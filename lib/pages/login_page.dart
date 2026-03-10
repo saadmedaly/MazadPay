@@ -91,7 +91,42 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               children: [
                 // Logo & Branding
-                Image.asset('assets/logo.png', height: 80, fit: BoxFit.contain),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RichText(
+                      textDirection: TextDirection.ltr,
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'Mazad',
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.white : Colors.black,
+                            ),
+                          ),
+                          const TextSpan(
+                            text: 'Pay',
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF135BEC),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      'مزاد باي',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ],
+                ),
 
                 const SizedBox(height: 20),
 
