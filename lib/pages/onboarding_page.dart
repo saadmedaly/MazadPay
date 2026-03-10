@@ -13,13 +13,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
   int _currentPage = 0;
 
   final List<Map<String, String>> onboardingData = [
-    {'image': 'assets/onboarding2.png', 'text': 'أول تطبيق مزاد في موريتانيا'},
+    {'image': 'on2.png', 'text': 'أول تطبيق مزاد في موريتانيا'},
     {
-      'image': 'assets/onboarding3.png',
+      'image': 'on3.png',
       'text': 'اتصل أو راسل المعلن مباشرة عبر التطبيق',
     },
     {
-      'image': 'assets/onboarding1.png',
+      'image': 'on1.png',
       'text':
           'ادخل عالم المزايدات، حيث التحدي والإثارة، وارفع عرضك بثقة لتكون صاحب الصفقة الرابحة',
     },

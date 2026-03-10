@@ -30,7 +30,7 @@ class _SplashPageState extends State<SplashPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Image.asset(
-              'assets/logo.png',
+              'logo.png',
               width: 200,
               errorBuilder: (context, error, stackTrace) {
                 return const Column(

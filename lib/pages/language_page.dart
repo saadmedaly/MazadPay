@@ -36,7 +36,7 @@ class _LanguagePageState extends State<LanguagePage> {
                     width: double.infinity,
                     decoration: const BoxDecoration(
                       image: DecorationImage(
-                        image: AssetImage('assets/language_bg.png'),
+                        image: AssetImage('lang_bg.png'),
                         fit: BoxFit.cover,
                       ),
                     ),
