@@ -32,7 +32,7 @@ class _LanguagePageState extends State<LanguagePage> {
               Stack(
                 children: [
                   Container(
-                    height: MediaQuery.of(context).size.height * 0.4,
+                    height: MediaQuery.of(context).size.height * 0.3,
                     width: double.infinity,
                     decoration: const BoxDecoration(
                       image: DecorationImage(
@@ -128,7 +128,7 @@ class _LanguagePageState extends State<LanguagePage> {
                   }).toList(),
                 ),
               ),
-              const SizedBox(height: 100), // Space for button
+              const SizedBox(height: 20),
             ],
           ),
         ),

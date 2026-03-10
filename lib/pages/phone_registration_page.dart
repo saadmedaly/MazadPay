@@ -113,7 +113,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               const Text(
                 'يرجى التسجيل برقم جوالك لاستخدام هذه الميزة.',
                 textAlign: TextAlign.center,
@@ -123,7 +123,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                   height: 1.5,
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
               Row(
                 textDirection: TextDirection.ltr,
                 children: [
@@ -226,10 +226,10 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 56,
+                height: 48,
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.push(
@@ -266,18 +266,18 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                 child: Column(
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 24,
+                      height: 24,
                       decoration: BoxDecoration(
                         color: const Color(0xFF38bdf8),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       'MAZADPAY',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 10,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 2,
                       ),
@@ -285,7 +285,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 10),
             ],
           ),
         ),

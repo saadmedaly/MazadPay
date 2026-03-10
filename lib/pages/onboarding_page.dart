@@ -52,7 +52,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     return Column(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 48), // Space from top to image
+                        const SizedBox(height: 24), // Space from top to image
                         Expanded(
                           child: Image.asset(
                             onboardingData[index]['image']!,
@@ -60,7 +60,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             fit: BoxFit.contain,
                           ),
                         ),
-                        const SizedBox(height: 48),
+                        const SizedBox(height: 24),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24.0),
                           child: Text(
@@ -76,7 +76,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 16),
                       ],
                     );
                   },
@@ -87,7 +87,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
-                  vertical: 16,
+                  vertical: 8,
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -100,8 +100,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         onboardingData.length,
                         (index) => Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: 10,
-                          height: 10,
+                          width: 8,
+                          height: 8,
                           decoration: BoxDecoration(
                             color: _currentPage == index
                                 ? primaryBlue
@@ -111,12 +111,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 20),
 
                     // Continue Button
                     SizedBox(
                       width: double.infinity,
-                      height: 56,
+                      height: 48,
                       child: ElevatedButton(
                         onPressed: () {
                           if (_currentPage < onboardingData.length - 1) {
@@ -135,7 +135,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryBlue,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
+                            borderRadius: BorderRadius.circular(24),
                           ),
                           elevation: 0,
                         ),
@@ -144,19 +144,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
                               ? 'ابدأ الآن'
                               : 'متابعة',
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
 
                     // Skip Button
                     SizedBox(
                       width: double.infinity,
-                      height: 56,
+                      height: 48,
                       child: ElevatedButton(
                         onPressed: () {
                           Navigator.of(context).pushReplacement(
@@ -168,21 +168,21 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryBlue,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
+                            borderRadius: BorderRadius.circular(24),
                           ),
                           elevation: 0,
                         ),
                         child: const Text(
                           'تخطي',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24), // Bottom safe space
+                    const SizedBox(height: 8), // Bottom safe space
                   ],
                 ),
               ),

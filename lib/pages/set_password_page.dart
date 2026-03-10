@@ -203,45 +203,45 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 // Illustration
                 SizedBox(
-                  height: 150,
-                  width: 150,
+                  height: 100,
+                  width: 100,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
                       Icon(
                         Icons.sync,
-                        size: 140,
+                        size: 90,
                         color: Theme.of(context).primaryColor.withOpacity(0.2),
                       ),
                       const Positioned(
-                        top: 30,
-                        right: 20,
+                        top: 20,
+                        right: 15,
                         child: Icon(
                           Icons.vpn_key,
-                          size: 40,
+                          size: 25,
                           color: Color(0xFFA08480),
                         ),
                       ),
                       const Positioned(
-                        bottom: 40,
+                        bottom: 25,
                         child: Icon(
                           Icons.lock_open,
-                          size: 60,
+                          size: 40,
                           color: Color(0xFFFFD54F),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
                 const Text(
                   'كلمة المرور الجديدة',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 Directionality(
                   textDirection: TextDirection.ltr,
                   child: _buildPinRow(
@@ -251,12 +251,12 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                     isDarkMode,
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
                 const Text(
                   'قم بتأكيد كلمة المرور الجديدة',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 Directionality(
                   textDirection: TextDirection.ltr,
                   child: _buildPinRow(
@@ -266,10 +266,10 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                     isDarkMode,
                   ),
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
-                  height: 56,
+                  height: 48,
                   child: ElevatedButton(
                     onPressed: _showSuccessDialog,
                     style: ElevatedButton.styleFrom(
@@ -292,6 +292,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 20),
               ],
             ),
           ),

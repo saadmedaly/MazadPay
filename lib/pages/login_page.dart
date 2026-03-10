@@ -90,16 +90,10 @@ class _LoginPageState extends State<LoginPage> {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               children: [
-                const SizedBox(height: 60),
-
                 // Logo & Branding
-                Image.asset(
-                  'assets/logo.png',
-                  height: 120,
-                  fit: BoxFit.contain,
-                ),
+                Image.asset('assets/logo.png', height: 80, fit: BoxFit.contain),
 
-                const SizedBox(height: 60),
+                const SizedBox(height: 20),
 
                 // Form Fields
                 _buildInputField(
@@ -110,7 +104,7 @@ class _LoginPageState extends State<LoginPage> {
                   counter: '${_phoneController.text.length}/8',
                   maxLength: 8,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
                 _buildInputField(
                   controller: _passwordController,
                   label: 'كلمة السر',
@@ -145,7 +139,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 10),
                 GestureDetector(
                   onTap: () {
                     Navigator.push(
@@ -163,31 +157,39 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 100), // Space for bottom button
+                const SizedBox(height: 10), // Reduced space for bottom button
               ],
             ),
           ),
         ),
         bottomNavigationBar: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const PhoneRegistrationPage(),
-                      ),
-                    );
-                  },
-                  child: const Text('تسجيل الدخول'),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PhoneRegistrationPage(),
+                        ),
+                      );
+                    },
+                    child: const Text('تسجيل الدخول'),
+                  ),
                 ),
-                const SizedBox(height: 12),
                 TextButton(
                   onPressed: () => _showContactInfo(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                   child: const Text(
                     'اتصل بنا',
                     style: TextStyle(

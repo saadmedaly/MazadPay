@@ -101,7 +101,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               const Text(
                 'أدخل رمز التحقق',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -131,7 +131,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 24),
               Directionality(
                 textDirection: TextDirection.ltr,
                 child: Row(
@@ -176,7 +176,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                   }),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 24),
               Center(
                 child: RichText(
                   text: TextSpan(
@@ -200,10 +200,10 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 56,
+                height: 48,
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.push(
@@ -237,6 +237,11 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
               Center(
                 child: TextButton(
                   onPressed: () {},
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                   child: Text(
                     'تغيير طريقة التحقق',
                     style: TextStyle(
@@ -247,7 +252,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 10),
             ],
           ),
         ),
