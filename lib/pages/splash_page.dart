@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/language_page.dart';
+import '../widgets/mazad_pay_logo.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -28,34 +29,7 @@ class _SplashPageState extends State<SplashPage> {
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              'assets/logo.png',
-              width: 200,
-              errorBuilder: (context, error, stackTrace) {
-                return const Column(
-                  children: [
-                    Text(
-                      'MazadPay',
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF135BEC),
-                      ),
-                    ),
-                    Text(
-                      'مزاد باي',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF135BEC),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
+          children: [const MazadPayLogo(fontSize: 64, arabicFontSize: 32)],
         ),
       ),
     );

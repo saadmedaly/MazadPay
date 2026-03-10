@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'phone_registration_page.dart';
 import 'language_page.dart';
+import '../widgets/mazad_pay_logo.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -91,42 +92,7 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               children: [
                 // Logo & Branding
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    RichText(
-                      textDirection: TextDirection.ltr,
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'Mazad',
-                            style: TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: isDarkMode ? Colors.white : Colors.black,
-                            ),
-                          ),
-                          const TextSpan(
-                            text: 'Pay',
-                            style: TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF135BEC),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      'مزاد باي',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.white : Colors.black,
-                      ),
-                    ),
-                  ],
-                ),
+                const MazadPayLogo(fontSize: 42, arabicFontSize: 24),
 
                 const SizedBox(height: 20),
 
