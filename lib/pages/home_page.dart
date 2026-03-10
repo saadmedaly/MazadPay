@@ -118,13 +118,6 @@ class _HomePageState extends State<HomePage> {
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Left: Menu
-              Builder(
-                builder: (context) => IconButton(
-                  icon: Icon(Icons.menu, color: isDarkMode ? Colors.white : Colors.black, size: 28),
-                  onPressed: () => Scaffold.of(context).openEndDrawer(),
-                ),
-              ),
               // Center: Logo
               Image.asset('logo.png', height: 35, errorBuilder: (c, e, s) => const Text('MazadPay', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold))),
               // Right: Notifications
