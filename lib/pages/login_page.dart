@@ -444,11 +444,11 @@ class _LoginPageState extends State<LoginPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isAvailable
-                  ? const Color(0xFF135BEC).withOpacity(0.3)
-                  : Colors.grey.withOpacity(0.2),
-            ),
+              border: Border.all(
+                color: isAvailable
+                    ? const Color(0xFF135BEC).withValues(alpha: 0.3)
+                    : Colors.grey.withValues(alpha: 0.2),
+              ),
           ),
           child: Row(
             children: [
@@ -576,7 +576,7 @@ class _LoginPageState extends State<LoginPage> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 24),

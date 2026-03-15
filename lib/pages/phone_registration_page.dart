@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'otp_entry_page.dart';
 
 class PhoneRegistrationPage extends StatefulWidget {
-  const PhoneRegistrationPage({Key? key}) : super(key: key);
+  const PhoneRegistrationPage({super.key});
 
   @override
   State<PhoneRegistrationPage> createState() => _PhoneRegistrationPageState();

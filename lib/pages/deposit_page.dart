@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/payment_details_page.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 class PaymentMethod {
   final String id;
@@ -244,7 +243,7 @@ class _DepositPageState extends State<DepositPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    ..._methods.map((method) => _buildPaymentMethodTile(method, isDarkMode)).toList(),
+                    ..._methods.map((method) => _buildPaymentMethodTile(method, isDarkMode)),
                   ],
                 ),
               ),

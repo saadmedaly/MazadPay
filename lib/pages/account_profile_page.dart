@@ -213,7 +213,7 @@ class AccountProfilePage extends StatelessWidget {
             ? Switch(
                 value: true,
                 onChanged: (_) {},
-                activeColor: const Color(0xFF0084FF),
+                activeThumbColor: const Color(0xFF0084FF),
               )
             : trailing != null
                 ? Row(

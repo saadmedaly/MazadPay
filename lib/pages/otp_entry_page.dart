@@ -4,7 +4,7 @@ import 'set_password_page.dart';
 class OtpEntryPage extends StatefulWidget {
   final String phoneNumber;
 
-  const OtpEntryPage({Key? key, required this.phoneNumber}) : super(key: key);
+  const OtpEntryPage({super.key, required this.phoneNumber});
 
   @override
   State<OtpEntryPage> createState() => _OtpEntryPageState();

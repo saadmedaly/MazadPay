@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:mezadpay/pages/terms_page.dart';
 import 'package:mezadpay/pages/Start Bidding.dart';
 
 class OnboardingPage extends StatefulWidget {
