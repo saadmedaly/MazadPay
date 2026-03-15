@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/terms_page.dart';
+import 'package:mezadpay/pages/Start Bidding.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -127,7 +128,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           } else {
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
-                                builder: (_) => const TermsPage(),
+                                builder: (_) => const StartBiddingPage(),
                               ),
                             );
                           }
@@ -161,7 +162,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         onPressed: () {
                           Navigator.of(context).pushReplacement(
                             MaterialPageRoute(
-                              builder: (_) => const TermsPage(),
+                              builder: (_) => const StartBiddingPage(),
                             ),
                           );
                         },
