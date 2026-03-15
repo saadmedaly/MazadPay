@@ -4,6 +4,7 @@ import 'phone_registration_page.dart';
 import 'language_page.dart';
 import '../widgets/mazad_pay_logo.dart';
 import 'home_page.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -38,14 +39,37 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: Container(
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF1D1D1D)
+                : const Color(0xFFF2F4F7),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: IconButton(
+            icon: Icon(
+              Icons.language,
+              color: isDarkMode ? Colors.white : Colors.black,
+              size: 20,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LanguagePage()),
+              );
+            },
+          ),
+        ),
+        actions: [
+          Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: isDarkMode
@@ -55,155 +79,133 @@ class _LoginPageState extends State<LoginPage> {
             ),
             child: IconButton(
               icon: Icon(
-                Icons.language,
+                Icons.arrow_forward_ios,
                 color: isDarkMode ? Colors.white : Colors.black,
-                size: 20,
+                size: 18,
               ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LanguagePage()),
-                );
-              },
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ),
-          actions: [
-            Container(
-              margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isDarkMode
-                    ? const Color(0xFF1D1D1D)
-                    : const Color(0xFFF2F4F7),
-                borderRadius: BorderRadius.circular(20),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              // Logo & Branding
+              const MazadPayLogo(fontSize: 42, arabicFontSize: 24),
+
+              const SizedBox(height: 20),
+
+              // Form Fields
+              _buildInputField(
+                controller: _phoneController,
+                label: l10n.phoneNumber,
+                hint: l10n.enterPhoneNumber,
+                keyboardType: TextInputType.phone,
+                counter: '${_phoneController.text.length}/8',
+                maxLength: 8,
               ),
-              child: IconButton(
-                icon: Icon(
-                  Icons.arrow_forward_ios,
-                  color: isDarkMode ? Colors.white : Colors.black,
-                  size: 18,
-                ),
-                onPressed: () => Navigator.of(context).pop(),
+              const SizedBox(height: 8),
+              _buildInputField(
+                controller: _passwordController,
+                label: l10n.password,
+                hint: l10n.enterPassword,
+                isPassword: true,
+                obscureText: _obscurePassword,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+                counter: '${_passwordController.text.length}/4',
+                maxLength: 4,
+                keyboardType: TextInputType.number,
+                letterSpacing: 24, // High spacing for digits as in screenshot
               ),
-            ),
-          ],
-        ),
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              children: [
-                // Logo & Branding
-                const MazadPayLogo(fontSize: 42, arabicFontSize: 24),
 
-                const SizedBox(height: 20),
-
-                // Form Fields
-                _buildInputField(
-                  controller: _phoneController,
-                  label: 'رقم الهاتف',
-                  hint: 'أدخل رقم هاتفك',
-                  keyboardType: TextInputType.phone,
-                  counter: '${_phoneController.text.length}/8',
-                  maxLength: 8,
-                ),
-                const SizedBox(height: 8),
-                _buildInputField(
-                  controller: _passwordController,
-                  label: 'كلمة السر',
-                  hint: 'أدخل كلمة السر',
-                  isPassword: true,
-                  obscureText: _obscurePassword,
-                  onToggleVisibility: () {
-                    setState(() {
-                      _obscurePassword = !_obscurePassword;
-                    });
-                  },
-                  counter: '${_passwordController.text.length}/4',
-                  maxLength: 4,
-                  keyboardType: TextInputType.number,
-                  letterSpacing: 24, // High spacing for digits as in screenshot
-                ),
-
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'خاصية استعادة كلمة المرور قيد التطوير',
-                          ),
+              Align(
+                alignment: Directionality.of(context) == TextDirection.rtl
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          l10n.passwordRecoveryDevelopment,
                         ),
-                      );
-                    },
-                    child: const Text(
-                      'هل نسيت كلمة المرور؟',
-                      style: TextStyle(color: Color(0xFF667085)),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const PhoneRegistrationPage(),
                       ),
                     );
                   },
-                  child: const Text(
-                    'مستخدم جديد؟ سجل الآن!',
-                    style: TextStyle(
-                      color: Color(0xFF667085),
-                      fontWeight: FontWeight.w500,
-                    ),
+                  child: Text(
+                    l10n.forgotPassword,
+                    style: const TextStyle(color: Color(0xFF667085)),
                   ),
                 ),
-                const SizedBox(height: 10), // Reduced space for bottom button
-              ],
-            ),
+              ),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const PhoneRegistrationPage(),
+                    ),
+                  );
+                },
+                child: Text(
+                  l10n.newUser,
+                  style: const TextStyle(
+                    color: Color(0xFF667085),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10), // Reduced space for bottom button
+            ],
           ),
         ),
-        bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () {
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const HomePage(),
                       ),
                     );
-                    },
-                    child: const Text('تسجيل الدخول'),
+                  },
+                  child: Text(l10n.login),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _showContactInfo(context),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  l10n.contactUs,
+                  style: const TextStyle(
+                    color: Color(0xFF135BEC),
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
                   ),
                 ),
-                TextButton(
-                  onPressed: () => _showContactInfo(context),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text(
-                    'اتصل بنا',
-                    style: TextStyle(
-                      color: Color(0xFF135BEC),
-                      fontWeight: FontWeight.bold,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -346,6 +348,7 @@ class _LoginPageState extends State<LoginPage> {
 
   void _showCountryPicker(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -372,24 +375,26 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'اختر الدولة',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Text(
+                l10n.selectCountry,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               _buildCountryItem(
                 context,
-                name: 'موريتانيا',
+                name: l10n.mauritania,
                 code: '+222',
                 flagUrl: 'https://flagcdn.com/w80/mr.png',
                 isAvailable: true,
               ),
               const Divider(height: 32),
-              const Align(
-                alignment: Alignment.centerRight,
+              Align(
+                alignment: Directionality.of(context) == TextDirection.rtl
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
                 child: Text(
-                  'قريباً',
-                  style: TextStyle(
+                  l10n.comingSoon,
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: Colors.grey,
@@ -399,7 +404,7 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(height: 16),
               _buildCountryItem(
                 context,
-                name: 'السنغال',
+                name: l10n.senegal,
                 code: '+221',
                 flagUrl: 'https://flagcdn.com/w80/sn.png',
                 isAvailable: false,
@@ -407,7 +412,7 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(height: 12),
               _buildCountryItem(
                 context,
-                name: 'المغرب',
+                name: l10n.morocco,
                 code: '+212',
                 flagUrl: 'https://flagcdn.com/w80/ma.png',
                 isAvailable: false,
@@ -415,7 +420,7 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(height: 12),
               _buildCountryItem(
                 context,
-                name: 'تونس',
+                name: l10n.tunisia,
                 code: '+216',
                 flagUrl: 'https://flagcdn.com/w80/tn.png',
                 isAvailable: false,
@@ -494,6 +499,7 @@ class _LoginPageState extends State<LoginPage> {
 
   void _showContactInfo(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -525,9 +531,9 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'تواصل معنا',
-                  style: TextStyle(
+                Text(
+                  l10n.contactUs,
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'Plus Jakarta Sans',
@@ -536,14 +542,14 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 24),
                 _buildContactItem(
                   icon: FontAwesomeIcons.whatsapp,
-                  label: 'واتس اب',
+                  label: l10n.whatsapp,
                   value: '47601175',
                   color: const Color(0xFF25D366),
                 ),
                 const SizedBox(height: 16),
                 _buildContactItem(
                   icon: Icons.email_outlined,
-                  label: 'البريد الإلكتروني',
+                  label: l10n.email,
                   value: 'mazadpay@gmail.com',
                   color: const Color(0xFF135BEC),
                 ),

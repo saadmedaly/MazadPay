@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'login_page.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 
 class SetPasswordPage extends StatefulWidget {
   const SetPasswordPage({super.key});
@@ -62,6 +63,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
   }
 
   void _showSuccessDialog() {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -82,7 +84,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                   height: 80,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Theme.of(context).primaryColor.withOpacity(0.2),
+                    color: Theme.of(context).primaryColor.withValues(alpha: 0.2),
                   ),
                   child: Center(
                     child: Container(
@@ -101,9 +103,9 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'تم فتح حساب بنجاح',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Text(
+                  l10n.accountCreatedSuccess,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -111,7 +113,6 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                   height: 48,
                   child: ElevatedButton(
                     onPressed: () {
-                      // Navigate to login and remove all previous routes
                       Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute(
                               builder: (context) => const LoginPage()),
@@ -124,9 +125,9 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'رجوع',
-                      style: TextStyle(
+                    child: Text(
+                      l10n.back,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -170,7 +171,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                 borderSide: BorderSide(
                   color: isDarkMode
                       ? const Color(0xFF333333)
-                      : Theme.of(context).primaryColor.withOpacity(0.5),
+                      : Theme.of(context).primaryColor.withValues(alpha: 0.5),
                   width: 2,
                 ),
               ),
@@ -192,13 +193,14 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: Container(), // hide default back button to match design
+        leading: Container(),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -218,7 +220,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                       Icon(
                         Icons.sync,
                         size: 90,
-                        color: Theme.of(context).primaryColor.withOpacity(0.2),
+                        color: Theme.of(context).primaryColor.withValues(alpha: 0.2),
                       ),
                       const Positioned(
                         top: 20,
@@ -241,9 +243,9 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'كلمة المرور الجديدة',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Text(
+                  l10n.newPassword,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 Directionality(
@@ -256,9 +258,9 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'قم بتأكيد كلمة المرور الجديدة',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Text(
+                  l10n.confirmNewPassword,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 Directionality(
@@ -284,11 +286,11 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                       elevation: isDarkMode ? 0 : 8,
                       shadowColor: Theme.of(
                         context,
-                      ).primaryColor.withOpacity(0.3),
+                      ).primaryColor.withValues(alpha: 0.3),
                     ),
-                    child: const Text(
-                      'التالي',
-                      style: TextStyle(
+                    child: Text(
+                      l10n.next,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,

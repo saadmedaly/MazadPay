@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'otp_entry_page.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 
 class PhoneRegistrationPage extends StatefulWidget {
   const PhoneRegistrationPage({super.key});
@@ -28,6 +29,9 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
+    bool isRtl = Directionality.of(context) == TextDirection.rtl;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -45,44 +49,36 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Theme.of(context).brightness == Brightness.light
-                      ? Colors.grey[100]
-                      : Colors.grey[800],
+                  color: isDarkMode ? Colors.grey[800] : Colors.grey[100],
                 ),
                 child: Icon(
-                  Icons.chevron_right,
-                  color: Theme.of(context).brightness == Brightness.light
-                      ? Colors.grey[600]
-                      : Colors.grey[300],
+                  isRtl ? Icons.chevron_right : Icons.chevron_left,
+                  color: isDarkMode ? Colors.grey[300] : Colors.grey[600],
                 ),
               ),
             ),
           ),
         ],
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisAlignment: isRtl ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
             Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: isRtl ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 Text(
-                  'هل تحتاج مساعدة؟',
+                  l10n.needHelp,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Theme.of(context).brightness == Brightness.light
-                        ? Colors.grey[500]
-                        : Colors.grey[400],
+                    color: isDarkMode ? Colors.grey[400] : Colors.grey[500],
                   ),
                 ),
                 Text(
-                  'تواصل مع الدعم',
+                  l10n.contactSupport,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: Theme.of(context).brightness == Brightness.light
-                        ? Colors.grey[800]
-                        : Colors.grey[200],
+                    color: isDarkMode ? Colors.grey[200] : Colors.grey[800],
                   ),
                 ),
               ],
@@ -93,16 +89,12 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               height: 40,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Theme.of(context).brightness == Brightness.light
-                    ? Colors.grey[100]
-                    : Colors.grey[800],
+                color: isDarkMode ? Colors.grey[800] : Colors.grey[100],
               ),
               child: Icon(
                 Icons.headset_mic,
                 size: 20,
-                color: Theme.of(context).brightness == Brightness.light
-                    ? Colors.grey[600]
-                    : Colors.grey[300],
+                color: isDarkMode ? Colors.grey[300] : Colors.grey[600],
               ),
             ),
           ],
@@ -114,10 +106,10 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
           child: Column(
             children: [
               const SizedBox(height: 8),
-              const Text(
-                'يرجى التسجيل برقم جوالك لاستخدام هذه الميزة.',
+              Text(
+                l10n.registrationPrompt,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                   height: 1.5,
@@ -134,14 +126,9 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                       height: 56,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.light
-                            ? Colors.grey[50]
-                            : Colors.grey[800]!.withOpacity(0.5),
+                        color: isDarkMode ? Colors.grey[800]!.withValues(alpha: 0.5) : Colors.grey[50],
                         border: Border.all(
-                          color:
-                              Theme.of(context).brightness == Brightness.light
-                              ? Colors.grey[200]!
-                              : Colors.grey[700]!,
+                          color: isDarkMode ? Colors.grey[700]! : Colors.grey[200]!,
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -175,14 +162,9 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                     child: Container(
                       height: 56,
                       decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.light
-                            ? Colors.grey[50]
-                            : Colors.grey[800]!.withOpacity(0.5),
+                        color: isDarkMode ? Colors.grey[800]!.withValues(alpha: 0.5) : Colors.grey[50],
                         border: Border.all(
-                          color:
-                              Theme.of(context).brightness == Brightness.light
-                              ? Colors.grey[200]!
-                              : Colors.grey[700]!,
+                          color: isDarkMode ? Colors.grey[700]! : Colors.grey[200]!,
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -200,12 +182,9 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.zero,
                           hintStyle: TextStyle(
-                            color:
-                                Theme.of(context).brightness == Brightness.light
-                                ? Colors.grey[400]
-                                : Colors.grey[600],
+                            color: isDarkMode ? Colors.grey[600] : Colors.grey[400],
                           ),
-                          counterText: "", // Hide default counter
+                          counterText: "",
                         ),
                         maxLength: 8,
                       ),
@@ -215,14 +194,12 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               ),
               const SizedBox(height: 8),
               Align(
-                alignment: Alignment.centerRight,
+                alignment: isRtl ? Alignment.centerRight : Alignment.centerLeft,
                 child: Text(
                   '${_phoneController.text.length}/8',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Theme.of(context).brightness == Brightness.light
-                        ? Colors.grey[500]
-                        : Colors.grey[400],
+                    color: isDarkMode ? Colors.grey[400] : Colors.grey[500],
                   ),
                 ),
               ),
@@ -235,8 +212,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) =>
-                            OtpEntryPage(phoneNumber: _phoneController.text),
+                        builder: (context) => OtpEntryPage(phoneNumber: _phoneController.text),
                       ),
                     );
                   },
@@ -246,13 +222,11 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     elevation: isDarkMode ? 0 : 8,
-                    shadowColor: Theme.of(
-                      context,
-                    ).primaryColor.withOpacity(0.3),
+                    shadowColor: Theme.of(context).primaryColor.withValues(alpha: 0.3),
                   ),
-                  child: const Text(
-                    'التالي',
-                    style: TextStyle(
+                  child: Text(
+                    l10n.next,
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -295,6 +269,9 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
 
   void _showCountryPicker(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
+    bool isRtl = Directionality.of(context) == TextDirection.rtl;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -321,26 +298,24 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'اختر الدولة',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Text(
+                l10n.selectCountry,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
-              // Current Country
               _buildCountryItem(
                 context,
-                name: 'موريتانيا',
+                name: l10n.mauritania,
                 code: '+222',
                 flagUrl: 'https://flagcdn.com/w80/mr.png',
                 isAvailable: true,
               ),
               const Divider(height: 32),
-              // Future Countries
-              const Align(
-                alignment: Alignment.centerRight,
+              Align(
+                alignment: isRtl ? Alignment.centerRight : Alignment.centerLeft,
                 child: Text(
-                  'قريباً',
-                  style: TextStyle(
+                  l10n.comingSoon,
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: Colors.grey,
@@ -350,7 +325,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               const SizedBox(height: 16),
               _buildCountryItem(
                 context,
-                name: 'السنغال',
+                name: l10n.senegal,
                 code: '+221',
                 flagUrl: 'https://flagcdn.com/w80/sn.png',
                 isAvailable: false,
@@ -358,7 +333,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               const SizedBox(height: 12),
               _buildCountryItem(
                 context,
-                name: 'المغرب',
+                name: l10n.morocco,
                 code: '+212',
                 flagUrl: 'https://flagcdn.com/w80/ma.png',
                 isAvailable: false,
@@ -366,7 +341,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               const SizedBox(height: 12),
               _buildCountryItem(
                 context,
-                name: 'تونس',
+                name: l10n.tunisia,
                 code: '+216',
                 flagUrl: 'https://flagcdn.com/w80/tn.png',
                 isAvailable: false,
@@ -397,8 +372,8 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isAvailable
-                  ? const Color(0xFF135BEC).withOpacity(0.3)
-                  : Colors.grey.withOpacity(0.2),
+                  ? const Color(0xFF135BEC).withValues(alpha: 0.3)
+                  : Colors.grey.withValues(alpha: 0.2),
             ),
           ),
           child: Row(

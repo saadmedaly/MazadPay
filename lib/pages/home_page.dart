@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
+import 'package:mezadpay/widgets/custom_app_bar.dart';
 import 'package:mezadpay/pages/account_page.dart';
 import 'package:mezadpay/pages/services_page.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -14,7 +16,6 @@ class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
   bool _showLocationModal = true;
   int _selectedCityIndex = 0;
-  final List<String> _cities = ['انواكشوط', 'انواذيبو'];
 
   @override
   void initState() {
@@ -28,9 +29,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showLocationPermissionDialog() {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.4),
+      barrierColor: Colors.black.withValues(alpha: 0.4),
       builder: (BuildContext context) {
         return Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -62,16 +64,16 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'خدمات مزاد موريتانيا بحاجة إلى\nموقعك',
+                Text(
+                  l10n.locationPermissionTitle,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.4),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.4, color: Colors.black),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'لتجربة أفضل يرجى تفعيل الموقع الجغرافي في هاتفك',
+                Text(
+                  l10n.locationPermissionDesc,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                  style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -88,7 +90,7 @@ class _HomePageState extends State<HomePage> {
                       backgroundColor: const Color(0xFF0084FF),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text('تفعيل خدمة تحديد الموقع', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(l10n.enableLocation, style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -102,32 +104,15 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
     const Color primaryBlue = Color(0xFF0084FF);
+    final List<String> cities = [l10n.nouakchott, l10n.nouadhibou];
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
-        // Pass the Drawer widget as endDrawer so it opens from the left side in RTL
-        endDrawer: const SideMenuDrawer(),
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          toolbarHeight: 70,
-          automaticallyImplyLeading: false, // Build custom layout
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Center: Logo
-              Image.asset('logo.png', height: 35, errorBuilder: (c, e, s) => const Text('MazadPay', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold))),
-              // Right: Notifications
-              IconButton(
-                icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 28),
-                onPressed: () {},
-              ),
-            ],
-          ),
-        ),
+    return Scaffold(
+      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
+      // Drawer will automatically handle RTL/LTR (Drawer on start side)
+      drawer: const SideMenuDrawer(),
+      appBar: const CustomAppBar(),
         body: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,10 +136,10 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         Text(
-                          'اربح وقتك',
-                          style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                          l10n.earnTime,
+                          style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -171,7 +156,7 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: Row(
-                    children: _cities.asMap().entries.map((entry) {
+                    children: cities.asMap().entries.map((entry) {
                       int idx = entry.key;
                       String city = entry.value;
                       bool isSelected = _selectedCityIndex == idx;
@@ -239,9 +224,9 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     Row(
                       children: [
-                        const Text(
-                          'مزاد لايف',
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                        Text(
+                          l10n.liveAuctions,
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(width: 8),
                         Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
@@ -259,12 +244,12 @@ class _HomePageState extends State<HomePage> {
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   children: [
-                    _buildAuctionCard('سمعه للبيع كرفور', 'MRU 2,500,000', '23h 42m 15s', 'smaah.png', '7', isDarkMode),
-                    _buildAuctionCard('12 Pro Max', 'MRU 12,000', '5h 42m 15s', 'iphone.png', '17', isDarkMode),
-                    _buildAuctionCard('كورولا 2017', 'MRU 285,000', '23h 42m 15s', 'corolla.png', '12', isDarkMode),
-                    _buildAuctionCard('راف 4 2017', 'MRU 320,000', '11h 20m 5s', 'raf4.png', '3', isDarkMode),
-                    _buildAuctionCard('دار في ربينة', 'MRU 5,000,000', '2h 10m 30s', 'house.png', '5', isDarkMode),
-                    _buildAuctionCard('لابتوب Lenovo', 'MRU 35,000', '18h 55m 00s', 'laptop.png', '9', isDarkMode),
+                    _buildAuctionCard(l10n.auctionSmaah, 'MRU 2,500,000', '23h 42m 15s', 'smaah.png', '7', isDarkMode),
+                    _buildAuctionCard(l10n.auctionIphone, 'MRU 12,000', '5h 42m 15s', 'iphone.png', '17', isDarkMode),
+                    _buildAuctionCard(l10n.auctionCorolla, 'MRU 285,000', '23h 42m 15s', 'corolla.png', '12', isDarkMode),
+                    _buildAuctionCard(l10n.auctionRaf4, 'MRU 320,000', '11h 20m 5s', 'raf4.png', '3', isDarkMode),
+                    _buildAuctionCard(l10n.auctionHouse, 'MRU 5,000,000', '2h 10m 30s', 'house.png', '5', isDarkMode),
+                    _buildAuctionCard(l10n.auctionLaptop, 'MRU 35,000', '18h 55m 00s', 'laptop.png', '9', isDarkMode),
                   ],
                 ),
               ),
@@ -281,17 +266,17 @@ class _HomePageState extends State<HomePage> {
                       backgroundColor: primaryBlue,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text('عرض مزيد من المزادات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text(l10n.viewMoreAuctions, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
               ),
 
               // Sponsors/Brands (الماركات)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20.0),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: Text(
-                  'الماركات',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  l10n.brands,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(height: 16),
@@ -345,16 +330,15 @@ class _HomePageState extends State<HomePage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(Icons.home_outlined, Icons.home, 'الرئيسية', 0),
-                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, 'توصيل', 1),
+                _buildNavItem(Icons.home_outlined, Icons.home, l10n.home, 0),
+                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, l10n.delivery, 1),
                 const SizedBox(width: 48), // Space for FAB
-                _buildNavItem(Icons.storefront_outlined, Icons.storefront, 'التجارة الالكترونية', 2),
-                _buildNavItem(Icons.person_outline, Icons.person, 'حسابي', 3),
+                _buildNavItem(Icons.storefront_outlined, Icons.storefront, l10n.ecommerce, 2),
+                _buildNavItem(Icons.person_outline, Icons.person, l10n.myAccount, 3),
               ],
             ),
           ),
         ),
-      ),
     );
   }
 
@@ -438,7 +422,7 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -490,10 +474,10 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),

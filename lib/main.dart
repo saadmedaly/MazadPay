@@ -1,9 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/core/theme.dart';
 import 'package:mezadpay/pages/splash_page.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
+import 'package:provider/provider.dart';
+import 'core/locale_provider.dart';
 
 void main() {
-  runApp(const MazadApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LocaleProvider()),
+      ],
+      child: const MazadApp(),
+    ),
+  );
 }
 
 class MazadApp extends StatelessWidget {
@@ -11,13 +22,29 @@ class MazadApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'MazadPay',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.light,
-      home: const SplashPage(),
+    return Consumer<LocaleProvider>(
+      builder: (context, provider, child) {
+        return MaterialApp(
+          title: 'MazadPay',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeMode.light,
+          locale: provider.locale,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('en'),
+            Locale('fr'),
+            Locale('ar'),
+          ],
+          home: const SplashPage(),
+        );
+      },
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'set_password_page.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 
 class OtpEntryPage extends StatefulWidget {
   final String phoneNumber;
@@ -40,6 +41,8 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
+    bool isRtl = Directionality.of(context) == TextDirection.rtl;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -54,7 +57,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
               children: [
                 InkWell(
                   onTap: () {
-                    // Toggle dark mode or handle theme change if needed
+                    // Handle dynamic theme change if needed
                   },
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
@@ -84,7 +87,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                       color: isDarkMode ? Colors.grey[800] : Colors.grey[100],
                     ),
                     child: Icon(
-                      Icons.arrow_forward_ios,
+                      isRtl ? Icons.arrow_forward_ios : Icons.arrow_back_ios,
                       size: 20,
                       color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
                     ),
@@ -99,27 +102,25 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: isRtl ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 8),
-              const Text(
-                'أدخل رمز التحقق',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              Text(
+                l10n.enterVerificationCode,
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               RichText(
-                textAlign: TextAlign.right,
+                textAlign: isRtl ? TextAlign.right : TextAlign.left,
                 text: TextSpan(
                   style: TextStyle(
                     fontSize: 14,
                     height: 1.5,
                     color: isDarkMode ? Colors.grey[400] : Colors.grey[500],
-                    fontFamily: 'Tajawal',
                   ),
                   children: [
-                    const TextSpan(
-                      text:
-                          'ادخل الرمز المكون من 6 أرقام المرسل عبر الواتساب إلى\n',
+                    TextSpan(
+                      text: '${l10n.otpUnderPhone}\n',
                     ),
                     TextSpan(
                       text: widget.phoneNumber,
@@ -183,10 +184,9 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                     style: TextStyle(
                       fontSize: 14,
                       color: isDarkMode ? Colors.grey[500] : Colors.grey[400],
-                      fontFamily: 'Tajawal',
                     ),
                     children: [
-                      const TextSpan(text: 'إعادة إرسال الرمز خلال '),
+                      TextSpan(text: '${l10n.resendCodeIn} '),
                       TextSpan(
                         text: '4:24',
                         style: TextStyle(
@@ -221,11 +221,11 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                     elevation: isDarkMode ? 0 : 8,
                     shadowColor: Theme.of(
                       context,
-                    ).primaryColor.withOpacity(0.3),
+                    ).primaryColor.withValues(alpha: 0.3),
                   ),
-                  child: const Text(
-                    'تحقق',
-                    style: TextStyle(
+                  child: Text(
+                    l10n.verify,
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -243,7 +243,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: Text(
-                    'تغيير طريقة التحقق',
+                    l10n.changeVerificationMethod,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,

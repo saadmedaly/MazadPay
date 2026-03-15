@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:mezadpay/pages/Start Bidding.dart';
+import 'package:mezadpay/pages/start_bidding_page.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -12,182 +13,173 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  final List<Map<String, String>> onboardingData = [
-    {'image': 'on2.png', 'text': 'أول تطبيق مزاد في موريتانيا'},
-    {
-      'image': 'on3.png',
-      'text': 'اتصل أو راسل المعلن مباشرة عبر التطبيق',
-    },
-    {
-      'image': 'on1.png',
-      'text':
-          'ادخل عالم المزايدات، حيث التحدي والإثارة، وارفع عرضك بثقة لتكون صاحب الصفقة الرابحة',
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
+
+    final List<Map<String, String>> onboardingData = [
+      {'image': 'on2.png', 'text': l10n.onboarding1},
+      {'image': 'on3.png', 'text': l10n.onboarding2},
+      {'image': 'on1.png', 'text': l10n.onboarding3},
+    ];
 
     // Pixel-perfect primary blue from the design
     const Color primaryBlue = Color(0xFF0084FF);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: PageView.builder(
-                  controller: _pageController,
-                  onPageChanged: (index) {
-                    setState(() {
-                      _currentPage = index;
-                    });
-                  },
-                  itemCount: onboardingData.length,
-                  itemBuilder: (context, index) {
-                    return Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 24), // Space from top to image
-                        Expanded(
-                          child: Image.asset(
-                            onboardingData[index]['image']!,
-                            width: double.infinity,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                          child: Text(
-                            onboardingData[index]['text']!,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              height: 1.4,
-                              color: isDarkMode
-                                  ? Colors.white
-                                  : const Color(0xFF1E1E1E),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    );
-                  },
-                ),
-              ),
-
-              // Bottom Section: Dots & Buttons
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 8,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Page Indicators
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      textDirection: TextDirection.ltr,
-                      children: List.generate(
-                        onboardingData.length,
-                        (index) => Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: _currentPage == index
-                                ? primaryBlue
-                                : primaryBlue, // In the design, all dots appear same color, but normally inactive is translucent. Keeping them same as per exact screenshot design instruction!
-                            shape: BoxShape.circle,
-                          ),
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentPage = index;
+                  });
+                },
+                itemCount: onboardingData.length,
+                itemBuilder: (context, index) {
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 24), // Space from top to image
+                      Expanded(
+                        child: Image.asset(
+                          onboardingData[index]['image']!,
+                          width: double.infinity,
+                          fit: BoxFit.contain,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Continue Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (_currentPage < onboardingData.length - 1) {
-                            _pageController.nextPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            );
-                          } else {
-                            Navigator.of(context).pushReplacement(
-                              MaterialPageRoute(
-                                builder: (_) => const StartBiddingPage(),
-                              ),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryBlue,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          elevation: 0,
-                        ),
+                      const SizedBox(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
                         child: Text(
-                          _currentPage == onboardingData.length - 1
-                              ? 'ابدأ الآن'
-                              : 'متابعة',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                          onboardingData[index]['text']!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            height: 1.4,
+                            color: isDarkMode
+                                ? Colors.white
+                                : const Color(0xFF1E1E1E),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
+                      const SizedBox(height: 16),
+                    ],
+                  );
+                },
+              ),
+            ),
 
-                    // Skip Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: () {
+            // Bottom Section: Dots & Buttons
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32,
+                vertical: 8,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Page Indicators
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    textDirection: TextDirection.ltr,
+                    children: List.generate(
+                      onboardingData.length,
+                      (index) => Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: _currentPage == index
+                              ? primaryBlue
+                              : primaryBlue, // Keeping them as per design
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Continue Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (_currentPage < onboardingData.length - 1) {
+                          _pageController.nextPage(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                          );
+                        } else {
                           Navigator.of(context).pushReplacement(
                             MaterialPageRoute(
                               builder: (_) => const StartBiddingPage(),
                             ),
                           );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryBlue,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          elevation: 0,
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryBlue,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
                         ),
-                        child: const Text(
-                          'تخطي',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        _currentPage == onboardingData.length - 1
+                            ? l10n.startNow
+                            : l10n.continueText,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8), // Bottom safe space
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Skip Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => const StartBiddingPage(),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryBlue,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        l10n.skip,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8), // Bottom safe space
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

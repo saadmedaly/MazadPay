@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
-import 'home_page.dart';
-import 'account_page.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
+import 'package:mezadpay/widgets/custom_app_bar.dart';
+import 'package:mezadpay/pages/home_page.dart';
+import 'package:mezadpay/pages/account_page.dart';
 
 class ServicesPage extends StatefulWidget {
   const ServicesPage({super.key});
@@ -16,135 +18,117 @@ class _ServicesPageState extends State<ServicesPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    const Color primaryBlue = Color(0xFF0084FF);
+    final l10n = AppLocalizations.of(context)!;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
-        endDrawer: const SideMenuDrawer(),
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          toolbarHeight: 70,
-          automaticallyImplyLeading: false,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: Icon(Icons.arrow_forward_ios, color: isDarkMode ? Colors.white : Colors.black, size: 28),
-                onPressed: () => Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const HomePage()),
-                ),
-              ),
-            ],
-          ),
+    return Scaffold(
+      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
+      drawer: const SideMenuDrawer(),
+      appBar: CustomAppBar(
+        showBack: true,
+        onBackPress: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
         ),
-        body: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Promo Banner
-              Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Container(
-                  width: double.infinity,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
-                      begin: Alignment.centerRight,
-                      end: Alignment.centerLeft,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Promo Banner
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Container(
+                width: double.infinity,
+                height: 100,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
+                    begin: Alignment.centerRight,
+                    end: Alignment.centerLeft,
                   ),
-                  child: Stack(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Text(
-                              'اربح وقتك',
-                              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
+                      Text(
+                        l10n.earnTime,
+                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                 ),
               ),
+            ),
 
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20.0),
-                child: Text(
-                  'الخدمات',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Text(
+                l10n.services,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 16),
 
-              // Services Grid
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.2,
-                  children: [
-                    _buildServiceCard('توصيل', Colors.blue[50]!, Icons.motorcycle, Colors.blue),
-                    _buildServiceCard('كورس', Colors.yellow[50]!, Icons.local_taxi, Colors.orange),
-                    _buildServiceCard('كورس عبر المدن', Colors.green[50]!, Icons.directions_bus, Colors.green),
-                    _buildServiceCard('نقل البضائع', Colors.orange[50]!, Icons.local_shipping, Colors.orangeAccent),
-                    _buildServiceCard('اخرى', Colors.purple[50]!, Icons.more_horiz, Colors.purple),
-                  ],
-                ),
+            // Services Grid
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.2,
+                children: [
+                  _buildServiceCard(l10n.deliveryService, Colors.blue[50]!, Icons.motorcycle, Colors.blue),
+                  _buildServiceCard(l10n.course, Colors.yellow[50]!, Icons.local_taxi, Colors.orange),
+                  _buildServiceCard(l10n.intercityCourse, Colors.green[50]!, Icons.directions_bus, Colors.green),
+                  _buildServiceCard(l10n.goodsTransport, Colors.orange[50]!, Icons.local_shipping, Colors.orangeAccent),
+                  _buildServiceCard(l10n.other, Colors.purple[50]!, Icons.more_horiz, Colors.purple),
+                ],
               ),
-              const SizedBox(height: 40),
+            ),
+            const SizedBox(height: 40),
+          ],
+        ),
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(top: 20.0),
+        child: SizedBox(
+          height: 70,
+          width: 70,
+          child: FloatingActionButton(
+            onPressed: () {},
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            highlightElevation: 0,
+            child: Image.asset(
+              'botum_bar.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: BottomAppBar(
+        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8,
+        child: SizedBox(
+          height: 60,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(Icons.home_outlined, Icons.home, l10n.home, 0),
+              _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, l10n.delivery, 1),
+              const SizedBox(width: 48), // Space for FAB
+              _buildNavItem(Icons.storefront_outlined, Icons.storefront, l10n.ecommerce, 2),
+              _buildNavItem(Icons.person_outline, Icons.person, l10n.myAccount, 3),
             ],
-          ),
-        ),
-        floatingActionButton: Padding(
-          padding: const EdgeInsets.only(top: 20.0),
-          child: SizedBox(
-            height: 70,
-            width: 70,
-            child: FloatingActionButton(
-              onPressed: () {},
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              highlightElevation: 0,
-              child: Image.asset(
-                'botum_bar.png',
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: BottomAppBar(
-          color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-          shape: const CircularNotchedRectangle(),
-          notchMargin: 8,
-          child: SizedBox(
-            height: 60,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(Icons.home_outlined, Icons.home, 'الرئيسية', 0),
-                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, 'توصيل', 1),
-                const SizedBox(width: 48), // Space for FAB
-                _buildNavItem(Icons.storefront_outlined, Icons.storefront, 'التجارة الالكترونية', 2),
-                _buildNavItem(Icons.person_outline, Icons.person, 'حسابي', 3),
-              ],
-            ),
           ),
         ),
       ),

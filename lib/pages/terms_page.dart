@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/login_page.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 
 class TermsPage extends StatefulWidget {
   const TermsPage({super.key});
@@ -14,16 +15,15 @@ class _TermsPageState extends State<TermsPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    final l10n = AppLocalizations.of(context)!;
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           centerTitle: true,
           elevation: 0,
           backgroundColor: Colors.transparent,
           title: Text(
-            'شروط الاستخدام',
+            l10n.termsOfUse,
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -133,9 +133,9 @@ class _TermsPageState extends State<TermsPage> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          child: const Text(
-                            'السابق',
-                            style: TextStyle(
+                          child: Text(
+                            l10n.previous,
+                            style: const TextStyle(
                               color: Color(0xFF344054),
                               fontWeight: FontWeight.bold,
                             ),
@@ -158,7 +158,7 @@ class _TermsPageState extends State<TermsPage> {
                           }
                         },
                         child: Text(
-                          currentPage == 1 ? 'متابعة' : 'أوافق على الشروط',
+                          currentPage == 1 ? l10n.continueText : l10n.iAgreeToTerms,
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -167,24 +167,24 @@ class _TermsPageState extends State<TermsPage> {
                 ),
                 if (currentPage == 2) ...[
                   const SizedBox(height: 16),
-                  const Text(
-                    'آخر تحديث: يونيو 2024',
-                    style: TextStyle(color: Color(0xFF667085), fontSize: 12),
+                  Text(
+                    l10n.lastUpdate,
+                    style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
                   ),
                 ],
               ],
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   List<Widget> _buildPage1() {
+    final l10n = AppLocalizations.of(context)!;
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return [
       Text(
-        'شروط استخدام تطبيق "مزاد موريتانيا"',
+        l10n.termsOfUseTitle,
         style: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 18,
@@ -192,53 +192,54 @@ class _TermsPageState extends State<TermsPage> {
         ),
       ),
       const SizedBox(height: 16),
-      _sectionHeader('الموافقة على الشروط'),
+      _sectionHeader(l10n.agreeToTermsHeader),
       _sectionBody(
-        'باستخدامك التطبيق، فإنك توافق على الالتزام بهذه الشروط والقوانين المعمول بها في موريتانيا.',
+        l10n.agreeToTermsBody,
       ),
       const SizedBox(height: 16),
-      _sectionHeader('الأهلية'),
+      _sectionHeader(l10n.eligibilityHeader),
       _sectionBody(
-        'يحق فقط للأشخاص الذين بلغوا 18 سنة أو أكثر المشاركة في المزادات.',
+        l10n.eligibilityBody,
       ),
       const SizedBox(height: 16),
-      _sectionHeader('الحساب والأمان'),
-      _sectionBody('يجب تسجيل الحساب باستخدام رقم هاتف صحيح وفعال.'),
+      _sectionHeader(l10n.accountSecurityHeader),
+      _sectionBody(l10n.accountSecurityBody1),
       _sectionBody(
-        'أنت مسؤول عن سرية كلمة المرور وجميع الأنشطة التي تتم بحسابك.',
+        l10n.accountSecurityBody2,
       ),
     ];
   }
 
   List<Widget> _buildPage2() {
+    final l10n = AppLocalizations.of(context)!;
     return [
-      _sectionHeader('التعديلات والإشعارات:'),
-      _bulletPoint('يحق لنا تعديل الشروط أو إضافة مزايا جديدة في أي وقت.'),
-      _bulletPoint('أي تغييرات مهمة سنرسل إشعاراً للمستخدمين.'),
+      _sectionHeader(l10n.modificationsHeader),
+      _bulletPoint(l10n.modificationsBullet1),
+      _bulletPoint(l10n.modificationsBullet2),
       const SizedBox(height: 16),
-      _sectionHeader('1. إنهاء الحساب:'),
+      _sectionHeader(l10n.terminationHeader),
       _bulletPoint(
-        'نحتفظ بحق تعليق أو حذف أي حساب ينتهك الشروط أو يضر بمستخدمي التطبيق.',
-      ),
-      const SizedBox(height: 16),
-      _sectionHeader('2. القانون الواجب التطبيق:'),
-      _bulletPoint(
-        'تخضع هذه الشروط لقوانين الجمهورية الإسلامية الموريتانية، وأي نزاع يتم حله وفقاً لها.',
+        l10n.terminationBullet1,
       ),
       const SizedBox(height: 16),
-      _sectionHeader('شروط المشاركة في المزادات:'),
-      _bulletPoint('يتطلب بعض المزادات دفع مبلغ تأمين لضمان جدية المزايدة.'),
+      _sectionHeader(l10n.lawHeader),
       _bulletPoint(
-        'يُسترجع مبلغ التأمين تلقائيًا في حال عدم الفوز بالمزاد خلال ساعة من انتهاء المزاد.',
+        l10n.lawBullet1,
+      ),
+      const SizedBox(height: 16),
+      _sectionHeader(l10n.participationTermsHeader),
+      _bulletPoint(l10n.participationBullet1),
+      _bulletPoint(
+        l10n.participationBullet2,
       ),
       _bulletPoint(
-        'لا يُسترجع مبلغ التأمين في حال الفوز بالمزاد وعدم إتمام عملية الدفع أو عند مخالفة شروط التطبيق.',
+        l10n.participationBullet3,
       ),
       _bulletPoint(
-        'يحق لإدارة التطبيق إلغاء أي مزاد في حال وجود خطأ تقني أو شبهة احتيال، ويتم في هذه الحالة إعادة مبلغ التأمين للمشاركين.',
+        l10n.participationBullet4,
       ),
       _bulletPoint(
-        'يشترط للاشتراك في التطبيق دفع رسوم اشتراك سنوية قدرها 100 أوقية جديدة للاستفادة من خدمات المزاد والمشاركة فيه',
+        l10n.participationBullet5,
       ),
     ];
   }
