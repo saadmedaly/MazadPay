@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'login_page.dart';
 
 class SetPasswordPage extends StatefulWidget {
   const SetPasswordPage({Key? key}) : super(key: key);
@@ -110,8 +111,11 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                   height: 48,
                   child: ElevatedButton(
                     onPressed: () {
-                      // Navigate back to login
-                      Navigator.of(context).popUntil((route) => route.isFirst);
+                      // Navigate to login and remove all previous routes
+                      Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                              builder: (context) => const LoginPage()),
+                          (route) => false);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).primaryColor,

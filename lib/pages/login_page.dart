@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'phone_registration_page.dart';
 import 'language_page.dart';
 import '../widgets/mazad_pay_logo.dart';
+import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -120,6 +121,7 @@ class _LoginPageState extends State<LoginPage> {
                   counter: '${_passwordController.text.length}/4',
                   maxLength: 4,
                   keyboardType: TextInputType.number,
+                  letterSpacing: 24, // High spacing for digits as in screenshot
                 ),
 
                 Align(
@@ -174,12 +176,12 @@ class _LoginPageState extends State<LoginPage> {
                   height: 48,
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const PhoneRegistrationPage(),
-                        ),
-                      );
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const HomePage(),
+                      ),
+                    );
                     },
                     child: const Text('تسجيل الدخول'),
                   ),
@@ -218,6 +220,7 @@ class _LoginPageState extends State<LoginPage> {
     VoidCallback? onToggleVisibility,
     TextInputType keyboardType = TextInputType.text,
     int? maxLength,
+    double? letterSpacing,
   }) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     bool isPhone = keyboardType == TextInputType.phone;
@@ -242,13 +245,14 @@ class _LoginPageState extends State<LoginPage> {
           style: TextStyle(
             fontWeight: FontWeight.w500,
             color: isDarkMode ? Colors.white : Colors.black,
+            letterSpacing: letterSpacing,
           ),
           maxLength: maxLength,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: Color(0xFF98A2B3), fontSize: 14),
             counterText: "",
-            prefixIcon: isPassword
+            suffixIcon: isPassword
                 ? IconButton(
                     icon: Icon(
                       obscureText
@@ -259,14 +263,14 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: onToggleVisibility,
                   )
                 : null,
-            suffixIcon: isPhone
+            prefixIcon: isPhone
                 ? InkWell(
                     onTap: () => _showCountryPicker(context),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         border: Border(
-                          left: BorderSide(
+                          right: BorderSide( // Swapping border to right for prefix
                             color: isDarkMode
                                 ? const Color(0xFF333333)
                                 : const Color(0xFFF2F4F7),
@@ -277,12 +281,16 @@ class _LoginPageState extends State<LoginPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.keyboard_arrow_down,
-                            color: Colors.grey[400],
-                            size: 18,
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: Image.network(
+                              'https://flagcdn.com/w80/mr.png',
+                              width: 24,
+                              height: 16,
+                              fit: BoxFit.cover,
+                            ),
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 8),
                           const Text(
                             '+222',
                             style: TextStyle(
@@ -292,15 +300,11 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             textDirection: TextDirection.ltr,
                           ),
-                          const SizedBox(width: 8),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(2),
-                            child: Image.network(
-                              'https://flagcdn.com/w80/mr.png',
-                              width: 24,
-                              height: 16,
-                              fit: BoxFit.cover,
-                            ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Colors.grey[400],
+                            size: 18,
                           ),
                         ],
                       ),
