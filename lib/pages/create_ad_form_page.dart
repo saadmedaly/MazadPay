@@ -18,7 +18,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   
   String _selectedMainCategory = 'سيارات';
   String _selectedSubCategory = 'أجهزة منزلية';
-  String _selectedCity = 'انواكشوط';
+  String _selectedCity = 'مدريد';
   final List<String> _selectedImages = []; // List of assets or paths
 
   @override
@@ -269,7 +269,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       isScrollControlled: true,
       builder: (context) => _CategorySheet(
         title: 'اختر المدينة',
-        items: ['انواكشوط', 'انواذيبو', 'كيهيدي', 'روصو', 'أطار', 'زويرات', 'العيون', 'النعمة', 'تجكجة', 'كبني'],
+        items: ['مدريد', 'عرفات', 'توجنين', 'لكصر', 'دار نعيم', 'عين الطلح', 'الميناء', 'الرياض', 'السبخة', 'تيارت', 'تفرغ زينة'],
         onSelected: (val) {
           setState(() => _selectedCity = val);
           Navigator.of(context).pop();
