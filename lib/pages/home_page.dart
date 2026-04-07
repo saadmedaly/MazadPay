@@ -264,13 +264,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
               ),
 
-              // Dots indicator for banner
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildDot(true), _buildDot(false), _buildDot(false),
-                ],
-              ),
               const SizedBox(height: 24),
 
               // Live Auctions (مزاد لايف)
@@ -383,7 +376,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0084FF),
+                  color: Colors.black,
                 ),
               ),
             ],
