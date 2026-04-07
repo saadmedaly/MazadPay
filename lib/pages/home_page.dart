@@ -551,7 +551,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 Positioned(
-                  bottom: 8, right: 8,
+                  top: 8, left: 8,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(color: const Color(0xFF0084FF), borderRadius: BorderRadius.circular(4)),
