@@ -352,12 +352,38 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   }
 
   Widget _buildExternalLinks(BuildContext context, Auction auction, bool isDarkMode) {
-    return Column(
-      children: [
-        _buildListTile(Icons.info_outline, 'أحكام وشروط المزايدة', () {}, isDarkMode),
-        const SizedBox(height: 12),
-        _buildListTile(Icons.contact_support_outlined, 'تواصل مع فريق الدعم', () {}, isDarkMode),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          _buildListTile(Icons.info_outline, 'أحكام وشروط المزايدة', () {}, isDarkMode),
+          const SizedBox(height: 12),
+          _buildListTile(Icons.contact_support_outlined, 'تواصل مع فريق الدعم', () {}, isDarkMode),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction.id)),
+            ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00C58D),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'مشاهدة كل المزايدين',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -381,25 +407,6 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF00C58D),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              'مشاهدة كل المزايدين',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -458,7 +465,9 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
         ),
       ),
       child: ListTile(
-        leading: Icon(icon, color: Colors.grey),
+        dense: true,
+        visualDensity: const VisualDensity(vertical: -2),
+        leading: Icon(icon, color: Colors.grey, size: 20),
         title: Text(title, style: GoogleFonts.plusJakartaSans(fontSize: 14)),
         trailing: const Icon(Icons.arrow_back_ios, size: 16, color: Colors.grey),
         onTap: onTap,
