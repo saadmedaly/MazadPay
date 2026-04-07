@@ -35,6 +35,11 @@ class _HowToBidPageState extends State<HowToBidPage> {
       'thumbnail': '',
       'videoUrl': '',
     },
+    {
+      'title': 'الأسئلة الشائعة',
+      'thumbnail': '',
+      'videoUrl': '',
+    },
   ];
 
   @override
@@ -373,16 +378,21 @@ class _HowToBidPageState extends State<HowToBidPage> {
                 color: isDarkMode ? Colors.grey[800] : const Color(0xFFF2F4F7),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: thumbnail.isNotEmpty 
+              child: thumbnail.isNotEmpty
                 ? ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Image.asset(
-                    thumbnail, 
+                    thumbnail,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) => const Icon(Icons.image, color: Colors.grey),
                   ),
                 )
-                : const Icon(Icons.play_circle_outline, color: Colors.grey),
+                : Icon(
+                    title == 'الأسئلة الشائعة'
+                        ? Icons.help_outline
+                        : Icons.play_circle_outline,
+                    color: Colors.grey,
+                  ),
             ),
           ],
         ),
