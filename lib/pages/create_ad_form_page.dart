@@ -17,7 +17,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   final _priceController = TextEditingController();
   
   String _selectedMainCategory = 'سيارات';
-  String _selectedSubCategory = 'سيارات رباعية دفع';
+  String _selectedSubCategory = 'أجهزة منزلية';
   String _selectedCity = 'انواكشوط';
   final List<String> _selectedImages = []; // List of assets or paths
 
@@ -287,7 +287,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         title: isMain ? 'اختر الفئة الرئيسية' : 'اختر الفئة الفرعية',
         items: isMain 
           ? ['عقارات', 'سيارات', 'هواتف', 'الكترونيات', 'ساعات', 'دراجات']
-          : ['سيارات رباعية دفع', 'سيارات عادية', 'سيارات تاكسي', 'سيارات مضروبة', 'سيارات كهربائية'],
+          : ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
         onSelected: (val) {
           setState(() {
             if (isMain) {

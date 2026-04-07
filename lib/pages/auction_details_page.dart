@@ -638,6 +638,17 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                     ),
                   ),
                 ),
+                Positioned(
+                  top: 8, left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0084FF),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(id, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                ),
               ],
             ),
             Padding(
