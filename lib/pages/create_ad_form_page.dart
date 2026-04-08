@@ -17,7 +17,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   final _priceController = TextEditingController();
   
   String _selectedMainCategory = 'سيارات';
-  String _selectedSubCategory = 'أجهزة منزلية';
+  String _selectedSubCategory = 'سيارات رباعية الدفع';
   String _selectedCity = 'مدريد';
   final List<String> _selectedImages = []; // List of assets or paths
 
@@ -278,6 +278,15 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     );
   }
 
+  static const Map<String, List<String>> _subCategoriesByMain = {
+    'سيارات': ['سيارات رباعية دفع', 'سيارات عادية', 'سيارات تاكسي', 'سيارات مضروبة', 'سيارات كهربائية'],
+    'عقارات': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
+    'هواتف': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
+    'الكترونيات': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
+    'ساعات': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
+    'دراجات': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
+  };
+
   void _showCategorySheet(BuildContext context, bool isMain) {
     showModalBottomSheet(
       context: context,
@@ -285,9 +294,9 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       isScrollControlled: true,
       builder: (context) => _CategorySheet(
         title: isMain ? 'اختر الفئة الرئيسية' : 'اختر الفئة الفرعية',
-        items: isMain 
-          ? ['عقارات', 'سيارات', 'هواتف', 'الكترونيات', 'ساعات', 'دراجات']
-          : ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
+        items: isMain
+          ? ['سيارات', 'عقارات', 'هواتف', 'قطع ارضية', 'الالكترونيات', 'أدوات منزلية', 'حيوانات', 'الاثاث', 'ساعات', 'دراجات', 'شاحنات', 'رباخة', 'معدات ثقيلة', 'ارقام ذهبية']
+          : (_subCategoriesByMain[_selectedMainCategory] ?? ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع']),
         onSelected: (val) {
           setState(() {
             if (isMain) {
@@ -320,12 +329,33 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   }
 }
 
-class _CategorySheet extends StatelessWidget {
+class _CategorySheet extends StatefulWidget {
   final String title;
   final List<String> items;
   final Function(String) onSelected;
-  
+
   const _CategorySheet({required this.title, required this.items, required this.onSelected});
+
+  @override
+  State<_CategorySheet> createState() => _CategorySheetState();
+}
+
+class _CategorySheetState extends State<_CategorySheet> {
+  late List<String> _filtered;
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.items;
+  }
+
+  void _onSearch(String query) {
+    setState(() {
+      _filtered = query.isEmpty
+          ? widget.items
+          : widget.items.where((item) => item.contains(query)).toList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +374,7 @@ class _CategorySheet extends StatelessWidget {
           Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 24),
           Text(
-            title,
+            widget.title,
             style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
@@ -352,6 +382,7 @@ class _CategorySheet extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: TextField(
               textAlign: TextAlign.right,
+              onChanged: _onSearch,
               decoration: InputDecoration(
                 hintText: 'بحث...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
@@ -365,11 +396,11 @@ class _CategorySheet extends StatelessWidget {
           Flexible(
             child: ListView.separated(
               shrinkWrap: true,
-              itemCount: items.length,
+              itemCount: _filtered.length,
               separatorBuilder: (context, index) => const Divider(height: 1),
               itemBuilder: (context, index) => ListTile(
-                title: Text(items[index], textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500)),
-                onTap: () => onSelected(items[index]),
+                title: Text(_filtered[index], textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500)),
+                onTap: () => widget.onSelected(_filtered[index]),
               ),
             ),
           ),
