@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class LoginState {
@@ -30,7 +31,7 @@ class LoginController extends StateNotifier<LoginState> {
         state = state.copyWith(isLoading: false);
         return true;
       } else {
-        state = state.copyWith(isLoading: false, error: "يرجى التحقق من البيانات");
+        state = state.copyWith(isLoading: false, error: 'يرجى التحقق من البيانات');
         return false;
       }
     } catch (e) {

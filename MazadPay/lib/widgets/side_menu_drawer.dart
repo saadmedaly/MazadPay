@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:mezadpay/pages/home_page.dart';
@@ -36,7 +37,7 @@ class SideMenuDrawer extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        'بدال سيديا',
+                        AppLocalizations.of(context)!.text_37,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -61,8 +62,8 @@ class SideMenuDrawer extends StatelessWidget {
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
+                    begin: AlignmentDirectional.centerStart,
+                    end: AlignmentDirectional.centerEnd,
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -78,9 +79,9 @@ class SideMenuDrawer extends StatelessWidget {
                       children: [
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
-                          children: const [
+                          children: [
                             Text(
-                              'قم بالإيداع الآن',
+                              AppLocalizations.of(context)!.text_379,
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
@@ -89,7 +90,7 @@ class SideMenuDrawer extends StatelessWidget {
                             ),
                             SizedBox(height: 4),
                             Text(
-                              'ابدا رحلة المزايدة الخاصة بك!',
+                              AppLocalizations.of(context)!.text_24,
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 12,
@@ -118,53 +119,53 @@ class SideMenuDrawer extends StatelessWidget {
                 children: [
                   _buildMenuItem(
                     context,
-                    title: 'الرئيسية',
+                    title: AppLocalizations.of(context)!.text_1,
                     icon: Icons.home,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'توصيل',
+                    title: AppLocalizations.of(context)!.text_32,
                     icon: Icons.local_shipping_outlined,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'حسابي',
+                    title: AppLocalizations.of(context)!.text_19,
                     icon: Icons.person_outline,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'مزاداتي',
+                    title: AppLocalizations.of(context)!.text_27,
                     icon: Icons.gavel,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'جميع المزادات',
+                    title: AppLocalizations.of(context)!.text_2,
                     icon: Icons.list_alt,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'للتواصل معنا',
+                    title: AppLocalizations.of(context)!.text_380,
                     icon: Icons.chat_bubble_outline,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'سياسة الخصوصية',
+                    title: AppLocalizations.of(context)!.text_284,
                     icon: Icons.privacy_tip_outlined,
                   ),
                   const Divider(height: 32, thickness: 1, indent: 20, endIndent: 20),
                   _buildMenuItem(
                     context,
-                    title: 'المعلومات الشخصية',
+                    title: AppLocalizations.of(context)!.text_381,
                     icon: Icons.person_outline,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'تغيير اللغة',
+                    title: AppLocalizations.of(context)!.text_382,
                     icon: Icons.language,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'المفضلة',
+                    title: AppLocalizations.of(context)!.text_28,
                     icon: Icons.favorite_border,
                   ),
                   const SizedBox(height: 20),
@@ -193,10 +194,10 @@ class SideMenuDrawer extends StatelessWidget {
                               minimumSize: Size.zero,
                             ),
                             icon: const Icon(Icons.star_border, size: 18),
-                            label: const Text('قيم التطبيق', style: TextStyle(fontWeight: FontWeight.bold)),
+                            label: Text(AppLocalizations.of(context)!.text_383, style: TextStyle(fontWeight: FontWeight.bold)),
                           ),
-                          const Text(
-                            'شاركتنا رأيك',
+                          Text(
+                            AppLocalizations.of(context)!.text_384,
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                         ],
@@ -207,19 +208,19 @@ class SideMenuDrawer extends StatelessWidget {
                   const SizedBox(height: 16),
                   _buildMenuItem(
                     context,
-                    title: 'الشروط والأحكام',
+                    title: AppLocalizations.of(context)!.text_385,
                     icon: Icons.article_outlined,
                     isCompact: true,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'مساعدة/الأسئلة الشائعة',
+                    title: AppLocalizations.of(context)!.text_386,
                     icon: Icons.help_outline,
                     isCompact: true,
                   ),
                   _buildMenuItem(
                     context,
-                    title: 'عن مزاد أبي',
+                    title: AppLocalizations.of(context)!.text_387,
                     icon: Icons.info_outline,
                     isCompact: true,
                   ),
@@ -248,11 +249,11 @@ class SideMenuDrawer extends StatelessWidget {
                               minimumSize: Size.zero,
                             ),
                             icon: const Icon(Icons.share, size: 16),
-                            label: const Text('مشاركة التطبيق', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            label: Text(AppLocalizations.of(context)!.text_388, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                           Expanded(
-                            child: const Text(
-                              'هل تعرف شخصا مهتما بخدمات والمزايدة ؟',
+                            child: Text(
+                              AppLocalizations.of(context)!.text_389,
                               textAlign: TextAlign.right,
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                             ),
@@ -267,7 +268,7 @@ class SideMenuDrawer extends StatelessWidget {
             
             // Footer Social Icons
             Padding(
-              padding: const EdgeInsets.only(bottom: 20.0),
+              padding: const EdgeInsetsDirectional.only(bottom: 20.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -307,27 +308,27 @@ class SideMenuDrawer extends StatelessWidget {
       child: InkWell(
         onTap: () {
           Navigator.pop(context); // Close drawer first
-          if (title == 'الرئيسية') {
+          if (title == AppLocalizations.of(context)!.text_1) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
-          } else if (title == 'توصيل') {
+          } else if (title == AppLocalizations.of(context)!.text_32) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ServicesPage()));
-          } else if (title == 'حسابي' || title == 'المعلومات الشخصية') {
+          } else if (title == AppLocalizations.of(context)!.text_19 || title == AppLocalizations.of(context)!.text_381) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AccountPage()));
-          } else if (title == 'مزاداتي') {
+          } else if (title == AppLocalizations.of(context)!.text_27) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const MyAuctionsPage()));
-          } else if (title == 'جميع المزادات') {
+          } else if (title == AppLocalizations.of(context)!.text_2) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const AllAuctionsPage()));
-          } else if (title == 'للتواصل معنا') {
+          } else if (title == AppLocalizations.of(context)!.text_380) {
             AppModals.showContactModal(context);
-          } else if (title == 'سياسة الخصوصية') {
+          } else if (title == AppLocalizations.of(context)!.text_284) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const PrivacyPolicyPage()));
-          } else if (title == 'المفضلة') {
+          } else if (title == AppLocalizations.of(context)!.text_28) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const FavoritesPage()));
-          } else if (title == 'مساعدة/الأسئلة الشائعة') {
+          } else if (title == AppLocalizations.of(context)!.text_386) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const HowToBidPage()));
-          } else if (title == 'عن مزاد أبي' || title == 'عن مزاد باي') {
+          } else if (title == AppLocalizations.of(context)!.text_387 || title == AppLocalizations.of(context)!.text_390) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const AboutMazadPayPage()));
-          } else if (title == 'تغيير اللغة') {
+          } else if (title == AppLocalizations.of(context)!.text_382) {
             AppModals.showLanguageModal(context);
           }
         },

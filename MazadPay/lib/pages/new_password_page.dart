@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'login_page.dart';
@@ -99,16 +100,14 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           leading: Padding(
-            padding: const EdgeInsets.only(right: 16.0),
+            padding: const EdgeInsetsDirectional.only(end: 16.0),
             child: Center(
               child: InkWell(
                 onTap: () => Navigator.pop(context),
@@ -128,11 +127,11 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
               ),
             ),
           ),
-          title: const Column(
+          title: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'هل تحتاج مساعدة؟',
+                AppLocalizations.of(context)!.text_241,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -140,7 +139,7 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
                 ),
               ),
               Text(
-                'تواصل مع الدعم',
+                AppLocalizations.of(context)!.text_242,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -151,7 +150,7 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
           ),
           actions: [
             Padding(
-              padding: const EdgeInsets.only(left: 16.0),
+              padding: const EdgeInsetsDirectional.only(start: 16.0),
               child: Center(
                 child: Container(
                   width: 40,
@@ -181,8 +180,8 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
 
                 const SizedBox(height: 32),
 
-                const Text(
-                  'كلمة المرور الجديدة',
+                Text(
+                  AppLocalizations.of(context)!.text_243,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -197,8 +196,8 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
 
                 const SizedBox(height: 32),
 
-                const Text(
-                  'قم بتأكيد كلمة المرور الجديدة',
+                Text(
+                  AppLocalizations.of(context)!.text_244,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -233,8 +232,8 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    child: const Text(
-                      'التالي',
+                    child: Text(
+                      AppLocalizations.of(context)!.text_211,
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -247,8 +246,7 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildIconIllustration(BuildContext context) {
@@ -262,7 +260,7 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
           const Icon(Icons.lock_reset_rounded, size: 80, color: Color(0xFF0081FF)),
           Positioned(
             top: 40,
-            right: MediaQuery.of(context).size.width * 0.3,
+            end: MediaQuery.of(context).size.width * 0.3,
             child: Icon(Icons.key_rounded, size: 40, color: Colors.amber.withOpacity(0.6)),
           ),
         ],

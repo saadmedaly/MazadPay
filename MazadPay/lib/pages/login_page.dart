@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'login_controller.dart';
@@ -59,9 +60,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
@@ -121,8 +120,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 // Form Fields
                 _buildInputField(
                   controller: _phoneController,
-                  label: 'رقم الهاتف',
-                  hint: 'أدخل رقم هاتفك',
+                  label: AppLocalizations.of(context)!.text_40,
+                  hint: AppLocalizations.of(context)!.text_213,
                   keyboardType: TextInputType.phone,
                   counter: '${_phoneController.text.length}/8',
                   maxLength: 8,
@@ -130,7 +129,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 const SizedBox(height: 8),
                 _buildInputField(
                   controller: _passwordController,
-                  label: 'كلمة السر',
+                  label: AppLocalizations.of(context)!.text_214,
                   hint: '• • • •',
                   isPassword: true,
                   obscureText: _obscurePassword,
@@ -146,7 +145,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
 
                 Align(
-                  alignment: Alignment.centerRight,
+                  alignment: AlignmentDirectional.centerEnd,
                   child: TextButton(
                     onPressed: () {
                       Navigator.push(
@@ -156,8 +155,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ),
                       );
                     },
-                    child: const Text(
-                      'هل نسيت كلمة المرور؟',
+                    child: Text(
+                      AppLocalizations.of(context)!.text_215,
                       style: TextStyle(color: Color(0xFF667085)),
                     ),
                   ),
@@ -172,8 +171,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                     );
                   },
-                  child: const Text(
-                    'مستخدم جديد؟ سجل الآن!',
+                  child: Text(
+                    AppLocalizations.of(context)!.text_216,
                     style: TextStyle(
                       color: Color(0xFF667085),
                       fontWeight: FontWeight.w500,
@@ -211,7 +210,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           width: 20,
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
-                      : const Text('تسجيل الدخول'),
+                      : Text(AppLocalizations.of(context)!.text_217),
                   ),
                 ),
                 TextButton(
@@ -221,8 +220,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text(
-                    'اتصل بنا',
+                  child: Text(
+                    AppLocalizations.of(context)!.text_218,
                     style: TextStyle(
                       color: Color(0xFF135BEC),
                       fontWeight: FontWeight.bold,
@@ -234,8 +233,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildInputField({
@@ -298,7 +296,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         border: Border(
-                          right: BorderSide( // Swapping border to right for prefix
+                          end: BorderSide( // Swapping border to right for prefix
                             color: isDarkMode
                                 ? const Color(0xFF333333)
                                 : const Color(0xFFF2F4F7),
@@ -382,9 +380,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return Container(
           decoration: BoxDecoration(
             color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
+            borderRadius: const BorderRadiusDirectional.only(
+              topStart: Radius.circular(24),
+              topEnd: Radius.circular(24),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -400,23 +398,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'اختر الدولة',
+              Text(
+                AppLocalizations.of(context)!.text_219,
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               _buildCountryItem(
                 context,
-                name: 'موريتانيا',
+                name: AppLocalizations.of(context)!.text_220,
                 code: '+222',
                 flagUrl: 'assets/mr.png',
                 isAvailable: true,
               ),
               const Divider(height: 32),
-              const Align(
-                alignment: Alignment.centerRight,
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
                 child: Text(
-                  'قريباً',
+                  AppLocalizations.of(context)!.text_165,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -427,7 +425,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               const SizedBox(height: 16),
               _buildCountryItem(
                 context,
-                name: 'السنغال',
+                name: AppLocalizations.of(context)!.text_221,
                 code: '+221',
                 flagUrl: 'https://flagcdn.com/w80/sn.png',
                 isAvailable: false,
@@ -435,7 +433,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               const SizedBox(height: 12),
               _buildCountryItem(
                 context,
-                name: 'المغرب',
+                name: AppLocalizations.of(context)!.text_222,
                 code: '+212',
                 flagUrl: 'https://flagcdn.com/w80/ma.png',
                 isAvailable: false,
@@ -443,7 +441,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               const SizedBox(height: 12),
               _buildCountryItem(
                 context,
-                name: 'تونس',
+                name: AppLocalizations.of(context)!.text_223,
                 code: '+216',
                 flagUrl: 'https://flagcdn.com/w80/tn.png',
                 isAvailable: false,
@@ -536,14 +534,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return Container(
           decoration: BoxDecoration(
             color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
+            borderRadius: const BorderRadiusDirectional.only(
+              topStart: Radius.circular(24),
+              topEnd: Radius.circular(24),
             ),
           ),
-          padding: const EdgeInsets.only(
-            left: 24,
-            right: 24,
+          padding: const EdgeInsetsDirectional.only(
+            start: 24,
+            end: 24,
             top: 16,
             bottom: 24,
           ),
@@ -560,8 +558,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'تواصل معنا',
+                Text(
+                  AppLocalizations.of(context)!.text_224,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -571,14 +569,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 const SizedBox(height: 24),
                 _buildContactItem(
                   icon: FontAwesomeIcons.whatsapp,
-                  label: 'واتس اب',
+                  label: AppLocalizations.of(context)!.text_225,
                   value: '47601175',
                   color: const Color(0xFF25D366),
                 ),
                 const SizedBox(height: 16),
                 _buildContactItem(
                   icon: Icons.email_outlined,
-                  label: 'البريد الإلكتروني',
+                  label: AppLocalizations.of(context)!.text_41,
                   value: 'mazadpay@gmail.com',
                   color: const Color(0xFF135BEC),
                 ),

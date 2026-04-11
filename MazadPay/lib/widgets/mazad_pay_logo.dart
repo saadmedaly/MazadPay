@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 class MazadPayLogo extends StatelessWidget {
@@ -32,8 +33,8 @@ class MazadPayLogo extends StatelessWidget {
                       0.46,
                       0.46,
                     ], // Split point roughly in the middle
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
+                    begin: AlignmentDirectional.centerStart,
+                    end: AlignmentDirectional.centerEnd,
                   ).createShader(bounds);
                 },
                 blendMode: BlendMode.srcIn,
@@ -73,7 +74,7 @@ class MazadPayLogo extends StatelessWidget {
             ],
           ),
         ),
-        // The Arabic part: "مزاد باي"
+        // The Arabic part: AppLocalizations.of(context)!.text_145
         Transform.translate(
           offset: const Offset(
             0,
@@ -84,7 +85,7 @@ class MazadPayLogo extends StatelessWidget {
             text: TextSpan(
               children: [
                 TextSpan(
-                  text: 'مزاد ',
+                  text: AppLocalizations.of(context)!.text_375,
                   style: TextStyle(
                     fontSize: arabicFontSize,
                     fontWeight: FontWeight.w900,
@@ -92,7 +93,7 @@ class MazadPayLogo extends StatelessWidget {
                   ),
                 ),
                 TextSpan(
-                  text: 'باي',
+                  text: AppLocalizations.of(context)!.text_376,
                   style: TextStyle(
                     fontSize: arabicFontSize,
                     fontWeight: FontWeight.w900,

@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
@@ -11,9 +12,7 @@ class AccountProfilePage extends StatelessWidget {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     const Color primaryBlue = Color(0xFF0084FF);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
         endDrawer: const SideMenuDrawer(),
         appBar: PreferredSize(
@@ -30,7 +29,7 @@ class AccountProfilePage extends StatelessWidget {
                       onPressed: () => Navigator.pop(ctx),
                     ),
                     Text(
-                      'معلومات الحساب',
+                      AppLocalizations.of(context)!.text_35,
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDarkMode ? Colors.white : Colors.black),
                     ),
                     IconButton(
@@ -70,18 +69,18 @@ class AccountProfilePage extends StatelessWidget {
                                   shape: BoxShape.circle,
                                   gradient: LinearGradient(
                                     colors: [Color(0xFF0055FF), Color(0xFF0084FF)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
+                                    begin: AlignmentDirectional.topStart,
+                                    end: AlignmentDirectional.bottomEnd,
                                   ),
                                 ),
-                                child: const Center(child: Text('ب', style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold))),
+                                child: Center(child: Text(AppLocalizations.of(context)!.text_36, style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold))),
                               ),
                             ),
                           ),
                         ),
                         Positioned(
                           bottom: 0,
-                          left: 0,
+                          start: 0,
                           child: Container(
                             width: 28,
                             height: 28,
@@ -92,7 +91,7 @@ class AccountProfilePage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    const Text('بدال سيديا', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                    Text(AppLocalizations.of(context)!.text_37, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                     const SizedBox(height: 4),
                     Text('+222 20 00 00 00', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
                   ],
@@ -105,20 +104,20 @@ class AccountProfilePage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('معلوماتي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(AppLocalizations.of(context)!.text_38, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 16),
-                    _buildInfoField(context, 'الاسم الكامل', 'بدال سيديا', Icons.person_outline, isDarkMode),
-                    _buildInfoField(context, 'رقم الهاتف', '+222 20 00 00 00', Icons.phone_outlined, isDarkMode),
-                    _buildInfoField(context, 'البريد الإلكتروني', 'badal@example.com', Icons.email_outlined, isDarkMode),
-                    _buildInfoField(context, 'المدينة', 'نواكشوط', Icons.location_city_outlined, isDarkMode),
+                    _buildInfoField(context, AppLocalizations.of(context)!.text_39, AppLocalizations.of(context)!.text_37, Icons.person_outline, isDarkMode),
+                    _buildInfoField(context, AppLocalizations.of(context)!.text_40, '+222 20 00 00 00', Icons.phone_outlined, isDarkMode),
+                    _buildInfoField(context, AppLocalizations.of(context)!.text_41, 'badal@example.com', Icons.email_outlined, isDarkMode),
+                    _buildInfoField(context, AppLocalizations.of(context)!.text_42, AppLocalizations.of(context)!.text_43, Icons.location_city_outlined, isDarkMode),
 
                     const SizedBox(height: 32),
-                    const Text('الإعدادات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(AppLocalizations.of(context)!.text_44, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 16),
 
-                    _buildSettingTile(context, 'تغيير كلمة المرور', Icons.lock_outline, isDarkMode),
-                    _buildSettingTile(context, 'اللغة', Icons.language, isDarkMode, trailing: 'العربية', onTap: () => AppModals.showLanguageModal(context)),
-                    _buildSettingTile(context, 'الإشعارات', Icons.notifications_outlined, isDarkMode, hasSwitch: true),
+                    _buildSettingTile(context, AppLocalizations.of(context)!.text_45, Icons.lock_outline, isDarkMode),
+                    _buildSettingTile(context, AppLocalizations.of(context)!.text_46, Icons.language, isDarkMode, trailing: AppLocalizations.of(context)!.text_47, onTap: () => AppModals.showLanguageModal(context)),
+                    _buildSettingTile(context, AppLocalizations.of(context)!.text_48, Icons.notifications_outlined, isDarkMode, hasSwitch: true),
 
                     const SizedBox(height: 32),
 
@@ -140,10 +139,10 @@ class AccountProfilePage extends StatelessWidget {
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
+                          children: [
                             Icon(Icons.logout, color: Colors.red),
                             SizedBox(width: 8),
-                            Text('تسجيل الخروج', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text(AppLocalizations.of(context)!.text_49, style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
                           ],
                         ),
                       ),
@@ -155,13 +154,12 @@ class AccountProfilePage extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildInfoField(BuildContext context, String label, String value, IconData icon, bool isDarkMode) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsetsDirectional.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
@@ -190,7 +188,7 @@ class AccountProfilePage extends StatelessWidget {
 
   Widget _buildSettingTile(BuildContext context, String title, IconData icon, bool isDarkMode, {String? trailing, bool hasSwitch = false, VoidCallback? onTap}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsetsDirectional.only(bottom: 10),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(12),

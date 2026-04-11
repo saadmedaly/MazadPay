@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 
@@ -8,9 +9,7 @@ class PaymentSuccessPage extends StatelessWidget {
   Widget build(BuildContext context) {
     const Color primaryBlue = Color(0xFF0084FF);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
           child: Center(
@@ -36,8 +35,8 @@ class PaymentSuccessPage extends StatelessWidget {
                           shape: BoxShape.circle,
                           gradient: LinearGradient(
                             colors: [Color(0xFF0055FF), Color(0xFF0084FF)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                            begin: AlignmentDirectional.topStart,
+                            end: AlignmentDirectional.bottomEnd,
                           ),
                         ),
                         child: const Center(
@@ -49,8 +48,8 @@ class PaymentSuccessPage extends StatelessWidget {
 
                   const SizedBox(height: 40),
 
-                  const Text(
-                    'تم استلام طلبك بنجاح',
+                  Text(
+                    AppLocalizations.of(context)!.text_279,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 22,
@@ -72,8 +71,8 @@ class PaymentSuccessPage extends StatelessWidget {
                       children: [
                         const Icon(Icons.access_time, color: Colors.orange, size: 18),
                         const SizedBox(width: 8),
-                        const Text(
-                          'قيد المراجعة',
+                        Text(
+                          AppLocalizations.of(context)!.text_280,
                           style: TextStyle(
                             color: Colors.orange,
                             fontWeight: FontWeight.bold,
@@ -87,7 +86,7 @@ class PaymentSuccessPage extends StatelessWidget {
                   const SizedBox(height: 20),
 
                   Text(
-                    'سيتم مراجعة طلبك من قبل الإدارة في أقرب وقت ممكن وسيتم إضافة الرصيد إلى حسابك.',
+                    AppLocalizations.of(context)!.text_281,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.grey[600],
@@ -114,8 +113,8 @@ class PaymentSuccessPage extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         elevation: 2,
                       ),
-                      child: const Text(
-                        'العودة للرئيسية',
+                      child: Text(
+                        AppLocalizations.of(context)!.text_282,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -129,7 +128,6 @@ class PaymentSuccessPage extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }

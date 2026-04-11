@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -8,9 +9,7 @@ class AboutMazadPayPage extends StatelessWidget {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : Colors.white,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
@@ -23,7 +22,7 @@ class AboutMazadPayPage extends StatelessWidget {
             onPressed: () => Navigator.of(context).pop(),
           ),
           title: Text(
-            'حول مزاد باي (Mazad Pay)',
+            AppLocalizations.of(context)!.text_4,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -37,71 +36,70 @@ class AboutMazadPayPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionTitle('حول مزاد باي (Mazad Pay)', isDarkMode),
+              _buildSectionTitle(AppLocalizations.of(context)!.text_4, isDarkMode),
               const SizedBox(height: 12),
               _buildParagraph(
-                'مزاد باي هو أول تطبيق للمزادات الرقمية في موريتانيا، والمنصة الرائدة التي تنقل مفهوم المزايدة التقليدية إلى تجربة تقنية حديثة، آمنة، وشفافة. نحن فخورون لكوننا أول من أطلق هذا النظام المتكامل في السوق الموريتاني، لنجمع لك بين إثارة المزايدة وتلبية احتياجاتك اليومية في تطبيق واحد وبسواعد وطنية.',
+                AppLocalizations.of(context)!.text_5,
                 isDarkMode,
               ),
               const SizedBox(height: 24),
               
-              _buildSectionTitle('خدماتنا الرائدة:', isDarkMode),
+              _buildSectionTitle(AppLocalizations.of(context)!.text_6, isDarkMode),
               const SizedBox(height: 12),
               _buildParagraph(
-                'من خلال تطبيقنا، نضع بين يديك باقة متنوعة من الخدمات المصممة خصيصاً لمجتمعنا:',
+                AppLocalizations.of(context)!.text_7,
                 isDarkMode,
               ),
               const SizedBox(height: 12),
               _buildBulletPoint(
-                'المزادات الرقمية (الأولى في موريتانيا): نظام مزايدة علني وشفاف على السيارات، العقارات، والإلكترونيات، يضمن حقوق الجميع بكل موثوقية.',
+                AppLocalizations.of(context)!.text_8,
                 isDarkMode,
               ),
               _buildBulletPoint(
-                'التجارة الإلكترونية العالمية: منصة تسوق ذكية تربطك بأفضل المواقع العالمية مثل (Amazon, AliExpress, Shein) لتصلك منتجاتك المفضلة أينما كنت.',
+                AppLocalizations.of(context)!.text_9,
                 isDarkMode,
               ),
               _buildBulletPoint(
-                'خدمات التوصيل والنقل الشاملة: حلول متكاملة تشمل نقل الأشخاص، شحن البضائع، وخدمات سحب ونقل السيارات (الحاملات).',
+                AppLocalizations.of(context)!.text_10,
                 isDarkMode,
               ),
               _buildBulletPoint(
-                'حجز الأنشطة الرياضية: إمكانية حجز مختلف أنواع الرياضات؛ بما في ذلك صالات اللياقة البدنية، الملاعب، وحصص السباحة.',
+                AppLocalizations.of(context)!.text_11,
                 isDarkMode,
               ),
               _buildBulletPoint(
-                'طلب الطعام: استمتع بطلب وجباتك من أشهر المطاعم ومقاهي بضغطة زر.',
+                AppLocalizations.of(context)!.text_12,
                 isDarkMode,
               ),
               _buildBulletPoint(
-                'حجز الفنادق والإقامات: خطط لرحلاتك داخل وخارج موريتانيا بأسعار تنافسية.',
+                AppLocalizations.of(context)!.text_13,
                 isDarkMode,
               ),
               _buildBulletPoint(
-                'المواعيد الطبية: تنظيم وتسهيل حجز المواعيد في كبرى المصحات والعيادات لضمان راحتك وصحتك.',
+                AppLocalizations.of(context)!.text_14,
                 isDarkMode,
               ),
               
               const SizedBox(height: 32),
-              _buildSectionTitle('رؤيتنا', isDarkMode),
+              _buildSectionTitle(AppLocalizations.of(context)!.text_15, isDarkMode),
               const SizedBox(height: 12),
               _buildParagraph(
-                'الريادة المطلقة كأول وجهة رقمية للمزادات في موريتانيا، وتقديم حلول شاملة تدمج بين التجارة الإلكترونية، مختلف أنواع توصيل، وخدمات، لتعزيز نمط حياة المواطن الموريتاني وتسهيل معاملاته.',
+                AppLocalizations.of(context)!.text_16,
                 isDarkMode,
               ),
               
               const SizedBox(height: 32),
-              _buildSectionTitle('التزامنا', isDarkMode),
+              _buildSectionTitle(AppLocalizations.of(context)!.text_17, isDarkMode),
               const SizedBox(height: 12),
               _buildParagraph(
-                'بصفتنا أول مزاد رقمي في البلاد، يلتزم فريق مزاد باي بتوفير بيئة رقمية آمنة كلياً، تلتزم بأعلى معايير المصداقية والشفافية، وتدعم التحول الرقمي في موريتانيا.',
+                AppLocalizations.of(context)!.text_18,
                 isDarkMode,
               ),
               const SizedBox(height: 40),
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildSectionTitle(String title, bool isDarkMode) {
@@ -129,12 +127,12 @@ class AboutMazadPayPage extends StatelessWidget {
 
   Widget _buildBulletPoint(String text, bool isDarkMode) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsetsDirectional.only(bottom: 12.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            margin: const EdgeInsets.only(top: 8, left: 12),
+            margin: const EdgeInsetsDirectional.only(top: 8, start: 12),
             width: 6,
             height: 6,
             decoration: BoxDecoration(

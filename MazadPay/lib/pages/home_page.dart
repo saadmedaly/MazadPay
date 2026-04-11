@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/account_page.dart';
@@ -23,7 +24,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   int _currentIndex = 0;
   bool _showLocationModal = true;
   int _selectedCityIndex = 0;
-  final List<String> _cities = ['انواكشوط', 'انواذيبو'];
+  final List<String> _cities = [AppLocalizations.of(context)!.text_193, AppLocalizations.of(context)!.text_194];
 
   @override
   void initState() {
@@ -71,14 +72,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'خدمات مزاد موريتانيا بحاجة إلى\nموقعك',
+                Text(
+                  AppLocalizations.of(context)!.text_195,
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.4),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'لتجربة أفضل يرجى تفعيل الموقع الجغرافي في هاتفك',
+                Text(
+                  AppLocalizations.of(context)!.text_196,
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: Colors.grey),
                 ),
@@ -97,7 +98,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       backgroundColor: const Color(0xFF0084FF),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text('تفعيل خدمة تحديد الموقع', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(AppLocalizations.of(context)!.text_197, style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -113,9 +114,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     const Color primaryBlue = Color(0xFF0084FF);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         // Pass the Drawer widget as endDrawer so it opens from the left side in RTL
         endDrawer: const SideMenuDrawer(),
@@ -177,8 +176,8 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text(
-                    "الصفحة غير متاحة حاليا",
+                  Text(
+                    AppLocalizations.of(context)!.text_34,
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
                   ),
                   const SizedBox(height: 24),
@@ -193,8 +192,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                     ),
-                    child: const Text(
-                      'العودة إلى انواكشوط',
+                    child: Text(
+                      AppLocalizations.of(context)!.text_198,
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
                     ),
                   ),
@@ -275,7 +274,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   children: [
                     Row(
                       children: [
-                        Text('مزاد لايف', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(AppLocalizations.of(context)!.text_199, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(width: 8),
                         const LiveIndicator(),
                       ],
@@ -317,17 +316,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                       backgroundColor: primaryBlue,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text('عرض مزيد من المزادات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text(AppLocalizations.of(context)!.text_200, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
               ),
 
 
               // Sponsors/Brands (الروعات)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20.0),
                 child: Text(
-                  'الروعات',
+                  AppLocalizations.of(context)!.text_201,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -379,8 +378,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
               ),
-              const Text(
-                'إعلان جديد',
+              Text(
+                AppLocalizations.of(context)!.text_202,
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
@@ -400,17 +399,16 @@ class _HomePageState extends ConsumerState<HomePage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(Icons.home_outlined, Icons.home, 'الرئيسية', 0),
-                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, 'توصيل', 1),
+                _buildNavItem(Icons.home_outlined, Icons.home, AppLocalizations.of(context)!.text_1, 0),
+                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, AppLocalizations.of(context)!.text_32, 1),
                 const SizedBox(width: 48), // Space for FAB
-                _buildNavItem(Icons.storefront_outlined, Icons.storefront, 'التجارة الالكترونية', 2),
-                _buildNavItem(Icons.person_outline, Icons.person, 'حسابي', 3),
+                _buildNavItem(Icons.storefront_outlined, Icons.storefront, AppLocalizations.of(context)!.text_33, 2),
+                _buildNavItem(Icons.person_outline, Icons.person, AppLocalizations.of(context)!.text_19, 3),
               ],
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildNavItem(IconData icon, IconData activeIcon, String label, int index) {
@@ -467,8 +465,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
-              begin: Alignment.centerRight,
-              end: Alignment.centerLeft,
+              begin: AlignmentDirectional.centerEnd,
+              end: AlignmentDirectional.centerStart,
             ),
           ),
           child: const Center(
@@ -531,14 +529,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
  
                 Positioned(
-                  top: 4, right: 4,
+                  top: 4, end: 4,
                   child: IconButton(
                     iconSize: 20,
                     onPressed: () {
                       ref.read(favoritesProvider.notifier).toggleFavorite(id);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(isFavorite ? 'تمت الإزالة من المفضلة' : 'تم الإضافة إلى المفضلة'),
+                          content: Text(isFavorite ? AppLocalizations.of(context)!.text_55 : AppLocalizations.of(context)!.text_56),
                           duration: const Duration(seconds: 1),
                           behavior: SnackBarBehavior.floating,
                         ),
@@ -559,7 +557,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 Positioned(
-                  top: 8, left: 8,
+                  top: 8, start: 8,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(color: const Color(0xFF0084FF), borderRadius: BorderRadius.circular(4)),

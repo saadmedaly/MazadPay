@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/start_bidding_page.dart';
 
@@ -13,14 +14,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
   int _currentPage = 0;
 
   final List<Map<String, String>> onboardingData = [
-    {'image': 'assets/on2.png', 'text': '  أول تطبيق مزاد  في موريتانيا'},
+    {'image': 'assets/on2.png', 'text': AppLocalizations.of(context)!.text_257},
     {
       'image': 'assets/on3.png',
-      'text': 'اتصل أو راسل المعلن مباشرة عبر التطبيق',
+      'text': AppLocalizations.of(context)!.text_258,
     },
     {
       'image': 'assets/on1.png',
-      'text': ' اطلب أي خدمة من التطبيق توصلك عند باب دارك',
+      'text': AppLocalizations.of(context)!.text_259,
     },
   ];
 
@@ -31,9 +32,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     // Pixel-perfect primary blue from the design
     const Color primaryBlue = Color(0xFF0084FF);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: SafeArea(
           child: Column(
@@ -140,8 +139,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         ),
                         child: Text(
                           _currentPage == onboardingData.length - 1
-                              ? 'ابدأ الآن'
-                              : 'متابعة',
+                              ? AppLocalizations.of(context)!.text_232
+                              : AppLocalizations.of(context)!.text_144,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -171,8 +170,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'تخطي',
+                        child: Text(
+                          AppLocalizations.of(context)!.text_233,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -188,7 +187,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }

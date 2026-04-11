@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 class SuccessDialog extends StatelessWidget {
@@ -49,8 +50,8 @@ class SuccessDialog extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Success text
-            const Text(
-              'تم فتح حساب بنجاح',
+            Text(
+              AppLocalizations.of(context)!.text_302,
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -77,8 +78,8 @@ class SuccessDialog extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text(
-                  'رجوع',
+                child: Text(
+                  AppLocalizations.of(context)!.text_303,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,

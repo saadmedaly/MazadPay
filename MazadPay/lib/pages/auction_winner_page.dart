@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,9 +14,7 @@ class AuctionWinnerPage extends ConsumerWidget {
     final auction = ref.watch(auctionNotifierProvider(auctionId));
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         body: Stack(
           children: [
@@ -25,13 +24,13 @@ class AuctionWinnerPage extends ConsumerWidget {
             SafeArea(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsetsDirectional.only(bottom: 24),
                 child: Column(
                   children: [
                     _buildHeader(context),
                     const SizedBox(height: 20),
                     Text(
-                      'مبروك!',
+                      AppLocalizations.of(context)!.text_81,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 40,
                         fontWeight: FontWeight.w900,
@@ -39,7 +38,7 @@ class AuctionWinnerPage extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      'ربحت المزاد',
+                      AppLocalizations.of(context)!.text_82,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -64,17 +63,16 @@ class AuctionWinnerPage extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildFireworksDecoration() {
      return Stack(
        children: [
-         Positioned(top: 100, left: 50, child: Icon(Icons.star, color: Colors.orange.withOpacity(0.3), size: 40)),
-         Positioned(top: 150, right: 80, child: Icon(Icons.auto_awesome, color: Colors.blue.withOpacity(0.3), size: 50)),
-         Positioned(top: 300, left: 30, child: Icon(Icons.favorite, color: Colors.red.withOpacity(0.2), size: 30)),
-         Positioned(bottom: 200, right: 40, child: Icon(Icons.wb_sunny, color: Colors.yellow.withOpacity(0.3), size: 60)),
+         Positioned(top: 100, start: 50, child: Icon(Icons.star, color: Colors.orange.withOpacity(0.3), size: 40)),
+         Positioned(top: 150, end: 80, child: Icon(Icons.auto_awesome, color: Colors.blue.withOpacity(0.3), size: 50)),
+         Positioned(top: 300, start: 30, child: Icon(Icons.favorite, color: Colors.red.withOpacity(0.2), size: 30)),
+         Positioned(bottom: 200, end: 40, child: Icon(Icons.wb_sunny, color: Colors.yellow.withOpacity(0.3), size: 60)),
        ],
      );
   }
@@ -178,8 +176,8 @@ class AuctionWinnerPage extends ConsumerWidget {
            Column(
              crossAxisAlignment: CrossAxisAlignment.start,
              children: [
-                Text('محمد احمد سيديا', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('الفائز الاول بالمزاد', style: GoogleFonts.plusJakartaSans(color: Colors.grey)),
+                Text(AppLocalizations.of(context)!.text_83, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(AppLocalizations.of(context)!.text_84, style: GoogleFonts.plusJakartaSans(color: Colors.grey)),
              ],
            ),
         ],
@@ -202,7 +200,7 @@ class AuctionWinnerPage extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
           child: Text(
-            'أكمل عملية الدفع',
+            AppLocalizations.of(context)!.text_85,
             style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
           ),
         ),

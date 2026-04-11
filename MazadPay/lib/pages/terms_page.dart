@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/create_profile_page.dart';
 
@@ -14,16 +15,14 @@ class _TermsPageState extends State<TermsPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           centerTitle: true,
           elevation: 0,
           backgroundColor: Colors.transparent,
           title: Text(
-            'شروط الاستخدام',
+            AppLocalizations.of(context)!.text_318,
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -101,9 +100,9 @@ class _TermsPageState extends State<TermsPage> {
                     width: 4,
                     decoration: const BoxDecoration(
                       color: Color(0xFF135BEC),
-                      borderRadius: BorderRadius.only(
-                        topRight: Radius.circular(4),
-                        bottomRight: Radius.circular(4),
+                      borderRadius: BorderRadiusDirectional.only(
+                        topEnd: Radius.circular(4),
+                        bottomEnd: Radius.circular(4),
                       ),
                     ),
                   ),
@@ -133,8 +132,8 @@ class _TermsPageState extends State<TermsPage> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          child: const Text(
-                            'السابق',
+                          child: Text(
+                            AppLocalizations.of(context)!.text_319,
                             style: TextStyle(
                               color: Color(0xFF344054),
                               fontWeight: FontWeight.bold,
@@ -158,7 +157,7 @@ class _TermsPageState extends State<TermsPage> {
                           }
                         },
                         child: Text(
-                          currentPage == 1 ? 'متابعة' : 'أوافق على الشروط',
+                          currentPage == 1 ? AppLocalizations.of(context)!.text_144 : AppLocalizations.of(context)!.text_320,
                           style: const TextStyle(fontWeight: FontWeight.bold,fontSize: 12),
                         ),
                       ),
@@ -167,8 +166,8 @@ class _TermsPageState extends State<TermsPage> {
                 ),
                 if (currentPage == 2) ...[
                   const SizedBox(height: 16),
-                  const Text(
-                    'آخر تحديث: يونيو 2024',
+                  Text(
+                    AppLocalizations.of(context)!.text_321,
                     style: TextStyle(color: Color(0xFF667085), fontSize: 12),
                   ),
                 ],
@@ -176,15 +175,14 @@ class _TermsPageState extends State<TermsPage> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   List<Widget> _buildPage1() {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return [
       Text(
-        'شروط استخدام تطبيق "مزاد موريتانيا"',
+        AppLocalizations.of(context)!.text_322,
         style: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 18,
@@ -192,53 +190,53 @@ class _TermsPageState extends State<TermsPage> {
         ),
       ),
       const SizedBox(height: 16),
-      _sectionHeader('الموافقة على الشروط'),
+      _sectionHeader(AppLocalizations.of(context)!.text_323),
       _sectionBody(
-        'باستخدامك التطبيق، فإنك توافق على الالتزام بهذه الشروط والقوانين المعمول بها في موريتانيا.',
+        AppLocalizations.of(context)!.text_324,
       ),
       const SizedBox(height: 16),
-      _sectionHeader('الأهلية'),
+      _sectionHeader(AppLocalizations.of(context)!.text_325),
       _sectionBody(
-        'يحق فقط للأشخاص الذين بلغوا 18 سنة أو أكثر المشاركة في المزادات.',
+        AppLocalizations.of(context)!.text_326,
       ),
       const SizedBox(height: 16),
-      _sectionHeader('الحساب والأمان'),
-      _sectionBody('يجب تسجيل الحساب باستخدام رقم هاتف صحيح وفعال.'),
+      _sectionHeader(AppLocalizations.of(context)!.text_327),
+      _sectionBody(AppLocalizations.of(context)!.text_328),
       _sectionBody(
-        'أنت مسؤول عن سرية كلمة المرور وجميع الأنشطة التي تتم بحسابك.',
+        AppLocalizations.of(context)!.text_329,
       ),
     ];
   }
 
   List<Widget> _buildPage2() {
     return [
-      _sectionHeader('التعديلات والإشعارات:'),
-      _bulletPoint('يحق لنا تعديل الشروط أو إضافة مزايا جديدة في أي وقت.'),
-      _bulletPoint('أي تغييرات مهمة سنرسل إشعاراً للمستخدمين.'),
+      _sectionHeader(AppLocalizations.of(context)!.text_330),
+      _bulletPoint(AppLocalizations.of(context)!.text_331),
+      _bulletPoint(AppLocalizations.of(context)!.text_332),
       const SizedBox(height: 16),
-      _sectionHeader('1. إنهاء الحساب:'),
+      _sectionHeader(AppLocalizations.of(context)!.text_333),
       _bulletPoint(
-        'نحتفظ بحق تعليق أو حذف أي حساب ينتهك الشروط أو يضر بمستخدمي التطبيق.',
-      ),
-      const SizedBox(height: 16),
-      _sectionHeader('2. القانون الواجب التطبيق:'),
-      _bulletPoint(
-        'تخضع هذه الشروط لقوانين الجمهورية الإسلامية الموريتانية، وأي نزاع يتم حله وفقاً لها.',
+        AppLocalizations.of(context)!.text_334,
       ),
       const SizedBox(height: 16),
-      _sectionHeader('شروط المشاركة في المزادات:'),
-      _bulletPoint('يتطلب بعض المزادات دفع مبلغ تأمين لضمان جدية المزايدة.'),
+      _sectionHeader(AppLocalizations.of(context)!.text_335),
       _bulletPoint(
-        'يُسترجع مبلغ التأمين تلقائيًا في حال عدم الفوز بالمزاد خلال ساعة من انتهاء المزاد.',
+        AppLocalizations.of(context)!.text_336,
+      ),
+      const SizedBox(height: 16),
+      _sectionHeader(AppLocalizations.of(context)!.text_337),
+      _bulletPoint(AppLocalizations.of(context)!.text_338),
+      _bulletPoint(
+        AppLocalizations.of(context)!.text_339,
       ),
       _bulletPoint(
-        'لا يُسترجع مبلغ التأمين في حال الفوز بالمزاد وعدم إتمام عملية الدفع أو عند مخالفة شروط التطبيق.',
+        AppLocalizations.of(context)!.text_340,
       ),
       _bulletPoint(
-        'يحق لإدارة التطبيق إلغاء أي مزاد في حال وجود خطأ تقني أو شبهة احتيال، ويتم في هذه الحالة إعادة مبلغ التأمين للمشاركين.',
+        AppLocalizations.of(context)!.text_341,
       ),
       _bulletPoint(
-        'يشترط للاشتراك في التطبيق دفع رسوم اشتراك سنوية قدرها 100 أوقية جديدة للاستفادة من خدمات المزاد والمشاركة فيه',
+        AppLocalizations.of(context)!.text_342,
       ),
     ];
   }
@@ -246,7 +244,7 @@ class _TermsPageState extends State<TermsPage> {
   Widget _sectionHeader(String title) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsetsDirectional.only(bottom: 8),
       child: Text(
         title,
         style: TextStyle(
@@ -261,7 +259,7 @@ class _TermsPageState extends State<TermsPage> {
   Widget _sectionBody(String body) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsetsDirectional.only(bottom: 8),
       child: Text(
         body,
         style: TextStyle(
@@ -276,12 +274,12 @@ class _TermsPageState extends State<TermsPage> {
   Widget _bulletPoint(String text) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsetsDirectional.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsetsDirectional.only(top: 6),
             child: Icon(
               Icons.circle,
               size: 6,

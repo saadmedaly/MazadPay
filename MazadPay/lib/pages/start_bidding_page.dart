@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/terms_page.dart';
 import 'package:mezadpay/pages/language_page.dart';
@@ -18,8 +19,8 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
   final List<Map<String, String>> onboardingData = [
     {
       'image': 'assets/Start Bidding.png',
-      'title': 'زايد الآن لتكون الفائز الأقرب بالصفقة!',
-      'description': 'انضم إلى آلاف المزايدين واقتنص الفرص الحصرية بلمسة واحدة.',
+      'title': AppLocalizations.of(context)!.text_304,
+      'description': AppLocalizations.of(context)!.text_305,
     },
   ];
 
@@ -28,9 +29,7 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final Color primaryColor = AppTheme.primaryColor;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
@@ -205,7 +204,7 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
                                   ),
                                 ),
                                 child: Text(
-                                  'متابعة',
+                                  AppLocalizations.of(context)!.text_144,
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -227,7 +226,7 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
                                 );
                               },
                               child: Text(
-                                'تخطي للجولة',
+                                AppLocalizations.of(context)!.text_308,
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
@@ -247,7 +246,6 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }

@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,9 +76,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     final auction = ref.watch(auctionNotifierProvider(widget.auctionId));
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         body: Column(
           children: [
@@ -107,8 +106,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             _buildBottomAction(context, auction, isDarkMode),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildSliverAppBar(BuildContext context, Auction auction, bool isDarkMode) {
@@ -121,7 +119,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       backgroundColor: isDarkMode ? const Color(0xFF1D1D1D) : const Color(0xFF0081FF),
       leadingWidth: 140,
       leading: Padding(
-        padding: const EdgeInsets.only(right: 16),
+        padding: const EdgeInsetsDirectional.only(end: 16),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -133,7 +131,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   ref.read(favoritesProvider.notifier).toggleFavorite(widget.auctionId);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(isFavorite ? 'تمت الإزالة من المفضلة' : 'تم الإضافة إلى المفضلة'),
+                      content: Text(isFavorite ? AppLocalizations.of(context)!.text_55 : AppLocalizations.of(context)!.text_56),
                       duration: const Duration(seconds: 1),
                       behavior: SnackBarBehavior.floating,
                     ),
@@ -160,7 +158,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             ),
             Positioned(
               bottom: 24,
-              right: 24,
+              end: 24,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
@@ -210,7 +208,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('السعر الحالي', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 14)),
+                Text(AppLocalizations.of(context)!.text_57, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 4),
                 Text('${auction.currentPrice.toStringAsFixed(0)} أوقية جديدة', 
                     style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
@@ -223,12 +221,12 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             height: 100,
             decoration: BoxDecoration(
               color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-              border: Border(left: BorderSide(color: Colors.grey.withOpacity(0.1))),
+              border: Border(start: BorderSide(color: Colors.grey.withOpacity(0.1))),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('الحد الأدنى للزيادة', style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 14)),
+                Text(AppLocalizations.of(context)!.text_58, style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 14)),
                 const SizedBox(height: 4),
                 Text('${auction.minIncrement.toStringAsFixed(0)} أوقية جديدة', 
                     style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0081FF), fontSize: 20, fontWeight: FontWeight.bold)),
@@ -288,9 +286,9 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildTimerUnit('ثانية', _formatDuration(_timeLeft).split(' : ')[2]),
-                _buildTimerUnit('دقيقة', _formatDuration(_timeLeft).split(' : ')[1]),
-                _buildTimerUnit('ساعة', _formatDuration(_timeLeft).split(' : ')[0]),
+                _buildTimerUnit(AppLocalizations.of(context)!.text_59, _formatDuration(_timeLeft).split(' : ')[2]),
+                _buildTimerUnit(AppLocalizations.of(context)!.text_60, _formatDuration(_timeLeft).split(' : ')[1]),
+                _buildTimerUnit(AppLocalizations.of(context)!.text_61, _formatDuration(_timeLeft).split(' : ')[0]),
               ],
             ),
           ),
@@ -357,9 +355,9 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          _buildListTile(Icons.info_outline, 'أحكام وشروط المزايدة', () {}, isDarkMode),
+          _buildListTile(Icons.info_outline, AppLocalizations.of(context)!.text_62, () {}, isDarkMode),
           const SizedBox(height: 12),
-          _buildListTile(Icons.contact_support_outlined, 'تواصل مع فريق الدعم', () {}, isDarkMode),
+          _buildListTile(Icons.contact_support_outlined, AppLocalizations.of(context)!.text_63, () {}, isDarkMode),
           const SizedBox(height: 12),
           GestureDetector(
             onTap: () => Navigator.of(context).push(
@@ -373,7 +371,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                'مشاهدة كل المزايدين',
+                AppLocalizations.of(context)!.text_64,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 16,
@@ -413,17 +411,17 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             runSpacing: 16,
             children: [
               if (auction.manufacturer != null)
-                _buildCarDetailItem(Icons.home_work_outlined, 'الشركة المصنعة', auction.manufacturer!, isDarkMode),
+                _buildCarDetailItem(Icons.home_work_outlined, AppLocalizations.of(context)!.text_65, auction.manufacturer!, isDarkMode),
               if (auction.transmission != null)
-                _buildCarDetailItem(Icons.vertical_split_outlined, 'نقل', auction.transmission!, isDarkMode),
+                _buildCarDetailItem(Icons.vertical_split_outlined, AppLocalizations.of(context)!.text_66, auction.transmission!, isDarkMode),
               if (auction.fuelType != null)
-                _buildCarDetailItem(Icons.local_gas_station_outlined, 'نوع الوقود', auction.fuelType!, isDarkMode),
+                _buildCarDetailItem(Icons.local_gas_station_outlined, AppLocalizations.of(context)!.text_67, auction.fuelType!, isDarkMode),
               if (auction.year != null)
-                _buildCarDetailItem(Icons.calendar_month_outlined, 'السنة', auction.year!, isDarkMode),
+                _buildCarDetailItem(Icons.calendar_month_outlined, AppLocalizations.of(context)!.text_68, auction.year!, isDarkMode),
               if (auction.mileage != null)
-                _buildCarDetailItem(Icons.speed_rounded, 'عدد الأميال', auction.mileage!, isDarkMode),
+                _buildCarDetailItem(Icons.speed_rounded, AppLocalizations.of(context)!.text_69, auction.mileage!, isDarkMode),
               if (auction.model != null)
-                _buildCarDetailItem(Icons.directions_car_filled, 'الطراز', auction.model!, isDarkMode),
+                _buildCarDetailItem(Icons.directions_car_filled, AppLocalizations.of(context)!.text_70, auction.model!, isDarkMode),
             ],
           ),
         ],
@@ -503,11 +501,11 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 if (auction.isUserHighestBidder) ...[
                    const Icon(Icons.back_hand_outlined, color: Colors.white),
                    const SizedBox(width: 8),
-                   Text('انت الان المزايد الأعلى', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                   Text(AppLocalizations.of(context)!.text_71, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
                 ] else ...[
                    const Icon(Icons.gavel, color: Colors.white),
                    const SizedBox(width: 8),
-                   Text('قم بالمزايدة الان', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                   Text(AppLocalizations.of(context)!.text_72, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
                 ],
               ],
             ),
@@ -527,7 +525,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'مزادات متشابهة',
+                AppLocalizations.of(context)!.text_73,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -547,7 +545,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    'عرض الكل',
+                    AppLocalizations.of(context)!.text_74,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -617,7 +615,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   child: Image.asset(imagePath, height: 120, width: double.infinity, fit: BoxFit.cover),
                 ),
                 Positioned(
-                  top: 4, right: 4,
+                  top: 4, end: 4,
                   child: IconButton(
                     iconSize: 18,
                     onPressed: () {
@@ -638,7 +636,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   ),
                 ),
                 Positioned(
-                  top: 8, left: 8,
+                  top: 8, start: 8,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(

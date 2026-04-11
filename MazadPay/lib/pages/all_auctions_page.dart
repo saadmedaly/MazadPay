@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -56,16 +57,14 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           title: Text(
-            'جميع المزادات',
+            AppLocalizations.of(context)!.text_2,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -97,7 +96,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: 'ابحث عن مزاد...',
+                    hintText: AppLocalizations.of(context)!.text_53,
                     hintStyle: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 14),
                     prefixIcon: const Icon(Icons.search, color: Colors.grey),
                     border: InputBorder.none,
@@ -112,7 +111,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
               child: _filteredAuctions.isEmpty
                   ? Center(
                       child: Text(
-                        'لا توجد نتائج بحث',
+                        AppLocalizations.of(context)!.text_54,
                         style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 16),
                       ),
                     )
@@ -141,8 +140,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildAuctionItem(BuildContext context, bool isDarkMode, String title, String price, String time, String id, String imageUrl) {
@@ -187,13 +185,13 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
               ),
               Positioned(
                 top: 8,
-                right: 8,
+                end: 8,
                 child: GestureDetector(
                   onTap: () {
                     ref.read(favoritesProvider.notifier).toggleFavorite(id);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(isFavorite ? 'تمت الإزالة من المفضلة' : 'تم الإضافة إلى المفضلة'),
+                        content: Text(isFavorite ? AppLocalizations.of(context)!.text_55 : AppLocalizations.of(context)!.text_56),
                         duration: const Duration(seconds: 1),
                         behavior: SnackBarBehavior.floating,
                       ),
@@ -215,7 +213,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
               ),
               Positioned(
                 top: 8,
-                left: 8,
+                start: 8,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
@@ -282,7 +280,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                       elevation: 0,
                     ),
                     child: Text(
-                      'زايد الآن',
+                      AppLocalizations.of(context)!.text_3,
                       style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                   ),

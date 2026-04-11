@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -8,9 +9,7 @@ class AdSuccessPage extends StatelessWidget {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : Colors.white,
         body: Center(
           child: Padding(
@@ -46,7 +45,7 @@ class AdSuccessPage extends StatelessWidget {
                 
                 // Success Text
                 Text(
-                  'تم نشر الإعلان بنجاح!',
+                  AppLocalizations.of(context)!.text_50,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 24,
@@ -58,7 +57,7 @@ class AdSuccessPage extends StatelessWidget {
                 
                 // Subtext
                 Text(
-                  'يتم مراجعته و سيظهر للجميع قريباً',
+                  AppLocalizations.of(context)!.text_51,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 16,
@@ -81,7 +80,7 @@ class AdSuccessPage extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     child: Text(
-                      'حَسناً',
+                      AppLocalizations.of(context)!.text_52,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -94,7 +93,6 @@ class AdSuccessPage extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }

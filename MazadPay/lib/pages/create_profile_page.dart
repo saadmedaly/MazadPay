@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'login_page.dart';
 
@@ -20,9 +21,7 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: const Color(0xFF135BEC),
         body: Column(
           children: [
@@ -60,7 +59,7 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                           ],
                         ),
                         Text(
-                          'مزاد باي',
+                          AppLocalizations.of(context)!.text_145,
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -81,9 +80,9 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                 width: double.infinity,
                 decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
+                  borderRadius: BorderRadiusDirectional.only(
+                    topStart: Radius.circular(30),
+                    topEnd: Radius.circular(30),
                   ),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -92,8 +91,8 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const SizedBox(height: 16),
-                      const Text(
-                        'إنشاء ملفك الشخصي',
+                      Text(
+                        AppLocalizations.of(context)!.text_146,
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -101,8 +100,8 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        'أدخل معلوماتك لإنهاء إنشاء حسابك',
+                      Text(
+                        AppLocalizations.of(context)!.text_147,
                         style: TextStyle(
                           fontSize: 14,
                           color: Color(0xFF9E9E9E),
@@ -132,8 +131,8 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                             color: Colors.black,
                             fontSize: 15,
                           ),
-                          decoration: const InputDecoration(
-                            hintText: 'أدخل اسمك الكامل',
+                          decoration: InputDecoration(
+                            hintText: AppLocalizations.of(context)!.text_148,
                             hintStyle: TextStyle(
                               color: Color(0xFF9E9E9E),
                               fontSize: 14,
@@ -170,8 +169,8 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          child: const Text(
-                            'متابعة',
+                          child: Text(
+                            AppLocalizations.of(context)!.text_144,
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -187,7 +186,6 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }

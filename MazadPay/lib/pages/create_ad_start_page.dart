@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math' as math;
@@ -11,14 +12,14 @@ class CreateAdStartPage extends StatelessWidget {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     final categories = [
-      {'icon': Icons.home_outlined, 'label': 'عقارات'},
-      {'icon': Icons.directions_car_outlined, 'label': 'سيارات'},
-      {'icon': Icons.smartphone_outlined, 'label': 'هواتف'},
-      {'icon': Icons.laptop_outlined, 'label': 'الكترونيات'},
-      {'icon': Icons.watch_outlined, 'label': 'ساعات'},
-      {'icon': Icons.pedal_bike_outlined, 'label': 'دراجات'},
-      {'icon': Icons.pets_outlined, 'label': 'حيوانات'},
-      {'icon': Icons.chair_outlined, 'label': 'أثاث'},
+      {'icon': Icons.home_outlined, 'label': AppLocalizations.of(context)!.text_119},
+      {'icon': Icons.directions_car_outlined, 'label': AppLocalizations.of(context)!.text_86},
+      {'icon': Icons.smartphone_outlined, 'label': AppLocalizations.of(context)!.text_130},
+      {'icon': Icons.laptop_outlined, 'label': AppLocalizations.of(context)!.text_131},
+      {'icon': Icons.watch_outlined, 'label': AppLocalizations.of(context)!.text_132},
+      {'icon': Icons.pedal_bike_outlined, 'label': AppLocalizations.of(context)!.text_133},
+      {'icon': Icons.pets_outlined, 'label': AppLocalizations.of(context)!.text_124},
+      {'icon': Icons.chair_outlined, 'label': AppLocalizations.of(context)!.text_142},
     ];
 
     return Scaffold(
@@ -28,7 +29,7 @@ class CreateAdStartPage extends StatelessWidget {
         elevation: 0,
         centerTitle: true,
         title: Text(
-          'مزايدة',
+          AppLocalizations.of(context)!.text_89,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -86,7 +87,7 @@ class CreateAdStartPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Text(
-              'هل يوجد لديك منتجات تعرضها للمزايدة ؟\nاختر اعلانك من هنا',
+              AppLocalizations.of(context)!.text_143,
               textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 14,
@@ -116,7 +117,7 @@ class CreateAdStartPage extends StatelessWidget {
                   elevation: 0,
                 ),
                 child: Text(
-                  'متابعة',
+                  AppLocalizations.of(context)!.text_144,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

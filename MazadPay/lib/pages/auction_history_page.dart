@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,16 +15,14 @@ class AuctionHistoryPage extends ConsumerWidget {
     final history = ref.watch(auctionHistoryProvider(auctionId));
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           title: Text(
-            'سجل المزايدات',
+            AppLocalizations.of(context)!.text_75,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -48,8 +47,7 @@ class AuctionHistoryPage extends ConsumerWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildProductHeader(BuildContext context, Auction auction, bool isDarkMode) {
@@ -73,7 +71,7 @@ class AuctionHistoryPage extends ConsumerWidget {
                 Text('${auction.currentPrice.toStringAsFixed(0)} أوقية جديدة', 
                     style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF))),
                 const SizedBox(height: 4),
-                Text('الفائز : محمد احمد', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey)),
+                Text(AppLocalizations.of(context)!.text_76, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey)),
               ],
             ),
           ),
@@ -91,11 +89,11 @@ class AuctionHistoryPage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('الملخص', style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[400])),
+        Text(AppLocalizations.of(context)!.text_77, style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[400])),
         const SizedBox(height: 16),
-        _buildSummaryRow('عدد مزايدات', '15', isDarkMode),
+        _buildSummaryRow(AppLocalizations.of(context)!.text_78, '15', isDarkMode),
         const SizedBox(height: 12),
-        _buildSummaryRow('عدد المزايدون', '12', isDarkMode),
+        _buildSummaryRow(AppLocalizations.of(context)!.text_79, '12', isDarkMode),
       ],
     );
   }
@@ -122,7 +120,7 @@ class AuctionHistoryPage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('المزايدات الأخيرة', style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[400])),
+        Text(AppLocalizations.of(context)!.text_80, style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[400])),
         const SizedBox(height: 16),
         ListView.separated(
           shrinkWrap: true,

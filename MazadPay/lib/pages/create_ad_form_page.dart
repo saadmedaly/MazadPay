@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'ad_success_page.dart';
@@ -16,25 +17,23 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   final _phoneController = TextEditingController();
   final _priceController = TextEditingController();
   
-  String _selectedMainCategory = 'سيارات';
-  String _selectedSubCategory = 'سيارات رباعية الدفع';
-  String _selectedCity = 'مدريد';
+  String _selectedMainCategory = AppLocalizations.of(context)!.text_86;
+  String _selectedSubCategory = AppLocalizations.of(context)!.text_87;
+  String _selectedCity = AppLocalizations.of(context)!.text_88;
   final List<String> _selectedImages = []; // List of assets or paths
 
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           title: Text(
-            'مزايدة',
+            AppLocalizations.of(context)!.text_89,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -52,7 +51,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'إنشاء إعلان جديد',
+                AppLocalizations.of(context)!.text_90,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -61,35 +60,35 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               ),
               const SizedBox(height: 32),
               
-              _buildLabel(context, 'اسم الإعلان'),
-              _buildTextField(context, controller: _nameController, hint: 'أدخل اسم منتجك'),
+              _buildLabel(context, AppLocalizations.of(context)!.text_91),
+              _buildTextField(context, controller: _nameController, hint: AppLocalizations.of(context)!.text_92),
               
               const SizedBox(height: 24),
-              _buildLabel(context, 'الوصف'),
-              _buildTextField(context, controller: _descriptionController, hint: 'اكتب وصفا', maxLines: 3, icon: Icons.description_outlined),
+              _buildLabel(context, AppLocalizations.of(context)!.text_93),
+              _buildTextField(context, controller: _descriptionController, hint: AppLocalizations.of(context)!.text_94, maxLines: 3, icon: Icons.description_outlined),
               
               const SizedBox(height: 24),
-              _buildLabel(context, 'رقم الهاتف'),
-              _buildTextField(context, controller: _phoneController, hint: 'لتواصل معك', icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
+              _buildLabel(context, AppLocalizations.of(context)!.text_40),
+              _buildTextField(context, controller: _phoneController, hint: AppLocalizations.of(context)!.text_95, icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
               
               const SizedBox(height: 24),
-              _buildLabel(context, 'السعر'),
-              _buildTextField(context, controller: _priceController, hint: 'أدخل السعر', icon: Icons.attach_money_outlined, keyboardType: TextInputType.number, suffixText: 'MRU'),
+              _buildLabel(context, AppLocalizations.of(context)!.text_96),
+              _buildTextField(context, controller: _priceController, hint: AppLocalizations.of(context)!.text_97, icon: Icons.attach_money_outlined, keyboardType: TextInputType.number, suffixText: 'MRU'),
               
               const SizedBox(height: 24),
-              _buildLabel(context, 'اختر الفئة الرئيسية'),
+              _buildLabel(context, AppLocalizations.of(context)!.text_98),
               _buildCategorySelector(context, value: _selectedMainCategory, icon: Icons.category_outlined, onTap: () => _showCategorySheet(context, true)),
               
               const SizedBox(height: 24),
-              _buildLabel(context, 'اختر الفئة الفرعية'),
+              _buildLabel(context, AppLocalizations.of(context)!.text_99),
               _buildCategorySelector(context, value: _selectedSubCategory, icon: Icons.grid_view_outlined, onTap: () => _showCategorySheet(context, false)),
               
               const SizedBox(height: 24),
-              _buildLabel(context, 'اختر الموقع'),
+              _buildLabel(context, AppLocalizations.of(context)!.text_100),
               _buildCategorySelector(context, value: _selectedCity, icon: Icons.location_on_outlined, onTap: () => _showCitySheet(context)),
               
               const SizedBox(height: 32),
-              _buildLabel(context, 'صور وفيديوهات المنتج'),
+              _buildLabel(context, AppLocalizations.of(context)!.text_101),
               _buildMediaSection(context),
               
               const SizedBox(height: 48),
@@ -109,7 +108,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                   child: Text(
-                    'نشر الإعلان',
+                    AppLocalizations.of(context)!.text_102,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -122,14 +121,13 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildLabel(BuildContext context, String text) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, right: 4),
+      padding: const EdgeInsetsDirectional.only(bottom: 8, end: 4),
       child: Row(
         children: [
           Text(
@@ -239,7 +237,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               onTap: () => _showMediaPicker(context),
               child: Container(
                 width: 100,
-                margin: const EdgeInsets.only(left: 12),
+                margin: const EdgeInsetsDirectional.only(start: 12),
                 decoration: BoxDecoration(
                   color: isDarkMode ? Colors.white10 : Colors.grey[100],
                   borderRadius: BorderRadius.circular(16),
@@ -251,7 +249,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
           }
           return Container(
             width: 100,
-            margin: const EdgeInsets.only(left: 12),
+            margin: const EdgeInsetsDirectional.only(start: 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               image: DecorationImage(image: AssetImage(_selectedImages[index]), fit: BoxFit.cover),
@@ -268,8 +266,8 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => _CategorySheet(
-        title: 'اختر المدينة',
-        items: ['مدريد', 'عرفات', 'توجنين', 'لكصر', 'دار نعيم', 'عين الطلح', 'الميناء', 'الرياض', 'السبخة', 'تيارت', 'تفرغ زينة'],
+        title: AppLocalizations.of(context)!.text_103,
+        items: [AppLocalizations.of(context)!.text_88, AppLocalizations.of(context)!.text_104, AppLocalizations.of(context)!.text_105, AppLocalizations.of(context)!.text_106, AppLocalizations.of(context)!.text_107, AppLocalizations.of(context)!.text_108, AppLocalizations.of(context)!.text_109, AppLocalizations.of(context)!.text_110, AppLocalizations.of(context)!.text_111, AppLocalizations.of(context)!.text_112, AppLocalizations.of(context)!.text_113],
         onSelected: (val) {
           setState(() => _selectedCity = val);
           Navigator.of(context).pop();
@@ -278,13 +276,13 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     );
   }
 
-  static const Map<String, List<String>> _subCategoriesByMain = {
-    'سيارات': ['سيارات رباعية دفع', 'سيارات عادية', 'سيارات تاكسي', 'سيارات مضروبة', 'سيارات كهربائية'],
-    'عقارات': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
-    'هواتف': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
-    'الكترونيات': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
-    'ساعات': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
-    'دراجات': ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع'],
+  static Map<String, List<String>> _subCategoriesByMain = {
+    AppLocalizations.of(context)!.text_86: [AppLocalizations.of(context)!.text_114, AppLocalizations.of(context)!.text_115, AppLocalizations.of(context)!.text_116, AppLocalizations.of(context)!.text_117, AppLocalizations.of(context)!.text_118],
+    AppLocalizations.of(context)!.text_119: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
+    AppLocalizations.of(context)!.text_130: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
+    AppLocalizations.of(context)!.text_131: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
+    AppLocalizations.of(context)!.text_132: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
+    AppLocalizations.of(context)!.text_133: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
   };
 
   void _showCategorySheet(BuildContext context, bool isMain) {
@@ -293,10 +291,10 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => _CategorySheet(
-        title: isMain ? 'اختر الفئة الرئيسية' : 'اختر الفئة الفرعية',
+        title: isMain ? AppLocalizations.of(context)!.text_98 : AppLocalizations.of(context)!.text_99,
         items: isMain
-          ? ['سيارات', 'عقارات', 'هواتف', 'قطع ارضية', 'الالكترونيات', 'أدوات منزلية', 'حيوانات', 'الاثاث', 'ساعات', 'دراجات', 'شاحنات', 'رباخة', 'معدات ثقيلة', 'ارقام ذهبية']
-          : (_subCategoriesByMain[_selectedMainCategory] ?? ['أجهزة منزلية', 'قطع أرضية', 'مستلزمات رجالية', 'مستلزمات نسائية', 'حيوانات', 'شاحنات', 'مواد ثقيلة', 'أرقام هاتف', 'ربّاخة', 'بيع مشاريع']),
+          ? [AppLocalizations.of(context)!.text_86, AppLocalizations.of(context)!.text_119, AppLocalizations.of(context)!.text_130, AppLocalizations.of(context)!.text_134, AppLocalizations.of(context)!.text_135, AppLocalizations.of(context)!.text_136, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_137, AppLocalizations.of(context)!.text_132, AppLocalizations.of(context)!.text_133, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_138, AppLocalizations.of(context)!.text_139, AppLocalizations.of(context)!.text_140]
+          : (_subCategoriesByMain[_selectedMainCategory] ?? [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129]),
         onSelected: (val) {
           setState(() {
             if (isMain) {
@@ -362,7 +360,7 @@ class _CategorySheetState extends State<_CategorySheet> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsetsDirectional.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -384,7 +382,7 @@ class _CategorySheetState extends State<_CategorySheet> {
               textAlign: TextAlign.right,
               onChanged: _onSearch,
               decoration: InputDecoration(
-                hintText: 'بحث...',
+                hintText: AppLocalizations.of(context)!.text_141,
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
                 fillColor: isDarkMode ? Colors.black26 : Colors.grey[100],

@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/delivery_details_page.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,9 +21,7 @@ class _ServicesPageState extends State<ServicesPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         endDrawer: const SideMenuDrawer(),
         appBar: AppBar(
@@ -53,9 +52,9 @@ class _ServicesPageState extends State<ServicesPage> {
           ),
         ),
         body: _currentIndex == 2 
-          ? const Center(
+          ? Center(
               child: Text(
-                "الصفحة غير متاحة حاليا",
+                AppLocalizations.of(context)!.text_34,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
               ),
             )
@@ -72,8 +71,8 @@ class _ServicesPageState extends State<ServicesPage> {
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
-                      begin: Alignment.centerRight,
-                      end: Alignment.centerLeft,
+                      begin: AlignmentDirectional.centerEnd,
+                      end: AlignmentDirectional.centerStart,
                     ),
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -84,9 +83,9 @@ class _ServicesPageState extends State<ServicesPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
+                          children: [
                             Text(
-                              'اربح وقتك',
+                              AppLocalizations.of(context)!.text_296,
                               style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                             ),
                           ],
@@ -97,10 +96,10 @@ class _ServicesPageState extends State<ServicesPage> {
                 ),
               ),
 
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20.0),
                 child: Text(
-                  'الخدمات',
+                  AppLocalizations.of(context)!.text_297,
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -118,7 +117,7 @@ class _ServicesPageState extends State<ServicesPage> {
                   childAspectRatio: 1.2,
                   children: [
                     _buildServiceCard(
-                      'توصيل', 
+                      AppLocalizations.of(context)!.text_32, 
                       Colors.blue[50]!, 
                       Icons.local_shipping_outlined, 
                       const Color(0xFF00C58D),
@@ -129,10 +128,10 @@ class _ServicesPageState extends State<ServicesPage> {
                         );
                       },
                     ),
-                    _buildServiceCard('كورس', Colors.yellow[50]!, Icons.local_taxi, Colors.orange),
-                    _buildServiceCard('كورس عبر المدن', Colors.green[50]!, Icons.directions_bus, Colors.green),
-                    _buildServiceCard('نقل البضائع', Colors.orange[50]!, Icons.local_shipping, Colors.orangeAccent),
-                    _buildServiceCard('اخرى', Colors.purple[50]!, Icons.more_horiz, Colors.purple),
+                    _buildServiceCard(AppLocalizations.of(context)!.text_298, Colors.yellow[50]!, Icons.local_taxi, Colors.orange),
+                    _buildServiceCard(AppLocalizations.of(context)!.text_299, Colors.green[50]!, Icons.directions_bus, Colors.green),
+                    _buildServiceCard(AppLocalizations.of(context)!.text_300, Colors.orange[50]!, Icons.local_shipping, Colors.orangeAccent),
+                    _buildServiceCard(AppLocalizations.of(context)!.text_301, Colors.purple[50]!, Icons.more_horiz, Colors.purple),
                   ],
                 ),
               ),
@@ -141,7 +140,7 @@ class _ServicesPageState extends State<ServicesPage> {
           ),
         ),
         floatingActionButton: Padding(
-          padding: const EdgeInsets.only(top: 20.0),
+          padding: const EdgeInsetsDirectional.only(top: 20.0),
           child: SizedBox(
             height: 70,
             width: 70,
@@ -172,17 +171,16 @@ class _ServicesPageState extends State<ServicesPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(Icons.home_outlined, Icons.home, 'الرئيسية', 0),
-                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, 'توصيل', 1),
+                _buildNavItem(Icons.home_outlined, Icons.home, AppLocalizations.of(context)!.text_1, 0),
+                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, AppLocalizations.of(context)!.text_32, 1),
                 const SizedBox(width: 48), // Space for FAB
-                _buildNavItem(Icons.storefront_outlined, Icons.storefront, 'التجارة الالكترونية', 2),
-                _buildNavItem(Icons.person_outline, Icons.person, 'حسابي', 3),
+                _buildNavItem(Icons.storefront_outlined, Icons.storefront, AppLocalizations.of(context)!.text_33, 2),
+                _buildNavItem(Icons.person_outline, Icons.person, AppLocalizations.of(context)!.text_19, 3),
               ],
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildServiceCard(String title, Color bgColor, IconData icon, Color iconColor, {VoidCallback? onTap}) {

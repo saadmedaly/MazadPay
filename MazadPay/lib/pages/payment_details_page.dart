@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/payment_success_page.dart';
@@ -25,9 +26,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
       backgroundColor: Colors.transparent,
       builder: (context) {
         bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: Container(
+        return Container(
             height: MediaQuery.of(context).size.height * 0.75,
             decoration: BoxDecoration(
               color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
@@ -42,10 +41,10 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                   decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
                 ),
                 const SizedBox(height: 20),
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
-                    'يمكن لهذا التطبيق الوصول إلى الصور التي تختارها فقط.',
+                    AppLocalizations.of(context)!.text_265,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
@@ -63,8 +62,8 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                             color: const Color(0xFFE8F0FE),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Center(
-                            child: Text('الصور', style: TextStyle(color: Color(0xFF0084FF), fontWeight: FontWeight.bold)),
+                          child: Center(
+                            child: Text(AppLocalizations.of(context)!.text_266, style: TextStyle(color: Color(0xFF0084FF), fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ),
@@ -76,8 +75,8 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                             color: isDarkMode ? Colors.white10 : Colors.grey[100],
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Center(
-                            child: Text('الألبومات', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                          child: Center(
+                            child: Text(AppLocalizations.of(context)!.text_267, style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ),
@@ -124,7 +123,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                                   border: Border.all(color: const Color(0xFF0084FF), width: 3),
                                 ),
                                 child: const Align(
-                                  alignment: Alignment.topRight,
+                                  alignment: AlignmentDirectional.topEnd,
                                   child: Padding(
                                     padding: EdgeInsets.all(4.0),
                                     child: Icon(Icons.check_circle, color: Color(0xFF0084FF), size: 18),
@@ -139,8 +138,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                 ),
               ],
             ),
-          ),
-        );
+          );
       },
     );
   }
@@ -150,9 +148,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     const Color primaryBlue = Color(0xFF0084FF);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         endDrawer: const SideMenuDrawer(),
         appBar: AppBar(
@@ -170,7 +166,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                 onPressed: () => Navigator.pop(context),
               ),
               Text(
-                'إضافة إيداع',
+                AppLocalizations.of(context)!.text_189,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: isDarkMode ? Colors.white : Colors.black),
               ),
            
@@ -191,7 +187,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
               ),
               const SizedBox(height: 12),
               Text(
-                'استخدم رمز التاجر لإتمام عملية الدفع',
+                AppLocalizations.of(context)!.text_268,
                 style: TextStyle(color: Colors.grey[600], fontSize: 16),
               ),
               const SizedBox(height: 8),
@@ -224,7 +220,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(
-                      child: Text(widget.methodName == 'سداد' ? 'Sedad' : widget.methodName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(widget.methodName == AppLocalizations.of(context)!.text_174 ? 'Sedad' : widget.methodName, style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(width: 15),
@@ -256,29 +252,29 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _buildDetailRow('التاريخ والوقت', '2025/12/27 م', isValueBold: true),
+                    _buildDetailRow(AppLocalizations.of(context)!.text_269, AppLocalizations.of(context)!.text_270, isValueBold: true),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('الحالة', style: TextStyle(color: Colors.grey)),
+                        Text(AppLocalizations.of(context)!.text_271, style: TextStyle(color: Colors.grey)),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
                             color: const Color(0xFFFFEBD5),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text(
-                            'في انتظار الدفع',
+                          child: Text(
+                            AppLocalizations.of(context)!.text_238,
                             style: TextStyle(color: Color(0xFFD47A2C), fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                         ),
                       ],
                     ),
                     const Divider(height: 32),
-                    _buildDetailRow('رسوم إنشاء الطلب', '100MRU', isValueBold: true),
+                    _buildDetailRow(AppLocalizations.of(context)!.text_272, '100MRU', isValueBold: true),
                     const SizedBox(height: 16),
-                    _buildDetailRow('رقم هاتف المدفوع', '36601175', isValueBold: true),
+                    _buildDetailRow(AppLocalizations.of(context)!.text_273, '36601175', isValueBold: true),
                     const SizedBox(height: 16),
                     _buildDetailRow('إجمالي المبلغ للدفع عبر ${widget.methodName}', '100MRU', isValueBold: true, isLarge: true),
                   ],
@@ -295,7 +291,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'يرجى تحويل مبلغ التأمين وارفاق صورة الحوالة في الاسفل',
+                      AppLocalizations.of(context)!.text_274,
                       style: TextStyle(color: Colors.grey[800], fontSize: 14, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -328,11 +324,11 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                              ],
                             const Icon(Icons.check_circle, color: Colors.green, size: 30),
                             const SizedBox(height: 8),
-                            const Text('تم إرفاق صورة الوصل', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text(AppLocalizations.of(context)!.text_275, style: TextStyle(fontWeight: FontWeight.bold)),
                           ],
                         )
                       : Text(
-                          'يرجى الضغط لإرفاق صورة الحوالة',
+                          AppLocalizations.of(context)!.text_276,
                           style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold),
                         ),
                   ),
@@ -354,7 +350,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                       );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('يرجى إرفاق صورة الوصل أولاً')),
+                        SnackBar(content: Text(AppLocalizations.of(context)!.text_277)),
                       );
                     }
                   },
@@ -369,7 +365,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                       const Icon(Icons.arrow_back, color: Colors.white),
                       const SizedBox(width: 12),
                       Text(
-                        _receiptUploaded ? 'إتمام الدفع' : 'ادفع عبر ${widget.methodName}',
+                        _receiptUploaded ? AppLocalizations.of(context)!.text_278 : 'ادفع عبر ${widget.methodName}',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
                       ),
                     ],
@@ -380,8 +376,7 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildDetailRow(String label, String value, {bool isValueBold = false, bool isLarge = false}) {

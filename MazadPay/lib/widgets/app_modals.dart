@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -12,17 +13,15 @@ class AppModals {
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
       builder: (context) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: SingleChildScrollView(
+        return SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'اختر اللغة',
+                  Text(
+                    AppLocalizations.of(context)!.text_210,
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -31,7 +30,7 @@ class AppModals {
                   const SizedBox(height: 24),
                   _buildLanguageOption(
                     context,
-                    title: 'العربية',
+                    title: AppLocalizations.of(context)!.text_47,
                     flag: '🇸🇦',
                     isSelected: true,
                     onTap: () => Navigator.pop(context),
@@ -55,8 +54,7 @@ class AppModals {
                 ],
               ),
             ),
-          ),
-        );
+          );
       },
     );
   }
@@ -70,7 +68,7 @@ class AppModals {
     required bool isDarkMode,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsetsDirectional.only(bottom: 12),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -122,13 +120,11 @@ class AppModals {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            return Directionality(
-              textDirection: TextDirection.rtl,
-              child: SingleChildScrollView(
+            return SingleChildScrollView(
                 child: Padding(
-                  padding: EdgeInsets.only(
-                    left: 24,
-                    right: 24,
+                  padding: EdgeInsetsDirectional.only(
+                    start: 24,
+                    end: 24,
                     top: 32,
                     bottom: MediaQuery.of(context).viewInsets.bottom + 32,
                   ),
@@ -145,16 +141,16 @@ class AppModals {
                         child: const Icon(Icons.star, color: Colors.amber, size: 40),
                       ),
                       const SizedBox(height: 24),
-                      const Text(
-                        'قيم تجربتك',
+                      Text(
+                        AppLocalizations.of(context)!.text_360,
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
-                        'رأيك يهمنا لتحسين جولة خدماتنا وإسعادكم!',
+                      Text(
+                        AppLocalizations.of(context)!.text_361,
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.grey),
                       ),
@@ -177,7 +173,7 @@ class AppModals {
                         maxLines: 3,
                         textAlign: TextAlign.right,
                         decoration: InputDecoration(
-                          hintText: 'اكتب ملاحظاتك hier (اختياري)...',
+                          hintText: AppLocalizations.of(context)!.text_362,
                           hintStyle: const TextStyle(fontSize: 14),
                           filled: true,
                           fillColor: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.grey[500]!.withOpacity(0.1),
@@ -200,8 +196,8 @@ class AppModals {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text(
-                            'إرسال التقييم',
+                          child: Text(
+                            AppLocalizations.of(context)!.text_363,
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                         ),
@@ -209,8 +205,7 @@ class AppModals {
                     ],
                   ),
                 ),
-              ),
-            );
+              );
           },
         );
       },
@@ -227,9 +222,7 @@ class AppModals {
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
       builder: (context) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: Padding(
+        return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -245,8 +238,8 @@ class AppModals {
                 ),
                 const SizedBox(height: 24),
                 
-                const Text(
-                  'تواصل معنا',
+                Text(
+                  AppLocalizations.of(context)!.text_224,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -258,7 +251,7 @@ class AppModals {
                   context,
                   icon: FontAwesomeIcons.whatsapp,
                   isWhatsApp: true,
-                  title: 'واتس اب',
+                  title: AppLocalizations.of(context)!.text_225,
                   subtitle: '47601175',
                   iconColor: const Color(0xFF25D366),
                   bgColor: const Color(0xFFE8F5E9),
@@ -273,7 +266,7 @@ class AppModals {
                   context,
                   icon: Icons.email_outlined,
                   isWhatsApp: false,
-                  title: 'البريد الإلكتروني',
+                  title: AppLocalizations.of(context)!.text_41,
                   subtitle: 'mazadpay@gmail.com',
                   iconColor: const Color(0xFF0084FF),
                   bgColor: const Color(0xFFE3F2FD),
@@ -285,8 +278,7 @@ class AppModals {
                 const SizedBox(height: 32),
               ],
             ),
-          ),
-        );
+          );
       },
     );
   }
@@ -357,4 +349,3 @@ class AppModals {
     );
   }
 }
-

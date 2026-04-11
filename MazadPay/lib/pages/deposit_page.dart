@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/payment_details_page.dart';
 
@@ -25,29 +26,29 @@ class _DepositPageState extends State<DepositPage> {
   final List<PaymentMethod> _methods = [
     PaymentMethod(
       'masrvi',
-      'مصرفي',
-      'استخدموا رمز التاجر الخاص بنا لإتمام عملية\nالدفع عبر مصرفي',
+      AppLocalizations.of(context)!.text_170,
+      AppLocalizations.of(context)!.text_171,
       'assets/Masrivi.png',
       const Color(0xFF00A99D),
     ),
     PaymentMethod(
       'bankily',
-      'بنكلي',
-      'استخدموا رمز التاجر الخاص بنا لإتمام عملية\nالدفع عبر بنكلي',
+      AppLocalizations.of(context)!.text_172,
+      AppLocalizations.of(context)!.text_173,
       'assets/Bankily.png',
       const Color(0xFF0084FF),
     ),
     PaymentMethod(
       'sedad',
-      'سداد',
-      'استخدموا رمز التاجر الخاص بنا لإتمام عملية\nالدفع عبر سداد',
+      AppLocalizations.of(context)!.text_174,
+      AppLocalizations.of(context)!.text_175,
       'assets/Sedad.png',
       const Color(0xFF33CC33),
     ),
     PaymentMethod(
       'click',
-      'كليك',
-      'استخدموا رمز التاجر الخاص بنا لإتمام عملية\nالدفع عبر كليك',
+      AppLocalizations.of(context)!.text_176,
+      AppLocalizations.of(context)!.text_177,
       'assets/Click.png',
       Colors.black,
     ),
@@ -106,35 +107,35 @@ class _DepositPageState extends State<DepositPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'دفع من خلال تطبيقات البنكية',
+              Text(
+                AppLocalizations.of(context)!.text_178,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'يرجى قراءة الشروط والأحكام التالية لاسترداد\nالمعاملات بعناية',
+              Text(
+                AppLocalizations.of(context)!.text_179,
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
               ),
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
-                children: const [
-                  Text('شروط الدفع والتأمين', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                children: [
+                  Text(AppLocalizations.of(context)!.text_180, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   SizedBox(width: 8),
                   Icon(Icons.article, color: Colors.brown, size: 18),
                 ],
               ),
               const SizedBox(height: 16),
               // Terms list
-              _buildTermItem('١. تقبل التطبيق وسائل الدفع: بنكلي، مصرفي، السداد.'),
-              _buildTermItem('٢. يتطلب بعض المزادات دفع مبلغ تأمين لضمان جدية المزايدة.'),
-              _buildTermItem('٣. يُسترجع مبلغ التأمين تلقائياً في حال عدم الفوز بالمزاد خلال ساعة\nحسب مزود الدفع.'),
-              _buildTermItem('٤. لا يُسترجع التأمين في حال الفوز وعدم إتمام الدفع أو مخالفة\nشروط التطبيق.'),
-              _buildTermItem('٥. يحق لإدارة التطبيق إلغاء أي مزاد عند وجود خطأ تقني أو شبهة\nاحتيال، مع إعادة التأمين عند الإلغاء.'),
+              _buildTermItem(AppLocalizations.of(context)!.text_181),
+              _buildTermItem(AppLocalizations.of(context)!.text_182),
+              _buildTermItem(AppLocalizations.of(context)!.text_183),
+              _buildTermItem(AppLocalizations.of(context)!.text_184),
+              _buildTermItem(AppLocalizations.of(context)!.text_185),
               const SizedBox(height: 24),
-              const Text(
-                'باستخدامك للتطبيق، فإنك توافق على هذه الشروط',
+              Text(
+                AppLocalizations.of(context)!.text_186,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               ),
               const SizedBox(height: 24),
@@ -150,7 +151,7 @@ class _DepositPageState extends State<DepositPage> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('إلغاء', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(AppLocalizations.of(context)!.text_187, style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -163,7 +164,7 @@ class _DepositPageState extends State<DepositPage> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('اوافق على شروط', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                      child: Text(AppLocalizations.of(context)!.text_188, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
                   ),
                 ],
@@ -179,7 +180,7 @@ class _DepositPageState extends State<DepositPage> {
 
   Widget _buildTermItem(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+      padding: const EdgeInsetsDirectional.only(bottom: 8.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -199,9 +200,7 @@ class _DepositPageState extends State<DepositPage> {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: PreferredSize(
           preferredSize: const Size.fromHeight(70),
@@ -215,7 +214,7 @@ class _DepositPageState extends State<DepositPage> {
                     onPressed: () => Navigator.pop(context),
                   ),
                   Text(
-                    'إضافة إيداع',
+                    AppLocalizations.of(context)!.text_189,
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDarkMode ? Colors.white : Colors.black),
                   ),
                 ],
@@ -231,10 +230,10 @@ class _DepositPageState extends State<DepositPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.symmetric(vertical: 8.0),
                       child: Text(
-                        'طريقة الدفع',
+                        AppLocalizations.of(context)!.text_190,
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
@@ -296,8 +295,7 @@ class _DepositPageState extends State<DepositPage> {
               ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildPaymentMethodTile(PaymentMethod method, bool isDarkMode) {
@@ -310,7 +308,7 @@ class _DepositPageState extends State<DepositPage> {
         });
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsetsDirectional.only(bottom: 16),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,

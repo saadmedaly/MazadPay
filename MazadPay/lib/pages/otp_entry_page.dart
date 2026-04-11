@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'set_password_page.dart';
 
@@ -49,7 +50,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
         centerTitle: true,
         // BACK BUTTON (Right side in RTL)
         leading: Padding(
-          padding: const EdgeInsets.only(right: 16.0),
+          padding: const EdgeInsetsDirectional.only(end: 16.0),
           child: Center(
             child: InkWell(
               onTap: () => Navigator.pop(context),
@@ -74,7 +75,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'هل تحتاج مساعدة؟',
+              AppLocalizations.of(context)!.text_241,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -82,7 +83,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
               ),
             ),
             Text(
-              'تواصل مع الدعم',
+              AppLocalizations.of(context)!.text_242,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -94,7 +95,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
         // ROBOT ICON (Left side in RTL)
         actions: [
           Padding(
-            padding: const EdgeInsets.only(left: 16.0),
+            padding: const EdgeInsetsDirectional.only(start: 16.0),
             child: Center(
               child: Container(
                 width: 40,
@@ -120,8 +121,8 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               const SizedBox(height: 8),
-              const Text(
-                'أدخل رمز التحقق',
+              Text(
+                AppLocalizations.of(context)!.text_260,
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
@@ -135,9 +136,9 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                     fontFamily: 'Tajawal',
                   ),
                   children: [
-                    const TextSpan(
+                    TextSpan(
                       text:
-                          'ادخل الرمز المكون من 6 أرقام المرسل عبر الواتساب إلى\n',
+                          AppLocalizations.of(context)!.text_261,
                     ),
                     TextSpan(
                       text: widget.phoneNumber,
@@ -204,7 +205,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                       fontFamily: 'Tajawal',
                     ),
                     children: [
-                      const TextSpan(text: 'إعادة إرسال الرمز خلال '),
+                      TextSpan(text: AppLocalizations.of(context)!.text_262),
                       TextSpan(
                         text: '4:24',
                         style: TextStyle(
@@ -238,8 +239,8 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'تحقق',
+                  child: Text(
+                    AppLocalizations.of(context)!.text_263,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -258,7 +259,7 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: Text(
-                    'تغيير طريقة التحقق',
+                    AppLocalizations.of(context)!.text_264,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,

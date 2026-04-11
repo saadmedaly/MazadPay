@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -50,7 +51,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
     final auction = ref.read(auctionNotifierProvider(widget.auctionId));
     return Column(
       children: [
-        Text('تاكيد المزايدة', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(AppLocalizations.of(context)!.text_368, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 24),
         
         // Header info box
@@ -64,11 +65,11 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-               _buildInfoColumn('11', 'مزايدات', Colors.red),
+               _buildInfoColumn('11', AppLocalizations.of(context)!.text_369, Colors.red),
                _buildVerticalDivider(),
-               _buildInfoColumn('${auction.currentPrice.toStringAsFixed(0)}', 'أعلى مزايدة', Colors.black),
+               _buildInfoColumn('${auction.currentPrice.toStringAsFixed(0)}', AppLocalizations.of(context)!.text_370, Colors.black),
                _buildVerticalDivider(),
-               _buildInfoColumn('09 : 00', 'الوقت المتبقي', Colors.red),
+               _buildInfoColumn('09 : 00', AppLocalizations.of(context)!.text_371, Colors.red),
             ],
           ),
         ),
@@ -109,12 +110,12 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
   Widget _buildStep2(bool isDarkMode) {
     return Column(
       children: [
-        Text('تاكيد المزايدة', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(AppLocalizations.of(context)!.text_368, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 32),
         Text('${_bidAmount.toStringAsFixed(0)} أوقية', 
             style: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF))),
         const SizedBox(height: 16),
-        Text('الموافقة على مبلغ المزايدة ؟', style: GoogleFonts.plusJakartaSans(fontSize: 16, color: Colors.grey)),
+        Text(AppLocalizations.of(context)!.text_372, style: GoogleFonts.plusJakartaSans(fontSize: 16, color: Colors.grey)),
         const SizedBox(height: 32),
       ],
     );
@@ -133,7 +134,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
             ref.read(auctionNotifierProvider(widget.auctionId).notifier).placeBid(_bidAmount);
             Navigator.of(context).pop();
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تمت المزايدة بنجاح !')),
+              SnackBar(content: Text(AppLocalizations.of(context)!.text_373)),
             );
           }
         },
@@ -146,7 +147,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
           children: [
             const Icon(Icons.gavel, color: Colors.white),
             const SizedBox(width: 8),
-            Text(_step == 1 ? 'قم بالمزايدة الان' : 'تاكيد', 
+            Text(_step == 1 ? AppLocalizations.of(context)!.text_72 : AppLocalizations.of(context)!.text_374, 
                 style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),

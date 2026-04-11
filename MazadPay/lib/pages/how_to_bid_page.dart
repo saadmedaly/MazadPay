@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
@@ -16,27 +17,27 @@ class _HowToBidPageState extends State<HowToBidPage> {
 
   final List<Map<String, String>> _tutorials = [
     {
-      'title': 'كيف يمكنني دفع من من أي تطبيق بنكي',
+      'title': AppLocalizations.of(context)!.text_203,
       'thumbnail': 'assets/mr.png', // Small flag or Bankily logo placeholder
       'videoUrl': 'assets/MezadPay.mp4',
     },
     {
-      'title': 'كيفية المزايدة على السيارات',
+      'title': AppLocalizations.of(context)!.text_204,
       'thumbnail': '',
       'videoUrl': '',
     },
     {
-      'title': 'طريقة استلام سيارتك بعد الفوز',
+      'title': AppLocalizations.of(context)!.text_205,
       'thumbnail': '',
       'videoUrl': '',
     },
     {
-      'title': 'شرح نظام العمولات والشحن',
+      'title': AppLocalizations.of(context)!.text_206,
       'thumbnail': '',
       'videoUrl': '',
     },
     {
-      'title': 'الأسئلة الشائعة',
+      'title': AppLocalizations.of(context)!.text_207,
       'thumbnail': '',
       'videoUrl': '',
     },
@@ -82,9 +83,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
@@ -107,7 +106,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
             ),
           ),
           title: Text(
-            'كيفية مزايدة والشحن',
+            AppLocalizations.of(context)!.text_208,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -121,7 +120,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionHeader(context, 'فيديوهات تعلمية'),
+              _buildSectionHeader(context, AppLocalizations.of(context)!.text_209),
               const SizedBox(height: 16),
               
               // Video Player Section
@@ -144,8 +143,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildSectionHeader(BuildContext context, String title) {
@@ -217,12 +215,11 @@ class _HowToBidPageState extends State<HowToBidPage> {
               ),
 
             // Skip Buttons 
-            Positioned(
-              left: 40,
+            Positioned.directional(textDirection: Directionality.of(context),$1start: 40,
               child: _buildSkipButton(Icons.replay_10),
             ),
             Positioned(
-              right: 40,
+              end: 40,
               child: _buildSkipButton(Icons.forward_10),
             ),
 
@@ -268,8 +265,8 @@ class _HowToBidPageState extends State<HowToBidPage> {
             // Progress Bar (from screenshot)
             Positioned(
               bottom: 0,
-              left: 0,
-              right: 0,
+              start: 0,
+              end: 0,
               child: Container(
                 height: 48,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -289,7 +286,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
                             borderRadius: BorderRadius.circular(2),
                           ),
                           child: FractionallySizedBox(
-                            alignment: Alignment.centerRight,
+                            alignment: AlignmentDirectional.centerEnd,
                             widthFactor: 0.35, // Mocked progress
                             child: Container(
                               decoration: BoxDecoration(
@@ -334,7 +331,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsetsDirectional.only(bottom: 16),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
@@ -388,7 +385,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
                   ),
                 )
                 : Icon(
-                    title == 'الأسئلة الشائعة'
+                    title == AppLocalizations.of(context)!.text_207
                         ? Icons.help_outline
                         : Icons.play_circle_outline,
                     color: Colors.grey,

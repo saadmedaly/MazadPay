@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -49,9 +50,9 @@ class _MediaPickerSheetState extends State<MediaPickerSheet> with SingleTickerPr
             indicatorColor: const Color(0xFF0081FF),
             indicatorSize: TabBarIndicatorSize.label,
             labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
-            tabs: const [
-              Tab(text: 'الصور'),
-              Tab(text: 'الفيديوهات'),
+            tabs: [
+              Tab(text: AppLocalizations.of(context)!.text_266),
+              Tab(text: AppLocalizations.of(context)!.text_377),
             ],
           ),
           
@@ -78,7 +79,7 @@ class _MediaPickerSheetState extends State<MediaPickerSheet> with SingleTickerPr
                   backgroundColor: const Color(0xFF0081FF),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: Text('إضافة', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, color: Colors.white)),
+                child: Text(AppLocalizations.of(context)!.text_378, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, color: Colors.white)),
               ),
             ),
           ),
@@ -121,7 +122,7 @@ class _MediaPickerSheetState extends State<MediaPickerSheet> with SingleTickerPr
               if (isVideo)
                 const Center(child: Icon(Icons.play_circle_fill, color: Colors.white, size: 32)),
               Positioned(
-                top: 8, right: 8,
+                top: 8, end: 8,
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),

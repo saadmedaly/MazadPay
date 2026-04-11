@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/terms_page.dart';
 import 'package:mezadpay/pages/language_page.dart';
@@ -19,9 +20,9 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
   final List<Map<String, String>> onboardingData = [
     {
       'image': 'assets/Start Bidding.png',
-      'title': 'زايد الآن لتكون الفائز الأقرب بالصفقة!',
+      'title': AppLocalizations.of(context)!.text_304,
       'description':
-          'انضم إلى آلاف المزايدين واقتنص الفرص الحصرية بلمسة واحدة.',
+          AppLocalizations.of(context)!.text_305,
     },
   ];
 
@@ -30,9 +31,7 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final Color primaryColor = AppTheme.primaryColor;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
@@ -236,8 +235,8 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
                         ),
                         child: Text(
                           _currentPage == onboardingData.length - 1
-                              ? 'ابدأ المزايدة الآن'
-                              : 'متابعة',
+                              ? AppLocalizations.of(context)!.text_306
+                              : AppLocalizations.of(context)!.text_144,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -258,7 +257,7 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       child: Text(
-                        'تخطي ',
+                        AppLocalizations.of(context)!.text_307,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -274,7 +273,6 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }

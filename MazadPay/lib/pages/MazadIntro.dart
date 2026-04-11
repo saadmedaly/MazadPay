@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mezadpay/pages/terms_page.dart';
@@ -16,18 +17,18 @@ class _MazadIntroPageState extends State<MazadIntroPage> {
   final List<Map<String, String>> onboardingData = [
     {
       'image': 'assets/onboarding2.png',
-      'title': 'أول تطبيق مزاد في موريتانيا',
-      'description': 'اكتشف تجربة جديدة وفريدة في عالم المزادات الموريتاني.',
+      'title': AppLocalizations.of(context)!.text_226,
+      'description': AppLocalizations.of(context)!.text_227,
     },
     {
       'image': 'assets/MazadIntro.png',
-      'title': 'تواصل مباشر',
-      'description': 'اتصل أو راسل المعلن مباشرة عبر التطبيق وبسهولة تامة.',
+      'title': AppLocalizations.of(context)!.text_228,
+      'description': AppLocalizations.of(context)!.text_229,
     },
     {
       'image': 'assets/onboarding1.png',
-      'title': 'صاحب الصفقة الرابحة',
-      'description': 'ادخل عالم المزايدات، وارفع عرضك بثقة لتكون صاحب الصفقة.',
+      'title': AppLocalizations.of(context)!.text_230,
+      'description': AppLocalizations.of(context)!.text_231,
     },
   ];
 
@@ -38,9 +39,7 @@ class _MazadIntroPageState extends State<MazadIntroPage> {
     // Pixel-perfect primary blue from the design
     const Color primaryBlue = Color(0xFF0084FF);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: SafeArea(
           child: Column(
@@ -172,8 +171,8 @@ class _MazadIntroPageState extends State<MazadIntroPage> {
                         ),
                         child: Text(
                           _currentPage == onboardingData.length - 1
-                              ? 'ابدأ الآن'
-                              : 'متابعة',
+                              ? AppLocalizations.of(context)!.text_232
+                              : AppLocalizations.of(context)!.text_144,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -191,7 +190,7 @@ class _MazadIntroPageState extends State<MazadIntroPage> {
                         );
                       },
                       child: Text(
-                        'تخطي',
+                        AppLocalizations.of(context)!.text_233,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -206,7 +205,6 @@ class _MazadIntroPageState extends State<MazadIntroPage> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }

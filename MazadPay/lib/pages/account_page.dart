@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/home_page.dart';
@@ -27,9 +28,7 @@ class _AccountPageState extends State<AccountPage> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     const Color primaryBlue = Color(0xFF0084FF);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         endDrawer: const SideMenuDrawer(),
         appBar: AppBar(
@@ -49,8 +48,8 @@ class _AccountPageState extends State<AccountPage> {
                   );
                 },
               ),
-              const Text(
-                'حسابي',
+              Text(
+                AppLocalizations.of(context)!.text_19,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
               ),
               IconButton(
@@ -66,9 +65,9 @@ class _AccountPageState extends State<AccountPage> {
           ),
         ),
         body: _currentIndex == 2 
-          ? const Center(
+          ? Center(
               child: Text(
-                "الصفحة غير متاحة حاليا",
+                AppLocalizations.of(context)!.text_34,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
               ),
             )
@@ -87,8 +86,8 @@ class _AccountPageState extends State<AccountPage> {
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
-                      begin: Alignment.centerRight,
-                      end: Alignment.centerLeft,
+                      begin: AlignmentDirectional.centerEnd,
+                      end: AlignmentDirectional.centerStart,
                     ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
@@ -105,8 +104,8 @@ class _AccountPageState extends State<AccountPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'مبلغ التأمين',
+                          Text(
+                            AppLocalizations.of(context)!.text_20,
                             style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           Icon(Icons.more_horiz, color: Colors.white),
@@ -120,8 +119,8 @@ class _AccountPageState extends State<AccountPage> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'الرصيد المتوفر',
+                              Text(
+                                AppLocalizations.of(context)!.text_21,
                                 style: TextStyle(color: Colors.white70, fontSize: 12),
                               ),
                               const SizedBox(height: 4),
@@ -155,8 +154,8 @@ class _AccountPageState extends State<AccountPage> {
                 ),
 
                 const SizedBox(height: 24),
-                const Text(
-                  'اختر طريقة',
+                Text(
+                  AppLocalizations.of(context)!.text_22,
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const SizedBox(height: 16),
@@ -176,8 +175,8 @@ class _AccountPageState extends State<AccountPage> {
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [Color(0xFFE50000), Color(0xFFFF4040)],
-                        begin: Alignment.centerRight,
-                        end: Alignment.centerLeft,
+                        begin: AlignmentDirectional.centerEnd,
+                        end: AlignmentDirectional.centerStart,
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -193,9 +192,9 @@ class _AccountPageState extends State<AccountPage> {
                           children: [
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
-                              children: const [
+                              children: [
                                 Text(
-                                  'قم بالإيداع الان',
+                                  AppLocalizations.of(context)!.text_23,
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 18,
@@ -204,7 +203,7 @@ class _AccountPageState extends State<AccountPage> {
                                 ),
                                 SizedBox(height: 4),
                                 Text(
-                                  'ابدا رحلة المزايدة الخاصة بك!',
+                                  AppLocalizations.of(context)!.text_24,
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 12,
@@ -242,8 +241,8 @@ class _AccountPageState extends State<AccountPage> {
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [Color(0xFF00AA00), Color(0xFF33CC33)],
-                        begin: Alignment.centerRight,
-                        end: Alignment.centerLeft,
+                        begin: AlignmentDirectional.centerEnd,
+                        end: AlignmentDirectional.centerStart,
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -259,9 +258,9 @@ class _AccountPageState extends State<AccountPage> {
                           children: [
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
-                              children: const [
+                              children: [
                                 Text(
-                                  'قم باسترجاع مبلغ التأمين',
+                                  AppLocalizations.of(context)!.text_25,
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 18,
@@ -270,7 +269,7 @@ class _AccountPageState extends State<AccountPage> {
                                 ),
                                 SizedBox(height: 4),
                                 Text(
-                                  'ابدا رحلة المزايدة الخاصة بك!',
+                                  AppLocalizations.of(context)!.text_24,
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 12,
@@ -292,8 +291,8 @@ class _AccountPageState extends State<AccountPage> {
                 ),
 
                 const SizedBox(height: 32),
-                const Text(
-                  'أنشطتك',
+                Text(
+                  AppLocalizations.of(context)!.text_26,
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const SizedBox(height: 16),
@@ -304,7 +303,7 @@ class _AccountPageState extends State<AccountPage> {
                     Expanded(
                       child: _buildActivityItem(
                         icon: Icons.gavel,
-                        title: 'مزاداتي',
+                        title: AppLocalizations.of(context)!.text_27,
                         isDarkMode: isDarkMode,
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MyAuctionsPage())),
                       ),
@@ -313,7 +312,7 @@ class _AccountPageState extends State<AccountPage> {
                     Expanded(
                       child: _buildActivityItem(
                         icon: Icons.favorite_border,
-                        title: 'المفضلة',
+                        title: AppLocalizations.of(context)!.text_28,
                         iconColor: Colors.red,
                         isDarkMode: isDarkMode,
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FavoritesPage())),
@@ -323,7 +322,7 @@ class _AccountPageState extends State<AccountPage> {
                     Expanded(
                       child: _buildActivityItem(
                         icon: Icons.emoji_events_outlined,
-                        title: 'العناصر التي فزت\nبها',
+                        title: AppLocalizations.of(context)!.text_29,
                         isDarkMode: isDarkMode,
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MyWinningsPage())),
                       ),
@@ -336,7 +335,7 @@ class _AccountPageState extends State<AccountPage> {
                   child: Column(
                     children: [
                       Text(
-                        'مركز التواصل',
+                        AppLocalizations.of(context)!.text_30,
                         style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
                       const SizedBox(height: 4),
@@ -349,11 +348,11 @@ class _AccountPageState extends State<AccountPage> {
                         },
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
+                          children: [
                             Icon(Icons.person_outline, size: 16),
                             SizedBox(width: 4),
                             Text(
-                              'معلومات الحساب الشخصي',
+                              AppLocalizations.of(context)!.text_31,
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF0084FF)),
                             ),
                           ],
@@ -368,7 +367,7 @@ class _AccountPageState extends State<AccountPage> {
           ),
         ),
         floatingActionButton: Padding(
-          padding: const EdgeInsets.only(top: 20.0),
+          padding: const EdgeInsetsDirectional.only(top: 20.0),
           child: SizedBox(
             height: 70,
             width: 70,
@@ -399,17 +398,16 @@ class _AccountPageState extends State<AccountPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(Icons.home_outlined, Icons.home, 'الرئيسية', 0),
-                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, 'توصيل', 1),
+                _buildNavItem(Icons.home_outlined, Icons.home, AppLocalizations.of(context)!.text_1, 0),
+                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, AppLocalizations.of(context)!.text_32, 1),
                 const SizedBox(width: 48), // Space for FAB
-                _buildNavItem(Icons.storefront_outlined, Icons.storefront, 'التجارة الالكترونية', 2),
-                _buildNavItem(Icons.person_outline, Icons.person, 'حسابي', 3),
+                _buildNavItem(Icons.storefront_outlined, Icons.storefront, AppLocalizations.of(context)!.text_33, 2),
+                _buildNavItem(Icons.person_outline, Icons.person, AppLocalizations.of(context)!.text_19, 3),
               ],
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildActivityItem({required IconData icon, required String title, Color? iconColor, required bool isDarkMode, VoidCallback? onTap}) {

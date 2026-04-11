@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../pages/auction_winner_page.dart';
@@ -10,9 +11,7 @@ class AuctionWinnerDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Dialog(
+    return Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -20,14 +19,14 @@ class AuctionWinnerDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Align(
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: IconButton(
                   icon: const Icon(Icons.close, color: Colors.grey),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
               Text(
-                'انتهى المزاد',
+                AppLocalizations.of(context)!.text_364,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -48,7 +47,7 @@ class AuctionWinnerDialog extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'ألف مبروك!',
+                AppLocalizations.of(context)!.text_365,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -57,7 +56,7 @@ class AuctionWinnerDialog extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'انتهى المزاد وانت المزايد الأعلى',
+                AppLocalizations.of(context)!.text_366,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 14,
@@ -82,7 +81,7 @@ class AuctionWinnerDialog extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: Text(
-                    'إستكمال إجراءات الدفع والشراء',
+                    AppLocalizations.of(context)!.text_367,
                     style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -93,7 +92,6 @@ class AuctionWinnerDialog extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }

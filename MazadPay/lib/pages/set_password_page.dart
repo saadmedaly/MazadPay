@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 
@@ -101,8 +102,8 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'تم فتح حساب بنجاح',
+                Text(
+                  AppLocalizations.of(context)!.text_302,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 24),
@@ -123,8 +124,8 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'رجوع',
+                    child: Text(
+                      AppLocalizations.of(context)!.text_303,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -200,7 +201,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
         centerTitle: true,
         // BACK BUTTON (Right side in RTL)
         leading: Padding(
-          padding: const EdgeInsets.only(right: 16.0),
+          padding: const EdgeInsetsDirectional.only(end: 16.0),
           child: Center(
             child: InkWell(
               onTap: () => Navigator.pop(context),
@@ -225,7 +226,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'هل تحتاج مساعدة؟',
+              AppLocalizations.of(context)!.text_241,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -233,7 +234,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
               ),
             ),
             Text(
-              'تواصل مع الدعم',
+              AppLocalizations.of(context)!.text_242,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -245,7 +246,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
         // ROBOT ICON (Left side in RTL)
         actions: [
           Padding(
-            padding: const EdgeInsets.only(left: 16.0),
+            padding: const EdgeInsetsDirectional.only(start: 16.0),
             child: Center(
               child: Container(
                 width: 40,
@@ -286,7 +287,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                       ),
                       const Positioned(
                         top: 20,
-                        right: 15,
+                        end: 15,
                         child: Icon(
                           Icons.vpn_key,
                           size: 25,
@@ -305,8 +306,8 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'كلمة المرور الجديدة',
+                Text(
+                  AppLocalizations.of(context)!.text_243,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
@@ -320,8 +321,8 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'قم بتأكيد كلمة المرور الجديدة',
+                Text(
+                  AppLocalizations.of(context)!.text_244,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
@@ -347,8 +348,8 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                     ),
                     elevation: 0,
                   ),
-                    child: const Text(
-                      'التالي',
+                    child: Text(
+                      AppLocalizations.of(context)!.text_211,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,

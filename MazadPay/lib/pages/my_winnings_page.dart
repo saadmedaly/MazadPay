@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'auction_winner_page.dart';
@@ -9,16 +10,14 @@ class MyWinningsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           title: Text(
-            'العناصر التي فزت بها',
+            AppLocalizations.of(context)!.text_236,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -39,8 +38,7 @@ class MyWinningsPage extends StatelessWidget {
             return _buildWinningItem(context, isPaid, isDarkMode);
           },
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildWinningItem(BuildContext context, bool isPaid, bool isDarkMode) {
@@ -90,7 +88,7 @@ class MyWinningsPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  isPaid ? 'مدفوع' : 'في انتظار الدفع',
+                  isPaid ? AppLocalizations.of(context)!.text_237 : AppLocalizations.of(context)!.text_238,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -114,7 +112,7 @@ class MyWinningsPage extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text('عرض التفاصيل', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold)),
+                  child: Text(AppLocalizations.of(context)!.text_239, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold)),
                 ),
               ),
               if (!isPaid) ...[
@@ -128,7 +126,7 @@ class MyWinningsPage extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text('ادفع الان', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold)),
+                    child: Text(AppLocalizations.of(context)!.text_240, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],

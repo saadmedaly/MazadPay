@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -16,16 +17,14 @@ class _WithdrawPageState extends State<WithdrawPage> {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           title: Text(
-            'استرجاع مبلغ التأمين',
+            AppLocalizations.of(context)!.text_343,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -45,7 +44,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
               _buildBalanceCard(isDarkMode),
               const SizedBox(height: 32),
               Text(
-                'مبلغ الاسترجاع',
+                AppLocalizations.of(context)!.text_344,
                 style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
@@ -63,13 +62,13 @@ class _WithdrawPageState extends State<WithdrawPage> {
               ),
               const SizedBox(height: 32),
               Text(
-                'طريقة الاستلام',
+                AppLocalizations.of(context)!.text_345,
                 style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              _buildMethodSelector('Bank Transfer', 'حوالة بنكية', Icons.account_balance, isDarkMode),
+              _buildMethodSelector('Bank Transfer', AppLocalizations.of(context)!.text_346, Icons.account_balance, isDarkMode),
               const SizedBox(height: 12),
-              _buildMethodSelector('Mobile Money', 'خدمة موبايل (Bankily/Masrivi)', Icons.phone_android, isDarkMode),
+              _buildMethodSelector('Mobile Money', AppLocalizations.of(context)!.text_347, Icons.phone_android, isDarkMode),
               const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,
@@ -84,7 +83,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                   child: Text(
-                    'تأكيد طلب الاسترجاع',
+                    AppLocalizations.of(context)!.text_348,
                     style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -92,8 +91,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildBalanceCard(bool isDarkMode) {
@@ -107,7 +105,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
       ),
       child: Column(
         children: [
-          Text('الرصيد القابل للاسترجاع', style: GoogleFonts.plusJakartaSans(color: Colors.grey[600], fontSize: 14)),
+          Text(AppLocalizations.of(context)!.text_349, style: GoogleFonts.plusJakartaSans(color: Colors.grey[600], fontSize: 14)),
           const SizedBox(height: 8),
           Text(
             '350,000 MRU',
@@ -152,10 +150,10 @@ class _WithdrawPageState extends State<WithdrawPage> {
           children: [
             const Icon(Icons.check_circle, color: Color(0xFF00C58D), size: 64),
             const SizedBox(height: 24),
-            Text('تم استلام طلبك!', style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.bold)),
+            Text(AppLocalizations.of(context)!.text_350, style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Text(
-              'سيتم معالجة طلب استرجاع مبلغ التأمين خلال 24 ساعة.',
+              AppLocalizations.of(context)!.text_351,
               textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(color: Colors.grey[600]),
             ),
@@ -172,7 +170,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('رجوع'),
+                child: Text(AppLocalizations.of(context)!.text_303),
               ),
             ),
           ],

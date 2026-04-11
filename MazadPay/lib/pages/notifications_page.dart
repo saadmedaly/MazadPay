@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -8,9 +9,7 @@ class NotificationsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
@@ -46,8 +45,7 @@ class NotificationsPage extends StatelessWidget {
             return _buildNotificationItem(index, isDarkMode);
           },
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildNotificationItem(int index, bool isDarkMode) {

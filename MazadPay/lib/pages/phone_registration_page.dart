@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'otp_entry_page.dart';
 import 'set_password_page.dart';
@@ -29,9 +30,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -39,7 +38,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
         centerTitle: true,
         // BACK BUTTON (Right side in RTL)
         leading: Padding(
-          padding: const EdgeInsets.only(right: 16.0),
+          padding: const EdgeInsetsDirectional.only(end: 16.0),
           child: Center(
             child: InkWell(
               onTap: () => Navigator.pop(context),
@@ -64,7 +63,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'هل تحتاج مساعدة؟',
+              AppLocalizations.of(context)!.text_241,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -72,7 +71,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               ),
             ),
             Text(
-              'تواصل مع الدعم',
+              AppLocalizations.of(context)!.text_242,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -84,7 +83,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
         // ROBOT ICON (Left side in RTL)
         actions: [
           Padding(
-            padding: const EdgeInsets.only(left: 16.0),
+            padding: const EdgeInsetsDirectional.only(start: 16.0),
             child: Center(
               child: Container(
                 width: 40,
@@ -109,8 +108,8 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
           child: Column(
             children: [
               const SizedBox(height: 8),
-              const Text(
-                'يرجى التسجيل برقم جوالك لاستخدام هذه الميزة.',
+              Text(
+                AppLocalizations.of(context)!.text_283,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 20,
@@ -210,7 +209,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               ),
               const SizedBox(height: 8),
               Align(
-                alignment: Alignment.centerRight,
+                alignment: AlignmentDirectional.centerEnd,
                 child: Text(
                   '${_phoneController.text.length}/8',
                   style: TextStyle(
@@ -243,8 +242,8 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'التالي',
+                  child: Text(
+                    AppLocalizations.of(context)!.text_211,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -283,8 +282,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
           ),
         ),
       ),
-    ),
-  );
+    );
 }
 
   void _showCountryPicker(BuildContext context) {
@@ -297,9 +295,9 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
         return Container(
           decoration: BoxDecoration(
             color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
+            borderRadius: const BorderRadiusDirectional.only(
+              topStart: Radius.circular(24),
+              topEnd: Radius.circular(24),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -315,25 +313,25 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'اختر الدولة',
+              Text(
+                AppLocalizations.of(context)!.text_219,
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               // Current Country
               _buildCountryItem(
                 context,
-                name: 'موريتانيا',
+                name: AppLocalizations.of(context)!.text_220,
                 code: '+222',
                 flagUrl: 'assets/mr.png',
                 isAvailable: true,
               ),
               const Divider(height: 32),
               // Future Countries
-              const Align(
-                alignment: Alignment.centerRight,
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
                 child: Text(
-                  'قريباً',
+                  AppLocalizations.of(context)!.text_165,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -344,7 +342,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               const SizedBox(height: 16),
               _buildCountryItem(
                 context,
-                name: 'السنغال',
+                name: AppLocalizations.of(context)!.text_221,
                 code: '+221',
                 flagUrl: 'https://flagcdn.com/w80/sn.png',
                 isAvailable: false,
@@ -352,7 +350,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               const SizedBox(height: 12),
               _buildCountryItem(
                 context,
-                name: 'المغرب',
+                name: AppLocalizations.of(context)!.text_222,
                 code: '+212',
                 flagUrl: 'https://flagcdn.com/w80/ma.png',
                 isAvailable: false,
@@ -360,7 +358,7 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
               const SizedBox(height: 12),
               _buildCountryItem(
                 context,
-                name: 'تونس',
+                name: AppLocalizations.of(context)!.text_223,
                 code: '+216',
                 flagUrl: 'https://flagcdn.com/w80/tn.png',
                 isAvailable: false,

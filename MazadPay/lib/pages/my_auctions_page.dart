@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'auction_details_page.dart';
@@ -9,16 +10,14 @@ class MyAuctionsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           title: Text(
-            'مزاداتي',
+            AppLocalizations.of(context)!.text_27,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -39,8 +38,7 @@ class MyAuctionsPage extends StatelessWidget {
             return _buildAuctionItem(context, isWinning, isDarkMode);
           },
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildAuctionItem(BuildContext context, bool isWinning, bool isDarkMode) {
@@ -88,7 +86,7 @@ class MyAuctionsPage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        isWinning ? 'مزايدة فائزة' : 'سعر أعلى منك',
+                        isWinning ? AppLocalizations.of(context)!.text_234 : AppLocalizations.of(context)!.text_235,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,

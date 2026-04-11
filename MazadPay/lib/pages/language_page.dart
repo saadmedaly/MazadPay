@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mezadpay/pages/onboarding_page.dart';
@@ -13,7 +14,7 @@ class _LanguagePageState extends State<LanguagePage> {
   String selectedLanguage = 'Arabic';
 
   final List<Map<String, String>> languages = [
-    {'name': 'العربية', 'key': 'Arabic'},
+    {'name': AppLocalizations.of(context)!.text_47, 'key': 'Arabic'},
     {'name': 'English', 'key': 'English'},
     {'name': 'Fracnis', 'key': 'French'}, // Matching the typo from the design
   ];
@@ -21,9 +22,7 @@ class _LanguagePageState extends State<LanguagePage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: SingleChildScrollView(
           child: Column(
@@ -43,9 +42,9 @@ class _LanguagePageState extends State<LanguagePage> {
                   ),
                   Positioned(
                     top: 60,
-                    right: 20,
-                    child: const Text(
-                      'اختر اللغة',
+                    end: 20,
+                    child: Text(
+                      AppLocalizations.of(context)!.text_210,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -66,7 +65,7 @@ class _LanguagePageState extends State<LanguagePage> {
                   children: languages.map((lang) {
                     bool isSelected = selectedLanguage == lang['key'];
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsetsDirectional.only(bottom: 12),
                       child: InkWell(
                         onTap: () {
                           setState(() {
@@ -141,11 +140,10 @@ class _LanguagePageState extends State<LanguagePage> {
                   MaterialPageRoute(builder: (_) => const OnboardingPage()),
                 );
               },
-              child: const Text('التالي'),
+              child: Text(AppLocalizations.of(context)!.text_211),
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }

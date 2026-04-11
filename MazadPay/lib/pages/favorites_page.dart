@@ -1,3 +1,4 @@
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,16 +22,14 @@ class FavoritesPage extends ConsumerWidget {
 
     final favoriteAuctions = allAuctions.where((a) => favoriteIds.contains(a['id'])).toList();
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           title: Text(
-            'المفضلة',
+            AppLocalizations.of(context)!.text_28,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -50,7 +49,7 @@ class FavoritesPage extends ConsumerWidget {
                     Icon(Icons.favorite_border, size: 80, color: Colors.grey.withOpacity(0.3)),
                     const SizedBox(height: 16),
                     Text(
-                      'لا توجد عناصر في المفضلة',
+                      AppLocalizations.of(context)!.text_191,
                       style: GoogleFonts.plusJakartaSans(fontSize: 16, color: Colors.grey),
                     ),
                   ],
@@ -77,8 +76,7 @@ class FavoritesPage extends ConsumerWidget {
                   );
                 },
               ),
-      ),
-    );
+      );
   }
 
   Widget _buildFavoriteItem(BuildContext context, WidgetRef ref, bool isDarkMode, String title, String price, String id) {
@@ -102,7 +100,7 @@ class FavoritesPage extends ConsumerWidget {
               ),
               Positioned(
                 top: 8,
-                left: 8,
+                start: 8,
                 child: GestureDetector(
                   onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(id),
                   child: Container(
@@ -149,7 +147,7 @@ class FavoritesPage extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    child: Text('زايد الان', style: GoogleFonts.plusJakartaSans(fontSize: 12)),
+                    child: Text(AppLocalizations.of(context)!.text_192, style: GoogleFonts.plusJakartaSans(fontSize: 12)),
                   ),
                 ),
               ],
