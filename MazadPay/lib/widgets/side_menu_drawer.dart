@@ -8,6 +8,7 @@ import 'package:mezadpay/pages/how_to_bid_page.dart';
 import 'package:mezadpay/pages/my_auctions_page.dart';
 import 'package:mezadpay/pages/favorites_page.dart';
 import 'package:mezadpay/pages/support_page.dart';
+import 'package:mezadpay/pages/all_auctions_page.dart';
 import 'package:mezadpay/pages/privacy_policy_page.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
 
@@ -134,6 +135,11 @@ class SideMenuDrawer extends StatelessWidget {
                     context,
                     title: 'مزاداتي',
                     icon: Icons.gavel,
+                  ),
+                  _buildMenuItem(
+                    context,
+                    title: 'جميع المزادات',
+                    icon: Icons.list_alt,
                   ),
                   _buildMenuItem(
                     context,
@@ -309,6 +315,8 @@ class SideMenuDrawer extends StatelessWidget {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AccountPage()));
           } else if (title == 'مزاداتي') {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const MyAuctionsPage()));
+          } else if (title == 'جميع المزادات') {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const AllAuctionsPage()));
           } else if (title == 'للتواصل معنا') {
             AppModals.showContactModal(context);
           } else if (title == 'سياسة الخصوصية') {

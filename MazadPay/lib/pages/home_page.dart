@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
+import 'package:mezadpay/pages/all_auctions_page.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -297,6 +298,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
               
               // View More Button
               Padding(
@@ -305,7 +307,12 @@ class _HomePageState extends ConsumerState<HomePage> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AllAuctionsPage()),
+                      );
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryBlue,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -314,6 +321,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
               ),
+
 
               // Sponsors/Brands (الروعات)
               const Padding(

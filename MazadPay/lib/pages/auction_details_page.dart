@@ -8,6 +8,7 @@ import '../widgets/bid_action_sheet.dart';
 import '../widgets/auction_winner_dialog.dart';
 import '../pages/auction_history_page.dart';
 import '../providers/favorites_provider.dart';
+import '../pages/all_auctions_page.dart';
 
 class AuctionDetailsPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -407,8 +408,9 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 24,
+            runSpacing: 16,
             children: [
               if (auction.manufacturer != null)
                 _buildCarDetailItem(Icons.home_work_outlined, 'الشركة المصنعة', auction.manufacturer!, isDarkMode),
@@ -418,20 +420,12 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 _buildCarDetailItem(Icons.local_gas_station_outlined, 'نوع الوقود', auction.fuelType!, isDarkMode),
               if (auction.year != null)
                 _buildCarDetailItem(Icons.calendar_month_outlined, 'السنة', auction.year!, isDarkMode),
+              if (auction.mileage != null)
+                _buildCarDetailItem(Icons.speed_rounded, 'عدد الأميال', auction.mileage!, isDarkMode),
+              if (auction.model != null)
+                _buildCarDetailItem(Icons.directions_car_filled, 'الطراز', auction.model!, isDarkMode),
             ],
           ),
-          if (auction.mileage != null || auction.model != null) ...[
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                if (auction.mileage != null)
-                  _buildCarDetailItem(Icons.speed_rounded, 'عدد الأميال', auction.mileage!, isDarkMode),
-                const SizedBox(width: 32),
-                if (auction.model != null)
-                  _buildCarDetailItem(Icons.directions_car_filled, 'الطراز', auction.model!, isDarkMode),
-              ],
-            ),
-          ],
         ],
       ),
     );
@@ -540,7 +534,12 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ),
               ),
               GestureDetector(
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AllAuctionsPage()),
+                  );
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
