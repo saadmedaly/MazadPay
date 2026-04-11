@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mezadpay/pages/terms_page.dart';
@@ -14,26 +14,26 @@ class _MazadIntroPageState extends State<MazadIntroPage> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  final List<Map<String, String>> onboardingData = [
-    {
-      'image': 'assets/onboarding2.png',
-      'title': AppLocalizations.of(context)!.text_226,
-      'description': AppLocalizations.of(context)!.text_227,
-    },
-    {
-      'image': 'assets/MazadIntro.png',
-      'title': AppLocalizations.of(context)!.text_228,
-      'description': AppLocalizations.of(context)!.text_229,
-    },
-    {
-      'image': 'assets/onboarding1.png',
-      'title': AppLocalizations.of(context)!.text_230,
-      'description': AppLocalizations.of(context)!.text_231,
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final List<Map<String, String>> onboardingData = [
+      {
+        'image': 'assets/onboarding2.png',
+        'title': AppLocalizations.of(context)!.text_226,
+        'description': AppLocalizations.of(context)!.text_227,
+      },
+      {
+        'image': 'assets/MazadIntro.png',
+        'title': AppLocalizations.of(context)!.text_228,
+        'description': AppLocalizations.of(context)!.text_229,
+      },
+      {
+        'image': 'assets/onboarding1.png',
+        'title': AppLocalizations.of(context)!.text_230,
+        'description': AppLocalizations.of(context)!.text_231,
+      },
+    ];
+
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     // Pixel-perfect primary blue from the design

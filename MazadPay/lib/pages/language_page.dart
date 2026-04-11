@@ -1,27 +1,47 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mezadpay/providers/locale_provider.dart';
 
 import 'package:mezadpay/pages/onboarding_page.dart';
 
-class LanguagePage extends StatefulWidget {
+class LanguagePage extends ConsumerStatefulWidget {
   const LanguagePage({super.key});
 
   @override
-  State<LanguagePage> createState() => _LanguagePageState();
+  ConsumerState<LanguagePage> createState() => _LanguagePageState();
 }
 
-class _LanguagePageState extends State<LanguagePage> {
+class _LanguagePageState extends ConsumerState<LanguagePage> {
   String selectedLanguage = 'Arabic';
 
-  final List<Map<String, String>> languages = [
-    {'name': AppLocalizations.of(context)!.text_47, 'key': 'Arabic'},
-    {'name': 'English', 'key': 'English'},
-    {'name': 'Fracnis', 'key': 'French'}, // Matching the typo from the design
-  ];
+  late List<Map<String, String>> languages;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Sync selectedLanguage with the current locale from Riverpod
+    final currentLocale = ref.watch(localeNotifierProvider);
+    if (currentLocale.languageCode == 'ar') {
+      selectedLanguage = 'Arabic';
+    } else if (currentLocale.languageCode == 'en') {
+      selectedLanguage = 'English';
+    } else if (currentLocale.languageCode == 'fr') {
+      selectedLanguage = 'French';
+    }
+
+    languages = [
+      {'name': 'العربية', 'key': 'Arabic', 'code': 'ar'},
+      {'name': 'English', 'key': 'English', 'code': 'en'},
+      {'name': 'Français', 'key': 'French', 'code': 'fr'}, 
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: SingleChildScrollView(
@@ -42,10 +62,10 @@ class _LanguagePageState extends State<LanguagePage> {
                   ),
                   Positioned(
                     top: 60,
-                    end: 20,
+                    right: 20,
                     child: Text(
                       AppLocalizations.of(context)!.text_210,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                         fontSize: 28,
@@ -71,6 +91,8 @@ class _LanguagePageState extends State<LanguagePage> {
                           setState(() {
                             selectedLanguage = lang['key']!;
                           });
+                          // Change the app locale via Riverpod
+                          ref.read(localeNotifierProvider.notifier).setLocale(Locale(lang['code']!));
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(
@@ -80,9 +102,7 @@ class _LanguagePageState extends State<LanguagePage> {
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? (isDarkMode
-                                      ? const Color(
-                                          0xFF135BEC,
-                                        ).withOpacity(0.15)
+                                      ? const Color(0xFF135BEC).withOpacity(0.15)
                                       : const Color(0xFFE8F0FE))
                                 : (isDarkMode
                                       ? const Color(0xFF1D1D1D)
@@ -146,4 +166,4 @@ class _LanguagePageState extends State<LanguagePage> {
         ),
       );
   }
-}
+}

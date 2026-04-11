@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/account_page.dart';
@@ -24,7 +24,13 @@ class _HomePageState extends ConsumerState<HomePage> {
   int _currentIndex = 0;
   bool _showLocationModal = true;
   int _selectedCityIndex = 0;
-  final List<String> _cities = [AppLocalizations.of(context)!.text_193, AppLocalizations.of(context)!.text_194];
+  late List<String> _cities;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _cities = [AppLocalizations.of(context)!.text_193, AppLocalizations.of(context)!.text_194];
+  }
 
   @override
   void initState() {
@@ -379,7 +385,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
               ),
               Text(
-                AppLocalizations.of(context)!.text_202,
+                "",
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
@@ -529,7 +535,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
  
                 Positioned(
-                  top: 4, end: 4,
+                  top: 4, right: 4,
                   child: IconButton(
                     iconSize: 20,
                     onPressed: () {
@@ -557,7 +563,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 Positioned(
-                  top: 8, start: 8,
+                  top: 8, left: 8,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(color: const Color(0xFF0084FF), borderRadius: BorderRadius.circular(4)),

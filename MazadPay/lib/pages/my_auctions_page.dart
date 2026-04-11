@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'auction_details_page.dart';
@@ -79,22 +79,26 @@ class MyAuctionsPage extends StatelessWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isWinning ? const Color(0xFF00C58D).withOpacity(0.1) : const Color(0xFFE31B23).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        isWinning ? AppLocalizations.of(context)!.text_234 : AppLocalizations.of(context)!.text_235,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: isWinning ? const Color(0xFF00C58D) : const Color(0xFFE31B23),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isWinning ? const Color(0xFF00C58D).withOpacity(0.1) : const Color(0xFFE31B23).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          isWinning ? AppLocalizations.of(context)!.text_234 : AppLocalizations.of(context)!.text_235,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isWinning ? const Color(0xFF00C58D) : const Color(0xFFE31B23),
+                          ),
                         ),
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     Text(
                       '13:45:10',
                       style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),

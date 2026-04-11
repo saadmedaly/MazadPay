@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/payment_details_page.dart';
 
@@ -23,36 +23,43 @@ class _DepositPageState extends State<DepositPage> {
   String? _selectedMethodId;
   bool _hasShownModal = false;
 
-  final List<PaymentMethod> _methods = [
-    PaymentMethod(
-      'masrvi',
-      AppLocalizations.of(context)!.text_170,
-      AppLocalizations.of(context)!.text_171,
-      'assets/Masrivi.png',
-      const Color(0xFF00A99D),
-    ),
-    PaymentMethod(
-      'bankily',
-      AppLocalizations.of(context)!.text_172,
-      AppLocalizations.of(context)!.text_173,
-      'assets/Bankily.png',
-      const Color(0xFF0084FF),
-    ),
-    PaymentMethod(
-      'sedad',
-      AppLocalizations.of(context)!.text_174,
-      AppLocalizations.of(context)!.text_175,
-      'assets/Sedad.png',
-      const Color(0xFF33CC33),
-    ),
-    PaymentMethod(
-      'click',
-      AppLocalizations.of(context)!.text_176,
-      AppLocalizations.of(context)!.text_177,
-      'assets/Click.png',
-      Colors.black,
-    ),
-  ];
+  late List<PaymentMethod> _methods;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final l10n = AppLocalizations.of(context)!;
+    _methods = [
+      PaymentMethod(
+        'masrvi',
+        l10n.text_170,
+        l10n.text_171,
+        'assets/Masrivi.png',
+        const Color(0xFF00A99D),
+      ),
+      PaymentMethod(
+        'bankily',
+        l10n.text_172,
+        l10n.text_173,
+        'assets/Bankily.png',
+        const Color(0xFF0084FF),
+      ),
+      PaymentMethod(
+        'sedad',
+        l10n.text_174,
+        l10n.text_175,
+        'assets/Sedad.png',
+        const Color(0xFF33CC33),
+      ),
+      PaymentMethod(
+        'click',
+        l10n.text_176,
+        l10n.text_177,
+        'assets/Click.png',
+        Colors.black,
+      ),
+    ];
+  }
 
   @override
   void initState() {

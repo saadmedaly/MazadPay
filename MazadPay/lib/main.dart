@@ -4,7 +4,7 @@ import 'package:mezadpay/core/theme.dart';
 import 'package:mezadpay/pages/splash_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:mezadpay/providers/locale_provider.dart';
 
 void main() {

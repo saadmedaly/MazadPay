@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -41,7 +41,7 @@ class AuctionHistoryPage extends ConsumerWidget {
             children: [
               _buildProductHeader(context, auction, isDarkMode),
               const SizedBox(height: 32),
-              _buildSummaryHeader(isDarkMode),
+              _buildSummaryHeader(context, isDarkMode),
               const SizedBox(height: 24),
               _buildBidList(context, history, isDarkMode),
             ],
@@ -85,7 +85,7 @@ class AuctionHistoryPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildSummaryHeader(bool isDarkMode) {
+  Widget _buildSummaryHeader(BuildContext context, bool isDarkMode) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

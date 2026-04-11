@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -72,9 +72,24 @@ class SupportPage extends StatelessWidget {
                 style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              _buildFaqItem(AppLocalizations.of(context)!.text_315, isDarkMode),
-              _buildFaqItem(AppLocalizations.of(context)!.text_316, isDarkMode),
-              _buildFaqItem(AppLocalizations.of(context)!.text_317, isDarkMode),
+               _buildFaqItem(
+                 context, 
+                 AppLocalizations.of(context)!.text_315, 
+                 AppLocalizations.of(context)!.text_182, // Answer using existing term
+                 isDarkMode
+               ),
+               _buildFaqItem(
+                 context, 
+                 AppLocalizations.of(context)!.text_316, 
+                 AppLocalizations.of(context)!.text_183, // Answer using existing term
+                 isDarkMode
+               ),
+               _buildFaqItem(
+                 context, 
+                 AppLocalizations.of(context)!.text_317, 
+                 AppLocalizations.of(context)!.text_181, // Answer using existing term
+                 isDarkMode
+               ),
             ],
           ),
         ),
@@ -116,17 +131,24 @@ class SupportPage extends StatelessWidget {
     );
   }
 
-  Widget _buildFaqItem(String question, bool isDarkMode) {
+  Widget _buildFaqItem(BuildContext context, String question, String answer, bool isDarkMode) {
     return Container(
       margin: const EdgeInsetsDirectional.only(bottom: 12),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: ListTile(
+      child: ExpansionTile(
         title: Text(question, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600)),
-        trailing: const Icon(Icons.add, size: 20, color: Color(0xFF0081FF)),
-        onTap: () {},
+        trailing: const Icon(Icons.keyboard_arrow_down, size: 20, color: Color(0xFF0081FF)),
+        childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        expandedAlignment: Alignment.centerLeft,
+        children: [
+          Text(
+            answer,
+            style: GoogleFonts.plusJakartaSans(fontSize: 13, color: Colors.grey[600], height: 1.5),
+          ),
+        ],
       ),
     );
   }

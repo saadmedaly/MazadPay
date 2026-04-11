@@ -6,7 +6,7 @@ part of 'auction_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$auctionNotifierHash() => r'3fba4c019b9c6b4533366677859f448174a81571';
+String _$auctionNotifierHash() => r'c99681b58b2d8049ef79dd20886e3af17320801c';
 
 /// Copied from Dart SDK
 class _SystemHash {

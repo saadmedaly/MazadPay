@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,24 +15,55 @@ class AllAuctionsPage extends ConsumerStatefulWidget {
 class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   final TextEditingController _searchController = TextEditingController();
   
-  // Mock data for all auctions
-  final List<Map<String, String>> _allAuctions = [
-    {'id': '1', 'title': 'Toyota Corolla...', 'price': '300,000 MRU', 'time': '13:50:23', 'image': 'assets/corolla.png'},
-    {'id': '2', 'title': 'Range Rover 2022', 'price': '1,200,000 MRU', 'time': '02:15:10', 'image': 'assets/corolla.png'},
-    {'id': '3', 'title': 'iPhone 15 Pro', 'price': '45,000 MRU', 'time': '05:45:00', 'image': 'assets/corolla.png'},
-    {'id': '4', 'title': 'Mercedes S-Class', 'price': '2,500,000 MRU', 'time': '20:10:05', 'image': 'assets/corolla.png'},
-    {'id': '5', 'title': 'MacBook Pro M3', 'price': '85,000 MRU', 'time': '08:30:00', 'image': 'assets/corolla.png'},
-    {'id': '6', 'title': 'Land Cruiser VXR', 'price': '3,800,000 MRU', 'time': '01:20:45', 'image': 'assets/corolla.png'},
-    {'id': '7', 'title': 'Samsung S24 Ultra', 'price': '38,000 MRU', 'time': '10:05:12', 'image': 'assets/corolla.png'},
-    {'id': '8', 'title': 'Apartment Tvragh Zeina', 'price': '4,500,000 MRU', 'time': '48:00:00', 'image': 'assets/corolla.png'},
-  ];
-
+  List<Map<String, String>> _allAuctions = [];
   List<Map<String, String>> _filteredAuctions = [];
+  int _activeTabIndex = 0; // 0 for Active, 1 for Finished
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final l10n = AppLocalizations.of(context)!;
+    _allAuctions = [
+      {
+        'id': '1',
+        'title': 'Toyota prado tx 2017',
+        'price': '15,000 MRU',
+        'bids': '15',
+        'time': '23h 30m 18s',
+        'location': l10n.text_171, // "تفرغ زينة"
+        'postedTime': 'منذ 23 دقائق',
+        'image': 'assets/raf4.png',
+        'status': 'active'
+      },
+      {
+        'id': '2',
+        'title': 'هلكس خليجية نظيفة',
+        'price': '760,000 MRU',
+        'bids': '7',
+        'time': '23h 30m 18s',
+        'location': l10n.text_172, // "عرفات"
+        'postedTime': 'منذ 23 دقائق',
+        'image': 'assets/corolla.png',
+        'status': 'active'
+      },
+      {
+        'id': '3',
+        'title': 'TOYOTA RAV4 2008 D4D',
+        'price': '420,000 MRU',
+        'bids': '20',
+        'time': l10n.text_364, // "انتهى المزاد"
+        'location': l10n.text_171,
+        'postedTime': 'منذ 24 ساعة',
+        'image': 'assets/raf4.png',
+        'status': 'finished'
+      },
+    ];
+    _filterAuctions();
+  }
 
   @override
   void initState() {
     super.initState();
-    _filteredAuctions = _allAuctions;
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -44,37 +75,49 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   }
 
   void _onSearchChanged() {
+    _filterAuctions();
+  }
+
+  void _filterAuctions() {
     setState(() {
-      _filteredAuctions = _allAuctions
-          .where((auction) => auction['title']!
-              .toLowerCase()
-              .contains(_searchController.text.toLowerCase()))
-          .toList();
+      _filteredAuctions = _allAuctions.where((auction) {
+        final matchesSearch = auction['title']!.toLowerCase().contains(_searchController.text.toLowerCase());
+        final matchesStatus = _activeTabIndex == 0 ? auction['status'] == 'active' : auction['status'] == 'finished';
+        return matchesSearch && matchesStatus;
+      }).toList();
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    const Color primaryBlue = Color(0xFF0084FF);
     
     return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         appBar: AppBar(
-          backgroundColor: Colors.transparent,
+          backgroundColor: primaryBlue,
           elevation: 0,
           centerTitle: true,
           title: Text(
-            AppLocalizations.of(context)!.text_2,
+            l10n.text_2, // "جميع المزادات"
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : Colors.black,
+              color: Colors.white,
             ),
           ),
           leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios, color: isDarkMode ? Colors.white : Colors.black, size: 20),
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
             onPressed: () => Navigator.of(context).pop(),
           ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white),
+              onPressed: () {}, // Drawer trigger
+            ),
+          ],
         ),
         body: Column(
           children: [
@@ -96,7 +139,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: AppLocalizations.of(context)!.text_53,
+                    hintText: l10n.text_53, // "ابحث عن مزاد..."
                     hintStyle: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 14),
                     prefixIcon: const Icon(Icons.search, color: Colors.grey),
                     border: InputBorder.none,
@@ -111,7 +154,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
               child: _filteredAuctions.isEmpty
                   ? Center(
                       child: Text(
-                        AppLocalizations.of(context)!.text_54,
+                        l10n.text_54, // "لا توجد نتائج بحث"
                         style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 16),
                       ),
                     )
@@ -121,7 +164,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                         crossAxisCount: 2,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 20,
-                        childAspectRatio: 0.58, // Adjusted for Bid Now button
+                        childAspectRatio: 0.40, // Providing more vertical space for info row
                       ),
                       itemCount: _filteredAuctions.length,
                       itemBuilder: (context, index) {
@@ -134,6 +177,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           auction['time']!,
                           auction['id']!,
                           auction['image']!,
+                          auction['bids']!,
                         );
                       },
                     ),
@@ -143,23 +187,27 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       );
   }
 
-  Widget _buildAuctionItem(BuildContext context, bool isDarkMode, String title, String price, String time, String id, String imageUrl) {
-    final favorites = ref.watch(favoritesProvider);
-    final isFavorite = favorites.contains(id);
+  Widget _buildAuctionItem(
+    BuildContext context,
+    bool isDarkMode,
+    String title,
+    String price,
+    String time,
+    String id,
+    String imageUrl,
+    String bids,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
     const Color primaryBlue = Color(0xFF0084FF);
+    final isFavorite = ref.watch(favoritesProvider).contains(id);
 
     return Container(
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDarkMode ? const Color(0xFF333333) : const Color(0xFFD0D5DD).withOpacity(0.3),
-          width: 1,
-        ),
         boxShadow: [
           BoxShadow(
-            color: isDarkMode ? Colors.black.withOpacity(0.3) : const Color(0xFF101828).withOpacity(0.08),
-            blurRadius: 12,
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
@@ -185,13 +233,13 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
               ),
               Positioned(
                 top: 8,
-                end: 8,
+                right: 8,
                 child: GestureDetector(
                   onTap: () {
                     ref.read(favoritesProvider.notifier).toggleFavorite(id);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(isFavorite ? AppLocalizations.of(context)!.text_55 : AppLocalizations.of(context)!.text_56),
+                        content: Text(isFavorite ? l10n.text_55 : l10n.text_56),
                         duration: const Duration(seconds: 1),
                         behavior: SnackBarBehavior.floating,
                       ),
@@ -213,7 +261,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
               ),
               Positioned(
                 top: 8,
-                start: 8,
+                left: 8,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
@@ -221,7 +269,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    id,
+                    'ID: $id',
                     style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -246,11 +294,26 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(Icons.timer_outlined, color: Colors.red, size: 12),
+                    const Icon(Icons.timer_outlined, color: Colors.red, size: 10),
                     const SizedBox(width: 4),
-                    Text(
-                      time,
-                      style: const TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
+                    Flexible(
+                      child: Text(
+                        time,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.gavel, color: Colors.grey, size: 10),
+                    const SizedBox(width: 2),
+                    Flexible(
+                      child: Text(
+                        '$bids ${l10n.text_371}', // "مزايدات" or "bids"
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.grey, fontSize: 10),
+                      ),
                     ),
                   ],
                 ),
@@ -280,7 +343,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                       elevation: 0,
                     ),
                     child: Text(
-                      AppLocalizations.of(context)!.text_3,
+                      l10n.text_3, // "زايد الآن"
                       style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -293,3 +356,4 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     );
   }
 }
+

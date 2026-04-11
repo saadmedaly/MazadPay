@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'login_controller.dart';
@@ -296,7 +296,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         border: Border(
-                          end: BorderSide( // Swapping border to right for prefix
+                          right: BorderSide( // Swapping border to right for prefix
                             color: isDarkMode
                                 ? const Color(0xFF333333)
                                 : const Color(0xFFF2F4F7),

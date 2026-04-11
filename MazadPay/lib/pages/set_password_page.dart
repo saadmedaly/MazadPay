@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 
@@ -287,7 +287,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                       ),
                       const Positioned(
                         top: 20,
-                        end: 15,
+                        right: 15,
                         child: Icon(
                           Icons.vpn_key,
                           size: 25,

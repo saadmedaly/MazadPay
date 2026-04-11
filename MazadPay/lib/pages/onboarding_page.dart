@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/start_bidding_page.dart';
 
@@ -13,20 +13,20 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  final List<Map<String, String>> onboardingData = [
-    {'image': 'assets/on2.png', 'text': AppLocalizations.of(context)!.text_257},
-    {
-      'image': 'assets/on3.png',
-      'text': AppLocalizations.of(context)!.text_258,
-    },
-    {
-      'image': 'assets/on1.png',
-      'text': AppLocalizations.of(context)!.text_259,
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final List<Map<String, String>> onboardingData = [
+      {'image': 'assets/on2.png', 'text': AppLocalizations.of(context)!.text_257},
+      {
+        'image': 'assets/on3.png',
+        'text': AppLocalizations.of(context)!.text_258,
+      },
+      {
+        'image': 'assets/on1.png',
+        'text': AppLocalizations.of(context)!.text_259,
+      },
+    ];
+
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     // Pixel-perfect primary blue from the design

@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
@@ -80,7 +80,7 @@ class AccountProfilePage extends StatelessWidget {
                         ),
                         Positioned(
                           bottom: 0,
-                          start: 0,
+                          left: 0,
                           child: Container(
                             width: 28,
                             height: 28,

@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
@@ -15,38 +15,50 @@ class _HowToBidPageState extends State<HowToBidPage> {
   late VideoPlayerController _videoController;
   bool _isInitialized = false;
 
-  final List<Map<String, String>> _tutorials = [
-    {
-      'title': AppLocalizations.of(context)!.text_203,
-      'thumbnail': 'assets/mr.png', // Small flag or Bankily logo placeholder
-      'videoUrl': 'assets/MezadPay.mp4',
-    },
-    {
-      'title': AppLocalizations.of(context)!.text_204,
-      'thumbnail': '',
-      'videoUrl': '',
-    },
-    {
-      'title': AppLocalizations.of(context)!.text_205,
-      'thumbnail': '',
-      'videoUrl': '',
-    },
-    {
-      'title': AppLocalizations.of(context)!.text_206,
-      'thumbnail': '',
-      'videoUrl': '',
-    },
-    {
-      'title': AppLocalizations.of(context)!.text_207,
-      'thumbnail': '',
-      'videoUrl': '',
-    },
-  ];
+  List<Map<String, String>> _tutorials = [];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final l10n = AppLocalizations.of(context)!;
+    _tutorials = [
+      {
+        'title': l10n.text_203,
+        'thumbnail': 'assets/mr.png', // Small flag or Bankily logo placeholder
+        'videoUrl': 'assets/MezadPay.mp4',
+      },
+      {
+        'title': l10n.text_204,
+        'thumbnail': '',
+        'videoUrl': '',
+      },
+      {
+        'title': l10n.text_205,
+        'thumbnail': '',
+        'videoUrl': '',
+      },
+      {
+        'title': l10n.text_206,
+        'thumbnail': '',
+        'videoUrl': '',
+      },
+      {
+        'title': l10n.text_207,
+        'thumbnail': '',
+        'videoUrl': '',
+      },
+    ];
+    
+    // Initialize video only after tutorials are ready
+    if (!_isInitialized) {
+      _initializeVideo();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _initializeVideo();
+    // Do not call _initializeVideo here because _tutorials needs l10n which requires context
   }
 
   void _initializeVideo() {
@@ -215,11 +227,13 @@ class _HowToBidPageState extends State<HowToBidPage> {
               ),
 
             // Skip Buttons 
-            Positioned.directional(textDirection: Directionality.of(context),$1start: 40,
+            Positioned.directional(
+              textDirection: Directionality.of(context),
+              start: 40,
               child: _buildSkipButton(Icons.replay_10),
             ),
             Positioned(
-              end: 40,
+              right: 40,
               child: _buildSkipButton(Icons.forward_10),
             ),
 
@@ -265,8 +279,8 @@ class _HowToBidPageState extends State<HowToBidPage> {
             // Progress Bar (from screenshot)
             Positioned(
               bottom: 0,
-              start: 0,
-              end: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 height: 48,
                 padding: const EdgeInsets.symmetric(horizontal: 16),

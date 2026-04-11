@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 class MazadPayLogo extends StatelessWidget {
@@ -33,8 +33,8 @@ class MazadPayLogo extends StatelessWidget {
                       0.46,
                       0.46,
                     ], // Split point roughly in the middle
-                    begin: AlignmentDirectional.centerStart,
-                    end: AlignmentDirectional.centerEnd,
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
                   ).createShader(bounds);
                 },
                 blendMode: BlendMode.srcIn,

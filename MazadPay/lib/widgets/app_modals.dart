@@ -1,5 +1,7 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mezadpay/providers/locale_provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class AppModals {
@@ -13,48 +15,65 @@ class AppModals {
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
       builder: (context) {
-        return SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppLocalizations.of(context)!.text_210,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+        return Consumer(
+          builder: (context, ref, child) {
+            final currentLocale = ref.watch(localeNotifierProvider);
+            
+            return SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      AppLocalizations.of(context)!.text_210, // "اختر اللغة"
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildLanguageOption(
-                    context,
-                    title: AppLocalizations.of(context)!.text_47,
-                    flag: '🇸🇦',
-                    isSelected: true,
-                    onTap: () => Navigator.pop(context),
-                    isDarkMode: isDarkMode,
-                  ),
-                  _buildLanguageOption(
-                    context,
-                    title: 'Français',
-                    flag: '🇫🇷',
-                    onTap: () => Navigator.pop(context),
-                    isDarkMode: isDarkMode,
-                  ),
-                  _buildLanguageOption(
-                    context,
-                    title: 'English',
-                    flag: '🇺🇸',
-                    onTap: () => Navigator.pop(context),
-                    isDarkMode: isDarkMode,
-                  ),
-                  const SizedBox(height: 8),
-                ],
+                    const SizedBox(height: 24),
+                    _buildLanguageOption(
+                      context,
+                      title: 'العربية',
+                      flag: '🇸🇦',
+                      isSelected: currentLocale.languageCode == 'ar',
+                      onTap: () {
+                        ref.read(localeNotifierProvider.notifier).setLocale(const Locale('ar'));
+                        Navigator.pop(context);
+                      },
+                      isDarkMode: isDarkMode,
+                    ),
+                    _buildLanguageOption(
+                      context,
+                      title: 'Français',
+                      flag: '🇫🇷',
+                      isSelected: currentLocale.languageCode == 'fr',
+                      onTap: () {
+                        ref.read(localeNotifierProvider.notifier).setLocale(const Locale('fr'));
+                        Navigator.pop(context);
+                      },
+                      isDarkMode: isDarkMode,
+                    ),
+                    _buildLanguageOption(
+                      context,
+                      title: 'English',
+                      flag: '🇺🇸',
+                      isSelected: currentLocale.languageCode == 'en',
+                      onTap: () {
+                        ref.read(localeNotifierProvider.notifier).setLocale(const Locale('en'));
+                        Navigator.pop(context);
+                      },
+                      isDarkMode: isDarkMode,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
-            ),
-          );
+            );
+          },
+        );
       },
     );
   }

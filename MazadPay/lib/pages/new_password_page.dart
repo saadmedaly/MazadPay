@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'login_page.dart';
@@ -260,7 +260,7 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
           const Icon(Icons.lock_reset_rounded, size: 80, color: Color(0xFF0081FF)),
           Positioned(
             top: 40,
-            end: MediaQuery.of(context).size.width * 0.3,
+            right: MediaQuery.of(context).size.width * 0.3,
             child: Icon(Icons.key_rounded, size: 40, color: Colors.amber.withOpacity(0.6)),
           ),
         ],

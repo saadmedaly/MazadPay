@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -8,6 +8,7 @@ class DeliveryDetailsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
@@ -16,7 +17,7 @@ class DeliveryDetailsPage extends StatelessWidget {
           elevation: 0,
           centerTitle: true,
           title: Text(
-            'تفاصيل التوصيل',
+            l10n.text_149, // 'تفاصيل التوصيل'
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -33,25 +34,26 @@ class DeliveryDetailsPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildTrackingCard(isDarkMode),
+              _buildTrackingCard(context, isDarkMode),
               const SizedBox(height: 32),
               Text(
-                'حالة التوصيل',
+                l10n.text_150, // 'حالة التوصيل'
                 style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
-              _buildTimeline(isDarkMode),
+              _buildTimeline(context, isDarkMode),
               const SizedBox(height: 32),
-              _buildAddressCard(isDarkMode),
+              _buildAddressCard(context, isDarkMode),
               const SizedBox(height: 32),
-              _buildDeliveryGuyCard(isDarkMode),
+              _buildDeliveryGuyCard(context, isDarkMode),
             ],
           ),
         ),
       );
   }
 
-  Widget _buildTrackingCard(bool isDarkMode) {
+  Widget _buildTrackingCard(BuildContext context, bool isDarkMode) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -70,7 +72,7 @@ class DeliveryDetailsPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('رقم التتبع', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12)),
+              Text(l10n.text_151, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12)),
               Text('MP-88294-2024', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
             ],
           ),
@@ -81,8 +83,8 @@ class DeliveryDetailsPage extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('الوصول المتوقع', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12)),
-                  Text('اليوم، 04:30 م', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text(l10n.text_152, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12)),
+                  Text(l10n.text_153, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                 ],
               ),
               const Icon(Icons.local_shipping, color: Colors.white, size: 40),
@@ -93,13 +95,14 @@ class DeliveryDetailsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildTimeline(bool isDarkMode) {
+  Widget _buildTimeline(BuildContext context, bool isDarkMode) {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
-        _buildTimelineStep('تم استلام الطلب', 'تم تأكيد طلبك بنجاح.', '10:00 ص', true, true, isDarkMode),
-        _buildTimelineStep('في مرحلة التجهيز', 'يتم فحص المنتج وتجهيزه للشحن.', '11:20 ص', true, true, isDarkMode),
-        _buildTimelineStep('تم الشحن', 'الطلب في طريقه إلى مدينتك.', '01:45 م', true, false, isDarkMode),
-        _buildTimelineStep('قيد التوصيل', 'المندوب في طريقه إلى عنوانك.', 'قريباً', false, false, isDarkMode),
+        _buildTimelineStep(l10n.text_154, l10n.text_155, l10n.text_156, true, true, isDarkMode),
+        _buildTimelineStep(l10n.text_157, l10n.text_158, l10n.text_159, true, true, isDarkMode),
+        _buildTimelineStep(l10n.text_160, l10n.text_161, l10n.text_162, true, false, isDarkMode),
+        _buildTimelineStep(l10n.text_163, l10n.text_164, l10n.text_165, false, false, isDarkMode),
       ],
     );
   }
@@ -150,7 +153,8 @@ class DeliveryDetailsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildAddressCard(bool isDarkMode) {
+  Widget _buildAddressCard(BuildContext context, bool isDarkMode) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -170,9 +174,9 @@ class DeliveryDetailsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('عنوان التوصيل', style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 12)),
+                Text(l10n.text_166, style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 12)),
                 const SizedBox(height: 4),
-                Text('نواكشوط، تفرغ زينة، شارع المختار ولد داداه', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(l10n.text_167, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14)),
               ],
             ),
           ),
@@ -181,7 +185,8 @@ class DeliveryDetailsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDeliveryGuyCard(bool isDarkMode) {
+  Widget _buildDeliveryGuyCard(BuildContext context, bool isDarkMode) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -200,8 +205,8 @@ class DeliveryDetailsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('محمد الأمين', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14)),
-                Text('مندوب التوصيل', style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 12)),
+                Text(l10n.text_168, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(l10n.text_169, style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 12)),
               ],
             ),
           ),

@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,7 +19,7 @@ class AuctionWinnerPage extends ConsumerWidget {
         body: Stack(
           children: [
             // Fireworks Background (Simulated with icons)
-            _buildFireworksDecoration(),
+            _buildFireworksDecoration(context),
             
             SafeArea(
               child: SingleChildScrollView(
@@ -53,7 +53,7 @@ class AuctionWinnerPage extends ConsumerWidget {
                     _buildProductCard(auction, isDarkMode),
                     const SizedBox(height: 32),
                     
-                    _buildWinnerSummary(isDarkMode),
+                    _buildWinnerSummary(context, isDarkMode),
                     
                     const SizedBox(height: 40),
                     _buildFooterAction(context, isDarkMode),
@@ -66,13 +66,14 @@ class AuctionWinnerPage extends ConsumerWidget {
       );
   }
 
-  Widget _buildFireworksDecoration() {
+  Widget _buildFireworksDecoration(BuildContext context) {
+     final bool isRtl = Directionality.of(context) == TextDirection.rtl;
      return Stack(
        children: [
-         Positioned(top: 100, start: 50, child: Icon(Icons.star, color: Colors.orange.withOpacity(0.3), size: 40)),
-         Positioned(top: 150, end: 80, child: Icon(Icons.auto_awesome, color: Colors.blue.withOpacity(0.3), size: 50)),
-         Positioned(top: 300, start: 30, child: Icon(Icons.favorite, color: Colors.red.withOpacity(0.2), size: 30)),
-         Positioned(bottom: 200, end: 40, child: Icon(Icons.wb_sunny, color: Colors.yellow.withOpacity(0.3), size: 60)),
+         Positioned.directional(textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr, top: 100, start: 50, child: Icon(Icons.star, color: Colors.orange.withOpacity(0.3), size: 40)),
+         Positioned.directional(textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr, top: 150, end: 80, child: Icon(Icons.auto_awesome, color: Colors.blue.withOpacity(0.3), size: 50)),
+         Positioned.directional(textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr, top: 300, start: 30, child: Icon(Icons.favorite, color: Colors.red.withOpacity(0.2), size: 30)),
+         Positioned.directional(textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr, bottom: 200, end: 40, child: Icon(Icons.wb_sunny, color: Colors.yellow.withOpacity(0.3), size: 60)),
        ],
      );
   }
@@ -153,7 +154,7 @@ class AuctionWinnerPage extends ConsumerWidget {
      );
   }
 
-  Widget _buildWinnerSummary(bool isDarkMode) {
+  Widget _buildWinnerSummary(BuildContext context, bool isDarkMode) {
     return Container(
       width: 350,
       padding: const EdgeInsets.all(20),

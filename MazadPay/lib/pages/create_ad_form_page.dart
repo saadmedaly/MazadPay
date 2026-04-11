@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'ad_success_page.dart';
@@ -17,10 +17,31 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   final _phoneController = TextEditingController();
   final _priceController = TextEditingController();
   
-  String _selectedMainCategory = AppLocalizations.of(context)!.text_86;
-  String _selectedSubCategory = AppLocalizations.of(context)!.text_87;
-  String _selectedCity = AppLocalizations.of(context)!.text_88;
+  late String _selectedMainCategory;
+  late String _selectedSubCategory;
+  late String _selectedCity;
   final List<String> _selectedImages = []; // List of assets or paths
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final l10n = AppLocalizations.of(context)!;
+    _selectedMainCategory = l10n.text_86;
+    _selectedSubCategory = l10n.text_87;
+    _selectedCity = l10n.text_88;
+    
+    // Initialize our sub-category mapping
+    _subCategoriesByMain = {
+      l10n.text_86: [l10n.text_114, l10n.text_115, l10n.text_116, l10n.text_117, l10n.text_118],
+      l10n.text_119: [l10n.text_120, l10n.text_121, l10n.text_122, l10n.text_123, l10n.text_124, l10n.text_125, l10n.text_126, l10n.text_127, l10n.text_128, l10n.text_129],
+      l10n.text_130: [l10n.text_120, l10n.text_121, l10n.text_122, l10n.text_123, l10n.text_124, l10n.text_125, l10n.text_126, l10n.text_127, l10n.text_128, l10n.text_129],
+      l10n.text_131: [l10n.text_120, l10n.text_121, l10n.text_122, l10n.text_123, l10n.text_124, l10n.text_125, l10n.text_126, l10n.text_127, l10n.text_128, l10n.text_129],
+      l10n.text_132: [l10n.text_120, l10n.text_121, l10n.text_122, l10n.text_123, l10n.text_124, l10n.text_125, l10n.text_126, l10n.text_127, l10n.text_128, l10n.text_129],
+      l10n.text_133: [l10n.text_120, l10n.text_121, l10n.text_122, l10n.text_123, l10n.text_124, l10n.text_125, l10n.text_126, l10n.text_127, l10n.text_128, l10n.text_129],
+    };
+  }
+
+  Map<String, List<String>> _subCategoriesByMain = {};
 
   @override
   Widget build(BuildContext context) {
@@ -276,14 +297,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     );
   }
 
-  static Map<String, List<String>> _subCategoriesByMain = {
-    AppLocalizations.of(context)!.text_86: [AppLocalizations.of(context)!.text_114, AppLocalizations.of(context)!.text_115, AppLocalizations.of(context)!.text_116, AppLocalizations.of(context)!.text_117, AppLocalizations.of(context)!.text_118],
-    AppLocalizations.of(context)!.text_119: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
-    AppLocalizations.of(context)!.text_130: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
-    AppLocalizations.of(context)!.text_131: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
-    AppLocalizations.of(context)!.text_132: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
-    AppLocalizations.of(context)!.text_133: [AppLocalizations.of(context)!.text_120, AppLocalizations.of(context)!.text_121, AppLocalizations.of(context)!.text_122, AppLocalizations.of(context)!.text_123, AppLocalizations.of(context)!.text_124, AppLocalizations.of(context)!.text_125, AppLocalizations.of(context)!.text_126, AppLocalizations.of(context)!.text_127, AppLocalizations.of(context)!.text_128, AppLocalizations.of(context)!.text_129],
-  };
 
   void _showCategorySheet(BuildContext context, bool isMain) {
     showModalBottomSheet(

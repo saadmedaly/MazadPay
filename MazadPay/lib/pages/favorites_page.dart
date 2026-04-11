@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -100,7 +100,7 @@ class FavoritesPage extends ConsumerWidget {
               ),
               Positioned(
                 top: 8,
-                start: 8,
+                left: 8,
                 child: GestureDetector(
                   onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(id),
                   child: Container(

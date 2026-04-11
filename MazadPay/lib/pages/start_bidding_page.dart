@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/terms_page.dart';
 import 'package:mezadpay/pages/language_page.dart';
@@ -16,16 +16,16 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  final List<Map<String, String>> onboardingData = [
-    {
-      'image': 'assets/Start Bidding.png',
-      'title': AppLocalizations.of(context)!.text_304,
-      'description': AppLocalizations.of(context)!.text_305,
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final List<Map<String, String>> onboardingData = [
+      {
+        'image': 'assets/Start Bidding.png',
+        'title': AppLocalizations.of(context)!.text_304,
+        'description': AppLocalizations.of(context)!.text_305,
+      },
+    ];
+
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final Color primaryColor = AppTheme.primaryColor;
 

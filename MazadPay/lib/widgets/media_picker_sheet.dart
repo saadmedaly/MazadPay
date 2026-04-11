@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -122,7 +122,7 @@ class _MediaPickerSheetState extends State<MediaPickerSheet> with SingleTickerPr
               if (isVideo)
                 const Center(child: Icon(Icons.play_circle_fill, color: Colors.white, size: 32)),
               Positioned(
-                top: 8, end: 8,
+                top: 8, right: 8,
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),

@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:mezadpay/pages/home_page.dart';
@@ -75,36 +75,46 @@ class SideMenuDrawer extends StatelessWidget {
                       color: Colors.white,
                       size: 20,
                     ),
-                    Row(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              AppLocalizations.of(context)!.text_379,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                    Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  AppLocalizations.of(context)!.text_379,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  AppLocalizations.of(context)!.text_24,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
-                            SizedBox(height: 4),
-                            Text(
-                              AppLocalizations.of(context)!.text_24,
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 12),
-                        const Icon(
-                          Icons.account_balance_wallet,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                      ],
+                          ),
+                          const SizedBox(width: 12),
+                          const Icon(
+                            Icons.account_balance_wallet,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -179,26 +189,38 @@ class SideMenuDrawer extends StatelessWidget {
                         color: isDarkMode ? const Color(0xFF2D2D2D) : const Color(0xFFFFF8E1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () => AppModals.showRatingModal(context),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              minimumSize: Size.zero,
+                       child: Row(
+                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                         children: [
+                           Flexible(
+                             child: ElevatedButton.icon(
+                               onPressed: () => AppModals.showRatingModal(context),
+                               style: ElevatedButton.styleFrom(
+                                 backgroundColor: Colors.red,
+                                 foregroundColor: Colors.white,
+                                 shape: RoundedRectangleBorder(
+                                   borderRadius: BorderRadius.circular(20),
+                                 ),
+                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                 minimumSize: Size.zero,
+                               ),
+                               icon: const Icon(Icons.star_border, size: 18),
+                               label: Text(
+                                 AppLocalizations.of(context)!.text_383,
+                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                 overflow: TextOverflow.ellipsis,
+                               ),
+                             ),
+                           ),
+                           const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              AppLocalizations.of(context)!.text_384,
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            icon: const Icon(Icons.star_border, size: 18),
-                            label: Text(AppLocalizations.of(context)!.text_383, style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                          Text(
-                            AppLocalizations.of(context)!.text_384,
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                         ],
                       ),
@@ -237,20 +259,27 @@ class SideMenuDrawer extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          ElevatedButton.icon(
-                            onPressed: () {},
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              minimumSize: Size.zero,
-                            ),
-                            icon: const Icon(Icons.share, size: 16),
-                            label: Text(AppLocalizations.of(context)!.text_388, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
+                           Flexible(
+                             child: ElevatedButton.icon(
+                               onPressed: () {},
+                               style: ElevatedButton.styleFrom(
+                                 backgroundColor: Colors.black,
+                                 foregroundColor: Colors.white,
+                                 shape: RoundedRectangleBorder(
+                                   borderRadius: BorderRadius.circular(20),
+                                 ),
+                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                 minimumSize: Size.zero,
+                               ),
+                               icon: const Icon(Icons.share, size: 16),
+                               label: Text(
+                                 AppLocalizations.of(context)!.text_388,
+                                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                 overflow: TextOverflow.ellipsis,
+                               ),
+                             ),
+                           ),
+                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               AppLocalizations.of(context)!.text_389,

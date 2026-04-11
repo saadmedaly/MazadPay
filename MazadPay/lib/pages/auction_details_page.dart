@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -158,7 +158,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             ),
             Positioned(
               bottom: 24,
-              end: 24,
+              right: 24,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
@@ -210,7 +210,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               children: [
                 Text(AppLocalizations.of(context)!.text_57, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 4),
-                Text('${auction.currentPrice.toStringAsFixed(0)} أوقية جديدة', 
+                Text('${auction.currentPrice.toStringAsFixed(0)} MRU', 
                     style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
@@ -221,14 +221,14 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             height: 100,
             decoration: BoxDecoration(
               color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-              border: Border(start: BorderSide(color: Colors.grey.withOpacity(0.1))),
+              border: Border(left: BorderSide(color: Colors.grey.withOpacity(0.1))),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(AppLocalizations.of(context)!.text_58, style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 14)),
                 const SizedBox(height: 4),
-                Text('${auction.minIncrement.toStringAsFixed(0)} أوقية جديدة', 
+                Text('${auction.minIncrement.toStringAsFixed(0)} MRU', 
                     style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0081FF), fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
@@ -309,7 +309,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'عدد المزايدات ${auction.bidderCount}', 
+                          '${AppLocalizations.of(context)!.text_78} ${auction.bidderCount}', 
                           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -335,7 +335,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('lot #${auction.lotNumber}', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0081FF), fontWeight: FontWeight.bold)),
+          Text('Lot #${auction.lotNumber}', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0081FF), fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -501,11 +501,25 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 if (auction.isUserHighestBidder) ...[
                    const Icon(Icons.back_hand_outlined, color: Colors.white),
                    const SizedBox(width: 8),
-                   Text(AppLocalizations.of(context)!.text_71, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                   Flexible(
+                     child: Text(
+                       AppLocalizations.of(context)!.text_71,
+                       maxLines: 1,
+                       overflow: TextOverflow.ellipsis,
+                       style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+                     ),
+                   ),
                 ] else ...[
                    const Icon(Icons.gavel, color: Colors.white),
                    const SizedBox(width: 8),
-                   Text(AppLocalizations.of(context)!.text_72, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                   Flexible(
+                     child: Text(
+                       AppLocalizations.of(context)!.text_72,
+                       maxLines: 1,
+                       overflow: TextOverflow.ellipsis,
+                       style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+                     ),
+                   ),
                 ],
               ],
             ),
@@ -615,7 +629,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   child: Image.asset(imagePath, height: 120, width: double.infinity, fit: BoxFit.cover),
                 ),
                 Positioned(
-                  top: 4, end: 4,
+                  top: 4, right: 4,
                   child: IconButton(
                     iconSize: 18,
                     onPressed: () {
@@ -636,7 +650,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   ),
                 ),
                 Positioned(
-                  top: 8, start: 8,
+                  top: 8, left: 8,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(

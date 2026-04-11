@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -8,6 +8,7 @@ class NotificationsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
@@ -16,7 +17,7 @@ class NotificationsPage extends StatelessWidget {
           elevation: 0,
           centerTitle: true,
           title: Text(
-            'الإشعارات',
+            l10n.text_48, // "الإشعارات"
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -31,7 +32,7 @@ class NotificationsPage extends StatelessWidget {
             TextButton(
               onPressed: () {},
               child: Text(
-                'تحديد ككل كمقروء',
+                l10n.text_245, // "تحديد ككل كمقروء"
                 style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0081FF), fontSize: 12),
               ),
             ),
@@ -42,52 +43,53 @@ class NotificationsPage extends StatelessWidget {
           itemCount: 5,
           separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
-            return _buildNotificationItem(index, isDarkMode);
+            return _buildNotificationItem(context, index, isDarkMode);
           },
         ),
       );
   }
 
-  Widget _buildNotificationItem(int index, bool isDarkMode) {
+  Widget _buildNotificationItem(BuildContext context, int index, bool isDarkMode) {
     final types = ['bid', 'win', 'system', 'payment', 'ad'];
     final type = types[index % types.length];
+    final l10n = AppLocalizations.of(context)!;
     
     IconData icon;
     Color color;
     String title;
     String description;
-    String time = 'منذ 5 دقائق';
+    String time = l10n.text_246; // "منذ 5 دقائق"
 
     switch (type) {
       case 'bid':
         icon = Icons.gavel_outlined;
         color = Colors.orange;
-        title = 'تنبيه مزايدة';
-        description = 'لقد تم تجاوز عرضك في مزاد Toyota Corolla.';
+        title = l10n.text_247;
+        description = l10n.text_248;
         break;
       case 'win':
         icon = Icons.emoji_events_outlined;
         color = const Color(0xFF00C58D);
-        title = 'مبروك الفوز!';
-        description = 'لقد فزت بمزاد iPhone 15 Pro Max.';
+        title = l10n.text_249;
+        description = l10n.text_250;
         break;
       case 'payment':
         icon = Icons.payment_outlined;
         color = const Color(0xFF0081FF);
-        title = 'تأكيد الدفع';
-        description = 'تم استلام دفعة مبلغ التأمين بنجاح.';
+        title = l10n.text_251;
+        description = l10n.text_252;
         break;
       case 'system':
         icon = Icons.notifications_active_outlined;
         color = Colors.blueGrey;
-        title = 'تحديث النظام';
-        description = 'هناك ميزات جديدة متاحة في التطبيق الآن.';
+        title = l10n.text_253;
+        description = l10n.text_254;
         break;
       default:
         icon = Icons.info_outline;
         color = Colors.grey;
-        title = 'تحديث الإعلان';
-        description = 'تمت الموافقة على إعلانك ونشره في التطبيق.';
+        title = l10n.text_255;
+        description = l10n.text_256;
     }
 
     return Container(
