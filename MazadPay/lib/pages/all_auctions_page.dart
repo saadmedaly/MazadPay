@@ -5,11 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/create_ad_start_page.dart';
-import 'package:mezadpay/pages/notifications_page.dart';
 import 'package:mezadpay/pages/account_page.dart';
 import 'package:mezadpay/pages/services_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
-import 'auction_details_page.dart';
 
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
@@ -196,10 +194,10 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                       width: 100,
                       margin: const EdgeInsets.only(right: 12),
                       decoration: BoxDecoration(
-                        color: isSelected ? primaryBlue.withOpacity(0.1) : (isDarkMode ? const Color(0xFF1D1D1D) : Colors.white),
+                        color: isSelected ? primaryBlue.withValues(alpha: 0.1) : (isDarkMode ? const Color(0xFF1D1D1D) : Colors.white),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: isSelected ? primaryBlue : (isDarkMode ? const Color(0xFF333333) : Colors.grey.withOpacity(0.1)),
+                          color: isSelected ? primaryBlue : (isDarkMode ? const Color(0xFF333333) : Colors.grey.withValues(alpha: 0.1)),
                           width: 1.5,
                         ),
                       ),
@@ -260,7 +258,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                 decoration: BoxDecoration(
                   color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                  border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
                 ),
                 child: TextField(
                   controller: _searchController,
@@ -415,7 +413,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
 
   Widget _buildDesignTab(int index, String label, int count) {
     bool isSelected = _activeTabIndex == index;
-    const Color primaryBlue = Color(0xFF0084FF);
     return Expanded(
       child: GestureDetector(
         onTap: () {
@@ -429,7 +426,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))] : [],
+            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))] : [],
           ),
           child: Center(
             child: Row(
@@ -461,7 +458,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   }
 
   Widget _buildHorizontalAuctionCard(BuildContext context, bool isDarkMode, Map<String, String> auction) {
-    final l10n = AppLocalizations.of(context)!;
     const Color primaryBlue = Color(0xFF0084FF);
     final id = auction['id']!;
     final isFavorite = ref.watch(favoritesProvider).contains(id);
@@ -472,7 +468,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: IntrinsicHeight(
