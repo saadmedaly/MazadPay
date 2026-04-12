@@ -1717,7 +1717,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_270.
   ///
   /// In ar, this message translates to:
-  /// **'2025/12/27 م'**
+  /// **'2026/04/12 م'**
   String get text_270;
 
   /// No description provided for @text_271.
@@ -1867,7 +1867,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_295.
   ///
   /// In ar, this message translates to:
-  /// **'آخر تحديث: مارس 2026'**
+  /// **'آخر تحديث: أبريل 2026'**
   String get text_295;
 
   /// No description provided for @text_296.
@@ -2023,7 +2023,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_321.
   ///
   /// In ar, this message translates to:
-  /// **'آخر تحديث: يونيو 2024'**
+  /// **'آخر تحديث: أبريل 2026'**
   String get text_321;
 
   /// No description provided for @text_322.

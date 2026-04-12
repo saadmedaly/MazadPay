@@ -819,7 +819,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get text_269 => 'Date & Time';
 
   @override
-  String get text_270 => '12/27/2025';
+  String get text_270 => '2026/04/12';
 
   @override
   String get text_271 => 'Status';
@@ -972,7 +972,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get text_320 => 'I Agree';
 
   @override
-  String get text_321 => 'Last Update: June 2024';
+  String get text_321 => 'Last Update: April 2026';
 
   @override
   String get text_322 => 'App Terms & Conditions';

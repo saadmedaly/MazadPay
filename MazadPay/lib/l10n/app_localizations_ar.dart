@@ -840,7 +840,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_269 => 'التاريخ والوقت';
 
   @override
-  String get text_270 => '2025/12/27 م';
+  String get text_270 => '2026/04/12 م';
 
   @override
   String get text_271 => 'الحالة';
@@ -922,7 +922,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'نحتفظ بالحق في تحديث سياسة الخصوصية هذه من وقت لآخر. سيتم إخطارك بأي تغييرات جوهرية عبر البريد الإلكتروني أو تنبيه داخل التطبيق.';
 
   @override
-  String get text_295 => 'آخر تحديث: مارس 2026';
+  String get text_295 => 'آخر تحديث: أبريل 2026';
 
   @override
   String get text_296 => 'اربح وقتك';
@@ -1001,7 +1001,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_320 => 'أوافق على الشروط';
 
   @override
-  String get text_321 => 'آخر تحديث: يونيو 2024';
+  String get text_321 => 'آخر تحديث: أبريل 2026';
 
   @override
   String get text_322 => 'شروط استخدام تطبيق \"مزاد موريتانيا\"';

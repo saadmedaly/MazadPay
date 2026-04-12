@@ -16,7 +16,7 @@ class AppTheme {
       primary: primaryColor,
       surface: backgroundColor,
     ),
-    textTheme: GoogleFonts.plusJakartaSansTextTheme(),
+    textTheme: GoogleFonts.poppinsTextTheme(),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -43,7 +43,7 @@ class AppTheme {
       primary: primaryColor,
       surface: const Color(0xFF1D1D1D),
     ),
-    textTheme: GoogleFonts.plusJakartaSansTextTheme(ThemeData.dark().textTheme),
+    textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -59,4 +59,5 @@ class AppTheme {
       ),
     ),
   );
+
 }

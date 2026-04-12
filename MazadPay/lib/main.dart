@@ -10,8 +10,8 @@ import 'package:mezadpay/providers/locale_provider.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Optional: Disable runtime font fetching if there are persistive issues.
-  GoogleFonts.config.allowRuntimeFetching = true;
+  // Disable runtime font fetching for offline use.
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   runApp(
     const ProviderScope(
@@ -42,18 +42,10 @@ class MazadApp extends ConsumerWidget {
         Locale('en'),
       ],
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme.copyWith(
-        textTheme: GoogleFonts.poppinsTextTheme(
-          ThemeData.light().textTheme,
-        ),
-      ),
-      darkTheme: AppTheme.darkTheme.copyWith(
-        textTheme: GoogleFonts.poppinsTextTheme(
-          ThemeData.dark().textTheme,
-        ),
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.light,
       home: const SplashPage(),
     );
   }
-}
+}

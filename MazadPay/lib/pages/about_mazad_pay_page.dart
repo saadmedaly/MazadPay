@@ -23,11 +23,14 @@ class AboutMazadPayPage extends StatelessWidget {
           ),
           title: Text(
             AppLocalizations.of(context)!.text_4,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(
+              fontFamily: 'Plus Jakarta Sans',
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
             ),
+
+
           ),
           centerTitle: true,
         ),
@@ -105,11 +108,14 @@ class AboutMazadPayPage extends StatelessWidget {
   Widget _buildSectionTitle(String title, bool isDarkMode) {
     return Text(
       title,
-      style: GoogleFonts.plusJakartaSans(
+      style: TextStyle(
+        fontFamily: 'Plus Jakarta Sans',
         fontSize: 20,
         fontWeight: FontWeight.w800,
         color: isDarkMode ? Colors.white : Colors.black,
       ),
+
+
     );
   }
 
@@ -117,11 +123,13 @@ class AboutMazadPayPage extends StatelessWidget {
     return Text(
       text,
       textAlign: TextAlign.justify,
-      style: GoogleFonts.plusJakartaSans(
+      style: TextStyle(
+        fontFamily: 'Plus Jakarta Sans',
         fontSize: 15,
         height: 1.6,
         color: isDarkMode ? Colors.white70 : Colors.black87,
       ),
+
     );
   }
 
@@ -143,11 +151,14 @@ class AboutMazadPayPage extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: GoogleFonts.plusJakartaSans(
+              style: TextStyle(
+                fontFamily: 'Plus Jakarta Sans',
                 fontSize: 15,
                 height: 1.5,
                 color: isDarkMode ? Colors.white70 : Colors.black87,
               ),
+
+
             ),
           ),
         ],

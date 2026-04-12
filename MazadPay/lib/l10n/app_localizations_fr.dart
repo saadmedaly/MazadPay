@@ -833,7 +833,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_269 => 'Date et heure';
 
   @override
-  String get text_270 => '27/12/2025';
+  String get text_270 => '12/04/2026';
 
   @override
   String get text_271 => 'Statut';
@@ -911,7 +911,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_294 => 'Nous nous réservons le droit de mise à jour.';
 
   @override
-  String get text_295 => 'Dernière mise à jour : Mars 2026';
+  String get text_295 => 'Dernière mise à jour : Avril 2026';
 
   @override
   String get text_296 => 'Gagnez du temps';
@@ -989,7 +989,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_320 => 'J\'accepte les termes';
 
   @override
-  String get text_321 => 'Dernière mise à jour : Juin 2024';
+  String get text_321 => 'Dernière mise à jour : Avril 2026';
 
   @override
   String get text_322 => 'Conditions de l\'application Mazad Mauritania';

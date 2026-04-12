@@ -45,10 +45,11 @@ class MazadPayLogo extends StatelessWidget {
                     fontWeight: FontWeight.w900,
                     fontStyle: FontStyle.italic,
                     fontFamily:
-                        'Roboto', // Ensures the 'M' is very straight-line sans-serif
+                        'Plus Jakarta Sans', // Ensures the 'M' looks consistent with the theme
                     height: 1.0,
                     letterSpacing: -2,
                   ),
+
                 ),
               ),
               // "azad" part

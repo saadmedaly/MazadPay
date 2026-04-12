@@ -90,22 +90,28 @@ class _MazadIntroPageState extends State<MazadIntroPage> {
                           Text(
                             onboardingData[index]['title']!,
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.plusJakartaSans(
+                            style: TextStyle(
+                              fontFamily: 'Plus Jakarta Sans',
                               fontSize: 26,
                               fontWeight: FontWeight.w800,
                               color: isDarkMode ? Colors.white : const Color(0xFF101828),
                             ),
+
+
                           ),
                           const SizedBox(height: 16),
                           Text(
                             onboardingData[index]['description']!,
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.plusJakartaSans(
+                            style: TextStyle(
+                              fontFamily: 'Plus Jakarta Sans',
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
                               height: 1.5,
                               color: isDarkMode ? Colors.white70 : const Color(0xFF667085),
                             ),
+
+
                           ),
                         ],
                       ),
@@ -173,10 +179,12 @@ class _MazadIntroPageState extends State<MazadIntroPage> {
                           _currentPage == onboardingData.length - 1
                               ? AppLocalizations.of(context)!.text_232
                               : AppLocalizations.of(context)!.text_144,
-                          style: GoogleFonts.plusJakartaSans(
+                          style: const TextStyle(
+                            fontFamily: 'Plus Jakarta Sans',
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),
+
                         ),
                       ),
                     ),
@@ -191,11 +199,14 @@ class _MazadIntroPageState extends State<MazadIntroPage> {
                       },
                       child: Text(
                         AppLocalizations.of(context)!.text_233,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: TextStyle(
+                          fontFamily: 'Plus Jakarta Sans',
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: isDarkMode ? Colors.white60 : const Color(0xFF667085),
                         ),
+
+
                       ),
                     ),
                     const SizedBox(height: 8), // Bottom safe space

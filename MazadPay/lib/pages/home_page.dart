@@ -280,7 +280,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   children: [
                     Row(
                       children: [
-                        Text(AppLocalizations.of(context)!.text_199, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(AppLocalizations.of(context)!.text_199, style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold)),
+
                         const SizedBox(width: 8),
                         const LiveIndicator(),
                       ],
