@@ -386,11 +386,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
               ),
               Text(
-                "",
+                "إعلان جديد",
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: Colors.grey[600],
                 ),
               ),
             ],
