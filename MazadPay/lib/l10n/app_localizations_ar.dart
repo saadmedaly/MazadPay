@@ -104,7 +104,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_28 => 'المفضلة';
 
   @override
-  String get text_29 => 'العناصر التي فزت\\nبها';
+  String get text_29 => 'العناصر التي فزت بها';
 
   @override
   String get text_30 => 'مركز التواصل';
@@ -447,7 +447,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_143 =>
-      'هل يوجد لديك منتجات تعرضها للمزايدة ؟\\nاختر اعلانك من هنا';
+      'هل يوجد لديك منتجات تعرضها للمزايدة ؟ اختر اعلانك من هنا';
 
   @override
   String get text_144 => 'متابعة';
@@ -532,35 +532,35 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_171 =>
-      'استخدموا رمز التاجر الخاص بنا لإتمام عملية\\nالدفع عبر مصرفي';
+      'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر مصرفي';
 
   @override
   String get text_172 => 'بنكلي';
 
   @override
   String get text_173 =>
-      'استخدموا رمز التاجر الخاص بنا لإتمام عملية\\nالدفع عبر بنكلي';
+      'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر بنكلي';
 
   @override
   String get text_174 => 'سداد';
 
   @override
   String get text_175 =>
-      'استخدموا رمز التاجر الخاص بنا لإتمام عملية\\nالدفع عبر سداد';
+      'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر سداد';
 
   @override
   String get text_176 => 'كليك';
 
   @override
   String get text_177 =>
-      'استخدموا رمز التاجر الخاص بنا لإتمام عملية\\nالدفع عبر كليك';
+      'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر كليك';
 
   @override
   String get text_178 => 'دفع من خلال تطبيقات البنكية';
 
   @override
   String get text_179 =>
-      'يرجى قراءة الشروط والأحكام التالية لاسترداد\\nالمعاملات بعناية';
+      'يرجى قراءة الشروط والأحكام التالية لاسترداد المعاملات بعناية';
 
   @override
   String get text_180 => 'شروط الدفع والتأمين';
@@ -574,15 +574,15 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_183 =>
-      '٣. يُسترجع مبلغ التأمين تلقائياً في حال عدم الفوز بالمزاد خلال ساعة\\nحسب مزود الدفع.';
+      '٣. يُسترجع مبلغ التأمين تلقائياً في حال عدم الفوز بالمزاد خلال ساعة حسب مزود الدفع.';
 
   @override
   String get text_184 =>
-      '٤. لا يُسترجع التأمين في حال الفوز وعدم إتمام الدفع أو مخالفة\\nشروط التطبيق.';
+      '٤. لا يُسترجع التأمين في حال الفوز وعدم إتمام الدفع أو مخالفة شروط التطبيق.';
 
   @override
   String get text_185 =>
-      '٥. يحق لإدارة التطبيق إلغاء أي مزاد عند وجود خطأ تقني أو شبهة\\nاحتيال، مع إعادة التأمين عند الإلغاء.';
+      '٥. يحق لإدارة التطبيق إلغاء أي مزاد عند وجود خطأ تقني أو شبهة احتيال، مع إعادة التأمين عند الإلغاء.';
 
   @override
   String get text_186 => 'باستخدامك للتطبيق، فإنك توافق على هذه الشروط';
@@ -612,7 +612,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_194 => 'انواذيبو';
 
   @override
-  String get text_195 => 'خدمات مزاد موريتانيا بحاجة إلى\\nموقعك';
+  String get text_195 => 'خدمات مزاد موريتانيا بحاجة إلى موقعك';
 
   @override
   String get text_196 => 'لتجربة أفضل يرجى تفعيل الموقع الجغرافي في هاتفك';
@@ -812,8 +812,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_260 => 'أدخل رمز التحقق';
 
   @override
-  String get text_261 =>
-      'ادخل الرمز المكون من 6 أرقام المرسل عبر الواتساب إلى\\n';
+  String get text_261 => 'ادخل الرمز المكون من 6 أرقام المرسل عبر الواتساب إلى';
 
   @override
   String get text_262 => 'إعادة إرسال الرمز خلال ';

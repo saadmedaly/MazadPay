@@ -271,7 +271,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_29.
   ///
   /// In ar, this message translates to:
-  /// **'العناصر التي فزت\\nبها'**
+  /// **'العناصر التي فزت بها'**
   String get text_29;
 
   /// No description provided for @text_30.
@@ -955,7 +955,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_143.
   ///
   /// In ar, this message translates to:
-  /// **'هل يوجد لديك منتجات تعرضها للمزايدة ؟\\nاختر اعلانك من هنا'**
+  /// **'هل يوجد لديك منتجات تعرضها للمزايدة ؟ اختر اعلانك من هنا'**
   String get text_143;
 
   /// No description provided for @text_144.
@@ -1123,7 +1123,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_171.
   ///
   /// In ar, this message translates to:
-  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية\\nالدفع عبر مصرفي'**
+  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر مصرفي'**
   String get text_171;
 
   /// No description provided for @text_172.
@@ -1135,7 +1135,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_173.
   ///
   /// In ar, this message translates to:
-  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية\\nالدفع عبر بنكلي'**
+  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر بنكلي'**
   String get text_173;
 
   /// No description provided for @text_174.
@@ -1147,7 +1147,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_175.
   ///
   /// In ar, this message translates to:
-  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية\\nالدفع عبر سداد'**
+  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر سداد'**
   String get text_175;
 
   /// No description provided for @text_176.
@@ -1159,7 +1159,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_177.
   ///
   /// In ar, this message translates to:
-  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية\\nالدفع عبر كليك'**
+  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر كليك'**
   String get text_177;
 
   /// No description provided for @text_178.
@@ -1171,7 +1171,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_179.
   ///
   /// In ar, this message translates to:
-  /// **'يرجى قراءة الشروط والأحكام التالية لاسترداد\\nالمعاملات بعناية'**
+  /// **'يرجى قراءة الشروط والأحكام التالية لاسترداد المعاملات بعناية'**
   String get text_179;
 
   /// No description provided for @text_180.
@@ -1195,19 +1195,19 @@ abstract class AppLocalizations {
   /// No description provided for @text_183.
   ///
   /// In ar, this message translates to:
-  /// **'٣. يُسترجع مبلغ التأمين تلقائياً في حال عدم الفوز بالمزاد خلال ساعة\\nحسب مزود الدفع.'**
+  /// **'٣. يُسترجع مبلغ التأمين تلقائياً في حال عدم الفوز بالمزاد خلال ساعة حسب مزود الدفع.'**
   String get text_183;
 
   /// No description provided for @text_184.
   ///
   /// In ar, this message translates to:
-  /// **'٤. لا يُسترجع التأمين في حال الفوز وعدم إتمام الدفع أو مخالفة\\nشروط التطبيق.'**
+  /// **'٤. لا يُسترجع التأمين في حال الفوز وعدم إتمام الدفع أو مخالفة شروط التطبيق.'**
   String get text_184;
 
   /// No description provided for @text_185.
   ///
   /// In ar, this message translates to:
-  /// **'٥. يحق لإدارة التطبيق إلغاء أي مزاد عند وجود خطأ تقني أو شبهة\\nاحتيال، مع إعادة التأمين عند الإلغاء.'**
+  /// **'٥. يحق لإدارة التطبيق إلغاء أي مزاد عند وجود خطأ تقني أو شبهة احتيال، مع إعادة التأمين عند الإلغاء.'**
   String get text_185;
 
   /// No description provided for @text_186.
@@ -1267,7 +1267,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_195.
   ///
   /// In ar, this message translates to:
-  /// **'خدمات مزاد موريتانيا بحاجة إلى\\nموقعك'**
+  /// **'خدمات مزاد موريتانيا بحاجة إلى موقعك'**
   String get text_195;
 
   /// No description provided for @text_196.
@@ -1663,7 +1663,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_261.
   ///
   /// In ar, this message translates to:
-  /// **'ادخل الرمز المكون من 6 أرقام المرسل عبر الواتساب إلى\\n'**
+  /// **'ادخل الرمز المكون من 6 أرقام المرسل عبر الواتساب إلى'**
   String get text_261;
 
   /// No description provided for @text_262.
