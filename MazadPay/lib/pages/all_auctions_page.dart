@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
@@ -18,12 +18,55 @@ class AllAuctionsPage extends ConsumerStatefulWidget {
 
 class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   final TextEditingController _searchController = TextEditingController();
-  
+
   List<Map<String, String>> _allAuctions = [];
   List<Map<String, String>> _filteredAuctions = [];
-  int _activeTabIndex = 0; // 0 for Active, 1 for Finished
-  int _selectedCategoryIndex = 0; 
+  int _activeTabIndex = 0;
+  int _selectedCategoryIndex = 0;
   int _selectedSubCategoryIndex = 0;
+
+  // صور كل فئة
+  final Map<String, List<String>> _categoryImages = {
+    'cars': [
+      'assets/car0.png',
+      'assets/car1.jpg',
+      'assets/car2.jpg',
+      'assets/car3.jpg',
+      'assets/car4.jpg',
+      'assets/car5.png',
+    ],
+    'phones': [
+      'assets/phone1.jpg',
+      'assets/phone2.jpg',
+      'assets/phone3.jpg',
+      'assets/phone4.jpg',
+      'assets/phone5.jpg',
+      'assets/phone6.jpg',
+    ],
+    'real_estate': [
+      'assets/maison1.jpg',
+      'assets/maison2.jpg',
+      'assets/maison3.jpg',
+      'assets/maison4.jpg',
+      'assets/maison5.jpg',
+    ],
+    'home_appliances': [
+      'assets/Appareils de maison1.jpg',
+      'assets/Appareils de maison2.jpg',
+      'assets/Appareils de maison3.jpg',
+      'assets/Appareils de maison4.jpg',
+      'assets/Appareils de maison5.jpg',
+      'assets/Appareils de maison6.jpg',
+      'assets/Appareils de maison7.jpg',
+      'assets/Appareils de maison8.jpg',
+    ],
+  };
+
+  List<String> get _currentCategoryImages {
+    if (_selectedCategoryIndex == 0) return [];
+    final key = _categories[_selectedCategoryIndex]['key'] as String;
+    return _categoryImages[key] ?? [];
+  }
 
   @override
   void didChangeDependencies() {
@@ -36,9 +79,10 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         'price': '15,000 MRU',
         'bids': '15',
         'time': '23h 30m 18s',
-        'location': l10n.text_113, // "تفرغ زينة"
+        'location': l10n.text_113,
         'category': 'cars',
-        'image': 'assets/raf4.png',
+        'subCategory': '4x4',
+        'image': 'assets/car0.png',
         'status': 'active',
         'postedTime': 'منذ 5 ساعات'
       },
@@ -48,21 +92,36 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         'price': '760,000 MRU',
         'bids': '7',
         'time': '23h 30m 18s',
-        'location': l10n.text_104, // "عرفات"
+        'location': l10n.text_104,
         'category': 'cars',
-        'image': 'assets/corolla.png',
+        'subCategory': 'standard',
+        'image': 'assets/car1.jpg',
         'status': 'active',
         'postedTime': 'منذ 2 ساعات'
+      },
+      {
+        'id': '5',
+        'title': 'سيارة تاكسي بحالة ممتازة',
+        'price': '450,000 MRU',
+        'bids': '3',
+        'time': '10h 15m 30s',
+        'location': l10n.text_111,
+        'category': 'cars',
+        'subCategory': 'taxi',
+        'image': 'assets/car2.jpg',
+        'status': 'active',
+        'postedTime': 'منذ ساعة'
       },
       {
         'id': '3',
         'title': 'TOYOTA RAV4 2008 D4D',
         'price': '420,000 MRU',
         'bids': '20',
-        'time': l10n.text_364, // "انتهى المزاد"
+        'time': l10n.text_364,
         'location': l10n.text_113,
         'category': 'cars',
-        'image': 'assets/raf4.png',
+        'subCategory': '4x4',
+        'image': 'assets/car3.jpg',
         'status': 'finished',
         'postedTime': 'منذ يوم'
       },
@@ -74,9 +133,69 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         'time': '12h 10m 05s',
         'location': l10n.text_113,
         'category': 'phones',
-        'image': 'assets/corolla.png',
+        'image': 'assets/phone1.jpg',
         'status': 'active',
         'postedTime': 'منذ 3 ساعات'
+      },
+      {
+        'id': '6',
+        'title': 'Samsung Galaxy S24 Ultra',
+        'price': '38,000 MRU',
+        'bids': '8',
+        'time': '05h 45m 20s',
+        'location': l10n.text_113,
+        'category': 'phones',
+        'image': 'assets/phone2.jpg',
+        'status': 'active',
+        'postedTime': 'منذ 6 ساعات'
+      },
+      {
+        'id': '7',
+        'title': 'فيلا راقية وسط العاصمة',
+        'price': '2,500,000 MRU',
+        'bids': '5',
+        'time': '48h 00m 00s',
+        'location': l10n.text_113,
+        'category': 'real_estate',
+        'image': 'assets/maison1.jpg',
+        'status': 'active',
+        'postedTime': 'منذ يومين'
+      },
+      {
+        'id': '8',
+        'title': 'شقة 3 غرف للبيع',
+        'price': '850,000 MRU',
+        'bids': '11',
+        'time': '24h 00m 00s',
+        'location': l10n.text_113,
+        'category': 'real_estate',
+        'image': 'assets/maison2.jpg',
+        'status': 'active',
+        'postedTime': 'منذ يوم'
+      },
+      {
+        'id': '9',
+        'title': 'غسالة أوتوماتيك 7 كيلو',
+        'price': '25,000 MRU',
+        'bids': '4',
+        'time': '08h 30m 00s',
+        'location': l10n.text_113,
+        'category': 'home_appliances',
+        'image': 'assets/Appareils de maison1.jpg',
+        'status': 'active',
+        'postedTime': 'منذ 4 ساعات'
+      },
+      {
+        'id': '10',
+        'title': 'ثلاجة سامسونج 500 لتر',
+        'price': '35,000 MRU',
+        'bids': '6',
+        'time': '15h 00m 00s',
+        'location': l10n.text_113,
+        'category': 'home_appliances',
+        'image': 'assets/Appareils de maison2.jpg',
+        'status': 'active',
+        'postedTime': 'منذ 7 ساعات'
       },
     ];
     _filterAuctions();
@@ -104,33 +223,41 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       _filteredAuctions = _allAuctions.where((auction) {
         final matchesSearch = auction['title']!.toLowerCase().contains(_searchController.text.toLowerCase());
         final matchesStatus = _activeTabIndex == 0 ? auction['status'] == 'active' : auction['status'] == 'finished';
-        
+
         bool matchesCategory = true;
         if (_selectedCategoryIndex != 0) {
-           final categoryKey = _categories[_selectedCategoryIndex]['key'];
-           matchesCategory = auction['category'] == categoryKey;
+          final categoryKey = _categories[_selectedCategoryIndex]['key'];
+          matchesCategory = auction['category'] == categoryKey;
         }
-        
-        return matchesSearch && matchesStatus && matchesCategory;
+
+        bool matchesSubCategory = true;
+        if (_selectedCategoryIndex == 1 && _selectedSubCategoryIndex != -1) {
+          final subKey = _carSubCategories[_selectedSubCategoryIndex]['key'];
+          if (auction.containsKey('subCategory')) {
+            matchesSubCategory = auction['subCategory'] == subKey;
+          }
+        }
+
+        return matchesSearch && matchesStatus && matchesCategory && matchesSubCategory;
       }).toList();
     });
   }
 
   final List<Map<String, dynamic>> _categories = [
-    {'title_key': 'text_74', 'image': 'assets/auctions/cars.png', 'key': 'all', 'count': 25},
-    {'title_key': 'text_86', 'image': 'assets/auctions/cars.png', 'key': 'cars', 'count': 10},
-    {'title_key': 'text_130', 'image': 'assets/auctions/phones.png', 'key': 'phones', 'count': 5},
-    {'title_key': 'text_119', 'image': 'assets/auctions/houses.png', 'key': 'real_estate', 'count': 8},
+    {'title_key': 'text_74', 'image': 'assets/auctions/other.png', 'key': 'all', 'count': 76},
+    {'title_key': 'text_86', 'image': 'assets/auctions/cars.png', 'key': 'cars', 'count': 45},
+    {'title_key': 'text_130', 'image': 'assets/auctions/phones.png', 'key': 'phones', 'count': 12},
+    {'title_key': 'text_119', 'image': 'assets/auctions/houses.png', 'key': 'real_estate', 'count': 31},
     {'title_key': 'text_127', 'image': 'assets/auctions/phone_numbers.png', 'key': 'phone_numbers', 'count': 15},
-    {'title_key': 'text_120', 'image': 'assets/auctions/home_appliances.png', 'key': 'home_appliances', 'count': 4},
+    {'title_key': 'text_120', 'image': 'assets/auctions/home_appliances.png', 'key': 'home_appliances', 'count': 8},
   ];
 
-  final List<Map<String, dynamic>> _subCategories = [
-    {'title': '4x4', 'icon': Icons.directions_car_filled_outlined},
-    {'title': 'يارة', 'icon': Icons.directions_car},
-    {'title': 'تكسي', 'icon': Icons.local_taxi},
-    {'title': 'باص', 'icon': Icons.airport_shuttle},
-    {'title': 'شاحنة', 'icon': Icons.local_shipping},
+  final List<Map<String, dynamic>> _carSubCategories = [
+    {'title_key': 'text_115', 'image': 'assets/car1.jpg', 'key': 'standard'},
+    {'title_key': 'text_114', 'image': 'assets/car0.png', 'key': '4x4'},
+    {'title_key': 'text_116', 'image': 'assets/car2.jpg', 'key': 'taxi'},
+    {'title_key': 'text_117', 'image': 'assets/car4.jpg', 'key': 'damaged'},
+    {'title_key': 'text_118', 'image': 'assets/car5.png', 'key': 'electric'},
   ];
 
   @override
@@ -138,103 +265,253 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     final l10n = AppLocalizations.of(context)!;
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     const Color primaryBlue = Color(0xFF0084FF);
-    
-    return Scaffold(
-        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
-        endDrawer: const SideMenuDrawer(),
-        appBar: AppBar(
-          backgroundColor: primaryBlue,
-          elevation: 0,
-          toolbarHeight: 60,
-          centerTitle: true,
-          title: Text(
-            "انواع المزادات", // "Types of Auctions" as per design
-            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          leading: Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu, color: Colors.white),
-              onPressed: () => Scaffold.of(context).openEndDrawer(),
-            ),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            // Top Categories Horizontal List
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 110,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _categories.length,
-                itemBuilder: (context, index) {
-                  final cat = _categories[index];
-                  bool isSelected = _selectedCategoryIndex == index;
-                  String title = _getLocalizedTitle(cat['title_key'], l10n);
 
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedCategoryIndex = index;
-                        _filterAuctions();
-                      });
-                    },
-                    child: Container(
-                      width: 100,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        color: isSelected ? primaryBlue.withValues(alpha: 0.1) : (isDarkMode ? const Color(0xFF1D1D1D) : Colors.white),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isSelected ? primaryBlue : (isDarkMode ? const Color(0xFF333333) : Colors.grey.withValues(alpha: 0.1)),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned(
-                            top: 6,
-                            right: 6,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.orange,
-                                borderRadius: BorderRadius.circular(8),
+    return Scaffold(
+      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
+      endDrawer: const SideMenuDrawer(),
+      appBar: AppBar(
+        backgroundColor: primaryBlue,
+        elevation: 0,
+        toolbarHeight: 60,
+        centerTitle: true,
+        title: Text(
+          "انواع المزادات",
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, color: Colors.white),
+            onPressed: () => Scaffold.of(context).openEndDrawer(),
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                // Top Categories Horizontal List
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 115,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _categories.length,
+                    itemBuilder: (context, index) {
+                      final cat = _categories[index];
+                      bool isSelected = _selectedCategoryIndex == index;
+                      String title = _getLocalizedTitle(cat['title_key'], l10n);
+
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedCategoryIndex = index;
+                            _selectedSubCategoryIndex = -1;
+                            _filterAuctions();
+                          });
+                        },
+                        child: Container(
+                          width: 105,
+                          margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+                          decoration: BoxDecoration(
+                            color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: isSelected
+                                ? [BoxShadow(color: primaryBlue.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4))]
+                                : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))],
+                            border: Border.all(
+                              color: isSelected ? primaryBlue : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Image.asset(
+                                      cat['image'],
+                                      height: 44,
+                                      width: 44,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (c, e, s) => Icon(Icons.category, color: isSelected ? primaryBlue : Colors.grey, size: 32),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      title,
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 12,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                        color: isSelected ? primaryBlue : (isDarkMode ? Colors.white70 : Colors.black87),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              child: Text(
-                                cat['count'].toString(),
-                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              Positioned(
+                                top: -4,
+                                right: -4,
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFFF3B30),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    cat['count'].toString(),
+                                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                // Search Bar
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      textAlign: TextAlign.center,
+                      decoration: InputDecoration(
+                        hintText: "البحث",
+                        hintStyle: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 15),
+                        prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 22),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // عرض صور الفئة المختارة
+                if (_currentCategoryImages.isNotEmpty) ...[
+                  SizedBox(
+                    height: 130,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _currentCategoryImages.length,
+                      itemBuilder: (context, index) {
+                        return Container(
+                          width: 160,
+                          margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.08),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.asset(
+                              _currentCategoryImages[index],
+                              fit: BoxFit.cover,
+                              errorBuilder: (c, e, s) => Container(
+                                color: Colors.grey[200],
+                                child: const Icon(Icons.image_not_supported, color: Colors.grey, size: 32),
                               ),
                             ),
                           ),
-                          Center(
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                // Sub-Categories selection (cars only)
+                if (_selectedCategoryIndex == 1) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        "اختر نوعية السيارة التي تبحث عنها",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDarkMode ? Colors.white : Colors.black,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    height: 100,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _carSubCategories.length,
+                      itemBuilder: (context, index) {
+                        final sub = _carSubCategories[index];
+                        bool isSelected = _selectedSubCategoryIndex == index;
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedSubCategoryIndex = index;
+                              _filterAuctions();
+                            });
+                          },
+                          child: Container(
+                            width: 110,
+                            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSelected ? primaryBlue : Colors.transparent,
+                                width: 2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2))
+                              ],
+                            ),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Image.asset(
-                                  cat['image'],
-                                  height: 48,
-                                  width: 48,
+                                  sub['image'],
+                                  height: 50,
                                   fit: BoxFit.contain,
-                                  errorBuilder: (c,e,s) => Icon(Icons.category, color: isSelected ? primaryBlue : Colors.grey, size: 32),
+                                  errorBuilder: (c, e, s) => Icon(Icons.directions_car, color: isSelected ? primaryBlue : Colors.grey, size: 30),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  title,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-                                    fontSize: 11,
+                                  _getLocalizedTitle(sub['title_key'], l10n),
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                                     color: isSelected ? primaryBlue : (isDarkMode ? Colors.white70 : Colors.black87),
                                   ),
@@ -242,176 +519,86 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                               ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // Search Bar
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-              child: Container(
-                height: 40,
-                decoration: BoxDecoration(
-                  color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: "ابحث", // "Search"
-                    hintStyle: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 14),
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 20),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  ),
-                ),
-              ),
-            ),
-            
-            // Sub-Categories selection
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                   "اختر نوعية السيارة التي تبحث عنها", // Example for cars
-                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[700]),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 50,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _subCategories.length,
-                itemBuilder: (context, index) {
-                  final sub = _subCategories[index];
-                  bool isSelected = _selectedSubCategoryIndex == index;
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedSubCategoryIndex = index),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected ? primaryBlue : Colors.grey.withOpacity(0.2),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(sub['icon'], size: 18, color: isSelected ? primaryBlue : Colors.grey),
-                          const SizedBox(width: 6),
-                          Text(
-                            sub['title'],
-                            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-                              fontSize: 12, 
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                              color: isSelected ? primaryBlue : (isDarkMode ? Colors.white70 : Colors.black87),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // Custom Tabs
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                height: 40,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: isDarkMode ? const Color(0xFF1D1D1D) : const Color(0xFFF3F3F3),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    _buildDesignTab(1, "مزادات منتهية", 12),
-                    _buildDesignTab(0, "مزادات نشطة", 150),
-                  ],
-                ),
-              ),
-            ),
-            
-            // Auction List (Vertical list of horizontal cards)
-            Expanded(
-              child: _filteredAuctions.isEmpty
-                  ? Center(
-                      child: Text(
-                        l10n.text_54,
-                        style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 16),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(20),
-                      itemCount: _filteredAuctions.length,
-                      itemBuilder: (context, index) {
-                        return _buildHorizontalAuctionCard(
-                          context,
-                          isDarkMode,
-                          _filteredAuctions[index],
                         );
                       },
                     ),
-            ),
-          ],
-        ),
-        
-        // Bottom Nav Bar (Matches designs)
-        floatingActionButton: GestureDetector(
-          onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(builder: (context) => const CreateAdStartPage()));
-          },
-          child: SizedBox(
-            height: 60,
-            width: 60,
-            child: FloatingActionButton(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const CreateAdStartPage())),
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              highlightElevation: 0,
-              child: Image.asset('assets/botum_bar.png', fit: BoxFit.contain),
-            ),
-          ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: BottomAppBar(
-          color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-          shape: const CircularNotchedRectangle(),
-          notchMargin: 6,
-          child: SizedBox(
-            height: 60,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildSimpleNavItem(Icons.home_outlined, l10n.text_1, 0),
-                _buildSimpleNavItem(Icons.local_shipping_outlined, l10n.text_32, 1),
-                const SizedBox(width: 48),
-                _buildSimpleNavItem(Icons.storefront_outlined, l10n.text_33, 2),
-                _buildSimpleNavItem(Icons.person_outline, l10n.text_19, 3),
+                  ),
+                ],
+
+                // Custom Tabs
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      _buildStitchTab(1, "مزايدات منتهية", "00", const Color(0xFFFFDEDE), const Color(0xFFFF3B30)),
+                      const SizedBox(width: 12),
+                      _buildStitchTab(0, "مزايدات نشطة", "02", const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
               ],
             ),
           ),
+
+          // Auction List
+          _filteredAuctions.isEmpty
+              ? SliverFillRemaining(
+                  child: Center(
+                    child: Text(
+                      l10n.text_54,
+                      style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 16),
+                    ),
+                  ),
+                )
+              : SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => _buildHorizontalAuctionCard(
+                        context,
+                        isDarkMode,
+                        _filteredAuctions[index],
+                      ),
+                      childCount: _filteredAuctions.length,
+                    ),
+                  ),
+                ),
+        ],
+      ),
+
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const CreateAdStartPage())),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        highlightElevation: 0,
+        child: Image.asset('assets/botum_bar.png', fit: BoxFit.contain),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: BottomAppBar(
+        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+        elevation: 0,
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 6,
+        child: SizedBox(
+          height: 60,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildSimpleNavItem(Icons.home_outlined, l10n.text_1, 0),
+              _buildSimpleNavItem(Icons.local_shipping_outlined, l10n.text_32, 1),
+              const SizedBox(width: 48),
+              _buildSimpleNavItem(Icons.storefront_outlined, l10n.text_33, 2),
+              _buildSimpleNavItem(Icons.person_outline, l10n.text_19, 3),
+            ],
+          ),
         ),
-      );
+      ),
+    );
   }
 
-  Widget _buildDesignTab(int index, String label, int count) {
+  Widget _buildStitchTab(int index, String label, String count, Color bgColor, Color textColor) {
     bool isSelected = _activeTabIndex == index;
     return Expanded(
       child: GestureDetector(
@@ -421,32 +608,35 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
             _filterAuctions();
           });
         },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+        child: Container(
+          height: 45,
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))] : [],
+            color: isSelected ? bgColor : Colors.grey.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: isSelected ? Border.all(color: textColor.withValues(alpha: 0.3)) : null,
           ),
           child: Center(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  "($count)",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isSelected ? Colors.green : Colors.grey,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  label,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                    color: isSelected ? textColor : Colors.grey,
                   ),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    color: isSelected ? Colors.black : Colors.grey,
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSelected ? textColor : Colors.grey.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    count,
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -484,7 +674,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                   children: [
                     Text(
                       auction['title']!,
-                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -529,7 +719,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                         Icon(Icons.location_on_outlined, size: 12, color: Colors.grey[400]),
+                        Icon(Icons.location_on_outlined, size: 12, color: Colors.grey[400]),
                         const SizedBox(width: 2),
                         Text(auction['location']!, style: TextStyle(fontSize: 10, color: Colors.grey[400])),
                         const Spacer(),
@@ -549,7 +739,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                     auction['image']!,
                     width: 120,
                     fit: BoxFit.cover,
-                    errorBuilder: (c,e,s) => Container(width: 120, color: Colors.grey[200]),
+                    errorBuilder: (c, e, s) => Container(width: 120, color: Colors.grey[200]),
                   ),
                   Positioned(
                     top: 8,
@@ -570,7 +760,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   }
 
   Widget _buildSimpleNavItem(IconData icon, String label, int index) {
-     return InkWell(
+    return InkWell(
       onTap: () {
         if (index == 0) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
         else if (index == 1) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ServicesPage()));
@@ -596,6 +786,11 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       case 'text_119': return l10n.text_119;
       case 'text_127': return l10n.text_127;
       case 'text_120': return l10n.text_120;
+      case 'text_114': return l10n.text_114;
+      case 'text_115': return l10n.text_115;
+      case 'text_116': return l10n.text_116;
+      case 'text_117': return l10n.text_117;
+      case 'text_118': return l10n.text_118;
       default: return "Category";
     }
   }
