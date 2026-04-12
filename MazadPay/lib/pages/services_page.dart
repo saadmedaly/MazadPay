@@ -1,7 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/delivery_details_page.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'home_page.dart';
 import 'account_page.dart';

@@ -1,7 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../providers/auction_provider.dart';
 import '../models/auction.dart';
 
@@ -31,7 +31,7 @@ class AuctionWinnerPage extends ConsumerWidget {
                     const SizedBox(height: 20),
                     Text(
                       AppLocalizations.of(context)!.text_81,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                         fontSize: 40,
                         fontWeight: FontWeight.w900,
                         color: const Color(0xFF135BEC),
@@ -39,7 +39,7 @@ class AuctionWinnerPage extends ConsumerWidget {
                     ),
                     Text(
                       AppLocalizations.of(context)!.text_82,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: isDarkMode ? Colors.white : Colors.black87,
@@ -108,7 +108,7 @@ class AuctionWinnerPage extends ConsumerWidget {
           ),
           child: Text(
             '2026/02/15',
-            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
         Container(
@@ -128,7 +128,7 @@ class AuctionWinnerPage extends ConsumerWidget {
                const SizedBox(width: 12),
                Text(
                  '${auction.currentPrice.toStringAsFixed(0)} أوقية',
-                 style: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.black),
+                 style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 28, fontWeight: FontWeight.w900, color: Colors.black),
                ),
             ],
           ),
@@ -177,8 +177,8 @@ class AuctionWinnerPage extends ConsumerWidget {
            Column(
              crossAxisAlignment: CrossAxisAlignment.start,
              children: [
-                Text(AppLocalizations.of(context)!.text_83, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text(AppLocalizations.of(context)!.text_84, style: GoogleFonts.plusJakartaSans(color: Colors.grey)),
+                Text(AppLocalizations.of(context)!.text_83, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(AppLocalizations.of(context)!.text_84, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey)),
              ],
            ),
         ],
@@ -202,7 +202,7 @@ class AuctionWinnerPage extends ConsumerWidget {
           ),
           child: Text(
             AppLocalizations.of(context)!.text_85,
-            style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
           ),
         ),
       ),

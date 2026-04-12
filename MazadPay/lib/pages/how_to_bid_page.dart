@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:video_player/video_player.dart';
 
 class HowToBidPage extends StatefulWidget {
@@ -119,7 +119,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
           ),
           title: Text(
             AppLocalizations.of(context)!.text_208,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -165,7 +165,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
       children: [
         Text(
           title,
-          style: GoogleFonts.plusJakartaSans(
+          style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
             fontSize: 16,
             fontWeight: FontWeight.w700,
             color: isDarkMode ? Colors.white : Colors.black,
@@ -373,7 +373,7 @@ class _HowToBidPageState extends State<HowToBidPage> {
               child: Text(
                 title,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.plusJakartaSans(
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: isDarkMode ? Colors.white : Colors.black,

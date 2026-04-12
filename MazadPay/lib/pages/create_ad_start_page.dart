@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'dart:math' as math;
 import 'create_ad_form_page.dart';
 
@@ -30,7 +30,7 @@ class CreateAdStartPage extends StatelessWidget {
         centerTitle: true,
         title: Text(
           AppLocalizations.of(context)!.text_89,
-          style: GoogleFonts.plusJakartaSans(
+          style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
             fontSize: 18,
             fontWeight: FontWeight.bold,
             color: isDarkMode ? Colors.white : Colors.black,
@@ -89,7 +89,7 @@ class CreateAdStartPage extends StatelessWidget {
             child: Text(
               AppLocalizations.of(context)!.text_143,
               textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
+              style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: isDarkMode ? Colors.white70 : Colors.black87,
@@ -118,7 +118,7 @@ class CreateAdStartPage extends StatelessWidget {
                 ),
                 child: Text(
                   AppLocalizations.of(context)!.text_144,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,

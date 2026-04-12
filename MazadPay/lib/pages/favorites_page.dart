@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
 import 'auction_details_page.dart';
@@ -30,7 +30,7 @@ class FavoritesPage extends ConsumerWidget {
           centerTitle: true,
           title: Text(
             AppLocalizations.of(context)!.text_28,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -50,7 +50,7 @@ class FavoritesPage extends ConsumerWidget {
                     const SizedBox(height: 16),
                     Text(
                       AppLocalizations.of(context)!.text_191,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 16, color: Colors.grey),
+                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -121,12 +121,12 @@ class FavoritesPage extends ConsumerWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   price,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF0081FF),
@@ -147,7 +147,7 @@ class FavoritesPage extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    child: Text(AppLocalizations.of(context)!.text_192, style: GoogleFonts.plusJakartaSans(fontSize: 12)),
+                    child: Text(AppLocalizations.of(context)!.text_192, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12)),
                   ),
                 ),
               ],

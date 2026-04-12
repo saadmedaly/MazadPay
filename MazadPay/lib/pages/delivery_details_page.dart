@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 class DeliveryDetailsPage extends StatelessWidget {
   const DeliveryDetailsPage({super.key});
@@ -18,7 +18,7 @@ class DeliveryDetailsPage extends StatelessWidget {
           centerTitle: true,
           title: Text(
             l10n.text_149, // 'تفاصيل التوصيل'
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -38,7 +38,7 @@ class DeliveryDetailsPage extends StatelessWidget {
               const SizedBox(height: 32),
               Text(
                 l10n.text_150, // 'حالة التوصيل'
-                style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               _buildTimeline(context, isDarkMode),
@@ -72,8 +72,8 @@ class DeliveryDetailsPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(l10n.text_151, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12)),
-              Text('MP-88294-2024', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(l10n.text_151, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white70, fontSize: 12)),
+              Text('MP-88294-2024', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
             ],
           ),
           const SizedBox(height: 20),
@@ -83,8 +83,8 @@ class DeliveryDetailsPage extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(l10n.text_152, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12)),
-                  Text(l10n.text_153, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text(l10n.text_152, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white70, fontSize: 12)),
+                  Text(l10n.text_153, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                 ],
               ),
               const Icon(Icons.local_shipping, color: Colors.white, size: 40),
@@ -138,12 +138,12 @@ class DeliveryDetailsPage extends StatelessWidget {
                  Row(
                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                    children: [
-                     Text(title, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14, color: isCompleted ? (isDarkMode ? Colors.white : Colors.black) : Colors.grey)),
-                     Text(time, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey)),
+                     Text(title, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold, fontSize: 14, color: isCompleted ? (isDarkMode ? Colors.white : Colors.black) : Colors.grey)),
+                     Text(time, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, color: Colors.grey)),
                    ],
                  ),
                  const SizedBox(height: 4),
-                 Text(subtitle, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey[600])),
+                 Text(subtitle, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, color: Colors.grey[600])),
                  const SizedBox(height: 24),
               ],
             ),
@@ -174,9 +174,9 @@ class DeliveryDetailsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(l10n.text_166, style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 12)),
+                Text(l10n.text_166, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 12)),
                 const SizedBox(height: 4),
-                Text(l10n.text_167, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(l10n.text_167, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold, fontSize: 14)),
               ],
             ),
           ),
@@ -205,8 +205,8 @@ class DeliveryDetailsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(l10n.text_168, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14)),
-                Text(l10n.text_169, style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 12)),
+                Text(l10n.text_168, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(l10n.text_169, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 12)),
               ],
             ),
           ),

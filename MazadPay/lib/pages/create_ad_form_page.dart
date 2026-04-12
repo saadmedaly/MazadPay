@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'ad_success_page.dart';
 import '../widgets/media_picker_sheet.dart';
 
@@ -55,7 +55,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
           centerTitle: true,
           title: Text(
             AppLocalizations.of(context)!.text_89,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -73,7 +73,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
             children: [
               Text(
                 AppLocalizations.of(context)!.text_90,
-                style: GoogleFonts.plusJakartaSans(
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: isDarkMode ? Colors.white : Colors.black,
@@ -130,7 +130,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
                   ),
                   child: Text(
                     AppLocalizations.of(context)!.text_102,
-                    style: GoogleFonts.plusJakartaSans(
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -153,7 +153,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         children: [
           Text(
             text,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 14,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white70 : Colors.black87,
@@ -195,7 +195,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         textAlign: TextAlign.right,
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 13),
+          hintStyle: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 13),
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           border: InputBorder.none,
           prefixIcon: icon != null ? Icon(icon, color: const Color(0xFF0081FF).withOpacity(0.5), size: 20) : null,
@@ -231,7 +231,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
              Expanded(
                child: Text(
                  value,
-                 style: GoogleFonts.plusJakartaSans(
+                 style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                    fontSize: 14,
                    fontWeight: FontWeight.w600,
                    color: isDarkMode ? Colors.white : Colors.black,
@@ -386,7 +386,7 @@ class _CategorySheetState extends State<_CategorySheet> {
           const SizedBox(height: 24),
           Text(
             widget.title,
-            style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Padding(
@@ -410,7 +410,7 @@ class _CategorySheetState extends State<_CategorySheet> {
               itemCount: _filtered.length,
               separatorBuilder: (context, index) => const Divider(height: 1),
               itemBuilder: (context, index) => ListTile(
-                title: Text(_filtered[index], textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500)),
+                title: Text(_filtered[index], textAlign: TextAlign.right, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.w500)),
                 onTap: () => widget.onSelected(_filtered[index]),
               ),
             ),

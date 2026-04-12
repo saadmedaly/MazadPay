@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 class AdSuccessPage extends StatelessWidget {
   const AdSuccessPage({super.key});
@@ -47,7 +47,7 @@ class AdSuccessPage extends StatelessWidget {
                 Text(
                   AppLocalizations.of(context)!.text_50,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: isDarkMode ? Colors.white : Colors.black,
@@ -59,7 +59,7 @@ class AdSuccessPage extends StatelessWidget {
                 Text(
                   AppLocalizations.of(context)!.text_51,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                     fontSize: 16,
                     color: Colors.grey,
                   ),
@@ -81,7 +81,7 @@ class AdSuccessPage extends StatelessWidget {
                     ),
                     child: Text(
                       AppLocalizations.of(context)!.text_52,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,

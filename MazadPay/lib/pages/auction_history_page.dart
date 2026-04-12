@@ -1,7 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../providers/auction_provider.dart';
 import '../models/auction.dart';
 
@@ -23,7 +23,7 @@ class AuctionHistoryPage extends ConsumerWidget {
           centerTitle: true,
           title: Text(
             AppLocalizations.of(context)!.text_75,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -66,12 +66,12 @@ class AuctionHistoryPage extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(auction.title, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold)),
+                Text(auction.title, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Text('${auction.currentPrice.toStringAsFixed(0)} أوقية جديدة', 
-                    style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF))),
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF))),
                 const SizedBox(height: 4),
-                Text(AppLocalizations.of(context)!.text_76, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey)),
+                Text(AppLocalizations.of(context)!.text_76, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, color: Colors.grey)),
               ],
             ),
           ),
@@ -89,7 +89,7 @@ class AuctionHistoryPage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(AppLocalizations.of(context)!.text_77, style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[400])),
+        Text(AppLocalizations.of(context)!.text_77, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[400])),
         const SizedBox(height: 16),
         _buildSummaryRow(AppLocalizations.of(context)!.text_78, '15', isDarkMode),
         const SizedBox(height: 12),
@@ -109,8 +109,8 @@ class AuctionHistoryPage extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
-          Text(value, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+          Text(label, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.w600)),
+          Text(value, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -120,7 +120,7 @@ class AuctionHistoryPage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(AppLocalizations.of(context)!.text_80, style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[400])),
+        Text(AppLocalizations.of(context)!.text_80, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[400])),
         const SizedBox(height: 16),
         ListView.separated(
           shrinkWrap: true,
@@ -131,7 +131,7 @@ class AuctionHistoryPage extends ConsumerWidget {
             final bid = history[index];
             return Row(
               children: [
-                Text('${_getTimeAgo(bid.timestamp)}', style: GoogleFonts.plusJakartaSans(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.bold)),
+                Text('${_getTimeAgo(bid.timestamp)}', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -140,12 +140,12 @@ class AuctionHistoryPage extends ConsumerWidget {
                       children: [
                         if (index == 0) const Icon(Icons.workspace_premium, color: Colors.orange, size: 20),
                         const SizedBox(width: 4),
-                        Text('${bid.amount.toStringAsFixed(0)} أوقية', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text('${bid.amount.toStringAsFixed(0)} أوقية', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold, fontSize: 15)),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text('${bid.bidderName} (${bid.phoneNumber})', 
-                        style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 12)),
+                        style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 12)),
                   ],
                 ),
               ],

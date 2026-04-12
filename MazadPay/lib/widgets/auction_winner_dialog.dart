@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../pages/auction_winner_page.dart';
 
 class AuctionWinnerDialog extends StatelessWidget {
@@ -27,7 +27,7 @@ class AuctionWinnerDialog extends StatelessWidget {
               ),
               Text(
                 AppLocalizations.of(context)!.text_364,
-                style: GoogleFonts.plusJakartaSans(
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: isDarkMode ? Colors.white : Colors.black87,
@@ -48,7 +48,7 @@ class AuctionWinnerDialog extends StatelessWidget {
               const SizedBox(height: 24),
               Text(
                 AppLocalizations.of(context)!.text_365,
-                style: GoogleFonts.plusJakartaSans(
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: const Color(0xFF00C58D),
@@ -58,7 +58,7 @@ class AuctionWinnerDialog extends StatelessWidget {
               Text(
                 AppLocalizations.of(context)!.text_366,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.plusJakartaSans(
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                   fontSize: 14,
                   color: isDarkMode ? Colors.white70 : Colors.black54,
                 ),
@@ -82,7 +82,7 @@ class AuctionWinnerDialog extends StatelessWidget {
                   ),
                   child: Text(
                     AppLocalizations.of(context)!.text_367,
-                    style: GoogleFonts.plusJakartaSans(
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),

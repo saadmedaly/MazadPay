@@ -7,7 +7,7 @@ import 'package:mezadpay/pages/create_ad_start_page.dart';
 import 'package:mezadpay/pages/notifications_page.dart';
 import 'package:mezadpay/widgets/live_indicator.dart';
 import 'package:mezadpay/pages/auction_details_page.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';

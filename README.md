@@ -27,7 +27,7 @@
 | Attribut | Détail |
 |:---|:---|
 | **Nom** | MazadPay (مزاد باي) |
-| **Version** | 3.2.0 |
+| **Version** | 1.0.0 |
 | **Plateforme** | Mobile (Flutter — Android & iOS) |
 | **Backend** | Go (Golang) — En cours de développement |
 | **Base de données** | PostgreSQL 15+ |
@@ -200,7 +200,7 @@
 | Lecteur vidéo | Play/pause, seek ±10s, barre de progression |
 | À propos | Présentation de MazadPay |
 | Politique de confidentialité | 5 sections légales |
-| Version | Affichée dans le drawer (v3.2.0) |
+| Version | Affichée dans le drawer (v1.0.0) |
 
 ---
 

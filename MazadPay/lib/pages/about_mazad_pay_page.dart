@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 class AboutMazadPayPage extends StatelessWidget {
   const AboutMazadPayPage({super.key});

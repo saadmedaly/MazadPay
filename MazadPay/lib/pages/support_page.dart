@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 class SupportPage extends StatelessWidget {
   const SupportPage({super.key});
@@ -17,7 +17,7 @@ class SupportPage extends StatelessWidget {
           centerTitle: true,
           title: Text(
             AppLocalizations.of(context)!.text_309,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -35,12 +35,12 @@ class SupportPage extends StatelessWidget {
             children: [
               Text(
                 AppLocalizations.of(context)!.text_310,
-                style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold),
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
                 AppLocalizations.of(context)!.text_311,
-                style: GoogleFonts.plusJakartaSans(color: Colors.grey[600]),
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey[600]),
               ),
               const SizedBox(height: 32),
               _buildContactTile(
@@ -69,7 +69,7 @@ class SupportPage extends StatelessWidget {
               const SizedBox(height: 40),
               Text(
                 AppLocalizations.of(context)!.text_207,
-                style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
                _buildFaqItem(
@@ -119,9 +119,9 @@ class SupportPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(title, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 4),
-                Text(subtitle, style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 12)),
+                Text(subtitle, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 12)),
               ],
             ),
           ),
@@ -139,14 +139,14 @@ class SupportPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: ExpansionTile(
-        title: Text(question, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600)),
+        title: Text(question, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.w600)),
         trailing: const Icon(Icons.keyboard_arrow_down, size: 20, color: Color(0xFF0081FF)),
         childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         expandedAlignment: Alignment.centerLeft,
         children: [
           Text(
             answer,
-            style: GoogleFonts.plusJakartaSans(fontSize: 13, color: Colors.grey[600], height: 1.5),
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: Colors.grey[600], height: 1.5),
           ),
         ],
       ),

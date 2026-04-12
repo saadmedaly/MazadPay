@@ -1,7 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../providers/auction_provider.dart';
 
 class BidActionSheet extends ConsumerStatefulWidget {
@@ -51,7 +51,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
     final auction = ref.read(auctionNotifierProvider(widget.auctionId));
     return Column(
       children: [
-        Text(AppLocalizations.of(context)!.text_368, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(AppLocalizations.of(context)!.text_368, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 24),
         
         // Header info box
@@ -91,7 +91,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
                 child: Center(
                   child: Text(
                     '${_bidAmount.toStringAsFixed(0)} أوقية',
-                    style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -110,12 +110,12 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
   Widget _buildStep2(bool isDarkMode) {
     return Column(
       children: [
-        Text(AppLocalizations.of(context)!.text_368, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(AppLocalizations.of(context)!.text_368, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 32),
         Text('${_bidAmount.toStringAsFixed(0)} أوقية', 
-            style: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF))),
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 28, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF))),
         const SizedBox(height: 16),
-        Text(AppLocalizations.of(context)!.text_372, style: GoogleFonts.plusJakartaSans(fontSize: 16, color: Colors.grey)),
+        Text(AppLocalizations.of(context)!.text_372, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, color: Colors.grey)),
         const SizedBox(height: 32),
       ],
     );
@@ -148,7 +148,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
             const Icon(Icons.gavel, color: Colors.white),
             const SizedBox(width: 8),
             Text(_step == 1 ? AppLocalizations.of(context)!.text_72 : AppLocalizations.of(context)!.text_374, 
-                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -158,8 +158,8 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
   Widget _buildInfoColumn(String value, String label, Color valueColor) {
     return Column(
       children: [
-        Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold, color: valueColor)),
-        Text(label, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey)),
+        Text(value, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold, color: valueColor)),
+        Text(label, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, color: Colors.grey)),
       ],
     );
   }

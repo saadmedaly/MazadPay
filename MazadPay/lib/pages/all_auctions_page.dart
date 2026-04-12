@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
@@ -151,7 +151,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
           centerTitle: true,
           title: Text(
             "انواع المزادات", // "Types of Auctions" as per design
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Colors.white,
@@ -235,7 +235,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                                 Text(
                                   title,
                                   textAlign: TextAlign.center,
-                                  style: GoogleFonts.plusJakartaSans(
+                                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                                     fontSize: 11,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                                     color: isSelected ? primaryBlue : (isDarkMode ? Colors.white70 : Colors.black87),
@@ -266,7 +266,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                   controller: _searchController,
                   decoration: InputDecoration(
                     hintText: "ابحث", // "Search"
-                    hintStyle: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 14),
+                    hintStyle: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 14),
                     prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 20),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -283,7 +283,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                 alignment: Alignment.centerRight,
                 child: Text(
                    "اختر نوعية السيارة التي تبحث عنها", // Example for cars
-                  style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[700]),
                 ),
               ),
             ),
@@ -316,7 +316,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           const SizedBox(width: 6),
                           Text(
                             sub['title'],
-                            style: GoogleFonts.plusJakartaSans(
+                            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                               fontSize: 12, 
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                               color: isSelected ? primaryBlue : (isDarkMode ? Colors.white70 : Colors.black87),
@@ -356,7 +356,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                   ? Center(
                       child: Text(
                         l10n.text_54,
-                        style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 16),
+                        style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 16),
                       ),
                     )
                   : ListView.builder(
@@ -446,7 +446,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                 const SizedBox(width: 4),
                 Text(
                   label,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                     fontSize: 13,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     color: isSelected ? Colors.black : Colors.grey,
@@ -488,7 +488,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                   children: [
                     Text(
                       auction['title']!,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.bold),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

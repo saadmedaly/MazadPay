@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/terms_page.dart';
 import 'package:mezadpay/pages/language_page.dart';
 import 'package:mezadpay/core/theme.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 class StartBiddingPage extends StatefulWidget {
   const StartBiddingPage({super.key});
@@ -126,7 +126,7 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
                             Text(
                               onboardingData[index]['title']!,
                               textAlign: TextAlign.center,
-                              style: GoogleFonts.plusJakartaSans(
+                              style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
                                 height: 1.5,
@@ -141,7 +141,7 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
                             Text(
                               onboardingData[index]['description']!,
                               textAlign: TextAlign.center,
-                              style: GoogleFonts.plusJakartaSans(
+                              style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                                 fontSize: 14,
                                 fontWeight: FontWeight.w400,
                                 height: 1.6,
@@ -205,7 +205,7 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
                                 ),
                                 child: Text(
                                   AppLocalizations.of(context)!.text_144,
-                                  style: GoogleFonts.plusJakartaSans(
+                                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
@@ -227,7 +227,7 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
                               },
                               child: Text(
                                 AppLocalizations.of(context)!.text_308,
-                                style: GoogleFonts.plusJakartaSans(
+                                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: isDarkMode ? Colors.white60 : const Color(0xFF6B7280),

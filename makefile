@@ -1,13 +1,11 @@
-.PHONY: front back web
+.PHONY: mobile back web
 
-front:
-	flutter run -d chrome
+mobile:
+	cd MazadPay && flutter run -d chrome
 
 back:
-	cd backend
-	go run ./cmd/api/main.go
+	cd backend && go run ./cmd/api/main.go
 
 web:
-	cd web
-	bun run dev
+	cd web && bun run dev
 

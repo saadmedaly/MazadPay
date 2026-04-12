@@ -88,17 +88,34 @@ flutter:
     - family: Poppins
       fonts:
         - asset: assets/fonts/Poppins/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins/Poppins-SemiBold.ttf
+          weight: 600
         - asset: assets/fonts/Poppins/Poppins-Bold.ttf
           weight: 700
+        - asset: assets/fonts/Poppins/Poppins-ExtraBold.ttf
+          weight: 800
     - family: Plus Jakarta Sans
       fonts:
         - asset: assets/fonts/PlusJakartaSans/static/PlusJakartaSans-Regular.ttf
         - asset: assets/fonts/PlusJakartaSans/static/PlusJakartaSans-Medium.ttf
           weight: 500
+        - asset: assets/fonts/PlusJakartaSans/static/PlusJakartaSans-SemiBold.ttf
+          weight: 600
         - asset: assets/fonts/PlusJakartaSans/static/PlusJakartaSans-Bold.ttf
           weight: 700
         - asset: assets/fonts/PlusJakartaSans/static/PlusJakartaSans-ExtraBold.ttf
           weight: 800
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo/Cairo-Regular.ttf
+        - asset: assets/fonts/Cairo/Cairo-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Cairo/Cairo-Bold.ttf
+          weight: 700
+
+
 
 
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 class AppTheme {
   static const Color primaryColor = Color(0xFF0081FF);
@@ -16,7 +16,10 @@ class AppTheme {
       primary: primaryColor,
       surface: backgroundColor,
     ),
-    textTheme: GoogleFonts.poppinsTextTheme(),
+    textTheme: ThemeData.light().textTheme.apply(
+      fontFamily: 'Poppins',
+      fontFamilyFallback: const ['Cairo'],
+    ),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -28,7 +31,7 @@ class AppTheme {
         minimumSize: const Size(double.infinity, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         elevation: 0,
-        textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamilyFallback: ['Cairo']),
       ),
     ),
   );
@@ -43,7 +46,10 @@ class AppTheme {
       primary: primaryColor,
       surface: const Color(0xFF1D1D1D),
     ),
-    textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+    textTheme: ThemeData.dark().textTheme.apply(
+      fontFamily: 'Poppins',
+      fontFamilyFallback: const ['Cairo'],
+    ),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,

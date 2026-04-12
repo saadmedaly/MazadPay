@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 class MediaPickerSheet extends StatefulWidget {
   final Function(String) onMediaSelected;
@@ -49,7 +49,7 @@ class _MediaPickerSheetState extends State<MediaPickerSheet> with SingleTickerPr
             unselectedLabelColor: Colors.grey,
             indicatorColor: const Color(0xFF0081FF),
             indicatorSize: TabBarIndicatorSize.label,
-            labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+            labelStyle: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold),
             tabs: [
               Tab(text: AppLocalizations.of(context)!.text_266),
               Tab(text: AppLocalizations.of(context)!.text_377),
@@ -79,7 +79,7 @@ class _MediaPickerSheetState extends State<MediaPickerSheet> with SingleTickerPr
                   backgroundColor: const Color(0xFF0081FF),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: Text(AppLocalizations.of(context)!.text_378, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, color: Colors.white)),
+                child: Text(AppLocalizations.of(context)!.text_378, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold, color: Colors.white)),
               ),
             ),
           ),

@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'auction_details_page.dart';
 
 class MyAuctionsPage extends StatelessWidget {
@@ -18,7 +18,7 @@ class MyAuctionsPage extends StatelessWidget {
           centerTitle: true,
           title: Text(
             AppLocalizations.of(context)!.text_27,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -65,12 +65,12 @@ class MyAuctionsPage extends StatelessWidget {
               children: [
                 Text(
                   'Toyota Corolla 2018',
-                  style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '307,000 MRU',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF0081FF),
@@ -90,7 +90,7 @@ class MyAuctionsPage extends StatelessWidget {
                           isWinning ? AppLocalizations.of(context)!.text_234 : AppLocalizations.of(context)!.text_235,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
+                          style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                             color: isWinning ? const Color(0xFF00C58D) : const Color(0xFFE31B23),
@@ -101,7 +101,7 @@ class MyAuctionsPage extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       '13:45:10',
-                      style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),

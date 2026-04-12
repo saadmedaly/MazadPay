@@ -2,7 +2,7 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../providers/auction_provider.dart';
 import '../models/auction.dart';
 import '../widgets/bid_action_sheet.dart';
@@ -167,7 +167,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ),
                 child: Text(
                   '${_currentPage + 1}/${auction.imageUrls.length} 🗂️',
-                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -208,10 +208,10 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(AppLocalizations.of(context)!.text_57, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 14)),
+                Text(AppLocalizations.of(context)!.text_57, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 4),
                 Text('${auction.currentPrice.toStringAsFixed(0)} MRU', 
-                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -226,10 +226,10 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(AppLocalizations.of(context)!.text_58, style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 14)),
+                Text(AppLocalizations.of(context)!.text_58, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 14)),
                 const SizedBox(height: 4),
                 Text('${auction.minIncrement.toStringAsFixed(0)} MRU', 
-                    style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0081FF), fontSize: 20, fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -258,7 +258,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               Expanded(
                 child: Text(
                   auction.title,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 22, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -266,7 +266,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('${auction.views}', style: GoogleFonts.plusJakartaSans(color: Colors.grey)),
+                  Text('${auction.views}', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey)),
                   const SizedBox(width: 4),
                   const Icon(Icons.visibility_outlined, size: 18, color: Colors.grey),
                 ],
@@ -310,7 +310,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                       Expanded(
                         child: Text(
                           '${AppLocalizations.of(context)!.text_78} ${auction.bidderCount}', 
-                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+                          style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -326,7 +326,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ),
                 child: Row(
                   children: [
-                    Text(auction.phoneNumber, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text(auction.phoneNumber, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 8),
                     const Icon(Icons.phone, color: Colors.white, size: 18),
                   ],
@@ -335,7 +335,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('Lot #${auction.lotNumber}', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0081FF), fontWeight: FontWeight.bold)),
+          Text('Lot #${auction.lotNumber}', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -344,8 +344,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   Widget _buildTimerUnit(String label, String value) {
     return Column(
       children: [
-        Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red)),
-        Text(label, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.red)),
+        Text(value, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red)),
+        Text(label, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, color: Colors.red)),
       ],
     );
   }
@@ -373,7 +373,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               child: Text(
                 AppLocalizations.of(context)!.text_64,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.plusJakartaSans(
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
@@ -437,11 +437,11 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           children: [
             Icon(icon, size: 20, color: isDarkMode ? Colors.white70 : Colors.black87),
             const SizedBox(width: 6),
-            Text(label, style: GoogleFonts.plusJakartaSans(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500)),
+            Text(label, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500)),
           ],
         ),
         const SizedBox(height: 6),
-        Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700)),
+        Text(value, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 15, fontWeight: FontWeight.w700)),
       ],
     );
   }
@@ -460,7 +460,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
         dense: true,
         visualDensity: const VisualDensity(vertical: -2),
         leading: Icon(icon, color: Colors.grey, size: 20),
-        title: Text(title, style: GoogleFonts.plusJakartaSans(fontSize: 14)),
+        title: Text(title, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14)),
         trailing: const Icon(Icons.arrow_back_ios, size: 16, color: Colors.grey),
         onTap: onTap,
       ),
@@ -506,7 +506,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                        AppLocalizations.of(context)!.text_71,
                        maxLines: 1,
                        overflow: TextOverflow.ellipsis,
-                       style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+                       style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
                      ),
                    ),
                 ] else ...[
@@ -517,7 +517,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                        AppLocalizations.of(context)!.text_72,
                        maxLines: 1,
                        overflow: TextOverflow.ellipsis,
-                       style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+                       style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
                      ),
                    ),
                 ],
@@ -540,7 +540,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             children: [
               Text(
                 AppLocalizations.of(context)!.text_73,
-                style: GoogleFonts.plusJakartaSans(
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
@@ -560,7 +560,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   ),
                   child: Text(
                     AppLocalizations.of(context)!.text_74,
-                    style: GoogleFonts.plusJakartaSans(
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,

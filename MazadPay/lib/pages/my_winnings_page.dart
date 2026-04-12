@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'auction_winner_page.dart';
 
 class MyWinningsPage extends StatelessWidget {
@@ -18,7 +18,7 @@ class MyWinningsPage extends StatelessWidget {
           centerTitle: true,
           title: Text(
             AppLocalizations.of(context)!.text_236,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -67,12 +67,12 @@ class MyWinningsPage extends StatelessWidget {
                   children: [
                     Text(
                       'Toyota Corolla 2018',
-                      style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '307,000 MRU',
-                      style: GoogleFonts.plusJakartaSans(
+                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: const Color(0xFF0081FF),
@@ -89,7 +89,7 @@ class MyWinningsPage extends StatelessWidget {
                 ),
                 child: Text(
                   isPaid ? AppLocalizations.of(context)!.text_237 : AppLocalizations.of(context)!.text_238,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                     color: isPaid ? const Color(0xFF00C58D) : Colors.orange,
@@ -112,7 +112,7 @@ class MyWinningsPage extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text(AppLocalizations.of(context)!.text_239, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold)),
+                  child: Text(AppLocalizations.of(context)!.text_239, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.bold)),
                 ),
               ),
               if (!isPaid) ...[
@@ -126,7 +126,7 @@ class MyWinningsPage extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(AppLocalizations.of(context)!.text_240, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold)),
+                    child: Text(AppLocalizations.of(context)!.text_240, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],

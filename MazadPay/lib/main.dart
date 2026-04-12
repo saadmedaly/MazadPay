@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/core/theme.dart';
 import 'package:mezadpay/pages/splash_page.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:mezadpay/providers/locale_provider.dart';
@@ -10,9 +10,6 @@ import 'package:mezadpay/providers/locale_provider.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Disable runtime font fetching for offline use.
-  GoogleFonts.config.allowRuntimeFetching = false;
-
   runApp(
     const ProviderScope(
       child: MazadApp(),

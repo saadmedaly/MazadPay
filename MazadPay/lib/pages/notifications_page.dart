@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
@@ -18,7 +18,7 @@ class NotificationsPage extends StatelessWidget {
           centerTitle: true,
           title: Text(
             l10n.text_48, // "الإشعارات"
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -33,7 +33,7 @@ class NotificationsPage extends StatelessWidget {
               onPressed: () {},
               child: Text(
                 l10n.text_245, // "تحديد ككل كمقروء"
-                style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0081FF), fontSize: 12),
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontSize: 12),
               ),
             ),
           ],
@@ -115,14 +115,14 @@ class NotificationsPage extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(title, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14)),
-                    Text(time, style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 10)),
+                    Text(title, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold, fontSize: 14)),
+                    Text(time, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 10)),
                   ],
                 ),
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: GoogleFonts.plusJakartaSans(color: isDarkMode ? Colors.grey[400] : Colors.grey[600], fontSize: 12),
+                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: isDarkMode ? Colors.grey[400] : Colors.grey[600], fontSize: 12),
                 ),
               ],
             ),

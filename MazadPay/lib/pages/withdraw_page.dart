@@ -1,6 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 class WithdrawPage extends StatefulWidget {
   const WithdrawPage({super.key});
@@ -25,7 +25,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
           centerTitle: true,
           title: Text(
             AppLocalizations.of(context)!.text_343,
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black,
@@ -45,7 +45,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
               const SizedBox(height: 32),
               Text(
                 AppLocalizations.of(context)!.text_344,
-                style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -63,7 +63,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
               const SizedBox(height: 32),
               Text(
                 AppLocalizations.of(context)!.text_345,
-                style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               _buildMethodSelector('Bank Transfer', AppLocalizations.of(context)!.text_346, Icons.account_balance, isDarkMode),
@@ -84,7 +84,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
                   ),
                   child: Text(
                     AppLocalizations.of(context)!.text_348,
-                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -105,11 +105,11 @@ class _WithdrawPageState extends State<WithdrawPage> {
       ),
       child: Column(
         children: [
-          Text(AppLocalizations.of(context)!.text_349, style: GoogleFonts.plusJakartaSans(color: Colors.grey[600], fontSize: 14)),
+          Text(AppLocalizations.of(context)!.text_349, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey[600], fontSize: 14)),
           const SizedBox(height: 8),
           Text(
             '350,000 MRU',
-            style: GoogleFonts.plusJakartaSans(fontSize: 32, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF)),
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 32, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF)),
           ),
         ],
       ),
@@ -131,7 +131,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
           children: [
             Icon(icon, color: isSelected ? const Color(0xFF0081FF) : Colors.grey),
             const SizedBox(width: 16),
-            Text(label, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(label, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold, fontSize: 14)),
             const Spacer(),
             if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF0081FF)),
           ],
@@ -150,12 +150,12 @@ class _WithdrawPageState extends State<WithdrawPage> {
           children: [
             const Icon(Icons.check_circle, color: Color(0xFF00C58D), size: 64),
             const SizedBox(height: 24),
-            Text(AppLocalizations.of(context)!.text_350, style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.bold)),
+            Text(AppLocalizations.of(context)!.text_350, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Text(
               AppLocalizations.of(context)!.text_351,
               textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(color: Colors.grey[600]),
+              style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey[600]),
             ),
             const SizedBox(height: 32),
             SizedBox(
