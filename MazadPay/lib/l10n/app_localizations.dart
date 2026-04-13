@@ -1267,7 +1267,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_195.
   ///
   /// In ar, this message translates to:
-  /// **'خدمات مزاد موريتانيا بحاجة إلى\\nموقعك'**
+  /// **'خدمات مزاد موريتانيا بحاجة إلى موقعك'**
   String get text_195;
 
   /// No description provided for @text_196.

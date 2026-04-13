@@ -612,7 +612,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_194 => 'انواذيبو';
 
   @override
-  String get text_195 => 'خدمات مزاد موريتانيا بحاجة إلى\\nموقعك';
+  String get text_195 => 'خدمات مزاد موريتانيا بحاجة إلى موقعك';
 
   @override
   String get text_196 => 'لتجربة أفضل يرجى تفعيل الموقع الجغرافي في هاتفك';
