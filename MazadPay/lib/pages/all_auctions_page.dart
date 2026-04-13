@@ -25,48 +25,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   int _selectedCategoryIndex = 0;
   int _selectedSubCategoryIndex = 0;
 
-  // صور كل فئة
-  final Map<String, List<String>> _categoryImages = {
-    'cars': [
-      'assets/car0.png',
-      'assets/car1.jpg',
-      'assets/car2.jpg',
-      'assets/car3.jpg',
-      'assets/car4.jpg',
-      'assets/car5.png',
-    ],
-    'phones': [
-      'assets/phone1.jpg',
-      'assets/phone2.jpg',
-      'assets/phone3.jpg',
-      'assets/phone4.jpg',
-      'assets/phone5.jpg',
-      'assets/phone6.jpg',
-    ],
-    'real_estate': [
-      'assets/maison1.jpg',
-      'assets/maison2.jpg',
-      'assets/maison3.jpg',
-      'assets/maison4.jpg',
-      'assets/maison5.jpg',
-    ],
-    'home_appliances': [
-      'assets/Appareils de maison1.jpg',
-      'assets/Appareils de maison2.jpg',
-      'assets/Appareils de maison3.jpg',
-      'assets/Appareils de maison4.jpg',
-      'assets/Appareils de maison5.jpg',
-      'assets/Appareils de maison6.jpg',
-      'assets/Appareils de maison7.jpg',
-      'assets/Appareils de maison8.jpg',
-    ],
-  };
-
-  List<String> get _currentCategoryImages {
-    if (_selectedCategoryIndex == 0) return [];
-    final key = _categories[_selectedCategoryIndex]['key'] as String;
-    return _categoryImages[key] ?? [];
-  }
 
   @override
   void didChangeDependencies() {
@@ -418,46 +376,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                     ),
                   ),
                 ),
-
-                // عرض صور الفئة المختارة
-                if (_currentCategoryImages.isNotEmpty) ...[
-                  SizedBox(
-                    height: 130,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _currentCategoryImages.length,
-                      itemBuilder: (context, index) {
-                        return Container(
-                          width: 160,
-                          margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.08),
-                                blurRadius: 6,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.asset(
-                              _currentCategoryImages[index],
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Container(
-                                color: Colors.grey[200],
-                                child: const Icon(Icons.image_not_supported, color: Colors.grey, size: 32),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
 
                 // Sub-Categories selection (cars only)
                 if (_selectedCategoryIndex == 1) ...[
