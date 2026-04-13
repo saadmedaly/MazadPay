@@ -64,7 +64,7 @@
 
 | Service | Rôle | Technologie |
 |:---|:---|:---|
-| **Auth Service** | Inscription, OTP (WhatsApp/SMS), JWT, Sessions | Bcrypt + JWT + Redis |
+| **Auth Service** | Inscription, OTP via **Termii SMS**, JWT, Sessions | Bcrypt + JWT + Redis + Termii API |
 | **Auction Service** | CRUD enchères, logique de mise atomique | PostgreSQL + Verrouillage optimiste |
 | **Realtime Service** | Prix live, timer, notifications surenchère | Go WebSockets |
 | **Payment Service** | Dépôt, retrait, validation admin | Transactions SQL atomiques |
@@ -88,7 +88,7 @@
 | Inscription | Par numéro de téléphone + code PIN (4 chiffres) |
 | Connexion | Téléphone + PIN |
 | Sélecteur de pays | Code pays +222 (Mauritanie) |
-| Envoi OTP | Via WhatsApp ou SMS avec timer de renvoi |
+| Envoi OTP | Via **SMS (Termii)** — code à 6 chiffres, TTL 5 min, 3 tentatives max |
 | Vérification OTP | Code à 6 chiffres avec limite de 3 tentatives |
 | Mot de passe oublié | Réinitialisation via OTP |
 | Déconnexion | Invalidation de la session JWT |
@@ -491,11 +491,12 @@ go run cmd/server/main.go
 |:---|:---|
 | **Go 1.22+** | Langage backend (haute concurrence) |
 | **PostgreSQL 15** | Base de données relationnelle |
-| **Redis** | Cache + Rate Limiting |
+| **Redis** | Cache + Rate Limiting OTP |
 | **gorilla/websocket** | Enchères temps réel |
 | **JWT (golang-jwt)** | Authentification stateless |
 | **MinIO** | Stockage media (S3-compatible) |
 | **Firebase FCM** | Push notifications |
+| **Termii SMS API** | Envoi et vérification des OTP par SMS (marché mauritanien) |
 
 ---
 
@@ -506,7 +507,8 @@ go run cmd/server/main.go
 - [x] Conception du schéma SQL (17 tables)
 - [x] Définition des endpoints API (~45 routes)
 - [ ] Génération des structs Go
-- [ ] Implémentation Auth Service (OTP + JWT)
+- [ ] Implémentation Auth Service (OTP via **Termii** + JWT)
+- [ ] Intégration SDK Termii (envoi + vérification OTP `termii_pin_id`)
 - [ ] Implémentation Auction CRUD
 
 ### Phase 2 — Core Features

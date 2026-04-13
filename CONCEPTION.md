@@ -16,13 +16,19 @@
 | F1.5  | Inscription par numéro de téléphone + PIN 4 chiffres | `login_page.dart`                       | `POST /api/auth/register`         |
 | F1.6  | Connexion par téléphone + PIN                        | `login_page.dart`                       | `POST /api/auth/login`            |
 | F1.7  | Sélection du pays (code +222 Mauritanie)             | `login_page.dart`                       | Validation côté serveur           |
-| F1.8  | Envoi OTP (via WhatsApp ou SMS)                      | `otp_entry_page.dart`                   | `POST /api/auth/otp/send`         |
-| F1.9  | Vérification OTP (6 chiffres, timer pour revoi)      | `otp_entry_page.dart`                   | `POST /api/auth/otp/verify`       |
+| F1.8  | Envoi OTP via SMS (Termii)                           | `otp_entry_page.dart`                   | `POST /api/auth/otp/send`         |
+| F1.9  | Vérification OTP (6 chiffres, timer pour renvoi)     | `otp_entry_page.dart`                   | `POST /api/auth/otp/verify`       |
 | F1.10 | Mot de passe oublié (reset via OTP)                  | `login_page.dart`                       | `POST /api/auth/reset-password`   |
 | F1.11 | Déconnexion                                          | `account_profile_page.dart`             | `POST /api/auth/logout`           |
 
 > [!IMPORTANT]
-> **Service SMS/OTP** : Le code montre un envoi via WhatsApp (`otp_entry_page.dart` L60). Il faut un fournisseur SMS pour la Mauritanie (Twilio, Vonage, ou un partenaire local). L'OTP doit être hashé en base, avec un `expires_at` de 5 min et un rate-limit de 3 tentatives.
+> **Service SMS/OTP — Termii** : Le fournisseur retenu pour l'envoi des OTP par SMS est **[Termii](https://termii.com)**.
+> - **Endpoint Termii** : `POST {BASE_URL}/api/sms/otp/send`
+> - **Paramètres clés** : `api_key`, `to` (format international ex: `2222XXXXXXXX`), `from` (Sender ID enregistré), `channel` (`generic`), `pin_type` (`NUMERIC`), `pin_length` (6), `pin_time_to_live` (5 min), `pin_attempts` (3).
+> - **Vérification** : `POST {BASE_URL}/api/sms/otp/verify` avec `pin_id` + `pin` saisi par l'utilisateur.
+> - Le `pin_id` retourné par Termii est stocké temporairement (Redis ou table `otp_verifications`) pour la vérification ultérieure.
+> - Rate-limit : **3 tentatives max**, blocage **15 min** après échec.
+> - Le canal SMS couvre le réseau mauritanien (+222).
 
 ---
 
@@ -189,6 +195,22 @@ CREATE TABLE users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+
+CREATE TABLE otp_verifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    phone VARCHAR(20) NOT NULL,               -- Numéro au format international (+222XXXXXXXX)
+    termii_pin_id VARCHAR(100) NOT NULL,      -- PIN ID retourné par l'API Termii (pour vérification)
+    attempts INT DEFAULT 0,                   -- Nombre de tentatives de vérification
+    max_attempts INT DEFAULT 3,               -- Limite de 3 tentatives
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL, -- TTL 5 minutes
+    verified_at TIMESTAMP WITH TIME ZONE,     -- NULL si non encore vérifié
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_otp_attempts CHECK (attempts <= max_attempts)
+);
+
+CREATE INDEX idx_otp_phone ON otp_verifications(phone);
+CREATE INDEX idx_otp_expires ON otp_verifications(expires_at);
 
 CREATE TABLE user_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -492,15 +514,41 @@ erDiagram
 
 ## 5. Services Backend Essentiels (Go)
 
-| Service                  | Responsabilité                                | Technologie                           |
-| :----------------------- | :-------------------------------------------- | :------------------------------------ |
-| **Auth Service**         | Inscription, OTP, JWT, Sessions               | Bcrypt + JWT + Redis (rate-limit)     |
-| **Auction Service**      | CRUD enchères, logique de mise atomique       | PostgreSQL + Verrouillage optimiste   |
-| **Realtime Service**     | Prix live, timer, notifications de surenchère | **Go WebSockets (gorilla/websocket)** |
-| **Payment Service**      | Dépôt, retrait, validation admin              | Transactions SQL atomiques            |
-| **Notification Service** | Push, in-app, email                           | Firebase Cloud Messaging              |
-| **Media Service**        | Upload/Serve images et vidéos                 | MinIO / AWS S3                        |
-| **Cron Service**         | Clôture auto des enchères, nettoyage OTP      | `robfig/cron`                         |
-| **Admin Service**        | Validation paiements, modération annonces     | Panneau admin (API + front séparé)    |
+| Service                  | Responsabilité                                | Technologie                                          |
+| :----------------------- | :-------------------------------------------- | :--------------------------------------------------- |
+| **Auth Service**         | Inscription, OTP via Termii, JWT, Sessions    | Bcrypt + JWT + Redis + **Termii SMS API**            |
+| **Auction Service**      | CRUD enchères, logique de mise atomique       | PostgreSQL + Verrouillage optimiste                  |
+| **Realtime Service**     | Prix live, timer, notifications de surenchère | **Go WebSockets (gorilla/websocket)**                |
+| **Payment Service**      | Dépôt, retrait, validation admin              | Transactions SQL atomiques                           |
+| **Notification Service** | Push, in-app, email                           | Firebase Cloud Messaging                             |
+| **Media Service**        | Upload/Serve images et vidéos                 | MinIO / AWS S3                                       |
+| **Cron Service**         | Clôture auto des enchères, nettoyage OTP      | `robfig/cron`                                        |
+| **Admin Service**        | Validation paiements, modération annonces     | Panneau admin (API + front séparé)                   |
+| **SMS Service (Termii)** | Envoi et vérification des OTP par SMS         | **API REST Termii** (`/api/sms/otp/send` + `/verify`) |
+
+### 🔌 Flux OTP Termii (Détail)
+
+```
+[Flutter App]  ──POST /api/auth/otp/send──►  [Go Auth Service]
+                                                     │
+                                           POST https://{BASE_URL}/api/sms/otp/send
+                                           { api_key, to: "+222XXXXXXXX",
+                                             from: "MazadPay", channel: "generic",
+                                             pin_type: "NUMERIC", pin_length: 6,
+                                             pin_time_to_live: 5, pin_attempts: 3,
+                                             message_text: "رمز التحقق الخاص بك: < 1234 >" }
+                                                     │
+                                              [Termii API] ──SMS──► [User Phone]
+                                                     │
+                                           Stocke { termii_pin_id } dans otp_verifications
+                                                     │
+[Flutter App]  ──POST /api/auth/otp/verify──► [Go Auth Service]
+                { pin_id (interne), user_code }
+                                                     │
+                                           POST https://{BASE_URL}/api/sms/otp/verify
+                                           { api_key, pin_id: termii_pin_id, pin: user_code }
+                                                     │
+                                           Si verified → émettre JWT + créer session
+```
 |                          |                                               |                                       |
 |                          |                                               |                                       |
