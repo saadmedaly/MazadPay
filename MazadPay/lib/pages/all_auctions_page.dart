@@ -25,48 +25,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   int _selectedCategoryIndex = 0;
   int _selectedSubCategoryIndex = 0;
 
-  // صور كل فئة
-  final Map<String, List<String>> _categoryImages = {
-    'cars': [
-      'assets/car0.png',
-      'assets/car1.jpg',
-      'assets/car2.jpg',
-      'assets/car3.jpg',
-      'assets/car4.jpg',
-      'assets/car5.png',
-    ],
-    'phones': [
-      'assets/phone1.jpg',
-      'assets/phone2.jpg',
-      'assets/phone3.jpg',
-      'assets/phone4.jpg',
-      'assets/phone5.jpg',
-      'assets/phone6.jpg',
-    ],
-    'real_estate': [
-      'assets/maison1.jpg',
-      'assets/maison2.jpg',
-      'assets/maison3.jpg',
-      'assets/maison4.jpg',
-      'assets/maison5.jpg',
-    ],
-    'home_appliances': [
-      'assets/Appareils de maison1.jpg',
-      'assets/Appareils de maison2.jpg',
-      'assets/Appareils de maison3.jpg',
-      'assets/Appareils de maison4.jpg',
-      'assets/Appareils de maison5.jpg',
-      'assets/Appareils de maison6.jpg',
-      'assets/Appareils de maison7.jpg',
-      'assets/Appareils de maison8.jpg',
-    ],
-  };
-
-  List<String> get _currentCategoryImages {
-    if (_selectedCategoryIndex == 0) return [];
-    final key = _categories[_selectedCategoryIndex]['key'] as String;
-    return _categoryImages[key] ?? [];
-  }
 
   @override
   void didChangeDependencies() {
@@ -244,12 +202,19 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   }
 
   final List<Map<String, dynamic>> _categories = [
-    {'title_key': 'text_74', 'image': 'assets/auctions/other.png', 'key': 'all', 'count': 76},
-    {'title_key': 'text_86', 'image': 'assets/auctions/cars.png', 'key': 'cars', 'count': 45},
-    {'title_key': 'text_130', 'image': 'assets/auctions/phones.png', 'key': 'phones', 'count': 12},
-    {'title_key': 'text_119', 'image': 'assets/auctions/houses.png', 'key': 'real_estate', 'count': 31},
-    {'title_key': 'text_127', 'image': 'assets/auctions/phone_numbers.png', 'key': 'phone_numbers', 'count': 15},
-    {'title_key': 'text_120', 'image': 'assets/auctions/home_appliances.png', 'key': 'home_appliances', 'count': 8},
+    {'title_key': 'text_74',  'image': 'assets/auctions/other.png',            'key': 'all',             'count': 76},
+    {'title_key': 'text_86',  'image': 'assets/auctions/cars.png',             'key': 'cars',            'count': 45},
+    {'title_key': 'text_130', 'image': 'assets/auctions/phones.png',           'key': 'phones',          'count': 12},
+    {'title_key': 'text_119', 'image': 'assets/auctions/houses.png',           'key': 'real_estate',     'count': 31},
+    {'title_key': 'text_127', 'image': 'assets/auctions/phone_numbers.png',    'key': 'phone_numbers',   'count': 15},
+    {'title_key': 'text_120', 'image': 'assets/auctions/home_appliances.png',  'key': 'home_appliances', 'count': 8},
+    {'title_key': 'text_124', 'image': 'assets/auctions/animals.png',          'key': 'animals',         'count': 5},
+    {'title_key': 'text_123', 'image': 'assets/auctions/womens_accessories.png','key': 'womens',         'count': 9},
+    {'title_key': 'text_122', 'image': 'assets/auctions/mens_accessories.png', 'key': 'mens',            'count': 7},
+    {'title_key': 'text_125', 'image': 'assets/auctions/heavy_equipment.png',  'key': 'trucks',          'count': 6},
+    {'title_key': 'text_131', 'image': 'assets/auctions/phones.png',           'key': 'electronics',     'count': 11},
+    {'title_key': 'text_129', 'image': 'assets/auctions/selling_projects.png', 'key': 'projects',        'count': 3},
+    {'title_key': 'text_133', 'image': 'assets/auctions/other.png',            'key': 'bikes',           'count': 4},
   ];
 
   final List<Map<String, dynamic>> _carSubCategories = [
@@ -411,46 +376,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                     ),
                   ),
                 ),
-
-                // عرض صور الفئة المختارة
-                if (_currentCategoryImages.isNotEmpty) ...[
-                  SizedBox(
-                    height: 130,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _currentCategoryImages.length,
-                      itemBuilder: (context, index) {
-                        return Container(
-                          width: 160,
-                          margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.08),
-                                blurRadius: 6,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.asset(
-                              _currentCategoryImages[index],
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Container(
-                                color: Colors.grey[200],
-                                child: const Icon(Icons.image_not_supported, color: Colors.grey, size: 32),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
 
                 // Sub-Categories selection (cars only)
                 if (_selectedCategoryIndex == 1) ...[
@@ -766,9 +691,13 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   Widget _buildSimpleNavItem(IconData icon, String label, int index) {
     return InkWell(
       onTap: () {
-        if (index == 0) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
-        else if (index == 1) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ServicesPage()));
-        else if (index == 3) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AccountPage()));
+        if (index == 0) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
+        } else if (index == 1) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ServicesPage()));
+        } else if (index == 3) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AccountPage()));
+        }
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -795,6 +724,13 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       case 'text_116': return l10n.text_116;
       case 'text_117': return l10n.text_117;
       case 'text_118': return l10n.text_118;
+      case 'text_122': return l10n.text_122;
+      case 'text_123': return l10n.text_123;
+      case 'text_124': return l10n.text_124;
+      case 'text_125': return l10n.text_125;
+      case 'text_129': return l10n.text_129;
+      case 'text_131': return l10n.text_131;
+      case 'text_133': return l10n.text_133;
       default: return "Category";
     }
   }
