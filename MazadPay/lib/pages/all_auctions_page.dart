@@ -265,10 +265,10 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
           SliverToBoxAdapter(
             child: Column(
               children: [
-                // Top Categories Horizontal List
-                const SizedBox(height: 12),
+                // Top Categories Horizontal List (Photo-card style)
+                const SizedBox(height: 14),
                 SizedBox(
-                  height: 115,
+                  height: 110,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -287,51 +287,79 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           });
                         },
                         child: Container(
-                          width: 105,
-                          margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+                          width: 100,
+                          margin: const EdgeInsets.only(right: 10, top: 4, bottom: 4),
                           decoration: BoxDecoration(
-                            color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: isSelected
-                                ? [BoxShadow(color: primaryBlue.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4))]
-                                : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))],
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: isSelected ? primaryBlue : Colors.transparent,
-                              width: 2,
+                              width: 2.5,
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: isSelected ? 0.15 : 0.07),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
-                              Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Image.asset(
-                                      cat['image'],
-                                      height: 44,
-                                      width: 44,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (c, e, s) => Icon(Icons.category, color: isSelected ? primaryBlue : Colors.grey, size: 32),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      title,
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 12,
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                        color: isSelected ? primaryBlue : (isDarkMode ? Colors.white70 : Colors.black87),
-                                      ),
-                                    ),
-                                  ],
+                              // Full image background
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Image.asset(
+                                  cat['image'],
+                                  width: 100,
+                                  height: 110,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (c, e, s) => Container(
+                                    color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFEEEEEE),
+                                    child: Center(child: Icon(Icons.category, color: isSelected ? primaryBlue : Colors.grey, size: 36)),
+                                  ),
                                 ),
                               ),
+                              // Dark gradient overlay at bottom
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black.withValues(alpha: 0.55),
+                                      ],
+                                      stops: const [0.4, 1.0],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Title at bottom
+                              Positioned(
+                                bottom: 8,
+                                left: 4,
+                                right: 4,
+                                child: Text(
+                                  title,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              // Count badge top-right
                               Positioned(
                                 top: -4,
                                 right: -4,
                                 child: Container(
-                                  padding: const EdgeInsets.all(6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                                   decoration: const BoxDecoration(
                                     color: Color(0xFFFF3B30),
                                     shape: BoxShape.circle,
@@ -416,11 +444,11 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                               color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: isSelected ? primaryBlue : Colors.transparent,
-                                width: 2,
+                                color: isSelected ? primaryBlue : Colors.grey.withValues(alpha: 0.15),
+                                width: isSelected ? 2 : 1,
                               ),
                               boxShadow: [
-                                BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2))
+                                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 3))
                               ],
                             ),
                             child: Column(
@@ -428,7 +456,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                               children: [
                                 Image.asset(
                                   sub['image'],
-                                  height: 50,
+                                  height: 52,
                                   fit: BoxFit.contain,
                                   errorBuilder: (c, e, s) => Icon(Icons.directions_car, color: isSelected ? primaryBlue : Colors.grey, size: 30),
                                 ),
@@ -450,17 +478,34 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                   ),
                 ],
 
-                // Custom Tabs
+                // Custom Tabs — dynamic count
                 const SizedBox(height: 16),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      _buildStitchTab(1, "مزايدات منتهية", "00", const Color(0xFFFFDEDE), const Color(0xFFFF3B30)),
-                      const SizedBox(width: 12),
-                      _buildStitchTab(0, "مزايدات نشطة", "02", const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
-                    ],
-                  ),
+                  child: Builder(builder: (context) {
+                    // Count active vs finished from all auctions (matching category filter)
+                    int activeCount = _allAuctions.where((a) {
+                      if (a['status'] != 'active') return false;
+                      if (_selectedCategoryIndex != 0) {
+                        return a['category'] == _categories[_selectedCategoryIndex]['key'];
+                      }
+                      return true;
+                    }).length;
+                    int finishedCount = _allAuctions.where((a) {
+                      if (a['status'] != 'finished') return false;
+                      if (_selectedCategoryIndex != 0) {
+                        return a['category'] == _categories[_selectedCategoryIndex]['key'];
+                      }
+                      return true;
+                    }).length;
+                    return Row(
+                      children: [
+                        _buildStitchTab(1, "مزايدات منتهية", finishedCount.toString().padLeft(2, '0'), const Color(0xFFFFEDED), const Color(0xFFFF3B30)),
+                        const SizedBox(width: 12),
+                        _buildStitchTab(0, "مزايدات نشطة", activeCount.toString().padLeft(2, '0'), const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
+                      ],
+                    );
+                  }),
                 ),
                 const SizedBox(height: 16),
               ],
@@ -581,6 +626,8 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     final id = auction['id']!;
     final isFavorite = ref.watch(favoritesProvider).contains(id);
 
+    final bool isFinished = auction['status'] == 'finished';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -604,15 +651,15 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Right Image Area (First in RTL code = Right visually)
+            // Right: Image
             ClipRRect(
               borderRadius: const BorderRadius.only(
                 topRight: Radius.circular(16),
                 bottomRight: Radius.circular(16),
               ),
               child: SizedBox(
-                width: 120,
-                height: 115,
+                width: 125,
+                height: 110,
                 child: Image.asset(
                   auction['image']!,
                   fit: BoxFit.cover,
@@ -623,18 +670,18 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                 ),
               ),
             ),
-            // Left Content Area
+            // Left: Content
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), // Reduced from 10
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start, // Start = Right in RTL
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     // Title
                     Text(
                       auction['title']!,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 15,
+                        fontSize: 14, // Reduced from 15
                         fontWeight: FontWeight.w800,
                         color: isDarkMode ? Colors.white : Colors.black,
                       ),
@@ -642,109 +689,83 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.right,
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 1), // Reduced from 2
                     // Price
                     Text(
                       "${auction['price']?.split(' ')[0]} أوقية جديدة",
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: isDarkMode ? Colors.white : Colors.black,
+                        fontSize: 13, // Reduced from 14
+                        fontWeight: FontWeight.w600,
+                        color: isDarkMode ? Colors.white70 : Colors.black87,
                       ),
                       textAlign: TextAlign.right,
                     ),
-                    const SizedBox(height: 8),
-                    // Interaction Row (Bid count, Favorite, Timer)
+                    const SizedBox(height: 6), // Reduced from 10
+                    // Interaction Row: [Timer] [Heart] [Bids+Gavel]
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Bids & Favorite side (On the Right/Middle)
+                        // Bid count + gavel (leftmost = endmost in RTL code)
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Bid Count Badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: isDarkMode ? darkGreyBg : lightGreyBg,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    auction['bids']!,
-                                    style: GoogleFonts.plusJakartaSans(
-                                      color: softRed,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    Icons.gavel_rounded,
-                                    color: isDarkMode ? Colors.white70 : Colors.black,
-                                    size: 16,
-                                  ),
-                                ],
+                            Text(
+                              auction['bids']!,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: softRed,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14, // Reduced from 16
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            // Favorite Button
-                            GestureDetector(
-                              onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(id),
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: isDarkMode ? darkGreyBg : lightGreyBg,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  isFavorite ? Icons.favorite : Icons.favorite_border,
-                                  color: isFavorite ? softRed : (isDarkMode ? Colors.white70 : Colors.black),
-                                  size: 18,
-                                ),
-                              ),
+                            const SizedBox(width: 3),
+                            Icon(
+                              Icons.gavel_rounded,
+                              color: isDarkMode ? Colors.white54 : Colors.black54,
+                              size: 16, // Reduced from 18
                             ),
                           ],
                         ),
-                        const SizedBox(width: 8),
-                        // Timer side (On the Left)
+                        // Heart / favorite
+                        GestureDetector(
+                          onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(id),
+                          child: Icon(
+                            isFavorite ? Icons.favorite : Icons.favorite_border,
+                            color: isFavorite ? softRed : (isDarkMode ? Colors.white54 : Colors.grey),
+                            size: 20, // Reduced from 22
+                          ),
+                        ),
+                        // Timer (rightmost = startmost in RTL code)
                         Flexible(
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Flexible(
                                 child: Text(
-                                  auction['time']!,
+                                  isFinished ? 'انتهى المزاد' : auction['time']!,
                                   style: GoogleFonts.plusJakartaSans(
                                     color: softRed,
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w800,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(width: 4),
-                              const Icon(
-                                Icons.access_time_rounded,
-                                color: softRed,
-                                size: 16,
-                              ),
+                              const SizedBox(width: 3),
+                              const Icon(Icons.access_time_rounded, color: softRed, size: 14),
                             ],
                           ),
                         ),
                       ],
                     ),
                     const Spacer(),
-                    // Bottom Metadata (Posted Time & Location)
+                    // Posted time + location
                     Directionality(
                       textDirection: TextDirection.rtl,
                       child: Text(
                         "${auction['postedTime']} . ${auction['location']}",
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          color: const Color(0xFF8E99AF),
+                          fontSize: 10, // Reduced from 11
+                          color: const Color(0xFF9AA5B4),
                           fontWeight: FontWeight.w500,
                         ),
                         maxLines: 1,
