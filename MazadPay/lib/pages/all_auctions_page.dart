@@ -574,6 +574,10 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
 
   Widget _buildHorizontalAuctionCard(BuildContext context, bool isDarkMode, Map<String, String> auction) {
     const Color primaryBlue = Color(0xFF0084FF);
+    const Color softRed = Color(0xFFFF3B30);
+    const Color lightGreyBg = Color(0xFFF2F2F7);
+    const Color darkGreyBg = Color(0xFF2C2C2E);
+    
     final id = auction['id']!;
     final isFavorite = ref.watch(favoritesProvider).contains(id);
 
@@ -581,109 +585,178 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+            spreadRadius: -5,
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left: Details
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    auction['title']!,
-                    style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Right Image Area (First in RTL code = Right visually)
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+              ),
+              child: SizedBox(
+                width: 120,
+                height: 115,
+                child: Image.asset(
+                  auction['image']!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (c, e, s) => Container(
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.image_not_supported, color: Colors.grey),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.timer_outlined, color: Colors.red, size: 13),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          auction['time']!,
-                          style: const TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.gavel, color: Colors.grey, size: 13),
-                      const SizedBox(width: 4),
-                      Text(auction['bids']!, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(id),
-                        child: Icon(
-                          isFavorite ? Icons.favorite : Icons.favorite_border,
-                          color: isFavorite ? Colors.red : Colors.grey,
-                          size: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    auction['price']!,
-                    style: const TextStyle(color: primaryBlue, fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.location_on_outlined, size: 11, color: Colors.grey[400]),
-                      const SizedBox(width: 2),
-                      Flexible(
-                        child: Text(
-                          auction['location']!,
-                          style: TextStyle(fontSize: 10, color: Colors.grey[400]),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(auction['postedTime']!, style: TextStyle(fontSize: 10, color: Colors.grey[400])),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-          // Right: Image
-          ClipRRect(
-            borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
-            child: Stack(
-              children: [
-                Image.asset(
-                  auction['image']!,
-                  width: 120,
-                  height: 110,
-                  fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) => Container(width: 120, height: 110, color: Colors.grey[200]),
+            // Left Content Area
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, // Start = Right in RTL
+                  children: [
+                    // Title
+                    Text(
+                      auction['title']!,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                    ),
+                    const SizedBox(height: 2),
+                    // Price
+                    Text(
+                      "${auction['price']?.split(' ')[0]} أوقية جديدة",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                    const SizedBox(height: 8),
+                    // Interaction Row (Bid count, Favorite, Timer)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Bids & Favorite side (On the Right/Middle)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Bid Count Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDarkMode ? darkGreyBg : lightGreyBg,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    auction['bids']!,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: softRed,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.gavel_rounded,
+                                    color: isDarkMode ? Colors.white70 : Colors.black,
+                                    size: 16,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Favorite Button
+                            GestureDetector(
+                              onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(id),
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: isDarkMode ? darkGreyBg : lightGreyBg,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  isFavorite ? Icons.favorite : Icons.favorite_border,
+                                  color: isFavorite ? softRed : (isDarkMode ? Colors.white70 : Colors.black),
+                                  size: 18,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        // Timer side (On the Left)
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  auction['time']!,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: softRed,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.access_time_rounded,
+                                color: softRed,
+                                size: 16,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    // Bottom Metadata (Posted Time & Location)
+                    Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: Text(
+                        "${auction['postedTime']} . ${auction['location']}",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          color: const Color(0xFF8E99AF),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: primaryBlue, borderRadius: BorderRadius.circular(4)),
-                    child: Text("ID: $id", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
