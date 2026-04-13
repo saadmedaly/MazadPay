@@ -618,7 +618,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_196 => 'لتجربة أفضل يرجى تفعيل الموقع الجغرافي في هاتفك';
 
   @override
-  String get text_197 => 'تفعيل خدمة تحديد الموقع';
+  String get text_197 => 'تفعيل  تحديد الموقع';
 
   @override
   String get text_198 => 'العودة إلى انواكشوط';
@@ -630,7 +630,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_200 => 'عرض مزيد من المزادات';
 
   @override
-  String get text_201 => 'الروعات';
+  String get text_201 => 'الرعاة';
 
   @override
   String get text_202 => 'إعلان جديد';

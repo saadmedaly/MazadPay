@@ -661,100 +661,104 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
           BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Left: Details
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      auction['title']!,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(Icons.timer_outlined, color: Colors.red, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          auction['time']!,
-                          style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.gavel, color: Colors.grey, size: 14),
-                        const SizedBox(width: 4),
-                        Text(auction['bids']!, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(id),
-                          child: Icon(
-                            isFavorite ? Icons.favorite : Icons.favorite_border,
-                            color: isFavorite ? Colors.red : Colors.grey,
-                            size: 20,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          auction['price']!,
-                          style: const TextStyle(color: primaryBlue, fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.location_on_outlined, size: 12, color: Colors.grey[400]),
-                        const SizedBox(width: 2),
-                        Text(auction['location']!, style: TextStyle(fontSize: 10, color: Colors.grey[400])),
-                        const Spacer(),
-                        Text(auction['postedTime']!, style: TextStyle(fontSize: 10, color: Colors.grey[400])),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // Right: Image
-            ClipRRect(
-              borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
-              child: Stack(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left: Details
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset(
-                    auction['image']!,
-                    width: 120,
-                    fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) => Container(width: 120, color: Colors.grey[200]),
+                  Text(
+                    auction['title']!,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: primaryBlue, borderRadius: BorderRadius.circular(4)),
-                      child: Text("ID: $id", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.timer_outlined, color: Colors.red, size: 13),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          auction['time']!,
+                          style: const TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.gavel, color: Colors.grey, size: 13),
+                      const SizedBox(width: 4),
+                      Text(auction['bids']!, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(id),
+                        child: Icon(
+                          isFavorite ? Icons.favorite : Icons.favorite_border,
+                          color: isFavorite ? Colors.red : Colors.grey,
+                          size: 18,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    auction['price']!,
+                    style: const TextStyle(color: primaryBlue, fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on_outlined, size: 11, color: Colors.grey[400]),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          auction['location']!,
+                          style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(auction['postedTime']!, style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                    ],
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+          // Right: Image
+          ClipRRect(
+            borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+            child: Stack(
+              children: [
+                Image.asset(
+                  auction['image']!,
+                  width: 120,
+                  height: 110,
+                  fit: BoxFit.cover,
+                  errorBuilder: (c, e, s) => Container(width: 120, height: 110, color: Colors.grey[200]),
+                ),
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: primaryBlue, borderRadius: BorderRadius.circular(4)),
+                    child: Text("ID: $id", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

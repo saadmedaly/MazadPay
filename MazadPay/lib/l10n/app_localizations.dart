@@ -1279,7 +1279,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_197.
   ///
   /// In ar, this message translates to:
-  /// **'تفعيل خدمة تحديد الموقع'**
+  /// **'تفعيل  تحديد الموقع'**
   String get text_197;
 
   /// No description provided for @text_198.
@@ -1303,7 +1303,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_201.
   ///
   /// In ar, this message translates to:
-  /// **'الروعات'**
+  /// **'الرعاة'**
   String get text_201;
 
   /// No description provided for @text_202.

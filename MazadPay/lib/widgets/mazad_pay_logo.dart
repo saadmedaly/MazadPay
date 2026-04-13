@@ -19,63 +19,60 @@ class MazadPayLogo extends StatelessWidget {
       children: [
         Directionality(
           textDirection: TextDirection.ltr,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              // Half Black Half Blue 'M'
-              ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return LinearGradient(
-                    colors: [primaryBlack, primaryBlue],
-                    stops: const [
-                      0.46,
-                      0.46,
-                    ], // Split point roughly in the middle
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ).createShader(bounds);
-                },
-                blendMode: BlendMode.srcIn,
-                child: Text(
-                  'M',
-                  style: TextStyle(
-                    fontSize: fontSize * 1.35,
-                    fontWeight: FontWeight.w900,
-                    fontStyle: FontStyle.italic,
-                    fontFamily:
-                        'Plus Jakarta Sans', // Ensures the 'M' looks consistent with the theme
-                    height: 1.0,
-                    letterSpacing: -2,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                 ShaderMask(
+                  shaderCallback: (Rect bounds) {
+                    return LinearGradient(
+                      colors: [primaryBlack, primaryBlue],
+                      stops: const [0.46, 0.46],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ).createShader(bounds);
+                  },
+                  blendMode: BlendMode.srcIn,
+                  child: Text(
+                    'M',
+                    style: TextStyle(
+                      fontSize: fontSize * 1.35,
+                      fontWeight: FontWeight.w900,
+                      fontStyle: FontStyle.italic,
+                      fontFamily: 'Plus Jakarta Sans',
+                      height: 1.0,
+                      letterSpacing: -2,
+                    ),
                   ),
-
                 ),
-              ),
-              // "azad" part
-              Text(
-                'azad',
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.w900,
-                  color: primaryBlack,
-                  letterSpacing: -1.5,
+                // "azad" part
+                Text(
+                  'azad',
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w900,
+                    color: primaryBlack,
+                    letterSpacing: -1.5,
+                  ),
                 ),
-              ),
-              // "Pay" part
-              Text(
-                'Pay',
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.w900,
-                  color: primaryBlue,
-                  letterSpacing: -1.5,
+                // "Pay" part
+                Text(
+                  'Pay',
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w900,
+                    color: primaryBlue,
+                    letterSpacing: -1.5,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-        // The Arabic part: AppLocalizations.of(context)!.text_145
+        // The Arabic part
         Transform.translate(
           offset: const Offset(
             0,
