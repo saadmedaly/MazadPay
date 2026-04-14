@@ -329,6 +329,135 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     {'title_key': 'text_118', 'image': 'assets/car5.png', 'key': 'electric'},
   ];
 
+  // خريطة تربط كل فئة بقائمة عناصرها المرئية في شريط التمرير
+  late final Map<String, List<Map<String, dynamic>>> _categoryItems = {
+    'cars': _carSubCategories,
+    'phones': [
+      {'label': 'iPhone 15 Pro Max', 'image': 'assets/phone1.jpg'},
+      {'label': 'Samsung S24 Ultra', 'image': 'assets/phone2.jpg'},
+      {'label': 'Huawei P60 Pro',    'image': 'assets/phone3.jpg'},
+      {'label': 'Xiaomi 14 Ultra',   'image': 'assets/phone4.jpg'},
+      {'label': 'Google Pixel 8',    'image': 'assets/phone5.jpg'},
+      {'label': 'OnePlus 12',        'image': 'assets/phone6.jpg'},
+    ],
+    'electronics': [
+      {'label': 'لابتوب',     'image': 'assets/Électronique1.jpg'},
+      {'label': 'آيباد',      'image': 'assets/Électronique2.jpg'},
+      {'label': 'كاميرا',     'image': 'assets/Électronique3.jpg'},
+      {'label': 'بلاي ستيشن','image': 'assets/Électronique4.jpg'},
+      {'label': 'سماعات',     'image': 'assets/Électronique5.jpg'},
+      {'label': 'شاشة',       'image': 'assets/Électronique6.jpg'},
+      {'label': 'طابعة',      'image': 'assets/Électronique7.jpg'},
+      {'label': 'راوتر',      'image': 'assets/Électronique8.jpg'},
+    ],
+    'real_estate': [
+      {'label': 'فيلا',         'image': 'assets/maison1.jpg'},
+      {'label': 'شقة',          'image': 'assets/maison2.jpg'},
+      {'label': 'منزل',         'image': 'assets/maison3.jpg'},
+      {'label': 'شقة مفروشة',   'image': 'assets/maison4.jpg'},
+      {'label': 'مبنى تجاري',   'image': 'assets/maison5.jpg'},
+    ],
+    'home_appliances': [
+      {'label': 'غسالة',   'image': 'assets/Appareils de maison1.jpg'},
+      {'label': 'ثلاجة',   'image': 'assets/Appareils de maison2.jpg'},
+      {'label': 'مكيف',    'image': 'assets/Appareils de maison3.jpg'},
+      {'label': 'بوتوغاز', 'image': 'assets/Appareils de maison4.jpg'},
+      {'label': 'تلفزيون', 'image': 'assets/Appareils de maison5.jpg'},
+      {'label': 'مجفف',    'image': 'assets/Appareils de maison6.jpg'},
+      {'label': 'طباخ',    'image': 'assets/Appareils de maison7.jpg'},
+      {'label': 'مكنسة',   'image': 'assets/Appareils de maison8.jpg'},
+    ],
+    'animals': [
+      {'label': 'حصان',  'image': 'assets/animal1.jpg'},
+      {'label': 'جمل',   'image': 'assets/animal2.jpg'},
+      {'label': 'ماعز',  'image': 'assets/animal3.jpg'},
+      {'label': 'خروف',  'image': 'assets/animal4.jpg'},
+      {'label': 'بقرة',  'image': 'assets/animal5.jpg'},
+      {'label': 'دجاج',  'image': 'assets/animal6.jpg'},
+      {'label': 'كبش',   'image': 'assets/animal7.jpg'},
+      {'label': 'إبل',   'image': 'assets/animal8.jpg'},
+    ],
+    'womens': [
+      {'label': 'حقيبة شانيل',   'image': 'assets/Fournitures pour femmes1.jpg'},
+      {'label': 'عطر',            'image': 'assets/Fournitures pour femmes2.jpg'},
+      {'label': 'ساعة نسائية',    'image': 'assets/Fournitures pour femmes3.jpg'},
+      {'label': 'مجوهرات',        'image': 'assets/Fournitures pour femmes4.jpg'},
+      {'label': 'فستان',          'image': 'assets/Fournitures pour femmes5.jpg'},
+      {'label': 'حذاء',           'image': 'assets/Fournitures pour femmes6.jpg'},
+      {'label': 'نظارة',          'image': 'assets/Fournitures pour femmes7.jpg'},
+      {'label': 'خاتم ألماس',     'image': 'assets/Fournitures pour femmes8.jpg'},
+    ],
+    'mens': [
+      {'label': 'ساعة رولكس',  'image': 'assets/Fournitures pour hommes1.jpg'},
+      {'label': 'حقيبة جلد',   'image': 'assets/Fournitures pour hommes2.jpg'},
+      {'label': 'بدلة',         'image': 'assets/Fournitures pour hommes3.jpg'},
+      {'label': 'حذاء جلد',    'image': 'assets/Fournitures pour hommes4.jpg'},
+      {'label': 'نظارة',        'image': 'assets/Fournitures pour hommes5.jpg'},
+      {'label': 'عطر',          'image': 'assets/Fournitures pour hommes6.jpg'},
+      {'label': 'حزام هيرمس',  'image': 'assets/Fournitures pour hommes7.jpg'},
+      {'label': 'قميص',         'image': 'assets/Fournitures pour hommes8.jpg'},
+      {'label': 'خاتم ذهب',    'image': 'assets/Fournitures pour hommes9.jpg'},
+      {'label': 'محفظة',        'image': 'assets/Fournitures pour hommes10.jpg'},
+    ],
+    'trucks': [
+      {'label': 'مرسيدس أكتروس', 'image': 'assets/Camions1.jpg'},
+      {'label': 'مان TGX',        'image': 'assets/Camions2.jpg'},
+      {'label': 'فولفو FH16',     'image': 'assets/Camions3.jpg'},
+      {'label': 'سكانيا R500',    'image': 'assets/Camions4.jpg'},
+      {'label': 'رينو T520',      'image': 'assets/Camions5.jpg'},
+      {'label': 'إيفيكو',         'image': 'assets/Camions6.jpg'},
+      {'label': 'دايملر',         'image': 'assets/Camions7.jpg'},
+      {'label': 'نيسان كوندور',   'image': 'assets/Camions8.jpg'},
+    ],
+    'bikes': [
+      {'label': 'ياماها R15',  'image': 'assets/Motos1.jpg'},
+      {'label': 'هوندا CB500', 'image': 'assets/Motos2.jpg'},
+      {'label': 'سوزوكي GSX',  'image': 'assets/Motos3.jpg'},
+      {'label': 'كاوازاكي',    'image': 'assets/Motos4.jpg'},
+      {'label': 'BMW G310R',   'image': 'assets/Motos5.jpg'},
+      {'label': 'هارلي',       'image': 'assets/Motos6.jpg'},
+      {'label': 'دوكاتي',      'image': 'assets/Motos7.jpg'},
+      {'label': 'ترياومف',     'image': 'assets/Motos8.jpg'},
+      {'label': 'أبريليا',     'image': 'assets/Motos9.jpg'},
+      {'label': 'KTM Duke',    'image': 'assets/Motos10.jpg'},
+      {'label': 'هيوسانج',     'image': 'assets/Motos11.jpg'},
+      {'label': 'موتو غوتسي',  'image': 'assets/Motos12.jpg'},
+    ],
+    'heavy_materials': [
+      {'label': 'حفارة',     'image': 'assets/Matériel lourd1.jpg'},
+      {'label': 'جرافة',     'image': 'assets/Matériel lourd2.jpg'},
+      {'label': 'رافعة شوكية','image': 'assets/Matériel lourd3.jpg'},
+      {'label': 'خلاطة',     'image': 'assets/Matériel lourd4.jpg'},
+      {'label': 'ضاغط هواء', 'image': 'assets/Matériel lourd5.jpg'},
+      {'label': 'شاحنة قلاب','image': 'assets/Matériel lourd6.jpg'},
+      {'label': 'مضخة مياه', 'image': 'assets/Matériel lourd7.jpg'},
+      {'label': 'مولد كهرباء','image': 'assets/Matériel lourd8.jpg'},
+      {'label': 'آلة تسوية', 'image': 'assets/Matériel lourd9.jpg'},
+      {'label': 'كرين 20 طن','image': 'assets/Matériel lourd10.jpg'},
+    ],
+    'land_plots': [
+      {'label': 'حي تفاريغ',  'image': 'assets/Terrains1.jpg'},
+      {'label': 'أرض سكنية',  'image': 'assets/Terrains2.jpg'},
+      {'label': 'قطعة تجارية','image': 'assets/Terrains3.jpg'},
+      {'label': 'أرض زراعية', 'image': 'assets/Terrains4.jpg'},
+    ],
+    'furniture': [
+      {'label': 'طقم صالون',  'image': 'assets/Meubles1.jpg'},
+      {'label': 'غرفة نوم',   'image': 'assets/Meubles2.jpg'},
+      {'label': 'طاولة سفرة', 'image': 'assets/Meubles3.jpg'},
+      {'label': 'مكتبة',      'image': 'assets/Meubles4.jpg'},
+      {'label': 'كنبة جلد',   'image': 'assets/Meubles5.jpg'},
+      {'label': 'طاولة قهوة', 'image': 'assets/Meubles6.jpg'},
+      {'label': 'خزانة ملابس','image': 'assets/Meubles7.jpg'},
+      {'label': 'سرير',       'image': 'assets/Meubles8.jpg'},
+    ],
+    'projects': [
+      {'label': 'مشروع 1', 'image': 'assets/auctions/selling_projects.png'},
+      {'label': 'مشروع 2', 'image': 'assets/auctions/selling_projects.png'},
+      {'label': 'مشروع 3', 'image': 'assets/auctions/selling_projects.png'},
+    ],
+  };
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -509,78 +638,104 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                   ),
                 ),
 
-                // Sub-Categories selection (cars only)
-                if (_selectedCategoryIndex == 1) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        "اختر نوعية السيارة التي تبحث عنها",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: isDarkMode ? Colors.white : Colors.black,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    height: 100,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _carSubCategories.length,
-                      itemBuilder: (context, index) {
-                        final sub = _carSubCategories[index];
-                        bool isSelected = _selectedSubCategoryIndex == index;
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedSubCategoryIndex = index;
-                              _filterAuctions();
-                            });
-                          },
-                          child: Container(
-                            width: 110,
-                            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isSelected ? primaryBlue : Colors.grey.withValues(alpha: 0.15),
-                                width: isSelected ? 2 : 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 3))
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(
-                                  sub['image'],
-                                  height: 52,
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (c, e, s) => Icon(Icons.directions_car, color: isSelected ? primaryBlue : Colors.grey, size: 30),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _getLocalizedTitle(sub['title_key'], l10n),
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 12,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                    color: isSelected ? primaryBlue : (isDarkMode ? Colors.white70 : Colors.black87),
-                                  ),
-                                ),
-                              ],
+                // شريط العناصر العام — يظهر لكل فئة لها محتوى
+                Builder(builder: (context) {
+                  final catKey = _selectedCategoryIndex == 0
+                      ? null
+                      : _categories[_selectedCategoryIndex]['key'] as String;
+                  final items = catKey != null ? (_categoryItems[catKey] ?? []) : [];
+                  if (items.isEmpty) return const SizedBox.shrink();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            _getLocalizedTitle(_categories[_selectedCategoryIndex]['title_key'], l10n),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.white : Colors.black,
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                        ),
+                      ),
+                      SizedBox(
+                        height: 100,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: items.length,
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final bool isCars = catKey == 'cars';
+                            final bool isSelected = isCars
+                                ? _selectedSubCategoryIndex == index
+                                : false;
+                            final String imagePath = item['image'] as String;
+                            final String label = isCars
+                                ? _getLocalizedTitle(item['title_key'] as String, l10n)
+                                : item['label'] as String;
+
+                            return GestureDetector(
+                              onTap: isCars
+                                  ? () => setState(() {
+                                        _selectedSubCategoryIndex = index;
+                                        _filterAuctions();
+                                      })
+                                  : null,
+                              child: Container(
+                                width: 110,
+                                margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isSelected ? primaryBlue : Colors.grey.withValues(alpha: 0.15),
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 3))
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.asset(
+                                        imagePath,
+                                        height: 52,
+                                        width: 90,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (c, e, s) => Icon(Icons.image_not_supported, color: Colors.grey, size: 30),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      label,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                        color: isSelected ? primaryBlue : (isDarkMode ? Colors.white70 : Colors.black87),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }),
 
                 // Custom Tabs — dynamic count
                 const SizedBox(height: 16),
