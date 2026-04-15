@@ -25,7 +25,7 @@ graph TD
     subgraph "Data & Storage"
         DB[(PostgreSQL 15)]
         Cache[(Redis - OTP/Rate Limit)]
-        S3[MinIO/S3 - Media Storage]
+        S3[Cloudflare R2 - Media Storage]
     end
 
     subgraph "External Services"
@@ -51,7 +51,7 @@ graph TD
 - **Base de Données** : PostgreSQL (Relations, Intégrité, JSONB pour les items).
 - **Temps Réel** : WebSockets pour les prix et les compteurs de temps.
 - **Cache** : Redis pour le rate-limiting des SMS et le cache des sessions OTP.
-- **Stockage** : Compatible S3 (MinIO ou S3) pour les images et vidéos.
+- **Stockage** : Compatible S3 (Cloudflare R2) pour les images et vidéos (10Go gratuits, puis 0.015$/GB/mois).
 
 ---
 
@@ -139,7 +139,7 @@ graph TD
 | F4.3 | Formulaire multi-champs (titre, description, prix, téléphone)                              | `create_ad_form_page.dart`                            | `POST /v1/api/auctions`           |
 | F4.4 | Sélection de catégorie + sous-catégorie (hiérarchique)                                     | `create_ad_form_page.dart`                            | FK `category_id` + `parent_id` |
 | F4.5 | Sélection de la ville et du quartier                                                       | `create_ad_form_page.dart`                            | FK `location_id`               |
-| F4.6 | Upload de médias (images + vidéos, max 5)                                                  | `create_ad_form_page.dart`, `media_picker_sheet.dart` | `POST /v1/api/upload` (S3/MinIO)  |
+| F4.6 | Upload de médias (images + vidéos, max 5)                                                  | `create_ad_form_page.dart`, `media_picker_sheet.dart` | `POST /v1/api/upload` (Cloudflare R2)  |
 | F4.7 | Validation des champs obligatoires                                                         | `create_ad_form_page.dart`                            | Validation middleware Go       |
 
 ---

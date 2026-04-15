@@ -1,0 +1,157 @@
+package repository
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+	apperr "github.com/mazadpay/backend/internal/errors"
+	"github.com/mazadpay/backend/internal/models"
+)
+
+type UserRepository interface {
+	FindByPhone(ctx context.Context, phone string) (*models.User, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*models.User, error)
+	Create(ctx context.Context, user *models.User) error
+	SetVerified(ctx context.Context, phone string) error
+	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
+	UpdateProfile(ctx context.Context, id uuid.UUID, fullName, email, city string) error
+	UpdateProfilePic(ctx context.Context, id uuid.UUID, url string) error
+	UpdatePin(ctx context.Context, id uuid.UUID, hash string) error
+	UpdateLanguage(ctx context.Context, id uuid.UUID, lang string) error
+	UpdateNotificationSettings(ctx context.Context, id uuid.UUID, enabled bool) error
+	SetBlockedUntil(ctx context.Context, phone string, until time.Time) error
+
+	// OTP
+	CreateOTP(ctx context.Context, otp *models.OTPVerification) error
+	FindLatestOTP(ctx context.Context, phone, purpose string) (*models.OTPVerification, error)
+	IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error
+	MarkOTPVerified(ctx context.Context, id uuid.UUID) error
+	CleanExpiredOTPs(ctx context.Context) error
+}
+
+type userRepo struct {
+	db *sqlx.DB
+}
+
+func NewUserRepository(db *sqlx.DB) UserRepository {
+	return &userRepo{db: db}
+}
+
+func (r *userRepo) FindByPhone(ctx context.Context, phone string) (*models.User, error) {
+	var u models.User
+	err := r.db.GetContext(ctx, &u, `SELECT * FROM users WHERE phone = $1 AND is_active = true`, phone)
+	if err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	return &u, nil
+}
+
+func (r *userRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	var u models.User
+	err := r.db.GetContext(ctx, &u, `SELECT * FROM users WHERE id = $1 AND is_active = true`, id)
+	if err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	return &u, nil
+}
+
+func (r *userRepo) Create(ctx context.Context, user *models.User) error {
+	_, err := r.db.NamedExecContext(ctx, `
+		INSERT INTO users (id, phone, password_hash, full_name, language_pref, role, is_verified)
+		VALUES (:id, :phone, :password_hash, :full_name, :language_pref, :role, :is_verified)
+	`, user)
+	return err
+}
+
+func (r *userRepo) SetVerified(ctx context.Context, phone string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET is_verified = true WHERE phone = $1`, phone)
+	return err
+}
+
+func (r *userRepo) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET last_login_at = now() WHERE id = $1`, id)
+	return err
+}
+
+func (r *userRepo) CreateOTP(ctx context.Context, otp *models.OTPVerification) error {
+	_, err := r.db.NamedExecContext(ctx, `
+		INSERT INTO otp_verifications 
+			(id, phone, termii_pin_id, purpose, attempts, max_attempts, expires_at, ip_address)
+		VALUES 
+			(:id, :phone, :termii_pin_id, :purpose, :attempts, :max_attempts, :expires_at, :ip_address)
+	`, otp)
+	return err
+}
+
+func (r *userRepo) FindLatestOTP(ctx context.Context, phone, purpose string) (*models.OTPVerification, error) {
+	var otp models.OTPVerification
+	err := r.db.GetContext(ctx, &otp, `
+		SELECT * FROM otp_verifications 
+		WHERE phone = $1 AND purpose = $2 AND verified_at IS NULL
+		ORDER BY created_at DESC 
+		LIMIT 1
+	`, phone, purpose)
+	if err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	return &otp, nil
+}
+
+func (r *userRepo) IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE otp_verifications SET attempts = attempts + 1 WHERE id = $1`, id)
+	return err
+}
+
+func (r *userRepo) MarkOTPVerified(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE otp_verifications SET verified_at = now() WHERE id = $1`, id)
+	return err
+}
+
+func (r *userRepo) CleanExpiredOTPs(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM otp_verifications WHERE expires_at < now() - interval '10 minutes'`)
+	return err
+}
+
+func (r *userRepo) UpdatePin(ctx context.Context, id uuid.UUID, hash string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET password_hash = $1 WHERE id = $2`, hash, id)
+	return err
+}
+
+func (r *userRepo) SetBlockedUntil(ctx context.Context, phone string, until time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET blocked_until = $1 WHERE phone = $2`, until, phone)
+	return err
+}
+
+func (r *userRepo) UpdateProfile(ctx context.Context, id uuid.UUID, fullName, email, city string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET full_name=$1, email=$2, city=$3 WHERE id=$4`,
+		fullName, email, city, id)
+	return err
+}
+
+func (r *userRepo) UpdateProfilePic(ctx context.Context, id uuid.UUID, url string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET profile_pic_url=$1 WHERE id=$2`, url, id)
+	return err
+}
+
+func (r *userRepo) UpdateLanguage(ctx context.Context, id uuid.UUID, lang string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET language_pref=$1 WHERE id=$2`, lang, id)
+	return err
+}
+
+func (r *userRepo) UpdateNotificationSettings(ctx context.Context, id uuid.UUID, enabled bool) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET notifications_enabled=$1 WHERE id=$2`, enabled, id)
+	return err
+}
