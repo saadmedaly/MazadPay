@@ -284,27 +284,30 @@ backend/
 
 ## 🗃 Schéma de Base de Données
 
-### Tables (17)
+### Tables (19)
 
 | # | Table | Description | Clés |
 |:--|:---|:---|:---|
-| 1 | `users` | Profils utilisateurs | PK: `id` (UUID) |
-| 2 | `otp_verifications` | Codes OTP hashés | FK: `phone` |
-| 3 | `user_sessions` | Sessions JWT actives | FK: `user_id` |
-| 4 | `categories` | Catégories hiérarchiques (auto-réf.) | FK: `parent_id` |
+| 1 | `users` | Profils utilisateurs (rôles, vérification) | PK: `id` (UUID) |
+| 2 | `otp_verifications` | Codes OTP et traçabilité IP | FK: `phone` |
+| 3 | `categories` | Catégories hiérarchiques | FK: `parent_id` |
 | 5 | `locations` | Villes et quartiers | — |
-| 6 | `auctions` | Enchères avec verrouillage optimiste | FK: `seller_id`, `category_id`, `location_id` |
+| 6 | `auctions` | Enchères (featured, winner link) | FK: `seller_id`, `category_id` |
 | 7 | `auction_images` | Médias des enchères | FK: `auction_id` |
-| 8 | `bids` | Mises individuelles | FK: `auction_id`, `bidder_id` |
-| 9 | `user_favorites` | Favoris (table de liaison) | PK composite: `(user_id, auction_id)` |
-| 10 | `wallets` | Portefeuille avec verrouillage | PK: `user_id` |
-| 11 | `transactions` | Journal financier immuable | FK: `user_id` |
-| 12 | `notifications` | Alertes utilisateur | FK: `user_id` |
-| 13 | `service_requests` | Demandes de livraison/taxi | FK: `user_id`, `driver_id` |
-| 14 | `delivery_timeline` | Étapes de livraison | FK: `request_id` |
-| 15 | `banners` | Bannières promotionnelles | — |
-| 16 | `app_ratings` | Évaluations utilisateurs | FK: `user_id` |
-| 17 | `faq_items` | Questions fréquentes | — |
+| 8 | `bids` | Mises individuelles (indexées) | FK: `auction_id`, `user_id` |
+| 9 | `user_favorites` | Favoris | PK composite |
+| 10 | `wallets` | Portefeuille atomique | PK: `user_id` |
+| 11 | `transactions` | Journal financier immuable | FK: `user_id`, `wallet_hold_id` |
+| 12 | `wallet_holds` | Blocage de cautions (captures/releases) | FK: `user_id`, `auction_id` |
+| 13 | `notifications` | Alertes (structurées par reference_id) | FK: `user_id` |
+| 14 | `service_requests` | Livraison & Tracking | FK: `user_id`, `driver_id` |
+| 15 | `delivery_timeline` | Étapes de livraison | FK: `request_id` |
+| 16 | `banners` | Bannières planifiées | — |
+| 17 | `app_ratings` | Évaluations uniques | FK: `user_id` |
+| 18 | `push_tokens` | Tokens Firebase FCM | FK: `user_id` |
+| 19 | `auction_payments` | Suivi paiements post-victoire | FK: `auction_id`, `winner_id` |
+| 20 | `blocked_phones` | Blacklist modération | — |
+| 21 | `faq_items` | Questions fréquentes | — |
 
 ### Diagramme Relationnel (ERD)
 
@@ -318,16 +321,17 @@ erDiagram
     users ||--o{ user_favorites : "favorise"
     users ||--o{ service_requests : "demande"
     users ||--o{ app_ratings : "évalue"
-    users ||--o{ user_sessions : "a"
+    users ||--o{ push_tokens : "enregistre"
+    users ||--o{ wallet_holds : "bloque"
 
     auctions ||--o{ bids : "contient"
     auctions ||--o{ auction_images : "illustré par"
-    auctions ||--o{ user_favorites : "favori de"
+    auctions ||--o{ auction_payments : "génère"
     auctions }o--|| categories : "appartient à"
     auctions }o--|| locations : "situé à"
-    categories ||--o{ categories : "sous-catégorie"
-
-    service_requests ||--o{ delivery_timeline : "suivi par"
+    
+    wallet_holds }o--o{ transactions : "capturé/libéré"
+    auction_payments }o--|| transactions : "paiement"
 ```
 
 ### Contraintes de Sécurité
@@ -359,70 +363,70 @@ CONSTRAINT chk_bid_amount CHECK (amount > 0)
 
 | Méthode | Route | Description |
 |:---|:---|:---|
-| `POST` | `/api/auth/register` | Inscription (téléphone + PIN) |
-| `POST` | `/api/auth/login` | Connexion |
-| `POST` | `/api/auth/logout` | Déconnexion |
-| `POST` | `/api/auth/otp/send` | Envoyer un code OTP |
-| `POST` | `/api/auth/otp/verify` | Vérifier le code OTP |
-| `POST` | `/api/auth/reset-password` | Réinitialiser le PIN |
-| `PUT` | `/api/auth/change-password` | Changer le PIN |
+| `POST` | `/v1/api/auth/register` | Inscription (téléphone + PIN) |
+| `POST` | `/v1/api/auth/login` | Connexion |
+| `POST` | `/v1/api/auth/logout` | Déconnexion |
+| `POST` | `/v1/api/auth/otp/send` | Envoyer un code OTP |
+| `POST` | `/v1/api/auth/otp/verify` | Vérifier le code OTP |
+| `POST` | `/v1/api/auth/reset-password` | Réinitialiser le PIN |
+| `PUT` | `/v1/api/auth/change-password` | Changer le PIN |
 
 ### Enchères
 
 | Méthode | Route | Description |
 |:---|:---|:---|
-| `GET` | `/api/auctions` | Liste des enchères (filtres: status, city, category) |
-| `GET` | `/api/auctions/:id` | Détails d'une enchère |
-| `POST` | `/api/auctions` | Créer une nouvelle enchère |
-| `POST` | `/api/auctions/:id/bids` | Placer une mise |
-| `GET` | `/api/auctions/:id/bids` | Historique des mises |
-| `POST` | `/api/auctions/:id/view` | Incrémenter les vues |
-| `GET` | `/api/auctions/search` | Recherche textuelle |
+| `GET` | `/v1/api/auctions` | Liste des enchères (filtres: status, city, category) |
+| `GET` | `/v1/api/auctions/:id` | Détails d'une enchère |
+| `POST` | `/v1/api/auctions` | Créer une nouvelle enchère |
+| `POST` | `/v1/api/auctions/:id/bids` | Placer une mise |
+| `GET` | `/v1/api/auctions/:id/bids` | Historique des mises |
+| `POST` | `/v1/api/auctions/:id/view` | Incrémenter les vues |
+| `GET` | `/v1/api/auctions/search` | Recherche textuelle |
 | `WS` | `/ws/auction/:id` | WebSocket temps réel (prix, timer) |
 
 ### Utilisateur
 
 | Méthode | Route | Description |
 |:---|:---|:---|
-| `GET` | `/api/users/me` | Mon profil |
-| `PUT` | `/api/users/me` | Modifier mon profil |
-| `POST` | `/api/users/me/avatar` | Upload photo de profil |
-| `GET` | `/api/users/me/bids` | Mes enchères en cours |
-| `GET` | `/api/users/me/favorites` | Mes favoris |
-| `GET` | `/api/users/me/winnings` | Mes gains |
+| `GET` | `/v1/api/users/me` | Mon profil |
+| `PUT` | `/v1/api/users/me` | Modifier mon profil |
+| `POST` | `/v1/api/users/me/avatar` | Upload photo de profil |
+| `GET` | `/v1/api/users/me/bids` | Mes enchères en cours |
+| `GET` | `/v1/api/users/me/favorites` | Mes favoris |
+| `GET` | `/v1/api/users/me/winnings` | Mes gains |
 
 ### Favoris
 
 | Méthode | Route | Description |
 |:---|:---|:---|
-| `POST` | `/api/favorites/:auction_id` | Ajouter aux favoris |
-| `DELETE` | `/api/favorites/:auction_id` | Retirer des favoris |
+| `POST` | `/v1/api/favorites/:auction_id` | Ajouter aux favoris |
+| `DELETE` | `/v1/api/favorites/:auction_id` | Retirer des favoris |
 
 ### Finance
 
 | Méthode | Route | Description |
 |:---|:---|:---|
-| `GET` | `/api/wallets/me` | Mon solde |
-| `POST` | `/api/transactions/deposit` | Initier un dépôt |
-| `POST` | `/api/transactions/:id/receipt` | Upload reçu de paiement |
-| `POST` | `/api/transactions/withdraw` | Demande de retrait |
-| `GET` | `/api/transactions` | Historique des transactions |
+| `GET` | `/v1/api/wallets/me` | Mon solde |
+| `POST` | `/v1/api/transactions/deposit` | Initier un dépôt |
+| `POST` | `/v1/api/transactions/:id/receipt` | Upload reçu de paiement |
+| `POST` | `/v1/api/transactions/withdraw` | Demande de retrait |
+| `GET` | `/v1/api/transactions` | Historique des transactions |
 
 ### Notifications
 
 | Méthode | Route | Description |
 |:---|:---|:---|
-| `GET` | `/api/notifications` | Mes notifications |
-| `PUT` | `/api/notifications/read-all` | Tout marquer comme lu |
+| `GET` | `/v1/api/notifications` | Mes notifications |
+| `PUT` | `/v1/api/notifications/read-all` | Tout marquer comme lu |
 
 ### Contenu
 
 | Méthode | Route | Description |
 |:---|:---|:---|
-| `GET` | `/api/banners` | Bannières promotionnelles |
-| `GET` | `/api/categories` | Liste des catégories |
-| `GET` | `/api/tutorials` | Vidéos tutorielles |
-| `GET` | `/api/faq` | Questions fréquentes |
+| `GET` | `/v1/api/banners` | Bannières promotionnelles |
+| `GET` | `/v1/api/categories` | Liste des catégories |
+| `GET` | `/v1/api/tutorials` | Vidéos tutorielles |
+| `GET` | `/v1/api/faq` | Questions fréquentes |
 
 ---
 
@@ -504,9 +508,9 @@ go run cmd/server/main.go
 
 ### Phase 1 — MVP Backend ✅ (En cours)
 - [x] Analyse complète du frontend (67 fonctionnalités)
-- [x] Conception du schéma SQL (17 tables)
+- [x] Conception du schéma SQL (20+ tables)
 - [x] Définition des endpoints API (~45 routes)
-- [ ] Génération des structs Go
+- [/] Génération des structs Go
 - [ ] Implémentation Auth Service (OTP via **Termii** + JWT)
 - [ ] Intégration SDK Termii (envoi + vérification OTP `termii_pin_id`)
 - [ ] Implémentation Auction CRUD
@@ -542,8 +546,8 @@ go run cmd/server/main.go
 | Fichiers analysés | 32 |
 | Fonctionnalités identifiées | 67 |
 | Modules fonctionnels | 9 |
-| Tables SQL | 17 |
-| Index de performance | 11 |
+| Tables SQL | 19 |
+| Index de performance | 15 |
 | Endpoints API | ~45 |
 | Services backend | 8 |
 | Passerelles de paiement | 4 |
