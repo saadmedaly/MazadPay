@@ -1,0 +1,60 @@
+@baseUrl = http://localhost:8082/v1/api
+@authToken = {{login.response.body.data.token}}
+
+### 0. Login (Required for protected routes)
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "pin": "1234"
+}
+
+### 1. Get Categories
+GET {{baseUrl}}/categories
+
+### 2. Get Locations
+GET {{baseUrl}}/locations
+
+### 3. List Auctions (All)
+GET {{baseUrl}}/auctions
+
+### 4. List Auctions (Active)
+GET {{baseUrl}}/auctions?status=active
+
+### 5. List Auctions (Search)
+GET {{baseUrl}}/auctions?query=Toyota
+
+### 6. Get Auction Details
+# Remplacez l'ID par un ID valide issu de la liste
+@auctionID =06464593-4862-49de-8af0-98bdbbd4db19
+GET {{baseUrl}}/auctions/{{auctionID}}
+
+### 7. Increment View Count
+POST {{baseUrl}}/auctions/{{auctionID}}/view
+
+### 8. Create Auction (Protected)
+POST {{baseUrl}}/auctions
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "category_id": 1,
+    "location_id": 1,
+    "title": "Toyota Hilux 2022",
+    "description": "Excellente condition, peu roulé.",
+    "start_price": 50000,
+    "min_increment": 500,
+    "insurance_amount": 1000,
+    "end_time": "2026-12-31T23:59:59Z",
+    "phone_contact": "+22247601175",
+    "lot_number": "LOT-002",
+    "buy_now_price": 75000,
+    "item_details": {
+        "manufacturer": "Toyota",
+        "model": "Hilux",
+        "year": "2022",
+        "mileage": "15000"
+    }
+}

@@ -1,0 +1,86 @@
+@baseUrl = http://localhost:8082/v1/api
+@authToken = {{login.response.body.data.token}}
+
+### 1. Register
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "pin": "1234"
+}
+
+### 2. Send OTP (register)
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "purpose": "register"
+}
+
+### 3. Verify OTP (register)
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "code": "123456",
+    "purpose": "register"
+}
+
+### 4. Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "pin": "1234"
+}
+
+### 5. Protected: Get Profile (Need to implement user handler first)
+GET {{baseUrl}}/users/me
+Authorization: Bearer {{authToken}}
+
+### 6. Change Password
+PUT {{baseUrl}}/auth/change-password
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "old_pin": "1234",
+    "new_pin": "5678"
+}
+
+### 7. Send OTP (reset_password)
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "purpose": "reset_password"
+}
+
+### 8. Verify OTP (reset_password)
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "code": "123456",
+    "purpose": "reset_password"
+}
+
+### 9. Reset Password
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "new_pin": "1234"
+}
+
+### 10. Logout
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{authToken}}

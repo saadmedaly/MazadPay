@@ -1,6 +1,6 @@
 ---
 name: mazadpay-go-backend
-description: Skill pour développer le backend Go (Fiber) de MazadPay — plateforme d'enchères en ligne pour le marché mauritanien. Utiliser ce skill pour générer des handlers, services, repositories, middlewares, WebSocket hubs, migrations SQL, ou tout fichier backend lié au projet MazadPay. Couvre l'architecture complète : Auth/OTP, Auctions, Bids, Wallets, WebSocket realtime, Notifications FCM, Upload S3/MinIO, Cron jobs.
+description: Skill pour développer le backend Go (Fiber) de MazadPay — plateforme d'enchères en ligne pour le marché mauritanien. Utiliser ce skill pour générer des handlers, services, repositories, middlewares, WebSocket hubs, migrations SQL, ou tout fichier backend lié au projet MazadPay. Couvre l'architecture complète : Auth/OTP, Auctions, Bids, Wallets, WebSocket realtime, Notifications FCM, Upload Cloudflare R2, Cron jobs.
 ---
 
 # MazadPay — Go Backend Skill
@@ -85,7 +85,7 @@ backend/
 ├── migrations/
 │   ├── 000001_init.up.sql          # Schéma complet
 │   └── 000001_init.down.sql        # Rollback
-├── docker-compose.yml              # PostgreSQL + Redis + MinIO
+├── docker-compose.yml              # PostgreSQL + Redis
 ├── .env.example
 ├── go.mod
 └── go.sum
@@ -268,12 +268,12 @@ JWT_SECRET=change_me_in_production_min_32_chars
 JWT_EXPIRY_HOURS=72
 JWT_REFRESH_EXPIRY_DAYS=30
 
-# MinIO / S3
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET_MEDIA=mazadpay-media
-MINIO_USE_SSL=false
+# Cloudflare R2 / S3
+R2_ENDPOINT=xxxxxxxx.r2.cloudflarestorage.com
+R2_ACCESS_KEY=your_r2_access_key
+R2_SECRET_KEY=your_r2_secret_key
+R2_BUCKET_MEDIA=mazadpay-media
+R2_PUBLIC_URL=https://pub-xxxxxx.r2.dev
 
 # Termii SMS (à configurer plus tard)
 TERMII_API_KEY=
@@ -323,23 +323,9 @@ services:
     volumes:
       - redis_data:/data
 
-  minio:
-    image: minio/minio:latest
-    container_name: mazadpay_minio
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"   # API
-      - "9001:9001"   # Console Web
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-
 volumes:
   postgres_data:
   redis_data:
-  minio_data:
 ```
 
 ### 9. Routes — Enregistrement Complet
@@ -484,14 +470,14 @@ var (
 ## Commandes de Démarrage Rapide
 
 ```bash
-# Lancer l'infra (DB + Redis + MinIO)
+# Lancer l'infra (DB + Redis)
 docker-compose up -d
 
 # Vérifier que tout est up
 docker-compose ps
 
-# Accéder à la console MinIO
-open http://localhost:9001  # admin/minioadmin
+# Vérifier que tout est up
+docker-compose ps
 
 # Initialiser le projet Go
 cd backend

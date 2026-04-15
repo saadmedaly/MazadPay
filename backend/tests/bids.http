@@ -1,0 +1,33 @@
+@baseUrl = http://localhost:8082/v1/api
+@authToken = {{login.response.body.data.token}}
+
+### 0. Login (Required for placing bids)
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "pin": "1234"
+}
+
+### 1. View Bid History (Public)
+# Remplacez l'ID par un ID d'enchère valide
+@auctionID = 00000000-0000-0000-0000-000000000000
+GET {{baseUrl}}/auctions/{{auctionID}}/bids
+
+### 2. Place a Bid (Protected)
+# Nécessite un solde suffisant pour la caution (insurance_amount)
+# Le montant doit être supérieur au prix actuel + incrément minimum
+POST {{baseUrl}}/auctions/{{auctionID}}/bids
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "amount": 55000
+}
+
+### 3. Note: WebSockets Testing
+# Les tests WebSocket ne peuvent pas être faits directement via un fichier .http standard.
+# Utilisez 'wscat' ou un client WebSocket :
+# ws://localhost:8082/ws/auction/{{auctionID}}?user_id=YOUR_USER_ID

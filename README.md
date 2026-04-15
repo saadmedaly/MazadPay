@@ -56,7 +56,7 @@
 │  │ Service  │ │  Service  │ │  Service  │ │ Service  │ │
 │  └──────────┘ └───────────┘ └───────────┘ └──────────┘ │
 ├─────────────────────────────────────────────────────────┤
-│   PostgreSQL   │   Redis (Cache)   │   MinIO (Media)    │
+│   PostgreSQL   │   Redis (Cache)   │  Cloudflare R2 (Media) │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -69,7 +69,7 @@
 | **Realtime Service** | Prix live, timer, notifications surenchère | Go WebSockets |
 | **Payment Service** | Dépôt, retrait, validation admin | Transactions SQL atomiques |
 | **Notification Service** | Push, in-app | Firebase Cloud Messaging |
-| **Media Service** | Upload/Serve images et vidéos | MinIO / AWS S3 |
+| **Media Service** | Upload/Serve images et vidéos | Cloudflare R2 (S3-compatible) |
 | **Cron Service** | Clôture auto enchères, nettoyage OTP | `robfig/cron` |
 | **Admin Service** | Validation paiements, modération annonces | API REST |
 
@@ -498,7 +498,7 @@ go run cmd/server/main.go
 | **Redis** | Cache + Rate Limiting OTP |
 | **gorilla/websocket** | Enchères temps réel |
 | **JWT (golang-jwt)** | Authentification stateless |
-| **MinIO** | Stockage media (S3-compatible) |
+| **Cloudflare R2** | Stockage media (S3-compatible, 10Go gratuits, puis 0.015$/Go/mois) |
 | **Firebase FCM** | Push notifications |
 | **Termii SMS API** | Envoi et vérification des OTP par SMS (marché mauritanien) |
 
