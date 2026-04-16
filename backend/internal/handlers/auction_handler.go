@@ -29,26 +29,21 @@ func NewAuctionHandler(svc services.AuctionService, logger *zap.Logger) *Auction
 
 func (h *AuctionHandler) List(c *fiber.Ctx) error {
     f := repository.AuctionFilters{
-        Status:  c.Query("status", "active"),
-        Query:   c.Query("q"),
-        Page:    c.QueryInt("page", 1),
-        PerPage: c.QueryInt("per_page", 20),
+        Status: c.Query("status", "active"),
+        Query:  c.Query("q"),
     }
     if catID := c.QueryInt("category_id", 0); catID > 0 {
         f.CategoryID = catID
     }
 
-    auctions, total, err := h.service.List(c.Context(), f)
+    auctions, err := h.service.List(c.Context(), f)
     if err != nil {
         return InternalError(c)
     }
 
-    return OKList(c, auctions, Meta{
-        Total:   total,
-        Page:    f.Page,
-        PerPage: f.PerPage,
-    })
+    return OK(c, auctions)
 }
+
 
 func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
     id, err := uuid.Parse(c.Params("id"))

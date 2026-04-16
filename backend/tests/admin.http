@@ -1,0 +1,117 @@
+@baseUrl = http://localhost:8082/v1/api
+@adminToken = {{adminLogin.response.body.data.token}}
+
+# ══════════════════════════════════════════════
+#  ADMIN — Authentication
+# ══════════════════════════════════════════════
+
+### 1. Admin Login
+# @name adminLogin
+POST {{baseUrl}}/auth/login 
+Content-Type: application/json
+
+{
+    "phone": "+22200000000",
+    "pin": "0000"
+}
+
+# ══════════════════════════════════════════════
+#  ADMIN — Dashboard
+# ══════════════════════════════════════════════
+
+### 2. Dashboard Stats
+GET {{baseUrl}}/admin/dashboard/stats
+Authorization: Bearer {{adminToken}}
+
+### 3. Revenue Chart
+GET {{baseUrl}}/admin/dashboard/revenue-chart
+Authorization: Bearer {{adminToken}}
+
+### 4. Activity Feed
+GET {{baseUrl}}/admin/dashboard/activity
+Authorization: Bearer {{adminToken}}
+
+# ══════════════════════════════════════════════
+#  ADMIN — Users
+# ══════════════════════════════════════════════
+
+### 5. List Users (with optional search & pagination)
+GET {{baseUrl}}/admin/users?q=&page=1&per_page=25
+Authorization: Bearer {{adminToken}}
+
+### 6. Get User by ID
+GET {{baseUrl}}/admin/users/USER_ID_HERE
+Authorization: Bearer {{adminToken}}
+
+### 7. User Auctions History
+GET {{baseUrl}}/admin/users/USER_ID_HERE/auctions
+Authorization: Bearer {{adminToken}}
+
+### 8. User Transactions History
+GET {{baseUrl}}/admin/users/USER_ID_HERE/transactions
+Authorization: Bearer {{adminToken}}
+
+### 9. Block / Unblock User
+PUT {{baseUrl}}/admin/users/USER_ID_HERE/block
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "block": true
+}
+
+# ══════════════════════════════════════════════
+#  ADMIN — Auctions
+# ══════════════════════════════════════════════
+
+### 10. List Auctions (admin view, with filters)
+GET {{baseUrl}}/admin/auctions?status=pending&page=1&per_page=25
+Authorization: Bearer {{adminToken}}
+
+### 11. Validate (Approve) an Auction
+PUT {{baseUrl}}/admin/auctions/AUCTION_ID_HERE/validate
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "approve": true,
+    "reason": ""
+}
+
+### 12. Reject an Auction
+PUT {{baseUrl}}/admin/auctions/AUCTION_ID_HERE/validate
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "approve": false,
+    "reason": "المنتج لا يستوفي المتطلبات"
+}
+
+# ══════════════════════════════════════════════
+#  ADMIN — Transactions
+# ══════════════════════════════════════════════
+
+### 13. List Transactions (admin view, with filters)
+GET {{baseUrl}}/admin/transactions?status=pending&type=deposit&page=1&per_page=25
+Authorization: Bearer {{adminToken}}
+
+### 14. Validate (Approve) a Transaction
+PUT {{baseUrl}}/admin/transactions/TXN_ID_HERE/validate
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "approve": true,
+    "notes": "تم التحقق من الدفع"
+}
+
+### 15. Reject a Transaction
+PUT {{baseUrl}}/admin/transactions/TXN_ID_HERE/validate
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "approve": false,
+    "notes": "إيصال الدفع غير صحيح"
+}

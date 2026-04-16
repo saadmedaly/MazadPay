@@ -29,7 +29,8 @@ type CreateAuctionInput struct {
 
 type AuctionService interface {
     GetByID(ctx context.Context, id uuid.UUID) (*models.Auction, []models.AuctionImage, error)
-    List(ctx context.Context, f repository.AuctionFilters) ([]models.Auction, int, error)
+    List(ctx context.Context, f repository.AuctionFilters) ([]models.Auction, error)
+
     Create(ctx context.Context, sellerID uuid.UUID, input CreateAuctionInput) (*models.Auction, error)
     IncrementViews(ctx context.Context, id uuid.UUID) error
     CloseExpiredAuctions(ctx context.Context) error
@@ -54,9 +55,10 @@ func (s *auctionService) GetByID(ctx context.Context, id uuid.UUID) (*models.Auc
     return auction, images, nil
 }
 
-func (s *auctionService) List(ctx context.Context, f repository.AuctionFilters) ([]models.Auction, int, error) {
+func (s *auctionService) List(ctx context.Context, f repository.AuctionFilters) ([]models.Auction, error) {
     return s.auctionRepo.FindAll(ctx, f)
 }
+
 
 func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input CreateAuctionInput) (*models.Auction, error) {
     if input.EndTime.Before(time.Now().Add(1 * time.Hour)) {
