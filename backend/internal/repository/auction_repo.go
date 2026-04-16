@@ -16,13 +16,13 @@ type AuctionFilters struct {
     City       string
     CategoryID int
     Query      string
-    Page       int
-    PerPage    int
 }
+
 
 type AuctionRepository interface {
     FindByID(ctx context.Context, id uuid.UUID) (*models.Auction, error)
-    FindAll(ctx context.Context, f AuctionFilters) ([]models.Auction, int, error)
+    FindAll(ctx context.Context, f AuctionFilters) ([]models.Auction, error)
+
     Create(ctx context.Context, tx *sqlx.Tx, a *models.Auction) error
     UpdatePrice(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, newPrice decimal.Decimal, version int) (bool, error)
     UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
@@ -55,11 +55,7 @@ func (r *auctionRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.Aucti
     return &a, nil
 }
 
-func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.Auction, int, error) {
-    if f.Page < 1 { f.Page = 1 }
-    if f.PerPage < 1 || f.PerPage > 50 { f.PerPage = 20 }
-    offset := (f.Page - 1) * f.PerPage
-
+func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.Auction, error) {
     where := "WHERE 1=1"
     args := []interface{}{}
     i := 1
@@ -80,15 +76,11 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
         i++
     }
 
-    var total int
-    _ = r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM auctions "+where, args...).Scan(&total)
-
-    args = append(args, f.PerPage, offset)
     rows, err := r.db.QueryxContext(ctx,
-        fmt.Sprintf("SELECT * FROM auctions %s ORDER BY is_featured DESC, created_at DESC LIMIT $%d OFFSET $%d", where, i, i+1),
+        fmt.Sprintf("SELECT * FROM auctions %s ORDER BY is_featured DESC, created_at DESC", where),
         args...)
     if err != nil {
-        return nil, 0, err
+        return nil, err
     }
     defer rows.Close()
 
@@ -99,8 +91,9 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
             auctions = append(auctions, a)
         }
     }
-    return auctions, total, nil
+    return auctions, nil
 }
+
 
 func (r *auctionRepo) Create(ctx context.Context, tx *sqlx.Tx, a *models.Auction) error {
     query := `

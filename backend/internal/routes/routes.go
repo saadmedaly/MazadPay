@@ -31,15 +31,13 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
 	userSvc := services.NewUserService(userRepo)
 
-
 	api := app.Group("/v1/api")
 
 	// Handlers
 	wsHandler := handlers.NewWSHandler(hub, logger)
 	bidHandler := handlers.NewBidHandler(bidSvc, logger)
 	userHandler := handlers.NewUserHandler(userSvc, logger)
-
-
+	adminHandler := handlers.NewAdminHandler(logger)
 
 	// WebSocket registration
 	app.Use("/ws", wsHandler.UpgradeMiddleware())
@@ -49,15 +47,12 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	setupAuthRoutes(api, authSvc, cfg.JWT.Secret, logger)
 	setupAuctionRoutes(api, auctionSvc, bidHandler, cfg.JWT.Secret, logger)
 	setupUserRoutes(api, userHandler, cfg.JWT.Secret)
-	setupUserRoutes(api, userHandler, cfg.JWT.Secret)
-
-	// More routes will be added in subsequent steps
+	setupAdminRoutes(api, adminHandler, cfg.JWT.Secret, logger)
 }
 
 func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, jwtSecret string, logger *zap.Logger) {
 	jwtMiddleware := middleware.JWT(jwtSecret)
 	h := handlers.NewAuthHandler(authSvc, logger)
-
 
 	auth := api.Group("/auth")
 
@@ -76,7 +71,6 @@ func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, jwtSecret s
 func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bidHandler *handlers.BidHandler, jwtSecret string, logger *zap.Logger) {
 	jwtMiddleware := middleware.JWT(jwtSecret)
 	h := handlers.NewAuctionHandler(auctionSvc, logger)
-
 
 	// Public routes
 	api.Get("/categories", h.GetCategories)
@@ -106,3 +100,25 @@ func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, jwtSec
 	users.Get("/me", userHandler.GetMe)
 }
 
+func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwtSecret string, logger *zap.Logger) {
+	jwtMiddleware := middleware.JWT(jwtSecret)
+	adminMiddleware := middleware.AdminOnly()
+
+	admin := api.Group("/admin", jwtMiddleware, adminMiddleware)
+
+	// Dashboard routes
+	admin.Get("/dashboard/stats", adminHandler.DashboardStats)
+	admin.Get("/dashboard/revenue-chart", adminHandler.RevenueChart)
+	admin.Get("/dashboard/activity", adminHandler.ActivityFeed)
+
+	// User management routes
+	admin.Get("/users", adminHandler.ListUsers)
+	admin.Get("/users/:id", adminHandler.GetUserByID)
+	admin.Get("/users/:id/auctions", adminHandler.GetUserAuctions)
+	admin.Get("/users/:id/transactions", adminHandler.GetUserTransactions)
+	admin.Put("/users/:id/block", adminHandler.BlockUser)
+
+	// Auction management routes
+	admin.Get("/auctions", adminHandler.ListAuctions)
+	admin.Put("/auctions/:id/validate", adminHandler.ValidateAuction)
+}

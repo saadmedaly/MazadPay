@@ -5,21 +5,13 @@ import (
 	"go.uber.org/zap"
 )
 
-type Meta struct {
-	Total   int `json:"total"`
-	Page    int `json:"page"`
-	PerPage int `json:"per_page"`
-}
-
 func OK(c *fiber.Ctx, data interface{}) error {
+
 	return c.JSON(fiber.Map{"success": true, "data": data})
 }
 
-func OKList(c *fiber.Ctx, data interface{}, meta Meta) error {
-	return c.JSON(fiber.Map{"success": true, "data": data, "meta": meta})
-}
-
 func Created(c *fiber.Ctx, data interface{}) error {
+
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"success": true, "data": data})
 }
 
