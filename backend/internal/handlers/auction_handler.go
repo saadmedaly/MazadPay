@@ -203,19 +203,33 @@ func (h *AuctionHandler) IncrementView(c *fiber.Ctx) error {
 }
 
 func (h *AuctionHandler) GetCategories(c *fiber.Ctx) error {
-    cats, err := h.service.GetCategories(c.Context())
-    if err != nil {
-        return InternalError(c)
-    }
-    return OK(c, cats)
+	categories, err := h.service.GetCategories(c.Context())
+	if err != nil {
+		return InternalError(c)
+	}
+
+	return OK(c, categories)
 }
 
 func (h *AuctionHandler) GetLocations(c *fiber.Ctx) error {
-    locs, err := h.service.GetLocations(c.Context())
-    if err != nil {
-        return InternalError(c)
-    }
-    return OK(c, locs)
+	locations, err := h.service.GetLocations(c.Context())
+	if err != nil {
+		return InternalError(c)
+	}
+
+	return OK(c, locations)
+}
+
+func (h *AuctionHandler) GetReportReasons(c *fiber.Ctx) error {
+	reasons := []fiber.Map{
+		{"id": "spam", "label_ar": "إعلان مزيف أو سبام", "label_fr": "Annoncespam ou frauduleuse", "label_en": "Fake or spam ad"},
+		{"id": "prohibited", "label_ar": "سلعة محظورة", "label_fr": "Article interdit", "label_en": "Prohibited item"},
+		{"id": "wrong_category", "label_ar": "فئة خاطئة", "label_fr": "Mauvaise catégorie", "label_en": "Wrong category"},
+		{"id": "inappropriate", "label_ar": "محتوى غير لائق", "label_fr": "Contenu inapproprié", "label_en": "Inappropriate content"},
+		{"id": "price_mismatch", "label_ar": "السعر غير حقيقي", "label_fr": "Prix erroné", "label_en": "Misleading price"},
+		{"id": "other", "label_ar": "أخرى", "label_fr": "Autre", "label_en": "Other"},
+	}
+	return OK(c, reasons)
 }
 
 func (h *AuctionHandler) GetSellerContact(c *fiber.Ctx) error {
@@ -245,29 +259,60 @@ func (h *AuctionHandler) GetSellerContact(c *fiber.Ctx) error {
 }
 
 func (h *AuctionHandler) Report(c *fiber.Ctx) error {
-    id, err := uuid.Parse(c.Params("id"))
-    if err != nil {
-        return BadRequest(c, "Invalid auction ID")
-    }
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
 
-    type ReportRequest struct {
-        Reason string `json:"reason" validate:"required,min=5"`
-    }
+	type ReportRequest struct {
+		Reason string `json:"reason" validate:"required,min=5"`
+	}
 
-    var req ReportRequest
-    if err := c.BodyParser(&req); err != nil {
-        return BadRequest(c, "Invalid request body")
-    }
+	var req ReportRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
 
-    reporterID, err := middleware.GetUserID(c)
-    if err != nil {
-        return Unauthorized(c)
-    }
+	reporterID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 
-    if err := h.service.ReportAuction(c.Context(), id, reporterID, req.Reason); err != nil {
-        return MapError(c, h.logger, err)
-    }
+	if err := h.service.ReportAuction(c.Context(), id, reporterID, req.Reason); err != nil {
+		return MapError(c, h.logger, err)
+	}
 
-    return OK(c, fiber.Map{"message": "Report submitted successfully"})
+	return OK(c, fiber.Map{"message": "Report submitted successfully"})
+}
+
+func (h *AuctionHandler) AddImages(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	type ImageRequest struct {
+		URLs []string `json:"urls" validate:"required,min=1,max=10"`
+	}
+
+	var req ImageRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	if len(req.URLs) == 0 {
+		return BadRequest(c, "At least one image URL required")
+	}
+
+	sellerID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	if err := h.service.AddImages(c.Context(), id, sellerID, req.URLs); err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, fiber.Map{"message": "Images added successfully"})
 }
 

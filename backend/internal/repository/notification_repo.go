@@ -12,7 +12,8 @@ type NotificationRepository interface {
 	Create(ctx context.Context, n *models.Notification) error
 	ListByUserID(ctx context.Context, userID uuid.UUID, limit int) ([]models.Notification, error)
 	MarkAllAsRead(ctx context.Context, userID uuid.UUID) error
-	
+	MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+
 	// Push Tokens
 	SavePushToken(ctx context.Context, token *models.PushToken) error
 	GetPushTokens(ctx context.Context, userID uuid.UUID) ([]string, error)
@@ -46,6 +47,11 @@ func (r *notificationRepo) ListByUserID(ctx context.Context, userID uuid.UUID, l
 
 func (r *notificationRepo) MarkAllAsRead(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE notifications SET is_read = true WHERE user_id = $1`, userID)
+	return err
+}
+
+func (r *notificationRepo) MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2`, id, userID)
 	return err
 }
 

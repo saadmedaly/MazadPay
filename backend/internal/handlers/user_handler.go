@@ -179,3 +179,44 @@ func (h *UserHandler) GetKYCStatus(c *fiber.Ctx) error {
 	}
 	return OK(c, kyc)
 }
+
+func (h *UserHandler) UpdateLanguage(c *fiber.Ctx) error {
+	type Request struct {
+		Language string `json:"language"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if req.Language != "ar" && req.Language != "fr" && req.Language != "en" {
+		return BadRequest(c, "Invalid language. Must be: ar, fr, or en")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	if err := h.service.UpdateLanguage(c.Context(), userID, req.Language); err != nil {
+		return InternalError(c, "Failed to update language")
+	}
+	return OK(c, fiber.Map{"message": "Language updated"})
+}
+
+func (h *UserHandler) UpdateNotificationPrefs(c *fiber.Ctx) error {
+	type Request struct {
+		Enabled bool `json:"enabled"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	if err := h.service.UpdateNotificationSettings(c.Context(), userID, req.Enabled); err != nil {
+		return InternalError(c, "Failed to update notification settings")
+	}
+	return OK(c, fiber.Map{"message": "Notification settings updated"})
+}

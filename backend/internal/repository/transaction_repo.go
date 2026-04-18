@@ -12,6 +12,7 @@ import (
 type TransactionRepository interface {
 	ListPaginated(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error)
+	FindByID(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*models.Transaction, error)
 	Create(ctx context.Context, tx *models.Transaction) error
 	UpdateReceipt(ctx context.Context, id uuid.UUID, url string, status string) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
@@ -61,6 +62,17 @@ func (r *transactionRepo) ListPaginated(ctx context.Context, page, perPage int, 
 func (r *transactionRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error) {
 	var tx models.Transaction
 	err := r.db.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1", id)
+	return &tx, err
+}
+
+func (r *transactionRepo) FindByID(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*models.Transaction, error) {
+	var tx models.Transaction
+	var err error
+	if userID != nil {
+		err = r.db.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1 AND user_id = $2", id, userID)
+	} else {
+		err = r.db.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1", id)
+	}
 	return &tx, err
 }
 

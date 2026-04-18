@@ -16,6 +16,7 @@ type WalletService interface {
 	UploadReceipt(ctx context.Context, txID uuid.UUID, receiptURL string) error
 	RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error)
 	GetTransactions(ctx context.Context, userID uuid.UUID, page, perPage int) ([]models.Transaction, int, error)
+	GetTransaction(ctx context.Context, userID uuid.UUID, txID uuid.UUID) (*models.Transaction, error)
 }
 
 type walletService struct {
@@ -77,4 +78,8 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 
 func (s *walletService) GetTransactions(ctx context.Context, userID uuid.UUID, page, perPage int) ([]models.Transaction, int, error) {
 	return s.txRepo.ListPaginated(ctx, page, perPage, "", &userID)
+}
+
+func (s *walletService) GetTransaction(ctx context.Context, userID uuid.UUID, txID uuid.UUID) (*models.Transaction, error) {
+	return s.txRepo.FindByID(ctx, txID, &userID)
 }

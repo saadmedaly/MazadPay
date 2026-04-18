@@ -225,3 +225,24 @@ export interface Banner {
   display_order: number
   created_at: string
 }
+
+export interface SystemSetting {
+  id: number
+  key: string
+  value: string
+  type: string
+}
+
+export interface BlockedPhone {
+  phone: string
+  reason: string | null
+  blocked_at: string
+  expires_at: string | null
+}
+
+export interface ReportReason {
+  id: string
+  label_ar: string
+  label_fr: string
+  label_en: string
+}

@@ -25,3 +25,7 @@ dist-ssr
 
 
 SKILLS/
+
+.env
+.env.*
+node_modules/

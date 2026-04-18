@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Gavel, CreditCard, Users,
-  Flag, Image, LogOut, Hammer, ShieldCheck, HelpCircle, Video, Bell, User
+  Flag, Image, LogOut, Hammer, ShieldCheck, HelpCircle, Video, Bell, User, Settings, PhoneOff
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
@@ -36,6 +36,8 @@ const NAV_SECTIONS = [
       { label: 'توثيق الحسابات', icon: ShieldCheck,     to: '/kyc',          badgeKey: 'pendingKYCs' },
       { label: 'الفئات',      icon: LayoutDashboard, to: '/categories',   badgeKey: null },
       { label: 'المواقع',      icon: Flag,            to: '/locations',    badgeKey: null },
+      { label: 'الإعدادات',    icon: Settings,        to: '/settings',     badgeKey: null },
+      { label: 'أرقام محظورة', icon: PhoneOff,        to: '/blocked-phones', badgeKey: null },
     ]
   },
   {

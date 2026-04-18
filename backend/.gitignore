@@ -1,0 +1,7 @@
+test/
+test-mazadpay-5f85f4f194e6.json
+.env
+.env.*
+*.json
+*.exe
+*.exe~
