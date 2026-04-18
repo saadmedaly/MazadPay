@@ -6,12 +6,14 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gofiber/fiber/v2"
 	"github.com/mazadpay/backend/internal/services"
+	"go.uber.org/zap"
 )
 
-func JWT(jwtSecret string) fiber.Handler {
+func JWT(jwtSecret string, logger *zap.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			logger.Warn("Auth failed: Missing or malformed token", zap.String("path", c.Path()))
 			return c.Status(401).JSON(fiber.Map{
 				"success": false,
 				"error":   fiber.Map{"code": "unauthorized", "message": "Missing token"},
@@ -28,6 +30,7 @@ func JWT(jwtSecret string) fiber.Handler {
 		})
 
 		if err != nil || !token.Valid {
+			logger.Warn("Auth failed: Invalid or expired token", zap.Error(err), zap.String("path", c.Path()))
 			return c.Status(401).JSON(fiber.Map{
 				"success": false,
 				"error":   fiber.Map{"code": "unauthorized", "message": "Invalid or expired token"},
@@ -42,10 +45,14 @@ func JWT(jwtSecret string) fiber.Handler {
 	}
 }
 
- func AdminOnly() fiber.Handler {
+func AdminOnly(logger *zap.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		role, ok := c.Locals("user_role").(string)
-		if !ok || role != "admin" {
+		if !ok || strings.ToLower(role) != "admin" {
+			logger.Warn("Access denied: Admin role required", 
+				zap.String("path", c.Path()), 
+				zap.String("user_role", role),
+			)
 			return c.Status(403).JSON(fiber.Map{
 				"success": false,
 				"error":   fiber.Map{"code": "forbidden", "message": "Admin access required"},
@@ -54,3 +61,4 @@ func JWT(jwtSecret string) fiber.Handler {
 		return c.Next()
 	}
 }
+

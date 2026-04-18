@@ -6,7 +6,7 @@ interface Props {
   value: string | number
   icon: LucideIcon
   trend?: { value: number; label: string }
-  accent?: 'blue' | 'amber' | 'green' | 'red' | 'orange'
+  accent?: 'blue' | 'amber' | 'green' | 'red' | 'orange' | 'purple'
   urgent?: boolean
 }
 
@@ -16,6 +16,7 @@ const ACCENT_MAP = {
   green:  'text-emerald-400 bg-emerald-500/10',
   red:    'text-red-400 bg-red-500/10',
   orange: 'text-orange-400 bg-orange-500/10',
+  purple: 'text-purple-400 bg-purple-500/10',
 }
 
 export function MetricCard({ label, value, icon: Icon, trend, accent = 'blue', urgent }: Props) {

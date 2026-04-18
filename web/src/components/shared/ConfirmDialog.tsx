@@ -9,7 +9,7 @@ interface Props {
   open: boolean
   onOpenChange: (v: boolean) => void
   title: string
-  description: string
+  description: React.ReactNode
   confirmLabel?: string
   cancelLabel?: string
   variant?: 'danger' | 'success' | 'default'

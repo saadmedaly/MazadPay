@@ -21,6 +21,11 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	auctionRepo := repository.NewAuctionRepository(db)
 	bidRepo := repository.NewBidRepository(db)
 	walletRepo := repository.NewWalletRepository(db)
+	txRepo := repository.NewTransactionRepository(db)
+	reportRepo := repository.NewReportRepository(db)
+	kycRepo := repository.NewKYCRepository(db)
+	contentRepo := repository.NewContentRepository(db)
+	favoriteRepo := repository.NewFavoriteRepository(db)
 
 	// Hub
 	hub := ws.NewHub(logger)
@@ -29,7 +34,10 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours)
 	auctionSvc := services.NewAuctionService(auctionRepo)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
-	userSvc := services.NewUserService(userRepo)
+	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
+	adminSvc := services.NewAdminService(userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo)
+	walletSvc := services.NewWalletService(walletRepo, txRepo)
+	contentSvc := services.NewContentService(contentRepo)
 
 	api := app.Group("/v1/api")
 
@@ -37,7 +45,10 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	wsHandler := handlers.NewWSHandler(hub, logger)
 	bidHandler := handlers.NewBidHandler(bidSvc, logger)
 	userHandler := handlers.NewUserHandler(userSvc, logger)
-	adminHandler := handlers.NewAdminHandler(logger)
+	adminHandler := handlers.NewAdminHandler(adminSvc, logger)
+	bannerHandler := handlers.NewBannerHandler(logger)
+	walletHandler := handlers.NewWalletHandler(walletSvc, logger)
+	contentHandler := handlers.NewContentHandler(contentSvc, logger)
 
 	// WebSocket registration
 	app.Use("/ws", wsHandler.UpgradeMiddleware())
@@ -46,12 +57,14 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	// Routes registration
 	setupAuthRoutes(api, authSvc, cfg.JWT.Secret, logger)
 	setupAuctionRoutes(api, auctionSvc, bidHandler, cfg.JWT.Secret, logger)
-	setupUserRoutes(api, userHandler, cfg.JWT.Secret)
+	setupUserRoutes(api, userHandler, walletHandler, cfg.JWT.Secret, logger)
 	setupAdminRoutes(api, adminHandler, cfg.JWT.Secret, logger)
+	setupBannerRoutes(api, bannerHandler, cfg.JWT.Secret, logger)
+	setupContentRoutes(api, contentHandler, cfg.JWT.Secret, logger)
 }
 
 func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, jwtSecret string, logger *zap.Logger) {
-	jwtMiddleware := middleware.JWT(jwtSecret)
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
 	h := handlers.NewAuthHandler(authSvc, logger)
 
 	auth := api.Group("/auth")
@@ -69,7 +82,7 @@ func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, jwtSecret s
 }
 
 func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bidHandler *handlers.BidHandler, jwtSecret string, logger *zap.Logger) {
-	jwtMiddleware := middleware.JWT(jwtSecret)
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
 	h := handlers.NewAuctionHandler(auctionSvc, logger)
 
 	// Public routes
@@ -93,16 +106,40 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	api.Get("/auctions/:id/seller-contact", jwtMiddleware, h.GetSellerContact)
 }
 
-func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, jwtSecret string) {
-	jwtMiddleware := middleware.JWT(jwtSecret)
+func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, walletHandler *handlers.WalletHandler, jwtSecret string, logger *zap.Logger) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
 	users := api.Group("/users", jwtMiddleware)
 
+	// Profile
 	users.Get("/me", userHandler.GetMe)
+	users.Put("/me", userHandler.UpdateProfile)
+	users.Post("/me/avatar", userHandler.UpdateAvatar)
+
+	// Favorites
+	users.Get("/me/favorites", userHandler.ListFavorites)
+	users.Post("/me/favorites/:auction_id", userHandler.AddFavorite)
+	users.Delete("/me/favorites/:auction_id", userHandler.RemoveFavorite)
+
+	// Activity
+	users.Get("/me/auctions", userHandler.MyAuctions)
+	users.Get("/me/bids", userHandler.MyBids)
+	users.Get("/me/winnings", userHandler.MyWinnings)
+
+	// Wallet
+	users.Get("/wallet", walletHandler.GetMe)
+	users.Post("/wallet/deposit", walletHandler.Deposit)
+	users.Post("/wallet/transactions/:id/receipt", walletHandler.UploadReceipt)
+	users.Post("/wallet/withdraw", walletHandler.Withdraw)
+	users.Get("/wallet/transactions", walletHandler.Transactions)
+
+	// KYC
+	users.Get("/kyc", userHandler.GetKYCStatus)
+	users.Post("/kyc", userHandler.SubmitKYC)
 }
 
 func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwtSecret string, logger *zap.Logger) {
-	jwtMiddleware := middleware.JWT(jwtSecret)
-	adminMiddleware := middleware.AdminOnly()
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+	adminMiddleware := middleware.AdminOnly(logger)
 
 	admin := api.Group("/admin", jwtMiddleware, adminMiddleware)
 
@@ -121,4 +158,67 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwt
 	// Auction management routes
 	admin.Get("/auctions", adminHandler.ListAuctions)
 	admin.Put("/auctions/:id/validate", adminHandler.ValidateAuction)
+	admin.Put("/auctions/:id", adminHandler.UpdateAuction)
+	admin.Delete("/auctions/:id", adminHandler.DeleteAuction)
+
+	// Additional management routes
+	admin.Get("/transactions", adminHandler.ListTransactions)
+	admin.Put("/transactions/:id/validate", adminHandler.ValidateTransaction)
+	admin.Get("/reports", adminHandler.ListReports)
+	admin.Put("/reports/:id/review", adminHandler.ReviewReport)
+
+	// KYC management
+	admin.Get("/kyc", adminHandler.ListKYCs)
+	admin.Put("/kyc/:user_id", adminHandler.ReviewKYC)
+
+	// Category management
+	admin.Post("/categories", adminHandler.CreateCategory)
+	admin.Put("/categories/:id", adminHandler.UpdateCategory)
+	admin.Delete("/categories/:id", adminHandler.DeleteCategory)
+
+	// Location management
+	admin.Post("/locations", adminHandler.CreateLocation)
+	admin.Put("/locations/:id", adminHandler.UpdateLocation)
+	admin.Delete("/locations/:id", adminHandler.DeleteLocation)
 }
+
+func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, jwtSecret string, logger *zap.Logger) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+	adminMiddleware := middleware.AdminOnly(logger)
+
+	// Public routes
+	api.Get("/banners", h.List)
+	api.Post("/banners", h.Create)
+
+	// Admin routes
+	admin := api.Group("/admin/banners", jwtMiddleware, adminMiddleware)
+	admin.Get("/", h.AdminList)
+	admin.Put("/:id/toggle", h.Toggle)
+	admin.Delete("/:id", h.Delete)
+}
+
+func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, jwtSecret string, logger *zap.Logger) {
+	// Public routes
+	api.Get("/faq", h.FAQ)
+	api.Get("/tutorials", h.Tutorials)
+	api.Get("/about", h.About)
+	api.Get("/privacy-policy", h.Privacy)
+
+	// Admin routes
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+	adminMiddleware := middleware.AdminOnly(logger)
+
+	admin := api.Group("/admin", jwtMiddleware, adminMiddleware)
+
+	// FAQ CRUD
+	admin.Post("/faq", h.CreateFAQ)
+	admin.Put("/faq/:id", h.UpdateFAQ)
+	admin.Delete("/faq/:id", h.DeleteFAQ)
+
+	// Tutorials CRUD
+	admin.Post("/tutorials", h.CreateTutorial)
+	admin.Put("/tutorials/:id", h.UpdateTutorial)
+	admin.Delete("/tutorials/:id", h.DeleteTutorial)
+}
+
+

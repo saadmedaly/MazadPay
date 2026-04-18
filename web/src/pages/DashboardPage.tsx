@@ -1,6 +1,6 @@
 import {
   Gavel, CreditCard, Users, Flag,
-  TrendingUp, RefreshCw, AlertTriangle, AlertCircle
+  TrendingUp, RefreshCw, AlertTriangle, AlertCircle, ShieldCheck
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -8,10 +8,10 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { MetricCard } from '@/components/shared/MetricCard'
-import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
+ import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { useDashboardStats, useRevenueChart, useActivityFeed } from '@/hooks/useDashboard'
 import { formatPrice, formatRelative, formatDateShort } from '@/lib/formatters'
+import { MetricCard } from '@/components/shared/MetricCard'
 
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
@@ -65,6 +65,13 @@ export function DashboardPage() {
       icon: Flag,
       accent: 'red' as const,
       urgent: (stats?.pending_reports ?? 0) > 0,
+    },
+    {
+      label: 'توثيق الحسابات  ',
+      value: stats?.pending_kycs ?? '—',
+      icon: ShieldCheck,
+      accent: 'purple' as const,
+      urgent: (stats?.pending_kycs ?? 0) > 0,
     },
     {
       label: 'الإيداعات (7 أيام)',

@@ -10,8 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// JSONB est un type custom pour les colonnes PostgreSQL de type JSONB
-type JSONB map[string]interface{}
+ type JSONB map[string]interface{}
 
 func (j JSONB) Value() (driver.Value, error) {
 	if j == nil {
@@ -43,8 +42,12 @@ type Auction struct {
 	SellerID        uuid.UUID        `db:"seller_id"        json:"seller_id"`
 	CategoryID      int              `db:"category_id"      json:"category_id"`
 	LocationID      *int             `db:"location_id"      json:"location_id"`
-	Title           string           `db:"title"            json:"title"`
-	Description     *string          `db:"description"      json:"description"`
+	TitleAr         string           `db:"title_ar"         json:"title_ar"`
+	TitleFr         *string          `db:"title_fr"         json:"title_fr"`
+	TitleEn         *string          `db:"title_en"         json:"title_en"`
+	DescriptionAr   *string          `db:"description_ar"   json:"description_ar"`
+	DescriptionFr   *string          `db:"description_fr"   json:"description_fr"`
+	DescriptionEn   *string          `db:"description_en"   json:"description_en"`
 	StartPrice      decimal.Decimal  `db:"start_price"      json:"start_price"`
 	CurrentPrice    decimal.Decimal  `db:"current_price"    json:"current_price"`
 	MinIncrement    decimal.Decimal  `db:"min_increment"    json:"min_increment"`
@@ -60,6 +63,8 @@ type Auction struct {
 	WinningBidID    *uuid.UUID       `db:"winning_bid_id"   json:"winning_bid_id"`
 	PaymentDeadline *time.Time       `db:"payment_deadline" json:"payment_deadline"`
 	IsFeatured      bool             `db:"is_featured"      json:"is_featured"`
+	FeaturedUntil   *time.Time       `db:"featured_until"   json:"featured_until"`
+	RejectionReason *string          `db:"rejection_reason" json:"rejection_reason"`
 	PhoneContact    *string          `db:"phone_contact"    json:"-"` // Masqué avant envoi
 	ItemDetails     JSONB            `db:"item_details"     json:"item_details"`
 	BuyNowPrice     *decimal.Decimal `db:"buy_now_price"    json:"buy_now_price"`
@@ -79,13 +84,16 @@ type Category struct {
 	ID           int     `db:"id"            json:"id"`
 	NameAr       string  `db:"name_ar"       json:"name_ar"`
 	NameFr       string  `db:"name_fr"       json:"name_fr"`
+	NameEn       string  `db:"name_en"       json:"name_en"`
 	ParentID     *int    `db:"parent_id"     json:"parent_id"`
 	IconName     *string `db:"icon_name"     json:"icon_name"`
 	DisplayOrder int     `db:"display_order" json:"display_order"`
 }
 
 type Location struct {
-	ID       int    `db:"id"        json:"id"`
-	CityName string `db:"city_name" json:"city_name"`
-	AreaName string `db:"area_name" json:"area_name"`
+	ID         int    `db:"id"           json:"id"`
+	CityNameAr string `db:"city_name_ar" json:"city_name_ar"`
+	CityNameFr string `db:"city_name_fr" json:"city_name_fr"`
+	AreaNameAr string `db:"area_name_ar" json:"area_name_ar"`
+	AreaNameFr string `db:"area_name_fr" json:"area_name_fr"`
 }

@@ -33,6 +33,7 @@ export function useAdminBadges() {
       pendingAuctions: data?.pending_auctions ?? 0,
       pendingTxns:     data?.pending_transactions ?? 0,
       pendingReports:  data?.pending_reports ?? 0,
+      pendingKYCs:     data?.pending_kycs ?? 0,
     }
   }
 }

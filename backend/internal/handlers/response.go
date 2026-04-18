@@ -10,6 +10,14 @@ func OK(c *fiber.Ctx, data interface{}) error {
 	return c.JSON(fiber.Map{"success": true, "data": data})
 }
 
+func PaginatedOK(c *fiber.Ctx, data interface{}, meta interface{}) error {
+	return c.JSON(fiber.Map{
+		"success": true,
+		"data":    data,
+		"meta":    meta,
+	})
+}
+
 func Created(c *fiber.Ctx, data interface{}) error {
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"success": true, "data": data})
@@ -26,20 +34,36 @@ func BadRequest(c *fiber.Ctx, message string) error {
 	return Fail(c, 400, "bad_request", message)
 }
 
-func Unauthorized(c *fiber.Ctx) error {
-	return Fail(c, 401, "unauthorized", "Authentication required")
+func Unauthorized(c *fiber.Ctx, message ...string) error {
+	msg := "Authentication required"
+	if len(message) > 0 {
+		msg = message[0]
+	}
+	return Fail(c, 401, "unauthorized", msg)
 }
 
-func Forbidden(c *fiber.Ctx) error {
-	return Fail(c, 403, "forbidden", "Access denied")
+func Forbidden(c *fiber.Ctx, message ...string) error {
+	msg := "Access denied"
+	if len(message) > 0 {
+		msg = message[0]
+	}
+	return Fail(c, 403, "forbidden", msg)
 }
 
-func NotFound(c *fiber.Ctx, resource string) error {
-	return Fail(c, 404, "not_found", resource+" not found")
+func NotFound(c *fiber.Ctx, resource ...string) error {
+	msg := "Resource"
+	if len(resource) > 0 {
+		msg = resource[0]
+	}
+	return Fail(c, 404, "not_found", msg+" not found")
 }
 
-func InternalError(c *fiber.Ctx) error {
-	return Fail(c, 500, "server_error", "An internal error occurred")
+func InternalError(c *fiber.Ctx, message ...string) error {
+	msg := "An internal error occurred"
+	if len(message) > 0 {
+		msg = message[0]
+	}
+	return Fail(c, 500, "server_error", msg)
 }
 
 // MapError convertit les erreurs métier en réponses HTTP appropriées et logue le problème.

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,6 +30,12 @@ type UserRepository interface {
 	IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error
 	MarkOTPVerified(ctx context.Context, id uuid.UUID) error
 	CleanExpiredOTPs(ctx context.Context) error
+
+	// Admin
+	ListPaginated(ctx context.Context, page, perPage int, query string) ([]models.User, int, error)
+	Count(ctx context.Context, query string) (int, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, isActive bool) error
+	GetStats(ctx context.Context) (int, int, error) // Total, Verified
 }
 
 type userRepo struct {
@@ -154,4 +161,55 @@ func (r *userRepo) UpdateNotificationSettings(ctx context.Context, id uuid.UUID,
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE users SET notifications_enabled=$1 WHERE id=$2`, enabled, id)
 	return err
+}
+
+func (r *userRepo) ListPaginated(ctx context.Context, page, perPage int, query string) ([]models.User, int, error) {
+	where := "WHERE 1=1"
+	args := []interface{}{}
+	if query != "" {
+		where += " AND (phone ILIKE $1 OR full_name ILIKE $1 OR email ILIKE $1)"
+		args = append(args, "%"+query+"%")
+	}
+
+	count, err := r.Count(ctx, query)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * perPage
+	q := fmt.Sprintf("SELECT * FROM users %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", 
+		where, len(args)+1, len(args)+2)
+	
+	listArgs := append(args, perPage, offset)
+	users := make([]models.User, 0)
+	err = r.db.SelectContext(ctx, &users, q, listArgs...)
+	return users, count, err
+}
+
+func (r *userRepo) Count(ctx context.Context, query string) (int, error) {
+	where := "WHERE 1=1"
+	args := []interface{}{}
+	if query != "" {
+		where += " AND (phone ILIKE $1 OR full_name ILIKE $1 OR email ILIKE $1)"
+		args = append(args, "%"+query+"%")
+	}
+
+	var count int
+	err := r.db.GetContext(ctx, &count, fmt.Sprintf("SELECT COUNT(*) FROM users %s", where), args...)
+	return count, err
+}
+
+func (r *userRepo) UpdateStatus(ctx context.Context, id uuid.UUID, isActive bool) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE users SET is_active = $1 WHERE id = $2", isActive, id)
+	return err
+}
+
+func (r *userRepo) GetStats(ctx context.Context) (int, int, error) {
+	var total, verified int
+	err := r.db.GetContext(ctx, &total, "SELECT COUNT(*) FROM users")
+	if err != nil {
+		return 0, 0, err
+	}
+	err = r.db.GetContext(ctx, &verified, "SELECT COUNT(*) FROM users WHERE is_verified = true")
+	return total, verified, err
 }
