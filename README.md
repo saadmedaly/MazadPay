@@ -284,7 +284,7 @@ backend/
 
 ## 🗃 Schéma de Base de Données
 
-### Tables (19)
+### Tables (21)
 
 | # | Table | Description | Clés |
 |:--|:---|:---|:---|
@@ -546,7 +546,7 @@ go run cmd/server/main.go
 | Fichiers analysés | 32 |
 | Fonctionnalités identifiées | 67 |
 | Modules fonctionnels | 9 |
-| Tables SQL | 19 |
+| Tables SQL | 21 |
 | Index de performance | 15 |
 | Endpoints API | ~45 |
 | Services backend | 8 |
