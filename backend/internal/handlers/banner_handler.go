@@ -1,47 +1,41 @@
 package handlers
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/mazadpay/backend/internal/models"
+	"github.com/mazadpay/backend/internal/services"
 	"go.uber.org/zap"
 )
 
 type BannerHandler struct {
-	logger *zap.Logger
+	service services.ContentService
+	logger  *zap.Logger
 }
 
-func NewBannerHandler(logger *zap.Logger) *BannerHandler {
-	return &BannerHandler{logger: logger}
+func NewBannerHandler(svc services.ContentService, logger *zap.Logger) *BannerHandler {
+	return &BannerHandler{
+		service: svc,
+		logger:  logger,
+	}
 }
 
 // List all active banners (Public)
 func (h *BannerHandler) List(c *fiber.Ctx) error {
-	banners := []fiber.Map{
-		{
-			"id":         1,
-			"title":      "Welcome to MazadPay",
-			"image_url":  "https://images.unsplash.com/photo-1611095773163-577328500526?q=80&w=2071&auto=format&fit=crop",
-			"link":       "/auctions",
-			"is_active":  true,
-			"created_at": "2024-04-16T10:30:00Z",
-		},
+	banners, err := h.service.GetBanners(c.Context(), true)
+	if err != nil {
+		return InternalError(c)
 	}
-
 	return OK(c, banners)
 }
 
 // Admin List all banners
 func (h *BannerHandler) AdminList(c *fiber.Ctx) error {
-	banners := []fiber.Map{
-		{
-			"id":         1,
-			"title":      "Welcome to MazadPay",
-			"image_url":  "https://images.unsplash.com/photo-1611095773163-577328500526?q=80&w=2071&auto=format&fit=crop",
-			"link":       "/auctions",
-			"is_active":  true,
-			"created_at": "2024-04-16T10:30:00Z",
-		},
+	banners, err := h.service.GetBanners(c.Context(), false)
+	if err != nil {
+		return InternalError(c)
 	}
-
 	return OK(c, banners)
 }
 
@@ -56,39 +50,46 @@ func (h *BannerHandler) Toggle(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	id := c.Params("id")
+	id, _ := strconv.Atoi(c.Params("id"))
+	if err := h.service.ToggleBanner(c.Context(), id, req.IsActive); err != nil {
+		return InternalError(c)
+	}
 	
-	return OK(c, fiber.Map{
-		"message": "Banner status updated",
-		"id":      id,
-		"active":  req.IsActive,
-	})
+	return OK(c, fiber.Map{"message": "Banner status updated"})
 }
 
 // Create banner
 func (h *BannerHandler) Create(c *fiber.Ctx) error {
-	type CreateRequest struct {
-		Title    string `json:"title"`
-		ImageURL string `json:"image_url"`
-		Link     string `json:"link"`
-	}
-
-	var req CreateRequest
-	if err := c.BodyParser(&req); err != nil {
+	var banner models.Banner
+	if err := c.BodyParser(&banner); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	return Created(c, fiber.Map{
-		"message": "Banner created successfully",
-		"data":    req,
-	})
+	if err := h.service.CreateBanner(c.Context(), &banner); err != nil {
+		return InternalError(c)
+	}
+
+	return Created(c, banner)
+}
+
+func (h *BannerHandler) Request(c *fiber.Ctx) error {
+	var banner models.Banner
+	if err := c.BodyParser(&banner); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	if err := h.service.RequestBanner(c.Context(), &banner); err != nil {
+		return InternalError(c)
+	}
+
+	return OK(c, fiber.Map{"message": "Banner request submitted successfully"})
 }
 
 // Delete banner
 func (h *BannerHandler) Delete(c *fiber.Ctx) error {
-	id := c.Params("id")
-	return OK(c, fiber.Map{
-		"message": "Banner deleted successfully",
-		"id":      id,
-	})
+	id, _ := strconv.Atoi(c.Params("id"))
+	if err := h.service.DeleteBanner(c.Context(), id); err != nil {
+		return InternalError(c)
+	}
+	return OK(c, fiber.Map{"message": "Banner deleted successfully"})
 }

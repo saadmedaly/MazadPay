@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 )
@@ -114,8 +116,13 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 		logger.Info("Registration attempt with existing phone", logFields...)
 		return Fail(c, 409, "duplicate_phone", "Phone number already registered")
 	default:
-		// Gestion des erreurs de base de données courantes (Postgres)
 		errStr := err.Error()
+		if strings.Contains(errStr, "at least 1 minute in the future") {
+			logger.Info("Auction date validation failed", logFields...)
+			return BadRequest(c, "تاريخ الإغلاق يجب أن يكون في المستقبل")
+		}
+		
+		// Gestion des erreurs de base de données courantes (Postgres)
 		if contains(errStr, "23505") || contains(errStr, "duplicate key") {
 			logger.Warn("Database unique constraint violation", logFields...)
 			return Fail(c, 409, "duplicate_record", "A record with this unique identifier already exists")
@@ -144,17 +151,3 @@ func contains(s, substr string) bool {
 
 
 
-// GetUserID extrait l'UUID de l'utilisateur depuis le contexte Fiber (set par JWT middleware)
-func GetUserID(c *fiber.Ctx) string {
-	return c.Locals("user_id").(string)
-}
-
-// GetUserRole extrait le rôle depuis le contexte Fiber
-func GetUserRole(c *fiber.Ctx) string {
-	return c.Locals("user_role").(string)
-}
-
-// RequireAdmin vérifie le rôle admin, retourne une erreur si non-admin
-func RequireAdmin(c *fiber.Ctx) bool {
-	return GetUserRole(c) == "admin"
-}

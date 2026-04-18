@@ -21,7 +21,7 @@ func NewContentHandler(svc services.ContentService, logger *zap.Logger) *Content
 func (h *ContentHandler) FAQ(c *fiber.Ctx) error {
 	items, err := h.svc.GetFAQ(c.Context())
 	if err != nil {
-		return InternalError(c, "Failed to get FAQ")
+		return MapError(c, h.logger, err)
 	}
 	return OK(c, items)
 }
@@ -32,7 +32,7 @@ func (h *ContentHandler) CreateFAQ(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 	if err := h.svc.CreateFAQ(c.Context(), &item); err != nil {
-		return InternalError(c, "Failed to create FAQ")
+		return MapError(c, h.logger, err)
 	}
 	return Created(c, item)
 }
@@ -45,7 +45,7 @@ func (h *ContentHandler) UpdateFAQ(c *fiber.Ctx) error {
 	}
 	item.ID = id
 	if err := h.svc.UpdateFAQ(c.Context(), &item); err != nil {
-		return InternalError(c, "Failed to update FAQ")
+		return MapError(c, h.logger, err)
 	}
 	return OK(c, item)
 }
@@ -53,7 +53,7 @@ func (h *ContentHandler) UpdateFAQ(c *fiber.Ctx) error {
 func (h *ContentHandler) DeleteFAQ(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 	if err := h.svc.DeleteFAQ(c.Context(), id); err != nil {
-		return InternalError(c, "Failed to delete FAQ")
+		return MapError(c, h.logger, err)
 	}
 	return OK(c, "FAQ deleted")
 }
@@ -72,7 +72,7 @@ func (h *ContentHandler) CreateTutorial(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 	if err := h.svc.CreateTutorial(c.Context(), &t); err != nil {
-		return InternalError(c, "Failed to create tutorial")
+		return MapError(c, h.logger, err)
 	}
 	return Created(c, t)
 }
@@ -85,7 +85,7 @@ func (h *ContentHandler) UpdateTutorial(c *fiber.Ctx) error {
 	}
 	t.ID = id
 	if err := h.svc.UpdateTutorial(c.Context(), &t); err != nil {
-		return InternalError(c, "Failed to update tutorial")
+		return MapError(c, h.logger, err)
 	}
 	return OK(c, t)
 }
@@ -93,7 +93,7 @@ func (h *ContentHandler) UpdateTutorial(c *fiber.Ctx) error {
 func (h *ContentHandler) DeleteTutorial(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 	if err := h.svc.DeleteTutorial(c.Context(), id); err != nil {
-		return InternalError(c, "Failed to delete tutorial")
+		return MapError(c, h.logger, err)
 	}
 	return OK(c, "Tutorial deleted")
 }

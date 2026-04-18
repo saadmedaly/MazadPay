@@ -10,7 +10,7 @@ web:
 	cd web && bun run dev
 
 build:
-	cd backend && go build -o /bin/server.exe ./cmd/server/main.go
+	cd backend && go build -o ./bin/server.exe ./cmd/server/main.go
 
 run:
 	cd backend && ./bin/server.exe

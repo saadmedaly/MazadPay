@@ -13,6 +13,7 @@ type ReportRepository interface {
 	ListPaginated(ctx context.Context, page, perPage int, status string) ([]models.Report, int, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
 	PendingCount(ctx context.Context) (int, error)
+	Create(ctx context.Context, report *models.Report) error
 }
 
 type reportRepo struct {
@@ -60,4 +61,12 @@ func (r *reportRepo) PendingCount(ctx context.Context) (int, error) {
 	var count int
 	err := r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM reports WHERE status = 'pending'")
 	return count, err
+}
+
+func (r *reportRepo) Create(ctx context.Context, report *models.Report) error {
+	_, err := r.db.NamedExecContext(ctx, `
+		INSERT INTO reports (id, auction_id, reporter_id, reason, status)
+		VALUES (:id, :auction_id, :reporter_id, :reason, :status)
+	`, report)
+	return err
 }

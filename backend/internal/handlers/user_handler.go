@@ -4,6 +4,7 @@ import (
     "github.com/gofiber/fiber/v2"
     "github.com/google/uuid"
     "github.com/mazadpay/backend/internal/models"
+    "github.com/mazadpay/backend/internal/middleware"
     "github.com/mazadpay/backend/internal/services"
     "go.uber.org/zap"
 )
@@ -19,7 +20,7 @@ func NewUserHandler(svc services.UserService, logger *zap.Logger) *UserHandler {
 
 
 func (h *UserHandler) GetMe(c *fiber.Ctx) error {
-	userID, err := uuid.Parse(GetUserID(c))
+	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c)
 	}
@@ -28,8 +29,7 @@ func (h *UserHandler) GetMe(c *fiber.Ctx) error {
 	if err != nil {
 		return MapError(c, h.logger, err)
 	}
-
-	return OK(c, fiber.Map{"data": user})
+	return OK(c, user)
 }
 
 func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
@@ -43,7 +43,10 @@ func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	if err := h.service.UpdateProfile(c.Context(), userID, req.FullName, req.Email, req.City); err != nil {
 		return InternalError(c, "Failed to update profile")
 	}
@@ -59,7 +62,10 @@ func (h *UserHandler) UpdateAvatar(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	if err := h.service.UpdateAvatar(c.Context(), userID, req.URL); err != nil {
 		return InternalError(c, "Failed to update avatar")
 	}
@@ -72,7 +78,10 @@ func (h *UserHandler) AddFavorite(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid auction ID")
 	}
 
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	if err := h.service.AddFavorite(c.Context(), userID, auctionID); err != nil {
 		return InternalError(c, "Failed to add favorite")
 	}
@@ -85,7 +94,10 @@ func (h *UserHandler) RemoveFavorite(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid auction ID")
 	}
 
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	if err := h.service.RemoveFavorite(c.Context(), userID, auctionID); err != nil {
 		return InternalError(c, "Failed to remove favorite")
 	}
@@ -93,39 +105,51 @@ func (h *UserHandler) RemoveFavorite(c *fiber.Ctx) error {
 }
 
 func (h *UserHandler) ListFavorites(c *fiber.Ctx) error {
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	auctions, err := h.service.ListFavorites(c.Context(), userID)
 	if err != nil {
 		return InternalError(c, "Failed to get favorites")
 	}
-	return OK(c, fiber.Map{"data": auctions})
+	return OK(c, auctions)
 }
 
 func (h *UserHandler) MyAuctions(c *fiber.Ctx) error {
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	auctions, err := h.service.ListMyAuctions(c.Context(), userID)
 	if err != nil {
 		return InternalError(c, "Failed to get my auctions")
 	}
-	return OK(c, fiber.Map{"data": auctions})
+	return OK(c, auctions)
 }
 
 func (h *UserHandler) MyBids(c *fiber.Ctx) error {
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	auctions, err := h.service.ListMyBids(c.Context(), userID)
 	if err != nil {
 		return InternalError(c, "Failed to get my bids")
 	}
-	return OK(c, fiber.Map{"data": auctions})
+	return OK(c, auctions)
 }
 
 func (h *UserHandler) MyWinnings(c *fiber.Ctx) error {
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	auctions, err := h.service.ListMyWinnings(c.Context(), userID)
 	if err != nil {
 		return InternalError(c, "Failed to get my winnings")
 	}
-	return OK(c, fiber.Map{"data": auctions})
+	return OK(c, auctions)
 }
 
 func (h *UserHandler) SubmitKYC(c *fiber.Ctx) error {
@@ -133,7 +157,11 @@ func (h *UserHandler) SubmitKYC(c *fiber.Ctx) error {
 	if err := c.BodyParser(&kyc); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
-	kyc.UserID = c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	kyc.UserID = userID
 	if err := h.service.SubmitKYC(c.Context(), &kyc); err != nil {
 		return InternalError(c, "Failed to submit KYC")
 	}
@@ -141,10 +169,13 @@ func (h *UserHandler) SubmitKYC(c *fiber.Ctx) error {
 }
 
 func (h *UserHandler) GetKYCStatus(c *fiber.Ctx) error {
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	kyc, err := h.service.GetKYCStatus(c.Context(), userID)
 	if err != nil {
 		return NotFound(c, "KYC not found")
 	}
-	return OK(c, fiber.Map{"data": kyc})
+	return OK(c, kyc)
 }

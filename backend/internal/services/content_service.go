@@ -20,16 +20,21 @@ type ContentService interface {
 	UpdateTutorial(ctx context.Context, tutorial *models.Tutorial) error
 	DeleteTutorial(ctx context.Context, id int) error
 	CreateBanner(ctx context.Context, banner *models.Banner) error
+	RequestBanner(ctx context.Context, banner *models.Banner) error
 	ToggleBanner(ctx context.Context, id int, active bool) error
 	DeleteBanner(ctx context.Context, id int) error
 }
 
 type contentService struct {
-	repo repository.ContentRepository
+	repo     repository.ContentRepository
+	notifSvc NotificationService
 }
 
-func NewContentService(repo repository.ContentRepository) ContentService {
-	return &contentService{repo: repo}
+func NewContentService(repo repository.ContentRepository, notifSvc NotificationService) ContentService {
+	return &contentService{
+		repo:     repo,
+		notifSvc: notifSvc,
+	}
 }
 
 func (s *contentService) GetFAQ(ctx context.Context) ([]models.FAQItem, error) {
@@ -70,6 +75,29 @@ func (s *contentService) DeleteTutorial(ctx context.Context, id int) error {
 
 func (s *contentService) CreateBanner(ctx context.Context, banner *models.Banner) error {
 	return s.repo.CreateBanner(ctx, banner)
+}
+
+func (s *contentService) RequestBanner(ctx context.Context, banner *models.Banner) error {
+	banner.IsActive = false // Les demandes sont inactives par défaut
+	if err := s.repo.CreateBanner(ctx, banner); err != nil {
+		return err
+	}
+
+	// Notifier les admins
+	if s.notifSvc != nil {
+		go func() {
+			_ = s.notifSvc.NotifyAdmins(context.Background(),
+				"💰 طلب إعلان جديد (Banner Request)",
+				"إليك طلب جديد لإضافة إعلان على المنصة.",
+				map[string]string{
+					"type":  "banner_request",
+					"title": func() string { if banner.TitleAr != nil { return *banner.TitleAr }; return "بدون عنوان" }(),
+				},
+			)
+		}()
+	}
+
+	return nil
 }
 
 func (s *contentService) ToggleBanner(ctx context.Context, id int, active bool) error {

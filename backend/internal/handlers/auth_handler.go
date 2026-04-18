@@ -3,7 +3,7 @@ package handlers
 import (
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
+	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/services"
 	"go.uber.org/zap"
 )
@@ -144,8 +144,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	userIDStr := GetUserID(c)
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return BadRequest(c, "Invalid user ID in token")
 	}

@@ -33,6 +33,63 @@ export function useUser(id: string) {
   })
 }
 
+export function useMe() {
+  return useQuery({
+    queryKey: ['users', 'me'],
+    queryFn: async () => {
+      const { data } = await client.get<{ data: AdminUser }>('/v1/api/users/me')
+      return data.data
+    },
+  })
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (updates: { full_name: string; email: string; city: string }) =>
+      client.put('/v1/api/users/me', updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users', 'me'] })
+      toast.success('تم تحديث الملف الشخصي بنجاح')
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || err.message),
+  })
+}
+
+export function useChangePin() {
+  return useMutation({
+    mutationFn: (data: { old_pin: string; new_pin: string }) =>
+      client.put('/v1/api/auth/change-password', data),
+    onSuccess: () => {
+      toast.success('تم تغيير كلمة المرور بنجاح')
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || err.message),
+  })
+}
+
+export function useCreateAdmin() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { token: string; phone: string; pin: string; full_name: string; email: string }) =>
+      client.post('/v1/api/auth/register-admin', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.all })
+      toast.success('تم تفعيل حساب المشرف بنجاح')
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || err.message),
+  })
+}
+
+export function useGenerateInvitation() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await client.post<{ data: { token: string } }>('/v1/api/admin/invitations')
+      return data.data.token
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || err.message),
+  })
+}
+
 export function useUserHistory(id: string, type: 'auctions' | 'transactions') {
   return useQuery({
     queryKey: userKeys.history(id, type),

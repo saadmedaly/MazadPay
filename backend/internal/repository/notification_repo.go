@@ -17,6 +17,7 @@ type NotificationRepository interface {
 	SavePushToken(ctx context.Context, token *models.PushToken) error
 	GetPushTokens(ctx context.Context, userID uuid.UUID) ([]string, error)
 	DeactivateToken(ctx context.Context, fcmToken string) error
+	DeleteOld(ctx context.Context, days int) error
 }
 
 type notificationRepo struct {
@@ -68,5 +69,10 @@ func (r *notificationRepo) GetPushTokens(ctx context.Context, userID uuid.UUID) 
 
 func (r *notificationRepo) DeactivateToken(ctx context.Context, fcmToken string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE push_tokens SET is_active = false WHERE fcm_token = $1`, fcmToken)
+	return err
+}
+
+func (r *notificationRepo) DeleteOld(ctx context.Context, days int) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM notifications WHERE created_at < now() - ($1 || ' days')::interval`, days)
 	return err
 }

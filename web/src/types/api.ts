@@ -81,11 +81,12 @@ export interface DashboardStats {
   pending_transactions: number
   pending_reports: number
   total_users: number
-  verified_users: number
-  today_deposits: number
+  total_auctions: number
+  total_bids: number
+  total_revenue: number
+  today_revenue: number
   week_deposits: number
-  today_bids: number
-  pending_kycs: number // Added
+  pending_kycs: number
 }
 
 export interface KYCVerification {

@@ -70,6 +70,10 @@ type Auction struct {
 	BuyNowPrice     *decimal.Decimal `db:"buy_now_price"    json:"buy_now_price"`
 	Version         int              `db:"version"          json:"version"`
 	CreatedAt       time.Time        `db:"created_at"       json:"created_at"`
+
+	// Joined Fields (Metadata)
+	CategoryNameAr *string `db:"category_name_ar" json:"category"`
+	CityNameAr     *string `db:"city_name_ar"     json:"city"`
 }
 
 type AuctionImage struct {

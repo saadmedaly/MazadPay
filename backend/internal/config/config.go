@@ -17,6 +17,7 @@ type Config struct {
 	R2       R2Config
 	Termii   TermiiConfig
 	Business BusinessConfig
+	Firebase FirebaseConfig
 }
 
 type AppConfig struct {
@@ -70,6 +71,10 @@ type BusinessConfig struct {
 	PaymentDeadlineHours int
 }
 
+type FirebaseConfig struct {
+	ServiceAccountPath string
+}
+
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, reading from environment")
@@ -119,6 +124,9 @@ func Load() *Config {
 			BidMinIncrement:      getEnvFloat("BID_MIN_INCREMENT", 100),
 			InsuranceDefault:     getEnvFloat("INSURANCE_DEFAULT_AMOUNT", 500),
 			PaymentDeadlineHours: getEnvInt("PAYMENT_DEADLINE_HOURS", 48),
+		},
+		Firebase: FirebaseConfig{
+			ServiceAccountPath: getEnv("FIREBASE_SERVICE_ACCOUNT_PATH", ""),
 		},
 	}
 }

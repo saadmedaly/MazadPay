@@ -16,6 +16,9 @@ type TransactionRepository interface {
 	UpdateReceipt(ctx context.Context, id uuid.UUID, url string, status string) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
 	GetStats(ctx context.Context) (float64, float64, error) // Total, Today
+	GetPendingCount(ctx context.Context) (int, error)
+	GetWeeklySum(ctx context.Context) (float64, error)
+	GetDailyRevenueChart(ctx context.Context) ([]map[string]interface{}, error)
 }
 
 type transactionRepo struct {
@@ -96,4 +99,48 @@ func (r *transactionRepo) GetStats(ctx context.Context) (float64, float64, error
 	}
 	err = r.db.GetContext(ctx, &today, "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE status = 'completed' AND created_at >= CURRENT_DATE")
 	return total, today, err
+}
+
+func (r *transactionRepo) GetPendingCount(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM transactions WHERE status = 'pending_review'")
+	return count, err
+}
+
+func (r *transactionRepo) GetWeeklySum(ctx context.Context) (float64, error) {
+	var sum float64
+	err := r.db.GetContext(ctx, &sum, "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE status = 'completed' AND created_at >= now() - interval '7 days'")
+	return sum, err
+}
+
+func (r *transactionRepo) GetDailyRevenueChart(ctx context.Context) ([]map[string]interface{}, error) {
+	var data []map[string]interface{}
+	query := `
+		SELECT 
+			TO_CHAR(d, 'YYYY-MM-DD') as date,
+			COALESCE(SUM(t.amount), 0) as amount
+		FROM 
+			generate_series(now() - interval '29 days', now(), interval '1 day') d
+		LEFT JOIN 
+			transactions t ON t.created_at::date = d::date AND t.status = 'completed'
+		GROUP BY 
+			d
+		ORDER BY 
+			d ASC
+	`
+	rows, err := r.db.QueryxContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		m := make(map[string]interface{})
+		err := rows.MapScan(m)
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, m)
+	}
+	return data, nil
 }

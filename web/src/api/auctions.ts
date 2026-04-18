@@ -37,8 +37,11 @@ export async function fetchAuctions(filters: AuctionFilters): Promise<{ data: Au
 }
 
 export async function fetchAuction(id: string): Promise<Auction> {
-  const { data } = await client.get<APIResponse<{ auction: Auction; images: string[] }>>(`/v1/api/auctions/${id}`)
-  return { ...data.data.auction, images: data.data.images }
+  const { data } = await client.get<APIResponse<{ auction: Auction; images: any[] }>>(`/v1/api/auctions/${id}`)
+  const auction = data.data.auction
+  // Merge images from dedicated array and handle potential strings or objects
+  const images = (data.data.images || []).map((img: any) => img?.url || img)
+  return { ...auction, images }
 }
 
 export async function validateAuction(payload: {

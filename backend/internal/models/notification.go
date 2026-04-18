@@ -18,3 +18,14 @@ type Notification struct {
 	Data          JSONB      `db:"data"           json:"data"`
 	CreatedAt     time.Time  `db:"created_at"     json:"created_at"`
 }
+
+type PushToken struct {
+	ID        uuid.UUID `db:"id"         json:"id"`
+	UserID    uuid.UUID `db:"user_id"    json:"user_id"`
+	FCMToken  string    `db:"fcm_token"  json:"fcm_token"`
+	DeviceID  string    `db:"device_id"  json:"device_id"`
+	Platform  string    `db:"platform"   json:"platform"` // android, ios, web
+	IsActive  bool      `db:"is_active"  json:"is_active"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+}

@@ -13,10 +13,12 @@ import { BannersPage } from './pages/BannersPage'
 import { KYCPage } from './pages/KYCPage'
 import { FAQPage } from './pages/FAQPage'
 import { TutorialsPage } from './pages/TutorialsPage'
- 
-import { useAuthStore } from './stores/authStore'
+import { NotificationsPage } from './pages/NotificationsPage'
+import { ProfilePage } from './pages/ProfilePage'
+import { AdminInvitePage } from './pages/AdminInvitePage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { LocationsPage } from './pages/LocationsPage'
+import { useAuthStore } from './stores/authStore'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -55,8 +57,11 @@ export default function App() {
         <Route path="tutorials" element={<TutorialsPage />} />
         <Route path="categories" element={<CategoriesPage />} />
         <Route path="locations" element={<LocationsPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="profile" element={<ProfilePage />} />
       </Route>
 
+      <Route path="/admin/register-admin" element={<AdminInvitePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

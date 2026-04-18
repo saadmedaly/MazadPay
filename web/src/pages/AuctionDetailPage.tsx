@@ -7,12 +7,16 @@ import {
   Clock, 
   Check, 
   X, 
-  AlertTriangle,
-  Gavel,
+   Gavel,
   Loader2,
   AlertCircle,
-  ImageIcon
+  ImageIcon,
+  ChevronRight,
+  ChevronLeft,
+  Eye,
+  Calendar
 } from 'lucide-react'
+import { useEffect, useCallback, useRef } from 'react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -21,6 +25,18 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { useAuction, useValidateAuction } from '@/hooks/useAuctions'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
+
+function DetailItem({ label, value, icon: Icon, color = "text-white" }: { label: string, value: string | number, icon?: any, color?: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[10px] font-bold text-surface-muted uppercase mb-1.5 flex items-center gap-1.5 tracking-wider">
+        {Icon && <Icon className="w-3 h-3 text-mazad-primary" />}
+        {label}
+      </span>
+      <span className={cn("text-sm font-bold truncate", color)}>{value}</span>
+    </div>
+  )
+}
 
 export function AuctionDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -32,12 +48,90 @@ export function AuctionDetailPage() {
 
   const { data: auction, isLoading, isError } = useAuction(id!)
   const validate = useValidateAuction()
+  const [selectedImg, setSelectedImg] = useState<string | null>(null)
+  const thumbScrollRef = useRef<HTMLDivElement>(null)
+  const [activeLang, setActiveLang] = useState<'ar' | 'fr' | 'en'>('ar')
+
+   const images = (() => {
+    if (!auction) return []
+    const base = auction.images || []
+    
+    let extra: string[] = []
+    const details = auction.item_details || {}
+    const possibleKeys = ['images', 'id_images', 'photos', 'gallery', 'item_images']
+    
+    possibleKeys.forEach(key => {
+      const val = details[key]
+      if (Array.isArray(val)) {
+        extra = [...extra, ...val.map(v => String(v))]
+      } else if (typeof val === 'string' && val.includes(',')) {
+        extra = [...extra, ...val.split(',').map(s => s.trim())]
+      } else if (typeof val === 'string' && val.length > 0) {
+        extra = [...extra, val]
+      }
+    })
+    
+    const combined = [...base, ...extra].filter(Boolean)
+    return Array.from(new Set(combined)) // Unique only
+  })()
+
+  // Navigation helpers
+  const currentIndex = selectedImg ? images.indexOf(selectedImg) : -1
+  
+  const handleNext = useCallback(() => {
+    if (images.length <= 1) return
+    const nextIdx = (currentIndex + 1) % images.length
+    setSelectedImg(images[nextIdx])
+  }, [currentIndex, images])
+
+  const handlePrev = useCallback(() => {
+    if (images.length <= 1) return
+    const prevIdx = (currentIndex - 1 + images.length) % images.length
+    setSelectedImg(images[prevIdx])
+  }, [currentIndex, images])
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') handlePrev() // RTL direction
+      if (e.key === 'ArrowLeft') handleNext()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleNext, handlePrev])
+
+  // Scroll active thumbnail into view
+  useEffect(() => {
+    if (currentIndex >= 0 && thumbScrollRef.current) {
+      const activeThumb = thumbScrollRef.current.children[currentIndex] as HTMLElement
+      if (activeThumb) {
+        const container = thumbScrollRef.current
+        const scrollLeft = activeThumb.offsetLeft - container.offsetWidth / 2 + activeThumb.offsetWidth / 2
+        container.scrollTo({ left: scrollLeft, behavior: 'smooth' })
+      }
+    }
+  }, [currentIndex])
+
+  // Initialize selected image when data finishes loading
+  if (images.length > 0 && !selectedImg && !isLoading) {
+    setSelectedImg(images[0])
+  }
 
   const handleValidate = (approve: boolean) => {
     validate.mutate(
       { id: id!, approve, reason: rejectionReason },
       { onSuccess: () => navigate('/auctions') }
     )
+  }
+
+  const formatImgUrl = (url: any) => {
+    if (!url) return ''
+    const realUrl = typeof url === 'string' ? url : (url.url || '')
+    if (!realUrl || typeof realUrl !== 'string') return ''
+
+    if (realUrl.startsWith('http') || realUrl.startsWith('data:')) return realUrl
+    const baseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8082'
+    return `${baseUrl}${realUrl.startsWith('/') ? '' : '/'}${realUrl}`
   }
 
   if (isLoading) return <LoadingSpinner fullPage label="جاري تحميل تفاصيل المزاد..." />
@@ -51,7 +145,6 @@ export function AuctionDetailPage() {
   )
 
   const isPending = auction.status === 'pending'
-  const images = auction.images?.length ? auction.images : []
 
   return (
     <div className="animate-fade-in max-w-6xl" dir="rtl">
@@ -71,11 +164,39 @@ export function AuctionDetailPage() {
           {/* Main Gallery */}
           <div className="admin-card overflow-hidden">
             <div className="aspect-video bg-surface-base relative group">
-              {images.length > 0 ? (
-                <ImagePreview 
-                   src={images[0]} 
-                   className="w-full h-full object-contain"
-                />
+              {selectedImg ? (
+                <>
+                  <ImagePreview 
+                     src={formatImgUrl(selectedImg)} 
+                     className="w-full h-full object-contain cursor-zoom-in transition-transform group-hover:scale-[1.02]"
+                     onClick={() => setActiveImage(selectedImg)}
+                  />
+                  
+                  {/* Prev/Next Buttons */}
+                  {images.length > 1 && (
+                    <>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handlePrev(); }}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/40 hover:bg-mazad-primary backdrop-blur-md rounded-full flex items-center justify-center text-white transition-all opacity-0 group-hover:opacity-100 border border-white/10"
+                      >
+                        <ChevronLeft className="w-6 h-6" />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/40 hover:bg-mazad-primary backdrop-blur-md rounded-full flex items-center justify-center text-white transition-all opacity-0 group-hover:opacity-100 border border-white/10"
+                      >
+                        <ChevronRight className="w-6 h-6" />
+                      </button>
+                    </>
+                  )}
+
+                  {/* Image Counter */}
+                  {images.length > 0 && (
+                    <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] font-bold text-white border border-white/10 z-10 transition-opacity">
+                      {currentIndex + 1} / {images.length}
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center text-surface-muted gap-3">
                   <ImageIcon className="w-12 h-12 opacity-20" />
@@ -84,40 +205,161 @@ export function AuctionDetailPage() {
               )}
             </div>
             {images.length > 1 && (
-              <div className="p-4 flex gap-3 overflow-x-auto border-t border-surface-border bg-surface-base/30">
+              <div 
+                ref={thumbScrollRef}
+                className="p-4 flex gap-3 overflow-x-auto border-t border-surface-border bg-surface-base/30 custom-scrollbar scroll-smooth"
+              >
                 {images.map((img, i) => (
                   <button 
                     key={i} 
-                    onClick={() => setActiveImage(img)}
-                    className="w-20 h-20 rounded-lg overflow-hidden border border-surface-border hover:border-mazad-primary transition-all shrink-0"
+                    onClick={() => setSelectedImg(img)}
+                    className={cn(
+                      "w-20 h-20 rounded-lg overflow-hidden border transition-all shrink-0",
+                      selectedImg === img ? "border-mazad-primary ring-2 ring-mazad-primary/20" : "border-surface-border hover:border-surface-muted"
+                    )}
                   >
-                    <img src={img} className="w-full h-full object-cover" alt="" />
+                    <img src={formatImgUrl(img)} className="w-full h-full object-cover" alt="" />
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Details Tabs placeholder */}
-          <div className="admin-card p-6">
-            <h2 className="font-display font-bold text-white text-lg mb-4 border-b border-surface-border pb-4">وصف المزاد والمواصفات</h2>
-            <p className="text-sm text-surface-muted leading-relaxed font-medium">
-              {auction.description || 'لا يوجد وصف متاح لهذا المزاد.'}
+          {/* Description & Specs */}
+          <div className="admin-card p-6 overflow-hidden">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-surface-border pb-4">
+              <h2 className={cn(
+                "font-display font-bold text-white text-lg",
+                activeLang !== 'ar' && "font-sans"
+              )}>
+                {activeLang === 'ar' ? 'وصف المزاد والمواصفات' : 
+                 activeLang === 'fr' ? 'Description & Spécifications' : 'Description & Specifications'}
+              </h2>
+              
+              <div className="flex bg-surface-base p-1 rounded-lg border border-surface-border w-fit">
+                {(['ar', 'fr', 'en'] as const).map(lang => (
+                  <button 
+                    key={lang} 
+                    onClick={() => setActiveLang(lang)}
+                    className={cn(
+                      "px-3 py-1 text-[10px] font-bold rounded flex items-center justify-center transition-all",
+                      activeLang === lang 
+                        ? "bg-mazad-primary text-white shadow-sm" 
+                        : "text-surface-muted hover:text-white"
+                    )}
+                  >
+                    {lang.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <p className={cn(
+              "text-sm leading-relaxed font-medium transition-all duration-300",
+              activeLang === 'ar' ? "text-right text-surface-muted" : "text-left text-surface-muted font-sans",
+              !auction?.[`description_${activeLang}` as keyof typeof auction] && "italic opacity-50"
+            )} dir={activeLang === 'ar' ? 'rtl' : 'ltr'}>
+              {auction ? (
+                (auction[`description_${activeLang}` as keyof typeof auction] as string) || 
+                (activeLang === 'ar' ? 'لا يوجد وصف متاح.' : 'No description available in this language.')
+              ) : ''}
             </p>
 
             <div className="mt-8 grid grid-cols-2 gap-4">
               <div className="p-4 bg-surface-base/50 rounded-xl border border-surface-border">
-                <span className="text-[10px] font-bold text-surface-muted uppercase mb-1 block">الفئة</span>
-                <span className="text-sm font-bold text-white">{auction.category || 'غير محدد'}</span>
+                <span className="text-[10px] font-bold text-surface-muted uppercase mb-1 block">رقم القطعة</span>
+                <span className="text-sm font-bold text-white uppercase tracking-wider">{auction.lot_number || shortID(auction.id)}</span>
               </div>
               <div className="p-4 bg-surface-base/50 rounded-xl border border-surface-border">
-                <span className="text-[10px] font-bold text-surface-muted uppercase mb-1 block">الموقع</span>
-                <span className="text-sm font-bold text-white flex items-center gap-2">
-                  <MapPin className="w-3.5 h-3.5 text-mazad-primary" />
-                  {auction.city || 'نواكشوط'}
-                </span>
+                <span className="text-[10px] font-bold text-surface-muted uppercase mb-1 block">تاريخ الانتهاء</span>
+                <span className="text-sm font-bold text-white">{formatDate(auction.end_time)}</span>
               </div>
             </div>
+          </div>
+
+          {/* Auction Details Card */}
+          <div className="admin-card p-6 mt-6">
+            <div className="flex items-center gap-3 mb-6 border-b border-surface-border pb-4">
+              <div className="p-2 bg-mazad-primary/20 text-mazad-primary rounded-lg">
+                <Gavel className="w-5 h-5" />
+              </div>
+              <h2 className="font-display font-bold text-white text-lg">تفاصيل المزاد المالية والزمنية</h2>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-8 gap-x-6">
+              <DetailItem 
+                label="الفئة" 
+                value={auction.category || 'غير محدد'} 
+                icon={Tag}
+              />
+              <DetailItem 
+                label="الموقع" 
+                value={auction.city || 'نواكشوط'} 
+                icon={MapPin}
+              />
+              <DetailItem 
+                label="السعر الافتتاحي" 
+                value={formatPrice(auction.start_price)} 
+                color="text-white"
+              />
+              <DetailItem 
+                label="الحد الأدنى للمزايدة" 
+                value={formatPrice(auction.min_increment)} 
+                color="text-white"
+              />
+              <DetailItem 
+                label="مبلغ التأمين" 
+                value={formatPrice(auction.insurance_amount)} 
+                color="text-white"
+              />
+
+              {auction.buy_now_price && (
+                <DetailItem 
+                  label="سعر الشراء المباشر" 
+                  value={formatPrice(auction.buy_now_price)} 
+                  color="text-mazad-accent"
+                />
+              )}
+
+              <DetailItem 
+                label="تاريخ البدء" 
+                value={formatDate(auction.start_time)} 
+                icon={Calendar}
+              />
+              
+              <div className="flex items-center gap-6 pt-2">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-surface-muted uppercase mb-1 flex items-center gap-1.5 tracking-wider">
+                    <Eye className="w-3 h-3 text-mazad-primary" /> المشاهدات
+                  </span>
+                  <span className="text-sm font-bold text-white">{auction.views}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-surface-muted uppercase mb-1 flex items-center gap-1.5 tracking-wider">
+                    <Gavel className="w-3 h-3 text-mazad-primary" /> المزايدات
+                  </span>
+                  <span className="text-sm font-bold text-white">{auction.bidder_count}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Technical Specifications (Dynamic from item_details) */}
+            {auction.item_details && Object.keys(auction.item_details).length > 0 && (
+              <div className="mt-10 pt-8 border-t border-surface-border/50">
+                <h3 className="text-[10px] font-bold text-mazad-primary uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-mazad-primary" />
+                  المواصفات التقنية والخصائص
+                </h3>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Object.entries(auction.item_details).map(([key, value]) => (
+                    <div key={key} className="p-4 bg-surface-base/30 rounded-xl border border-surface-border/50 hover:border-surface-muted/30 transition-colors">
+                      <span className="text-[10px] font-bold text-surface-muted block mb-1 opacity-70">{key}</span>
+                      <span className="text-sm font-bold text-white break-words">{String(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -128,7 +370,7 @@ export function AuctionDetailPage() {
             
             <div className="relative">
               <StatusBadge status={auction.status} className="mb-4" />
-              <h1 className="text-2xl font-display font-bold text-white mb-6 leading-tight">{auction.title}</h1>
+              <h1 className="text-2xl font-display font-bold text-white mb-6 leading-tight">{auction.title_ar}</h1>
               
               <div className="space-y-6">
                  <div>
@@ -189,7 +431,7 @@ export function AuctionDetailPage() {
       {activeImage && (
         <ImagePreview 
           fullScreen 
-          src={activeImage} 
+          src={formatImgUrl(activeImage)} 
           onClose={() => setActiveImage(null)} 
         />
       )}

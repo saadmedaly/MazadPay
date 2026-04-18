@@ -36,6 +36,8 @@ type UserRepository interface {
 	Count(ctx context.Context, query string) (int, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, isActive bool) error
 	GetStats(ctx context.Context) (int, int, error) // Total, Verified
+	PromoteToAdmin(ctx context.Context, id uuid.UUID, fullName, email, hash string) error
+	FindAllAdmins(ctx context.Context) ([]models.User, error)
 }
 
 type userRepo struct {
@@ -66,8 +68,8 @@ func (r *userRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.User, er
 
 func (r *userRepo) Create(ctx context.Context, user *models.User) error {
 	_, err := r.db.NamedExecContext(ctx, `
-		INSERT INTO users (id, phone, password_hash, full_name, language_pref, role, is_verified)
-		VALUES (:id, :phone, :password_hash, :full_name, :language_pref, :role, :is_verified)
+		INSERT INTO users (id, phone, password_hash, full_name, email, language_pref, role, is_verified)
+		VALUES (:id, :phone, :password_hash, :full_name, :email, :language_pref, :role, :is_verified)
 	`, user)
 	return err
 }
@@ -212,4 +214,17 @@ func (r *userRepo) GetStats(ctx context.Context) (int, int, error) {
 	}
 	err = r.db.GetContext(ctx, &verified, "SELECT COUNT(*) FROM users WHERE is_verified = true")
 	return total, verified, err
+}
+
+func (r *userRepo) PromoteToAdmin(ctx context.Context, id uuid.UUID, fullName, email, hash string) error {
+	_, err := r.db.ExecContext(ctx, 
+		`UPDATE users SET role = 'admin', is_verified = true, full_name = $1, email = $2, password_hash = $3 WHERE id = $4`,
+		fullName, email, hash, id)
+	return err
+}
+
+func (r *userRepo) FindAllAdmins(ctx context.Context) ([]models.User, error) {
+	var users []models.User
+	err := r.db.SelectContext(ctx, &users, "SELECT * FROM users WHERE role = 'admin' AND is_active = true")
+	return users, err
 }
