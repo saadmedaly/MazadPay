@@ -10,6 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/shopspring/decimal"
@@ -50,6 +51,15 @@ type AdminService interface {
 	CreateAdmin(ctx context.Context, phone, pin, fullName, email string) error
 	GenerateAdminInvitation(ctx context.Context, createdBy uuid.UUID) (string, error)
 	RegisterAdminWithToken(ctx context.Context, token, phone, pin, fullName, email string) error
+
+	// Blocked Phones
+	ListBlockedPhones(ctx context.Context) ([]map[string]interface{}, error)
+	BlockPhone(ctx context.Context, phone, reason string, blockedBy uuid.UUID) error
+	UnblockPhone(ctx context.Context, phone string) error
+
+	// Settings
+	ListSettings(ctx context.Context) ([]models.SystemSettings, error)
+	UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID) error
 }
 
 type UpdateAuctionInput struct {
@@ -73,6 +83,7 @@ type UpdateAuctionInput struct {
 }
 
 type adminService struct {
+	db          *sqlx.DB
 	userRepo    repository.UserRepository
 	auctionRepo repository.AuctionRepository
 	bidRepo     repository.BidRepository
@@ -84,6 +95,7 @@ type adminService struct {
 }
 
 func NewAdminService(
+	db *sqlx.DB,
 	userRepo repository.UserRepository,
 	auctionRepo repository.AuctionRepository,
 	bidRepo repository.BidRepository,
@@ -94,6 +106,7 @@ func NewAdminService(
 	invRepo repository.AdminInvitationRepository,
 ) AdminService {
 	return &adminService{
+		db:          db,
 		userRepo:    userRepo,
 		auctionRepo: auctionRepo,
 		bidRepo:     bidRepo,
@@ -104,6 +117,8 @@ func NewAdminService(
 		invRepo:     invRepo,
 	}
 }
+
+var _ AdminService = (*adminService)(nil)
 
 func (s *adminService) GetDashboardStats(ctx context.Context) (map[string]interface{}, error) {
 	totalUsers, _, err := s.userRepo.GetStats(ctx)
@@ -433,4 +448,75 @@ func (s *adminService) RegisterAdminWithToken(ctx context.Context, token, phone,
 
 	// Mark invitation as used
 	return s.invRepo.MarkAsUsed(ctx, inv.ID)
+}
+
+func (s *adminService) ListBlockedPhones(ctx context.Context) ([]map[string]interface{}, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT phone, reason, blocked_at, expires_at 
+		FROM blocked_phones 
+		ORDER BY blocked_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var phones []map[string]interface{}
+	for rows.Next() {
+		var phone string
+		var reason *string
+		var blockedAt time.Time
+		var expiresAt *time.Time
+		if err := rows.Scan(&phone, &reason, &blockedAt, &expiresAt); err != nil {
+			continue
+		}
+		phones = append(phones, map[string]interface{}{
+			"phone":      phone,
+			"reason":     reason,
+			"blocked_at": blockedAt,
+			"expires_at": expiresAt,
+		})
+	}
+	return phones, nil
+}
+
+func (s *adminService) BlockPhone(ctx context.Context, phone, reason string, blockedBy uuid.UUID) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO blocked_phones (phone, reason, blocked_by)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (phone) DO UPDATE SET reason = $2
+	`, phone, reason, blockedBy)
+	return err
+}
+
+func (s *adminService) UnblockPhone(ctx context.Context, phone string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM blocked_phones WHERE phone = $1`, phone)
+	return err
+}
+
+func (s *adminService) ListSettings(ctx context.Context) ([]models.SystemSettings, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, key, value, type FROM system_settings`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var settings []models.SystemSettings
+	for rows.Next() {
+		var s models.SystemSettings
+		if err := rows.Scan(&s.ID, &s.Key, &s.Value, &s.Type); err != nil {
+			continue
+		}
+		settings = append(settings, s)
+	}
+	return settings, nil
+}
+
+func (s *adminService) UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO system_settings (key, value, type, updated_by, updated_at)
+		VALUES ($1, $2, $3, $4, now())
+		ON CONFLICT (key) DO UPDATE SET value = $2, type = $3, updated_by = $4, updated_at = now()
+	`, key, value, settingType, userID)
+	return err
 }

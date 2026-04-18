@@ -38,7 +38,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	auctionSvc := services.NewAuctionService(auctionRepo, reportRepo, notifSvc)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
-	adminSvc := services.NewAdminService(userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo)
+	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo)
 	walletSvc := services.NewWalletService(walletRepo, txRepo)
 	contentSvc := services.NewContentService(contentRepo, notifSvc)
 
@@ -99,6 +99,7 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	api.Get("/auctions", h.List)
 	api.Get("/auctions/:id", h.GetByID)
 	api.Post("/auctions/:id/view", h.IncrementView)
+	api.Get("/report-reasons", h.GetReportReasons)
 
 	// Bids (Public history)
 	api.Get("/auctions/:id/bids", bidHandler.History)
@@ -107,6 +108,7 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	auctions := api.Group("/auctions", jwtMiddleware)
 	auctions.Post("/", h.Create)
 	auctions.Post("/:id/report", h.Report) // CONCEPTION Signalements
+	auctions.Post("/:id/images", h.AddImages)
 
 	// Bids (Protected place)
 	api.Post("/auctions/:id/bids", jwtMiddleware, bidHandler.Place)
@@ -123,6 +125,8 @@ func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, wallet
 	users.Get("/me", userHandler.GetMe)
 	users.Put("/me", userHandler.UpdateProfile)
 	users.Post("/me/avatar", userHandler.UpdateAvatar)
+	users.Put("/me/language", userHandler.UpdateLanguage)
+	users.Put("/me/notification-prefs", userHandler.UpdateNotificationPrefs)
 
 	// Favorites
 	users.Get("/me/favorites", userHandler.ListFavorites)
@@ -140,6 +144,7 @@ func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, wallet
 	users.Post("/wallet/transactions/:id/receipt", walletHandler.UploadReceipt)
 	users.Post("/wallet/withdraw", walletHandler.Withdraw)
 	users.Get("/wallet/transactions", walletHandler.Transactions)
+	users.Get("/wallet/transactions/:id", walletHandler.GetTransaction)
 
 	// KYC
 	users.Get("/kyc", userHandler.GetKYCStatus)
@@ -190,6 +195,15 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwt
 	admin.Post("/locations", adminHandler.CreateLocation)
 	admin.Put("/locations/:id", adminHandler.UpdateLocation)
 	admin.Delete("/locations/:id", adminHandler.DeleteLocation)
+
+	// Blocked phones management
+	admin.Get("/blocked-phones", adminHandler.ListBlockedPhones)
+	admin.Post("/blocked-phones", adminHandler.BlockPhone)
+	admin.Delete("/blocked-phones/:phone", adminHandler.UnblockPhone)
+
+	// Settings management
+	admin.Get("/settings", adminHandler.ListSettings)
+	admin.Put("/settings/:key", adminHandler.UpdateSetting)
 }
 
 func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, jwtSecret string, logger *zap.Logger) {
@@ -205,6 +219,7 @@ func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, jwtSecret st
 	// Admin routes
 	admin := api.Group("/admin/banners", jwtMiddleware, adminMiddleware)
 	admin.Get("/", h.AdminList)
+	admin.Post("/", h.Create)
 	admin.Put("/:id/toggle", h.Toggle)
 	admin.Delete("/:id", h.Delete)
 }
@@ -241,6 +256,7 @@ func setupNotificationRoutes(api fiber.Router, h *handlers.NotificationHandler, 
 	notif.Post("/push-tokens", h.SaveToken)
 	notif.Get("/", h.List)
 	notif.Put("/read-all", h.MarkAllAsRead)
+	notif.Put("/:id/read", h.MarkAsRead)
 }
 
 

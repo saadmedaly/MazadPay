@@ -116,3 +116,22 @@ func (h *WalletHandler) Transactions(c *fiber.Ctx) error {
 		"total":    total,
 	})
 }
+
+func (h *WalletHandler) GetTransaction(c *fiber.Ctx) error {
+	txID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid transaction ID")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	tx, err := h.svc.GetTransaction(c.Context(), userID, txID)
+	if err != nil {
+		return NotFound(c, "Transaction")
+	}
+
+	return OK(c, tx)
+}

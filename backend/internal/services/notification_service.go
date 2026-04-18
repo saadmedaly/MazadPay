@@ -18,6 +18,7 @@ type NotificationService interface {
 	NotifyAdmins(ctx context.Context, title, body string, data map[string]string) error
 	ListNotifications(ctx context.Context, userID uuid.UUID, limit int) ([]models.Notification, error)
 	MarkAllAsRead(ctx context.Context, userID uuid.UUID) error
+	MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 	CleanupOldNotifications(ctx context.Context) error
 }
 
@@ -137,6 +138,10 @@ func (s *notificationService) ListNotifications(ctx context.Context, userID uuid
 
 func (s *notificationService) MarkAllAsRead(ctx context.Context, userID uuid.UUID) error {
 	return s.repo.MarkAllAsRead(ctx, userID)
+}
+
+func (s *notificationService) MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	return s.repo.MarkAsRead(ctx, id, userID)
 }
 
 func (s *notificationService) CleanupOldNotifications(ctx context.Context) error {

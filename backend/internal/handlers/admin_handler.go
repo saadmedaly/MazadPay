@@ -584,3 +584,60 @@ func (h *AdminHandler) DeleteLocation(c *fiber.Ctx) error {
 	}
 	return OK(c, fiber.Map{"message": "Location deleted"})
 }
+
+func (h *AdminHandler) ListBlockedPhones(c *fiber.Ctx) error {
+	phones, err := h.svc.ListBlockedPhones(c.Context())
+	if err != nil {
+		return InternalError(c, "Failed to list blocked phones")
+	}
+	return OK(c, phones)
+}
+
+func (h *AdminHandler) BlockPhone(c *fiber.Ctx) error {
+	type Request struct {
+		Phone   string `json:"phone"`
+		Reason  string `json:"reason"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	adminID, _ := middleware.GetUserID(c)
+	if err := h.svc.BlockPhone(c.Context(), req.Phone, req.Reason, adminID); err != nil {
+		return InternalError(c, "Failed to block phone")
+	}
+	return OK(c, fiber.Map{"message": "Phone blocked successfully"})
+}
+
+func (h *AdminHandler) UnblockPhone(c *fiber.Ctx) error {
+	phone := c.Params("phone")
+	if err := h.svc.UnblockPhone(c.Context(), phone); err != nil {
+		return InternalError(c, "Failed to unblock phone")
+	}
+	return OK(c, fiber.Map{"message": "Phone unblocked successfully"})
+}
+
+func (h *AdminHandler) ListSettings(c *fiber.Ctx) error {
+	settings, err := h.svc.ListSettings(c.Context())
+	if err != nil {
+		return InternalError(c, "Failed to list settings")
+	}
+	return OK(c, settings)
+}
+
+func (h *AdminHandler) UpdateSetting(c *fiber.Ctx) error {
+	type Request struct {
+		Value string `json:"value"`
+		Type  string `json:"type"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	key := c.Params("key")
+	adminID, _ := middleware.GetUserID(c)
+	if err := h.svc.UpdateSetting(c.Context(), key, req.Value, req.Type, adminID); err != nil {
+		return InternalError(c, "Failed to update setting")
+	}
+	return OK(c, fiber.Map{"message": "Setting updated successfully"})
+}

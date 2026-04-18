@@ -42,6 +42,7 @@ type AuctionService interface {
     Update(ctx context.Context, id uuid.UUID, input CreateAuctionInput) (*models.Auction, error)
     Delete(ctx context.Context, id uuid.UUID) error
     IncrementViews(ctx context.Context, id uuid.UUID) error
+    AddImages(ctx context.Context, auctionID, sellerID uuid.UUID, urls []string) error
     CloseExpiredAuctions(ctx context.Context) error
     GetCategories(ctx context.Context) ([]models.Category, error)
     GetLocations(ctx context.Context) ([]models.Location, error)
@@ -251,6 +252,27 @@ func (s *auctionService) Delete(ctx context.Context, id uuid.UUID) error {
 
 func (s *auctionService) IncrementViews(ctx context.Context, id uuid.UUID) error {
     return s.auctionRepo.IncrementViews(ctx, id)
+}
+
+func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid.UUID, urls []string) error {
+    auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+    if err != nil {
+        return apperr.ErrNotFound
+    }
+    if auction.SellerID != sellerID {
+        return apperr.ErrUnauthorized
+    }
+
+    for i, url := range urls {
+        img := &models.AuctionImage{
+            AuctionID:    auctionID,
+            URL:          url,
+            MediaType:    "image",
+            DisplayOrder: i + 1,
+        }
+        _ = s.auctionRepo.AddImage(ctx, img)
+    }
+    return nil
 }
 
 // CloseExpiredAuctions — appelé par le Cron toutes les 30 secondes

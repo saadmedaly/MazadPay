@@ -18,6 +18,8 @@ import { ProfilePage } from './pages/ProfilePage'
 import { AdminInvitePage } from './pages/AdminInvitePage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { LocationsPage } from './pages/LocationsPage'
+import { SettingsPage } from './pages/SettingsPage'
+import { BlockedPhonesPage } from './pages/BlockedPhonesPage'
 import { useAuthStore } from './stores/authStore'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -58,6 +60,8 @@ export default function App() {
         <Route path="categories" element={<CategoriesPage />} />
         <Route path="locations" element={<LocationsPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="blocked-phones" element={<BlockedPhonesPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
 
