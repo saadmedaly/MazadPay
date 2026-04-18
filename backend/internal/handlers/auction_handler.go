@@ -316,3 +316,108 @@ func (h *AuctionHandler) AddImages(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{"message": "Images added successfully"})
 }
 
+func (h *AuctionHandler) BuyNow(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	auction, err := h.service.BuyNow(c.Context(), id, userID)
+	if err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	return OK(c, fiber.Map{
+		"message":    "Purchase completed successfully",
+		"auction":   auction,
+		"final_price": auction.CurrentPrice,
+	})
+}
+
+func (h *AuctionHandler) Cancel(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	type CancelRequest struct {
+		Reason string `json:"reason"`
+	}
+	var req CancelRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	if err := h.service.CancelAuction(c.Context(), id, userID, req.Reason); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	return OK(c, fiber.Map{"message": "Auction canceled"})
+}
+
+func (h *AuctionHandler) Relist(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	type RelistRequest struct {
+		EndTime string `json:"end_time"`
+	}
+	var req RelistRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	newEndTime, err := time.Parse(time.RFC3339, req.EndTime)
+	if err != nil {
+		return BadRequest(c, "Invalid end_time format (use RFC3339)")
+	}
+
+	if err := h.service.RelistAuction(c.Context(), id, newEndTime); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	return OK(c, fiber.Map{"message": "Auction relisted"})
+}
+
+func (h *AuctionHandler) Extend(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	type ExtendRequest struct {
+		Hours int `json:"hours"`
+	}
+	var req ExtendRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	if req.Hours <= 0 || req.Hours > 72 {
+		return BadRequest(c, "Hours must be between 1 and 72")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	if err := h.service.ExtendAuction(c.Context(), id, userID, req.Hours); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	return OK(c, fiber.Map{"message": "Auction extended"})
+}
+

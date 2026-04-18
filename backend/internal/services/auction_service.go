@@ -6,10 +6,10 @@ import (
     "time"
 
     "github.com/google/uuid"
+    "github.com/shopspring/decimal"
     apperr "github.com/mazadpay/backend/internal/errors"
     "github.com/mazadpay/backend/internal/models"
     "github.com/mazadpay/backend/internal/repository"
-    "github.com/shopspring/decimal"
 )
 
 type CreateAuctionInput struct {
@@ -43,6 +43,10 @@ type AuctionService interface {
     Delete(ctx context.Context, id uuid.UUID) error
     IncrementViews(ctx context.Context, id uuid.UUID) error
     AddImages(ctx context.Context, auctionID, sellerID uuid.UUID, urls []string) error
+    BuyNow(ctx context.Context, auctionID, buyerID uuid.UUID) (*models.Auction, error)
+    CancelAuction(ctx context.Context, auctionID, sellerID uuid.UUID, reason string) error
+    RelistAuction(ctx context.Context, auctionID uuid.UUID, newEndTime time.Time) error
+    ExtendAuction(ctx context.Context, auctionID uuid.UUID, sellerID uuid.UUID, hours int) error
     CloseExpiredAuctions(ctx context.Context) error
     GetCategories(ctx context.Context) ([]models.Category, error)
     GetLocations(ctx context.Context) ([]models.Location, error)
@@ -273,6 +277,92 @@ func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid
         _ = s.auctionRepo.AddImage(ctx, img)
     }
     return nil
+}
+
+func (s *auctionService) BuyNow(ctx context.Context, auctionID, buyerID uuid.UUID) (*models.Auction, error) {
+    auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+    if err != nil {
+        return nil, apperr.ErrNotFound
+    }
+    if auction.Status != "active" {
+        return nil, fmt.Errorf("auction is not active")
+    }
+    if auction.BuyNowPrice == nil {
+        return nil, fmt.Errorf("auction does not have buy now price")
+    }
+    if auction.SellerID == buyerID {
+        return nil, fmt.Errorf("cannot buy your own auction")
+    }
+
+    // Update auction as ended with winner
+    auction.WinnerID = &buyerID
+    auction.Status = "ended"
+    auction.CurrentPrice = *auction.BuyNowPrice
+
+    if err := s.auctionRepo.Update(ctx, auction); err != nil {
+        return nil, err
+    }
+
+    // Notify seller
+    if s.notifSvc != nil {
+        go func() {
+            _ = s.notifSvc.SendPush(context.Background(), auction.SellerID,
+                "تم بيعienst!", fmt.Sprintf("تم شراء مزاد %s بسعر fijo", auction.TitleAr),
+                map[string]string{"type": "auction_sold", "id": auction.ID.String()})
+        }()
+    }
+
+    return auction, nil
+}
+
+func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID uuid.UUID, reason string) error {
+    auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+    if err != nil {
+        return apperr.ErrNotFound
+    }
+    if auction.SellerID != sellerID {
+        return apperr.ErrUnauthorized
+    }
+    if auction.Status == "ended" || auction.Status == "canceled" {
+        return fmt.Errorf("cannot cancel auction in current status: %s", auction.Status)
+    }
+
+    auction.Status = "canceled"
+    auction.RejectionReason = &reason
+    return s.auctionRepo.Update(ctx, auction)
+}
+
+func (s *auctionService) RelistAuction(ctx context.Context, auctionID uuid.UUID, newEndTime time.Time) error {
+    auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+    if err != nil {
+        return apperr.ErrNotFound
+    }
+    if auction.Status != "canceled" && auction.Status != "ended" {
+        return fmt.Errorf("can only relist canceled or ended auctions")
+    }
+
+    auction.Status = "pending"
+    auction.EndTime = newEndTime
+    auction.WinnerID = nil
+    auction.CurrentPrice = auction.StartPrice
+    return s.auctionRepo.Update(ctx, auction)
+}
+
+func (s *auctionService) ExtendAuction(ctx context.Context, auctionID, sellerID uuid.UUID, hours int) error {
+    auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+    if err != nil {
+        return apperr.ErrNotFound
+    }
+    if auction.SellerID != sellerID {
+        return apperr.ErrUnauthorized
+    }
+    if auction.Status != "active" {
+        return fmt.Errorf("can only extend active auctions")
+    }
+
+    newEndTime := auction.EndTime.Add(time.Duration(hours) * time.Hour)
+    auction.EndTime = newEndTime
+    return s.auctionRepo.Update(ctx, auction)
 }
 
 // CloseExpiredAuctions — appelé par le Cron toutes les 30 secondes

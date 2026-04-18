@@ -109,6 +109,10 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	auctions.Post("/", h.Create)
 	auctions.Post("/:id/report", h.Report) // CONCEPTION Signalements
 	auctions.Post("/:id/images", h.AddImages)
+	auctions.Post("/:id/buy-now", h.BuyNow)
+	auctions.Post("/:id/cancel", h.Cancel)
+	auctions.Post("/:id/relist", h.Relist)
+	auctions.Post("/:id/extend", h.Extend)
 
 	// Bids (Protected place)
 	api.Post("/auctions/:id/bids", jwtMiddleware, bidHandler.Place)
