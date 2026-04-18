@@ -2,7 +2,12 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"sort"
 	"time"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/models"
@@ -12,6 +17,8 @@ import (
 
 type AdminService interface {
 	GetDashboardStats(ctx context.Context) (map[string]interface{}, error)
+	GetRevenueChartData(ctx context.Context) ([]map[string]interface{}, error)
+	GetRecentActivity(ctx context.Context) ([]map[string]interface{}, error)
 	ListUsers(ctx context.Context, page, perPage int, query string) ([]models.User, int, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error)
 	BlockUser(ctx context.Context, id uuid.UUID, block bool) error
@@ -38,6 +45,11 @@ type AdminService interface {
 	CreateLocation(ctx context.Context, l *models.Location) error
 	UpdateLocation(ctx context.Context, l *models.Location) error
 	DeleteLocation(ctx context.Context, id int) error
+
+	// Admin Management
+	CreateAdmin(ctx context.Context, phone, pin, fullName, email string) error
+	GenerateAdminInvitation(ctx context.Context, createdBy uuid.UUID) (string, error)
+	RegisterAdminWithToken(ctx context.Context, token, phone, pin, fullName, email string) error
 }
 
 type UpdateAuctionInput struct {
@@ -57,6 +69,7 @@ type UpdateAuctionInput struct {
 	PhoneContact    string
 	BuyNowPrice     *decimal.Decimal
 	ItemDetails     models.JSONB
+	Images          []string
 }
 
 type adminService struct {
@@ -67,6 +80,7 @@ type adminService struct {
 	reportRepo  repository.ReportRepository
 	kycRepo     repository.KYCRepository
 	contentRepo repository.ContentRepository
+	invRepo     repository.AdminInvitationRepository
 }
 
 func NewAdminService(
@@ -77,6 +91,7 @@ func NewAdminService(
 	reportRepo repository.ReportRepository,
 	kycRepo repository.KYCRepository,
 	contentRepo repository.ContentRepository,
+	invRepo repository.AdminInvitationRepository,
 ) AdminService {
 	return &adminService{
 		userRepo:    userRepo,
@@ -86,6 +101,7 @@ func NewAdminService(
 		reportRepo:  reportRepo,
 		kycRepo:     kycRepo,
 		contentRepo: contentRepo,
+		invRepo:     invRepo,
 	}
 }
 
@@ -94,7 +110,7 @@ func (s *adminService) GetDashboardStats(ctx context.Context) (map[string]interf
 	if err != nil {
 		return nil, err
 	}
-	totalAuctions, activeAuctions, pendingValidations, err := s.auctionRepo.GetStats(ctx)
+	totalAuctions, activeAuctions, pendingAuctions, err := s.auctionRepo.GetStats(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -112,17 +128,66 @@ func (s *adminService) GetDashboardStats(ctx context.Context) (map[string]interf
 	}
 	pendingKYCs, _ := s.kycRepo.List(ctx, "pending")
 
+	pendingTransactions, _ := s.txRepo.GetPendingCount(ctx)
+	weekDeposits, _ := s.txRepo.GetWeeklySum(ctx)
+
 	return map[string]interface{}{
-		"total_users":         totalUsers,
-		"total_auctions":      totalAuctions,
-		"total_bids":          totalBids,
-		"total_revenue":       totalRevenue,
-		"today_revenue":       todayRevenue,
-		"active_auctions":     activeAuctions,
-		"pending_validations": pendingValidations,
-		"pending_reports":     pendingReports,
-		"pending_kycs":        len(pendingKYCs),
+		"total_users":          totalUsers,
+		"total_auctions":       totalAuctions,
+		"total_bids":           totalBids,
+		"total_revenue":        totalRevenue,
+		"today_revenue":        todayRevenue,
+		"active_auctions":      activeAuctions,
+		"pending_auctions":     pendingAuctions,
+		"pending_reports":      pendingReports,
+		"pending_kycs":         len(pendingKYCs),
+		"pending_transactions": pendingTransactions,
+		"week_deposits":        weekDeposits,
 	}, nil
+}
+
+func (s *adminService) GetRevenueChartData(ctx context.Context) ([]map[string]interface{}, error) {
+	return s.txRepo.GetDailyRevenueChart(ctx)
+}
+
+func (s *adminService) GetRecentActivity(ctx context.Context) ([]map[string]interface{}, error) {
+	var activities []map[string]interface{}
+
+	// Latest 5 Auctions
+	auctions, _, _ := s.auctionRepo.ListPaginated(ctx, 1, 5, repository.AuctionFilters{})
+	for _, a := range auctions {
+		activities = append(activities, map[string]interface{}{
+			"id":          "auc_" + a.ID.String(),
+			"type":        "auction",
+			"description": "مزاد جديد: " + a.TitleAr,
+			"created_at":  a.CreatedAt,
+		})
+	}
+
+	// Latest 5 Transactions
+	txs, _, _ := s.txRepo.ListPaginated(ctx, 1, 5, "", nil)
+	for _, t := range txs {
+		activities = append(activities, map[string]interface{}{
+			"id":          "tx_" + t.ID.String(),
+			"type":        "transaction",
+			"description": "عملية مالية جديدة بقيمة " + t.Amount.String() + " MRU",
+			"created_at":  t.CreatedAt,
+		})
+	}
+
+	// Sort by created_at descending
+	sort.Slice(activities, func(i, j int) bool {
+		ti := activities[i]["created_at"].(time.Time)
+		tj := activities[j]["created_at"].(time.Time)
+		return ti.After(tj)
+	})
+
+	// Limit to 10
+	if len(activities) > 10 {
+		activities = activities[:10]
+	}
+
+	return activities, nil
 }
 
 func (s *adminService) ListUsers(ctx context.Context, page, perPage int, query string) ([]models.User, int, error) {
@@ -185,10 +250,33 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 	auction.EndTime       = input.EndTime
 	auction.PhoneContact  = phone
 	auction.BuyNowPrice   = input.BuyNowPrice
+	auction.ItemDetails   = input.ItemDetails
 	if input.StartTime != nil {
 		auction.StartTime = *input.StartTime
 	}
-	return s.auctionRepo.Update(ctx, auction)
+	
+	if err := s.auctionRepo.Update(ctx, auction); err != nil {
+		return err
+	}
+
+	// Sync images: Delete existing and add new ones
+	if err := s.auctionRepo.DeleteImages(ctx, id); err != nil {
+		return err
+	}
+	for i, url := range input.Images {
+		if url == "" { continue }
+		err := s.auctionRepo.AddImage(ctx, &models.AuctionImage{
+			AuctionID:    id,
+			URL:          url,
+			MediaType:    "image",
+			DisplayOrder: i,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *adminService) DeleteAuction(ctx context.Context, id uuid.UUID) error {
@@ -255,4 +343,94 @@ func (s *adminService) UpdateLocation(ctx context.Context, l *models.Location) e
 
 func (s *adminService) DeleteLocation(ctx context.Context, id int) error {
 	return s.auctionRepo.DeleteLocation(ctx, id)
+}
+
+func (s *adminService) CreateAdmin(ctx context.Context, phone, pin, fullName, email string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	user := &models.User{
+		ID:           uuid.New(),
+		Phone:        phone,
+		PasswordHash: string(hash),
+		FullName:     &fullName,
+		Email:        &email,
+		LanguagePref: "ar",
+		Role:         "admin",
+		IsVerified:   true, // Admins created by admins are verified
+	}
+
+	return s.userRepo.Create(ctx, user)
+}
+
+func (s *adminService) GenerateAdminInvitation(ctx context.Context, createdBy uuid.UUID) (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(b)
+
+	inv := &models.AdminInvitation{
+		ID:        uuid.New(),
+		Token:     token,
+		CreatedBy: createdBy,
+		ExpiresAt: time.Now().Add(24 * time.Hour), // 24h validity
+	}
+
+	if err := s.invRepo.Create(ctx, inv); err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+func (s *adminService) RegisterAdminWithToken(ctx context.Context, token, phone, pin, fullName, email string) error {
+	inv, err := s.invRepo.GetByToken(ctx, token)
+	if err != nil {
+		return err
+	}
+	if inv == nil {
+		return fmt.Errorf("invitation non trouvée")
+	}
+	if inv.UsedAt != nil {
+		return fmt.Errorf("cette invitation a déjà été utilisée")
+	}
+	if time.Now().After(inv.ExpiresAt) {
+		return fmt.Errorf("cette invitation a expiré")
+	}
+
+	// Check if user already exists
+	existingUser, _ := s.userRepo.FindByPhone(ctx, phone)
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	if existingUser != nil {
+		// Promote existing user to admin
+		if err := s.userRepo.PromoteToAdmin(ctx, existingUser.ID, fullName, email, string(hash)); err != nil {
+		    return err
+		}
+	} else {
+		// Create new admin user
+		user := &models.User{
+			ID:           uuid.New(),
+			Phone:        phone,
+			PasswordHash: string(hash),
+			FullName:     &fullName,
+			Email:        &email,
+			LanguagePref: "ar",
+			Role:         "admin",
+			IsVerified:   true,
+		}
+		if err := s.userRepo.Create(ctx, user); err != nil {
+			return err
+		}
+	}
+
+	// Mark invitation as used
+	return s.invRepo.MarkAsUsed(ctx, inv.ID)
 }

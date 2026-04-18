@@ -56,12 +56,24 @@ export function CategoriesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const payload = {
+      ...form,
+      name_ar: form.name_ar.trim(),
+      name_fr: form.name_fr.trim(),
+      name_en: form.name_en.trim(),
+      icon_name: form.icon_name.trim(),
+    }
+
+    if (!payload.name_ar || !payload.name_fr) {
+      return // browser check 'required' handles this usually, but safe to trim
+    }
+
     if (editingCategory) {
-      updateMut.mutate({ id: editingCategory.id, payload: form }, {
+      updateMut.mutate({ id: editingCategory.id, payload }, {
         onSuccess: () => setIsModalOpen(false)
       })
     } else {
-      createMut.mutate(form, {
+      createMut.mutate(payload, {
         onSuccess: () => setIsModalOpen(false)
       })
     }

@@ -47,8 +47,8 @@ func main() {
 
 	app := fiber.New(fiber.Config{
 		AppName:      cfg.App.Name,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {
@@ -92,7 +92,31 @@ func main() {
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"success": true, "data": fiber.Map{"status": "ok"}})
 	})
-	routes.Setup(app, db, rdb, cfg, logger)
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"success": false, "message": "MazadPay API root"})
+	})
+
+	auctionSvc, notifSvc := routes.Setup(app, db, rdb, cfg, logger)
+	
+	// --- Background Tasks ---
+	go func() {
+		auctionTicker := time.NewTicker(30 * time.Second)
+		cleanupTicker := time.NewTicker(1 * time.Hour)
+		defer auctionTicker.Stop()
+		defer cleanupTicker.Stop()
+
+		for {
+			select {
+			case <-auctionTicker.C:
+				logger.Debug("Running background: CloseExpiredAuctions")
+				_ = auctionSvc.CloseExpiredAuctions(context.Background())
+			case <-cleanupTicker.C:
+				logger.Info("Running background: CleanupOldNotifications")
+				_ = notifSvc.CleanupOldNotifications(context.Background())
+			}
+		}
+	}()
 
 	// Démarrage gracieux
 	go func() {

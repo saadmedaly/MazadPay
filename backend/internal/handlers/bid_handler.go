@@ -4,6 +4,7 @@ import (
     "github.com/go-playground/validator/v10"
     "github.com/gofiber/fiber/v2"
     "github.com/google/uuid"
+    "github.com/mazadpay/backend/internal/middleware"
     "github.com/mazadpay/backend/internal/services"
     "github.com/shopspring/decimal"
     "go.uber.org/zap"
@@ -42,7 +43,10 @@ func (h *BidHandler) Place(c *fiber.Ctx) error {
         return BadRequest(c, err.Error())
     }
 
-    userID, _ := uuid.Parse(GetUserID(c))
+    userID, err := middleware.GetUserID(c)
+    if err != nil {
+        return Unauthorized(c)
+    }
     amount := decimal.NewFromFloat(req.Amount)
 
     bid, err := h.service.PlaceBid(c.Context(), auctionID, userID, amount)

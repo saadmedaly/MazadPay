@@ -35,9 +35,11 @@ const EMPTY_FORM = {
   description_ar: '', description_fr: '', description_en: '',
   start_price: 0, buy_now_price: 0, min_increment: 0, insurance_amount: 0,
   category_id: 1, location_id: 1,
-  start_time: '', end_time: '',
+  start_time: '', 
+  end_time: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
   phone_contact: '',
   images: [''] as string[],
+  item_details: {} as Record<string, any>,
 }
 
 type FormState = typeof EMPTY_FORM
@@ -60,7 +62,7 @@ export function AuctionsPage() {
   const status = searchParams.get('status') ?? ''
   const page   = parseInt(searchParams.get('page') ?? '1')
 
-  const { data, isLoading, isError } = useAuctions({ status: status || undefined, q, page, per_page: 25 })
+  const { data, isLoading, isError, refetch } = useAuctions({ status: status || undefined, q, page, per_page: 25 })
   const validate    = useValidateAuction()
   const createMut   = useCreateAuction()
   const updateMut   = useUpdateAuction()
@@ -97,7 +99,14 @@ export function AuctionsPage() {
     if (!form.end_time)        { toast.error('تاريخ الإغلاق مطلوب'); return null }
 
     let end_time: string
-    try { end_time = parseISO(form.end_time) }
+    try { 
+      const d = new Date(form.end_time)
+      if (d <= new Date()) {
+        toast.error('تاريخ الإغلاق يجب أن يكون في المستقبل')
+        return null
+      }
+      end_time = d.toISOString() 
+    }
     catch { toast.error('تاريخ الإغلاق غير صالح'); return null }
 
     let start_time: string | undefined
@@ -106,23 +115,34 @@ export function AuctionsPage() {
       catch { toast.error('تاريخ البدء غير صالح'); return null }
     }
 
+    if (form.buy_now_price > 0 && form.buy_now_price <= form.start_price) {
+      toast.error('سعر البيع المباشر يجب أن يكون أكبر من السعر الافتتاحي')
+      return null
+    }
+
+    const phone = form.phone_contact?.trim()
+    if (phone && !/^[234]\d{7}$/.test(phone)) {
+      toast.error('رقم الهاتف غير صحيح (يجب أن يكون 8 أرقام تبدأ بـ 2 أو 3 أو 4)')
+      return null
+    }
+
     return {
       category_id:      form.category_id,
       location_id:      form.location_id || undefined,
-      title_ar:         form.title_ar,
-      title_fr:         form.title_fr  || undefined,
-      title_en:         form.title_en  || undefined,
-      description_ar:   form.description_ar  || undefined,
-      description_fr:   form.description_fr  || undefined,
-      description_en:   form.description_en  || undefined,
+      title_ar:         form.title_ar.trim(),
+      title_fr:         form.title_fr?.trim()  || undefined,
+      title_en:         form.title_en?.trim()  || undefined,
+      description_ar:   form.description_ar?.trim()  || undefined,
+      description_fr:   form.description_fr?.trim()  || undefined,
+      description_en:   form.description_en?.trim()  || undefined,
       start_price:      form.start_price,
       min_increment:    form.min_increment || Math.max(form.start_price * 0.05, 100),
       insurance_amount: form.insurance_amount || undefined,
       buy_now_price:    form.buy_now_price   || undefined,
-      phone_contact:    form.phone_contact   || undefined,
+      phone_contact:    phone || undefined,
       start_time,
       end_time,
-      images: form.images.filter(Boolean),
+      images: form.images.filter(img => img && img.trim()),
     }
   }
 
@@ -130,7 +150,7 @@ export function AuctionsPage() {
     const payload = buildPayload()
     if (!payload) return
     createMut.mutate(payload, {
-      onSuccess: () => { setMode(null); setForm(EMPTY_FORM) }
+      onSuccess: () => { setMode(null); setForm(EMPTY_FORM); refetch(); }
     })
   }
 
@@ -138,8 +158,8 @@ export function AuctionsPage() {
     if (!editingId) return
     const payload = buildPayload()
     if (!payload) return
-    updateMut.mutate({ id: editingId, payload }, {
-      onSuccess: () => { setMode(null); setEditingId(null); setForm(EMPTY_FORM) }
+    updateMut.mutate({ id: editingId!, payload }, {
+      onSuccess: () => { setMode(null); setEditingId(null); setForm(EMPTY_FORM); refetch(); }
     })
   }
 
@@ -174,6 +194,7 @@ export function AuctionsPage() {
         end_time:       toDatetimeLocal(full.end_time   as unknown as string),
         phone_contact:  '',
         images:         imgs.length > 0 ? imgs : [''],
+        item_details:   full.item_details ?? {},
       })
       setMode('edit')
       setActiveLang('ar')
@@ -201,8 +222,35 @@ export function AuctionsPage() {
     },
     {
       header: 'العنوان',
-      accessorKey: 'title_ar',
-      cell: ({ getValue }) => <p className="text-white font-bold truncate max-w-[180px]">{getValue<string>()}</p>
+      cell: ({ row }) => {
+        const a = row.original
+        const title = activeLang === 'ar' ? a.title_ar : activeLang === 'fr' ? (a.title_fr || a.title_ar) : (a.title_en || a.title_fr || a.title_ar)
+        return <p className="text-white font-bold truncate max-w-[300px]" title={title}>{title}</p>
+      }
+    },
+    {
+      header: 'الفئة',
+      cell: ({ row }) => {
+        const cat = categories?.find(c => c.id === row.original.category_id)
+        if (!cat) return <span className="text-surface-muted text-xs">-</span>
+        const name = activeLang === 'ar' ? cat.name_ar : activeLang === 'fr' ? cat.name_fr : (cat.name_en || cat.name_fr)
+        return <span className="text-xs text-blue-400 font-medium">{name}</span>
+      }
+    },
+    {
+      header: 'الموقع',
+      cell: ({ row }) => {
+        const loc = locations?.find(l => l.id === row.original.location_id)
+        if (!loc) return <span className="text-surface-muted text-xs">عام</span>
+        const city = activeLang === 'ar' ? loc.city_name_ar : loc.city_name_fr
+        const area = activeLang === 'ar' ? loc.area_name_ar : loc.area_name_fr
+        return (
+          <div className="flex flex-col">
+            <span className="text-xs text-white font-medium">{city}</span>
+            {area && <span className="text-[10px] text-surface-muted">{area}</span>}
+          </div>
+        )
+      }
     },
     {
       header: 'السعر الحالي',

@@ -38,6 +38,7 @@ type AuctionService interface {
     List(ctx context.Context, f repository.AuctionFilters) ([]models.Auction, error)
 
     Create(ctx context.Context, sellerID uuid.UUID, input CreateAuctionInput) (*models.Auction, error)
+    ReportAuction(ctx context.Context, auctionID, reporterID uuid.UUID, reason string) error
     Update(ctx context.Context, id uuid.UUID, input CreateAuctionInput) (*models.Auction, error)
     Delete(ctx context.Context, id uuid.UUID) error
     IncrementViews(ctx context.Context, id uuid.UUID) error
@@ -48,10 +49,16 @@ type AuctionService interface {
 
 type auctionService struct {
     auctionRepo repository.AuctionRepository
+    reportRepo  repository.ReportRepository
+    notifSvc    NotificationService
 }
 
-func NewAuctionService(auctionRepo repository.AuctionRepository) AuctionService {
-    return &auctionService{auctionRepo: auctionRepo}
+func NewAuctionService(auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService) AuctionService {
+    return &auctionService{
+        auctionRepo: auctionRepo,
+        reportRepo:  reportRepo,
+        notifSvc:    notifSvc,
+    }
 }
 
 func (s *auctionService) GetByID(ctx context.Context, id uuid.UUID) (*models.Auction, []models.AuctionImage, error) {
@@ -138,6 +145,20 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
         _ = s.auctionRepo.AddImage(ctx, img)
     }
 
+    // Notifier les admins
+    if s.notifSvc != nil {
+        go func() {
+            _ = s.notifSvc.NotifyAdmins(context.Background(), 
+                "Nouvelle enchère en attente", 
+                fmt.Sprintf("L'article '%s' a été soumis pour validation.", auction.TitleAr),
+                map[string]string{
+                    "type": "new_auction",
+                    "id":   auction.ID.String(),
+                },
+            )
+        }()
+    }
+
     return auction, nil
 }
 
@@ -180,7 +201,48 @@ func (s *auctionService) Update(ctx context.Context, id uuid.UUID, input CreateA
     if err := s.auctionRepo.Update(ctx, auction); err != nil {
         return nil, err
     }
+
+     _ = s.auctionRepo.DeleteImages(ctx, id)
+    for i, url := range input.Images {
+        if url == "" { continue }
+        _ = s.auctionRepo.AddImage(ctx, &models.AuctionImage{
+            AuctionID:    id,
+            URL:          url,
+            MediaType:    "image",
+            DisplayOrder: i,
+        })
+    }
+
     return auction, nil
+}
+
+func (s *auctionService) ReportAuction(ctx context.Context, auctionID, reporterID uuid.UUID, reason string) error {
+    report := &models.Report{
+        ID:         uuid.New(),
+        AuctionID:  auctionID,
+        ReporterID: reporterID,
+        Reason:     reason,
+        Status:     "pending",
+    }
+
+    if err := s.reportRepo.Create(ctx, report); err != nil {
+        return err
+    }
+
+    // Notifier les admins
+    if s.notifSvc != nil {
+        go func() {
+            title := "⚠️ بلاغ جديد (Signalement)"
+            body := fmt.Sprintf("تم الإبلاغ عن المزاد رقم %s. السبب: %s", auctionID.String()[:8], reason)
+            _ = s.notifSvc.NotifyAdmins(context.Background(), title, body, map[string]string{
+                "type":         "report",
+                "auction_id":   auctionID.String(),
+                "reference_id": report.ID.String(),
+            })
+        }()
+    }
+
+    return nil
 }
 
 func (s *auctionService) Delete(ctx context.Context, id uuid.UUID) error {

@@ -100,6 +100,7 @@ graph TD
 | F2.9  | Partage de l'application                                 | `side_menu_drawer.dart` L233-246                            | — (Deep link)                          |
 | F2.10 | Bouton "Évaluer l'app" (noter 1-5 étoiles + commentaire) | `app_modals.dart` L111-217                                  | `POST /v1/api/ratings`                    |
 | F2.11 | **Signalement d'annonce (Report)**                       | Nouvel ajout                                                | `POST /v1/api/auctions/{id}/report`       |
+| F2.12 | **Demande d'annonce (Banner Request)**                   | Nouvel ajout                                                | `POST /v1/api/banners/request`            |
 
 
 ---
@@ -558,13 +559,25 @@ CREATE TABLE push_tokens (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     fcm_token TEXT NOT NULL,
-    device_id VARCHAR(100),
-    platform VARCHAR(10) CHECK (platform IN ('android', 'ios')),
+    device_id TEXT,
+    platform VARCHAR(10) CHECK (platform IN ('android', 'ios', 'web')),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_fcm_token UNIQUE (fcm_token)
 );
 CREATE INDEX idx_push_tokens_user ON push_tokens(user_id);
+
+-- Invitations d'Admin
+CREATE TABLE admin_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    token VARCHAR(255) UNIQUE NOT NULL,
+    created_by UUID REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_admin_invitations_token ON admin_invitations(token);
 
 -- Paiements post-victoire d'enchère (F3.16 — POST /v1/api/payments/auction/{id})
 CREATE TABLE auction_payments (
@@ -618,7 +631,25 @@ CREATE INDEX idx_banners_active    ON banners(is_active, starts_at, ends_at);
  
 
 -- ============================================================
--- 9. TRIGGERS AUTOMATIQUES
+-- 10. SYSTÈME DE NOTIFICATIONS (Détails)
+-- ============================================================
+
+-- Le système de notifications repose sur Firebase Cloud Messaging (FCM) pour le temps réel
+-- et une table `notifications` pour l'historique consultable dans l'application.
+
+-- Les jetons FCM sont stockés dans `push_tokens` lors de l'ouverture de l'application.
+-- Un service en arrière-plan (Cron) nettoie automatiquement les notifications de plus de 30 jours.
+
+-- Types de notifications gérés :
+-- 1. `bid` : Nouvelle mise sur votre enchère ou surenchère reçue.
+-- 2. `win` : Vous avez gagné une enchère.
+-- 3. `payment` : Confirmation ou refus d'un dépôt/retrait.
+-- 4. `report` : Signalement d'une enchère (Admin).
+-- 5. `banner_request` : Nouvelle demande d'annonce (Admin).
+-- 6. `system` : Messages généraux ou maintenance.
+
+-- ============================================================
+-- 11. TRIGGERS AUTOMATIQUES
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION update_modified_column()

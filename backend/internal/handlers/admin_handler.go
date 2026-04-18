@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/shopspring/decimal"
@@ -28,32 +29,84 @@ func (h *AdminHandler) DashboardStats(c *fiber.Ctx) error {
 		return InternalError(c, "Failed to get stats: "+err.Error())
 	}
 
-	return OK(c, fiber.Map{"data": stats})
+	return OK(c, stats)
 }
 
 // Revenue chart
 func (h *AdminHandler) RevenueChart(c *fiber.Ctx) error {
-	chart := fiber.Map{
-		"labels": []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun"},
-		"data":   []float64{1200, 1900, 1500, 2500, 2200, 3000},
+	data, err := h.svc.GetRevenueChartData(c.Context())
+	if err != nil {
+		return InternalError(c, "Failed to get chart data: "+err.Error())
 	}
 
-	return OK(c, fiber.Map{"data": chart})
+	return OK(c, data)
 }
 
 // Activity feed
 func (h *AdminHandler) ActivityFeed(c *fiber.Ctx) error {
-	// For now kept as is or semi-dynamic
-	activities := []fiber.Map{
-		{
-			"id":        "1",
-			"type":      "new_auction",
-			"message":   "System started successfully",
-			"timestamp": "2024-04-16T10:30:00Z",
-		},
+	activities, err := h.svc.GetRecentActivity(c.Context())
+	if err != nil {
+		return InternalError(c, "Failed to get activity feed: "+err.Error())
 	}
 
-	return OK(c, fiber.Map{"data": activities})
+	return OK(c, activities)
+}
+
+// CreateAdmin creates a new admin user
+func (h *AdminHandler) CreateAdmin(c *fiber.Ctx) error {
+	type Request struct {
+		Phone    string `json:"phone"     validate:"required"`
+		Pin      string `json:"pin"       validate:"required,len=4"`
+		FullName string `json:"full_name" validate:"required"`
+		Email    string `json:"email"     validate:"required,email"`
+	}
+
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	if err := h.svc.CreateAdmin(c.Context(), req.Phone, req.Pin, req.FullName, req.Email); err != nil {
+		return InternalError(c, "Failed to create admin: "+err.Error())
+	}
+
+	return OK(c, fiber.Map{"message": "Admin user created successfully"})
+}
+
+// GenerateInvitation generates a new admin invitation link
+func (h *AdminHandler) GenerateInvitation(c *fiber.Ctx) error {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	token, err := h.svc.GenerateAdminInvitation(c.Context(), adminID)
+	if err != nil {
+		return InternalError(c, "Failed to generate invitation: "+err.Error())
+	}
+
+	return OK(c, fiber.Map{"token": token})
+}
+
+// RegisterWithInvitation registers a new admin using an invitation token
+func (h *AdminHandler) RegisterWithInvitation(c *fiber.Ctx) error {
+	type Request struct {
+		Token    string `json:"token"     validate:"required"`
+		Phone    string `json:"phone"     validate:"required"`
+		Pin      string `json:"pin"       validate:"required,len=4"`
+		FullName string `json:"full_name" validate:"required"`
+		Email    string `json:"email"     validate:"required,email"`
+	}
+
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	if err := h.svc.RegisterAdminWithToken(c.Context(), req.Token, req.Phone, req.Pin, req.FullName, req.Email); err != nil {
+		return InternalError(c, "Failed to register with invitation: "+err.Error())
+	}
+
+	return OK(c, fiber.Map{"message": "Admin registered successfully"})
 }
 
 // List users
@@ -92,7 +145,7 @@ func (h *AdminHandler) GetUserByID(c *fiber.Ctx) error {
 		return NotFound(c, "User not found")
 	}
 
-	return OK(c, fiber.Map{"data": user})
+	return OK(c, user)
 }
 
 // Get user auctions
@@ -247,6 +300,7 @@ func (h *AdminHandler) UpdateAuction(c *fiber.Ctx) error {
 		PhoneContact    string                 `json:"phone_contact"`
 		BuyNowPrice     *float64               `json:"buy_now_price"`
 		ItemDetails     map[string]interface{} `json:"item_details"`
+		Images          []string               `json:"images"`
 	}
 
 	var req UpdateRequest
@@ -290,6 +344,8 @@ func (h *AdminHandler) UpdateAuction(c *fiber.Ctx) error {
 		EndTime:         endTime,
 		PhoneContact:    req.PhoneContact,
 		BuyNowPrice:     buyNow,
+		Images:          req.Images,
+		ItemDetails:     req.ItemDetails,
 	}); err != nil {
 		return MapError(c, h.logger, err)
 	}
@@ -377,7 +433,10 @@ func (h *AdminHandler) ValidateTransaction(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid transaction ID")
 	}
 
-	adminID := uuid.Nil // TODO: Get from JWT context
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	if err := h.svc.ValidateTransaction(c.Context(), id, req.Approve, req.Notes, adminID); err != nil {
 		return InternalError(c, "Failed to validate transaction")
 	}
@@ -411,7 +470,10 @@ func (h *AdminHandler) ReviewReport(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid report ID")
 	}
 
-	adminID := uuid.Nil // TODO: Get from JWT
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	if err := h.svc.ReviewReport(c.Context(), id, req.Status, req.Notes, adminID); err != nil {
 		return InternalError(c, "Failed to review report")
 	}
@@ -428,7 +490,7 @@ func (h *AdminHandler) ListKYCs(c *fiber.Ctx) error {
 	if err != nil {
 		return InternalError(c, "Failed to list KYC")
 	}
-	return OK(c, fiber.Map{"data": kycs})
+	return OK(c, kycs)
 }
 
 func (h *AdminHandler) ReviewKYC(c *fiber.Ctx) error {
@@ -446,7 +508,10 @@ func (h *AdminHandler) ReviewKYC(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid user ID")
 	}
 
-	adminID := c.Locals("userID").(uuid.UUID)
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	if err := h.svc.ReviewKYC(c.Context(), userID, req.Status, req.Notes, adminID); err != nil {
 		return InternalError(c, "Failed to review KYC: "+err.Error())
 	}

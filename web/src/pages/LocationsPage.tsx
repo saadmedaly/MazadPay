@@ -55,12 +55,23 @@ export function LocationsPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const payload = {
+      city_name_ar: form.city_name_ar.trim(),
+      city_name_fr: form.city_name_fr.trim(),
+      area_name_ar: form.area_name_ar.trim() || '',
+      area_name_fr: form.area_name_fr.trim() || ''
+    }
+
+    if (!payload.city_name_ar || !payload.city_name_fr) {
+      return
+    }
+
     if (editingLocation) {
-      updateMut.mutate({ id: editingLocation.id, payload: form }, {
+      updateMut.mutate({ id: editingLocation.id, payload }, {
         onSuccess: () => setIsModalOpen(false)
       })
     } else {
-      createMut.mutate(form, {
+      createMut.mutate(payload, {
         onSuccess: () => setIsModalOpen(false)
       })
     }

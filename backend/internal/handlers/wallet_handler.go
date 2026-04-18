@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -20,12 +21,15 @@ func NewWalletHandler(svc services.WalletService, logger *zap.Logger) *WalletHan
 }
 
 func (h *WalletHandler) GetMe(c *fiber.Ctx) error {
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	wallet, err := h.svc.GetBalance(c.Context(), userID)
 	if err != nil {
 		return InternalError(c, "Failed to get wallet: "+err.Error())
 	}
-	return OK(c, fiber.Map{"data": wallet})
+	return OK(c, wallet)
 }
 
 func (h *WalletHandler) Deposit(c *fiber.Ctx) error {
@@ -38,14 +42,16 @@ func (h *WalletHandler) Deposit(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	amount := decimal.NewFromFloat(req.Amount)
 	tx, err := h.svc.InitiateDeposit(c.Context(), userID, amount, req.Gateway)
 	if err != nil {
 		return InternalError(c, "Failed to initiate deposit")
 	}
-
-	return OK(c, fiber.Map{"data": tx})
+	return OK(c, tx)
 }
 
 func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
@@ -79,18 +85,23 @@ func (h *WalletHandler) Withdraw(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	amount := decimal.NewFromFloat(req.Amount)
 	tx, err := h.svc.RequestWithdraw(c.Context(), userID, amount, req.Gateway)
 	if err != nil {
 		return InternalError(c, err.Error())
 	}
-
-	return OK(c, fiber.Map{"data": tx})
+	return OK(c, tx)
 }
 
 func (h *WalletHandler) Transactions(c *fiber.Ctx) error {
-	userID := c.Locals("userID").(uuid.UUID)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	perPage, _ := strconv.Atoi(c.Query("per_page", "20"))
 

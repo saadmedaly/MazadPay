@@ -7,6 +7,7 @@ import (
     "github.com/go-playground/validator/v10"
     "github.com/gofiber/fiber/v2"
     "github.com/google/uuid"
+    "github.com/mazadpay/backend/internal/middleware"
     "github.com/mazadpay/backend/internal/repository"
     "github.com/mazadpay/backend/internal/services"
     "github.com/shopspring/decimal"
@@ -143,7 +144,10 @@ func (h *AuctionHandler) Create(c *fiber.Ctx) error {
         h.logger.Info("[Create Auction] min_increment auto-computed", zap.Float64("value", minIncrement))
     }
 
-    sellerID, _ := uuid.Parse(GetUserID(c))
+    sellerID, err := middleware.GetUserID(c)
+    if err != nil {
+        return Unauthorized(c)
+    }
 
     var buyNow *decimal.Decimal
     if req.BuyNowPrice != nil && *req.BuyNowPrice > 0 {
@@ -238,5 +242,32 @@ func (h *AuctionHandler) GetSellerContact(c *fiber.Ctx) error {
     }
 
     return OK(c, fiber.Map{"phone": phone})
+}
+
+func (h *AuctionHandler) Report(c *fiber.Ctx) error {
+    id, err := uuid.Parse(c.Params("id"))
+    if err != nil {
+        return BadRequest(c, "Invalid auction ID")
+    }
+
+    type ReportRequest struct {
+        Reason string `json:"reason" validate:"required,min=5"`
+    }
+
+    var req ReportRequest
+    if err := c.BodyParser(&req); err != nil {
+        return BadRequest(c, "Invalid request body")
+    }
+
+    reporterID, err := middleware.GetUserID(c)
+    if err != nil {
+        return Unauthorized(c)
+    }
+
+    if err := h.service.ReportAuction(c.Context(), id, reporterID, req.Reason); err != nil {
+        return MapError(c, h.logger, err)
+    }
+
+    return OK(c, fiber.Map{"message": "Report submitted successfully"})
 }
 

@@ -7,9 +7,10 @@ interface ImagePreviewProps {
   className?: string
   fullScreen?: boolean
   onClose?: () => void
+  onClick?: () => void
 }
 
-export function ImagePreview({ src, alt, className, fullScreen, onClose }: ImagePreviewProps) {
+export function ImagePreview({ src, alt, className, fullScreen, onClose, onClick }: ImagePreviewProps) {
   if (!src) return null
 
   if (fullScreen) {
@@ -41,10 +42,14 @@ export function ImagePreview({ src, alt, className, fullScreen, onClose }: Image
       <img
         src={src}
         alt={alt}
+        onClick={onClick}
         className="w-full h-full object-contain cursor-zoom-in transition-transform group-hover:scale-[1.02]"
       />
       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-        <button className="bg-white text-black font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2 shadow-2xl">
+        <button 
+          onClick={onClick}
+          className="bg-white text-black font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2 shadow-2xl hover:scale-105 transition-transform"
+        >
           <ZoomIn className="w-4 h-4" />
           تكبير الصورة
         </button>

@@ -33,7 +33,14 @@ client.interceptors.response.use(
   (err) => {
     const status = err.response?.status ?? 'NETWORK_ERROR'
     const serverData = err.response?.data
-    const message = serverData?.error?.message ?? err.message
+    let message = err.message
+    if (typeof serverData?.error === 'string') {
+      message = serverData.error
+    } else if (serverData?.error?.message) {
+      message = serverData.error.message
+    } else if (serverData?.message) {
+      message = serverData.message
+    }
 
     console.error(
       `%c[API Error] ${status} ${err.config?.method?.toUpperCase()} ${err.config?.url}`,

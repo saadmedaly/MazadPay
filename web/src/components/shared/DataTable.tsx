@@ -46,7 +46,7 @@ export function DataTable<TData, TValue>({
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-surface-border bg-surface-base/30">
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-6 py-4 text-[10px] font-bold text-surface-muted uppercase tracking-widest">
+                  <th key={header.id} className="px-6 py-4 text-[10px] font-bold text-surface-muted uppercase tracking-widest whitespace-nowrap">
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
@@ -74,7 +74,7 @@ export function DataTable<TData, TValue>({
               table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="hover:bg-surface-border/20 transition-colors group">
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-6 py-4">
+                    <td key={cell.id} className="px-6 py-4 whitespace-nowrap">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}

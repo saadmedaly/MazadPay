@@ -3,10 +3,11 @@ import { ar } from 'date-fns/locale'
 
 export const formatPrice = (amount: number | string): string => {
   const n = typeof amount === 'string' ? parseFloat(amount) : amount
-  return new Intl.NumberFormat('ar-MR', {
+  if (isNaN(n)) return '—'
+  return '\u200E' + new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(n) + ' أ.م'
+  }).format(n) + ' MRU'
 }
 
 export const formatDate = (date: string | Date): string => {

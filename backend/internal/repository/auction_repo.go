@@ -43,6 +43,7 @@ type AuctionRepository interface {
     // Images
     AddImage(ctx context.Context, img *models.AuctionImage) error
     GetImages(ctx context.Context, auctionID uuid.UUID) ([]models.AuctionImage, error)
+    DeleteImages(ctx context.Context, auctionID uuid.UUID) error
 
     // Categories & Locations
     GetCategories(ctx context.Context) ([]models.Category, error)
@@ -64,7 +65,15 @@ func NewAuctionRepository(db *sqlx.DB) AuctionRepository {
 
 func (r *auctionRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.Auction, error) {
     var a models.Auction
-    err := r.db.GetContext(ctx, &a, `SELECT * FROM auctions WHERE id = $1`, id)
+    err := r.db.GetContext(ctx, &a, `
+        SELECT a.*, 
+               c.name_ar as category_name_ar,
+               l.city_name_ar as city_name_ar
+        FROM auctions a
+        LEFT JOIN categories c ON a.category_id = c.id
+        LEFT JOIN locations l ON a.location_id = l.id
+        WHERE a.id = $1
+    `, id)
     if err != nil {
         return nil, apperr.ErrNotFound
     }
@@ -82,9 +91,9 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
         i++
     }
     if f.Query != "" {
-        where += fmt.Sprintf(" AND (title_ar ILIKE $%d OR description_ar ILIKE $%d)", i, i+1)
-        args = append(args, "%"+f.Query+"%", "%"+f.Query+"%")
-        i += 2
+        where += fmt.Sprintf(" AND (title_ar ILIKE $%d OR title_fr ILIKE $%d OR title_en ILIKE $%d OR description_ar ILIKE $%d OR description_fr ILIKE $%d OR description_en ILIKE $%d)", i, i, i, i, i, i)
+        args = append(args, "%"+f.Query+"%")
+        i++
     }
     if f.CategoryID > 0 {
         where += fmt.Sprintf(" AND category_id = $%d", i)
@@ -93,7 +102,15 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
     }
 
     rows, err := r.db.QueryxContext(ctx,
-        fmt.Sprintf("SELECT * FROM auctions %s ORDER BY is_featured DESC, created_at DESC", where),
+        fmt.Sprintf(`
+            SELECT a.*, 
+                   c.name_ar as category_name_ar,
+                   l.city_name_ar as city_name_ar
+            FROM auctions a
+            LEFT JOIN categories c ON a.category_id = c.id
+            LEFT JOIN locations l ON a.location_id = l.id
+            %s 
+            ORDER BY a.is_featured DESC, a.created_at DESC`, where),
         args...)
     if err != nil {
         return nil, err
@@ -189,6 +206,11 @@ func (r *auctionRepo) GetImages(ctx context.Context, auctionID uuid.UUID) ([]mod
     return imgs, err
 }
 
+func (r *auctionRepo) DeleteImages(ctx context.Context, auctionID uuid.UUID) error {
+    _, err := r.db.ExecContext(ctx, `DELETE FROM auction_images WHERE auction_id = $1`, auctionID)
+    return err
+}
+
 func (r *auctionRepo) GetCategories(ctx context.Context) ([]models.Category, error) {
     var cats []models.Category
     err := r.db.SelectContext(ctx, &cats, `SELECT * FROM categories ORDER BY display_order`)
@@ -261,9 +283,9 @@ func (r *auctionRepo) ListPaginated(ctx context.Context, page, perPage int, f Au
         i++
     }
     if f.Query != "" {
-        where += fmt.Sprintf(" AND (title_ar ILIKE $%d OR description_ar ILIKE $%d)", i, i+1)
-        args = append(args, "%"+f.Query+"%", "%"+f.Query+"%")
-        i += 2
+        where += fmt.Sprintf(" AND (title_ar ILIKE $%d OR title_fr ILIKE $%d OR title_en ILIKE $%d OR description_ar ILIKE $%d OR description_fr ILIKE $%d OR description_en ILIKE $%d)", i, i, i, i, i, i)
+        args = append(args, "%"+f.Query+"%")
+        i++
     }
 
     var total int
@@ -273,7 +295,15 @@ func (r *auctionRepo) ListPaginated(ctx context.Context, page, perPage int, f Au
     }
 
     offset := (page - 1) * perPage
-    query := fmt.Sprintf("SELECT * FROM auctions %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", 
+    query := fmt.Sprintf(`
+        SELECT a.*, 
+               c.name_ar as category_name_ar,
+               l.city_name_ar as city_name_ar
+        FROM auctions a
+        LEFT JOIN categories c ON a.category_id = c.id
+        LEFT JOIN locations l ON a.location_id = l.id
+        %s 
+        ORDER BY a.created_at DESC LIMIT $%d OFFSET $%d`, 
         where, i, i+1)
     
     listArgs := append(args, perPage, offset)
