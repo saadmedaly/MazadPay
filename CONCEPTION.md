@@ -606,11 +606,47 @@ CREATE TABLE blocked_phones (
     blocked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ============================================================
+-- 9. AUDIT & LOGGING (Nouveaux)
+-- ============================================================
 
- 
+-- Audit logs pour tracer les actions admin
+CREATE TABLE audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    action VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id UUID,
+    details TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX idx_audit_logs_admin ON audit_logs(admin_id);
+CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
+
+-- System settings (configuration globale)
+CREATE TABLE system_settings (
+    id SERIAL PRIMARY KEY,
+    key VARCHAR(100) UNIQUE NOT NULL,
+    value TEXT NOT NULL,
+    type VARCHAR(20) DEFAULT 'string',
+    updated_by UUID REFERENCES users(id),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Insert default settings
+INSERT INTO system_settings (key, value, type) VALUES
+    ('maintenance_mode', 'false', 'boolean'),
+    ('registration_open', 'true', 'boolean'),
+    ('max_auction_duration_hours', '72', 'number'),
+    ('default_insurance_amount', '1000', 'number'),
+    ('min_bid_increment', '100', 'number'),
+    ('contact_whatsapp', '47601175', 'string'),
+    ('contact_email', 'mazadpay@gmail.com', 'string')
+ON CONFLICT (key) DO NOTHING;
 
 -- ============================================================
--- 8. INDEX DE PERFORMANCE
+-- 10. INDEX DE PERFORMANCE
 -- ============================================================
 
 -- Index existants
