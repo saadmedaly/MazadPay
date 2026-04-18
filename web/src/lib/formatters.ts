@@ -9,14 +9,26 @@ export const formatPrice = (amount: number | string): string => {
   }).format(n) + ' أ.م'
 }
 
-export const formatDate = (date: string | Date): string =>
-  format(new Date(date), 'dd MMM yyyy, HH:mm', { locale: ar })
+export const formatDate = (date: string | Date): string => {
+  if (!date) return '—'
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return '—'
+  return format(d, 'dd MMM yyyy, HH:mm', { locale: ar })
+}
 
-export const formatDateShort = (date: string | Date): string =>
-  format(new Date(date), 'yyyy/MM/dd', { locale: ar })
+export const formatDateShort = (date: string | Date): string => {
+  if (!date) return '—'
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return '—'
+  return format(d, 'yyyy/MM/dd', { locale: ar })
+}
 
-export const formatRelative = (date: string | Date): string =>
-  formatDistanceToNow(new Date(date), { addSuffix: true, locale: ar })
+export const formatRelative = (date: string | Date): string => {
+  if (!date) return '—'
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return '—'
+  return formatDistanceToNow(d, { addSuffix: true, locale: ar })
+}
 
 export const maskPhone = (phone: string): string => {
   if (!phone || phone.length < 4) return '####'

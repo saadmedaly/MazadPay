@@ -10,7 +10,13 @@ import { UsersPage } from './pages/UsersPage'
 import { UserDetailPage } from './pages/UserDetailPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { BannersPage } from './pages/BannersPage'
+import { KYCPage } from './pages/KYCPage'
+import { FAQPage } from './pages/FAQPage'
+import { TutorialsPage } from './pages/TutorialsPage'
+ 
 import { useAuthStore } from './stores/authStore'
+import { CategoriesPage } from './pages/CategoriesPage'
+import { LocationsPage } from './pages/LocationsPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -44,6 +50,11 @@ export default function App() {
         
         <Route path="reports" element={<ReportsPage />} />
         <Route path="banners" element={<BannersPage />} />
+        <Route path="kyc" element={<KYCPage />} />
+        <Route path="faq" element={<FAQPage />} />
+        <Route path="tutorials" element={<TutorialsPage />} />
+        <Route path="categories" element={<CategoriesPage />} />
+        <Route path="locations" element={<LocationsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

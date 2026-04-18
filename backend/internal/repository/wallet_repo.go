@@ -11,6 +11,7 @@ import (
 )
 
 type WalletRepository interface {
+    GetByUserID(ctx context.Context, userID uuid.UUID) (*models.Wallet, error)
     FindForUpdate(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID) (*models.Wallet, error)
     FindActiveHold(ctx context.Context, tx *sqlx.Tx, userID, auctionID uuid.UUID) (*models.WalletHold, error)
     CreateHold(ctx context.Context, tx *sqlx.Tx, userID, auctionID uuid.UUID, amount decimal.Decimal) error
@@ -21,6 +22,15 @@ type walletRepo struct{ db *sqlx.DB }
 
 func NewWalletRepository(db *sqlx.DB) WalletRepository {
     return &walletRepo{db: db}
+}
+
+func (r *walletRepo) GetByUserID(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
+    var w models.Wallet
+    err := r.db.GetContext(ctx, &w, `SELECT * FROM wallets WHERE user_id = $1`, userID)
+    if err != nil {
+        return nil, err
+    }
+    return &w, nil
 }
 
 func (r *walletRepo) FindForUpdate(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID) (*models.Wallet, error) {

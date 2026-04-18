@@ -79,7 +79,7 @@ export function BannersPage() {
 
   return (
     <div className="animate-fade-in" dir="rtl">
-      <PageHeader title="إدارة الإعلانات (Banners)" subtitle="إدارة الصور الترويجية التي تظهر في الصفحة الرئيسية للتطبيق">
+      <PageHeader title="إدارة الإعلانات " subtitle="إدارة الصور الترويجية التي تظهر في الصفحة الرئيسية للتطبيق">
         <button
            onClick={() => setShowForm(!showForm)}
            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-mazad-primary text-white text-sm font-bold shadow-lg shadow-mazad-primary/20 hover:bg-mazad-primary-dk transition-all"

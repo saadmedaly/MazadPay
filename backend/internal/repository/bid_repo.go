@@ -15,6 +15,7 @@ type BidRepository interface {
     FindUserBidOnAuction(ctx context.Context, userID, auctionID uuid.UUID) (*models.Bid, error)
     SetAllNotWinning(ctx context.Context, tx *sqlx.Tx, auctionID uuid.UUID) error
     FindUserActiveBids(ctx context.Context, userID uuid.UUID) ([]models.Bid, error)
+    Count(ctx context.Context) (int, error)
 }
 
 type bidRepo struct{ db *sqlx.DB }
@@ -41,6 +42,18 @@ func (r *bidRepo) FindByAuction(ctx context.Context, auctionID uuid.UUID) ([]mod
          ORDER BY b.amount DESC, b.created_at DESC`,
         auctionID)
     return bids, err
+}
+
+func (r *bidRepo) FindByAuctionID(ctx context.Context, auctionID uuid.UUID) ([]models.Bid, error) {
+	var bids []models.Bid
+	err := r.db.SelectContext(ctx, &bids, `SELECT * FROM bids WHERE auction_id = $1 ORDER BY amount DESC`, auctionID)
+	return bids, err
+}
+
+func (r *bidRepo) Count(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM bids")
+	return count, err
 }
 
 func (r *bidRepo) FindTopBid(ctx context.Context, auctionID uuid.UUID) (*models.Bid, error) {

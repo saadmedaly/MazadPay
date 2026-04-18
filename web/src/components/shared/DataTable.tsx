@@ -4,7 +4,7 @@ import {
   flexRender,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { ChevronRight, ChevronLeft } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Inbox } from 'lucide-react'
 import { LoadingSpinner } from './LoadingSpinner'
 import { EmptyState } from './EmptyState'
 import { cn } from '@/lib/utils'
@@ -63,7 +63,11 @@ export function DataTable<TData, TValue>({
             ) : data.length === 0 ? (
               <tr>
                 <td colSpan={columns.length}>
-                  <EmptyState title={emptyTitle} description={emptyDescription} icon={undefined} />
+                  <EmptyState 
+                    title={emptyTitle} 
+                    description={emptyDescription} 
+                    icon={Inbox} 
+                  />
                 </td>
               </tr>
             ) : (

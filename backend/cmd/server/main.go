@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	fiberLogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/mazadpay/backend/internal/config"
 	"github.com/mazadpay/backend/internal/database"
@@ -17,17 +18,27 @@ import (
 )
 
 func main() {
- 	logger, _ := zap.NewProduction()
+	println("--- Starting MazadPay Backend ---")
+	
+	cfg := config.Load()
+	
+	var logger *zap.Logger
+	if cfg.App.Env == "development" {
+		logger, _ = zap.NewDevelopment()
+	} else {
+		logger, _ = zap.NewProduction()
+	}
 	defer logger.Sync()
 
- 	cfg := config.Load()
 
+	logger.Info("Connecting to PostgreSQL...", zap.String("host", cfg.DB.Host))
 	db, err := database.NewPostgres(cfg, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to PostgreSQL", zap.Error(err))
 	}
 	defer db.Close()
 
+	logger.Info("Connecting to Redis...", zap.String("url", cfg.Redis.URL))
 	rdb, err := database.NewRedis(cfg, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to Redis", zap.Error(err))
@@ -39,20 +50,39 @@ func main() {
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			// Log l'erreur imprévue
-			logger.Error("Unhandled request error",
-				zap.String("path", c.Path()),
-				zap.String("method", c.Method()),
-				zap.Error(err),
-			)
-			return c.Status(500).JSON(fiber.Map{
+			code := fiber.StatusInternalServerError
+			if e, ok := err.(*fiber.Error); ok {
+				code = e.Code
+			}
+
+			// Ne pas loguer les erreurs bruyantes du client (404, 405, 408) comme des ERROR
+			if code == fiber.StatusNotFound || code == fiber.StatusMethodNotAllowed || code == fiber.StatusRequestTimeout {
+				logger.Debug("Client request info",
+					zap.String("path", c.Path()),
+					zap.String("method", c.Method()),
+					zap.Int("status", code),
+					zap.Error(err),
+				)
+			} else {
+				logger.Error("Request error",
+					zap.String("path", c.Path()),
+					zap.String("method", c.Method()),
+					zap.Int("status", code),
+					zap.Error(err),
+				)
+			}
+
+			return c.Status(code).JSON(fiber.Map{
 				"success": false,
-				"error":   fiber.Map{"code": "server_error", "message": "An internal error occurred"},
+				"error":   fiber.Map{"code": "error", "message": err.Error()},
 			})
 		},
 	})
 
 	app.Use(recover.New())
+	app.Use(fiberLogger.New(fiberLogger.Config{
+		Format: "[${time}] ${status} - ${latency} ${method} ${path}\n",
+	}))
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",

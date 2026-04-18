@@ -284,6 +284,7 @@ CREATE TABLE categories (
     id SERIAL PRIMARY KEY,
     name_ar VARCHAR(100) NOT NULL,
     name_fr VARCHAR(100) NOT NULL,
+    name_en VARCHAR(100) NOT NULL DEFAULT '',
     parent_id INT REFERENCES categories(id) ON DELETE CASCADE,
     icon_name VARCHAR(50),
     display_order INT DEFAULT 0
@@ -291,8 +292,10 @@ CREATE TABLE categories (
 
 CREATE TABLE locations (
     id SERIAL PRIMARY KEY,
-    city_name VARCHAR(100) NOT NULL,          -- انواكشوط
-    area_name VARCHAR(100) NOT NULL           -- تفرغ زينة
+    city_name_ar VARCHAR(100) NOT NULL,
+    city_name_fr VARCHAR(100) NOT NULL DEFAULT '',
+    area_name_ar VARCHAR(100) NOT NULL,
+    area_name_fr VARCHAR(100) NOT NULL DEFAULT ''
 );
 
 -- ============================================================
@@ -304,33 +307,36 @@ CREATE TABLE auctions (
     seller_id UUID REFERENCES users(id) NOT NULL,
     category_id INT REFERENCES categories(id) NOT NULL,
     location_id INT REFERENCES locations(id),
-    title VARCHAR(200) NOT NULL,
-    description TEXT,
+    title_ar VARCHAR(200) NOT NULL,
+    title_fr VARCHAR(200),
+    title_en VARCHAR(200),
+    description_ar TEXT,
+    description_fr TEXT,
+    description_en TEXT,
     start_price DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
     current_price DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
     min_increment DECIMAL(15, 2) NOT NULL DEFAULT 100.00,
-    insurance_amount DECIMAL(15, 2) DEFAULT 0.00, -- Montant de caution requis
-    reserve_price DECIMAL(15, 2) DEFAULT 0.00,    -- Prix minimum de vente
+    insurance_amount DECIMAL(15, 2) DEFAULT 0.00,
+    reserve_price DECIMAL(15, 2) DEFAULT 0.00,
     start_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    status VARCHAR(20) DEFAULT 'pending',     -- pending, active, ended, canceled, rejected
+    status VARCHAR(20) DEFAULT 'pending',
     lot_number VARCHAR(50) UNIQUE,
     views INT DEFAULT 0,
     bidder_count INT DEFAULT 0,
     winner_id UUID REFERENCES users(id),
-    winning_bid_id UUID,                      -- FK vers bids(id) — ajoutée après création de bids
-    payment_deadline TIMESTAMP WITH TIME ZONE, -- Date limite de paiement post-victoire
-    is_featured BOOLEAN DEFAULT FALSE,        -- Enchère mise en avant sur Home
-    featured_until TIMESTAMP WITH TIME ZONE,  -- Expiration du featured
-    rejection_reason TEXT,                    -- Raison du refus admin
+    winning_bid_id UUID,
+    payment_deadline TIMESTAMP WITH TIME ZONE,
+    is_featured BOOLEAN DEFAULT FALSE,
+    featured_until TIMESTAMP WITH TIME ZONE,
+    rejection_reason TEXT,
     phone_contact VARCHAR(20),
-    item_details JSONB,                       -- {manufacturer, model, year, fuel, transmission, mileage}
-    buy_now_price DECIMAL(15, 2),             -- Option "Achat Immédiat"
-    version INT DEFAULT 1,                    -- Verrouillage optimiste
+    item_details JSONB,
+    buy_now_price DECIMAL(15, 2),
+    version INT DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT chk_auction_prices CHECK (current_price >= start_price),
-    CONSTRAINT chk_auction_increment CHECK (min_increment > 0),
     CONSTRAINT chk_auction_status CHECK (status IN ('pending', 'active', 'ended', 'canceled', 'rejected'))
 );
 
@@ -701,13 +707,16 @@ Cette section présente le détail de chaque table pour garantir une implémenta
 | :--- | :--- | :--- |
 | `id` | UUID | Identifiant unique. |
 | `seller_id` | UUID | FK vers `users.id`. |
-| `title` | VARCHAR(200) | Titre de l'annonce. |
+| `title_ar/fr/en` | VARCHAR(200) | Titre de l'annonce multilingue. |
+| `description_ar/fr/en` | TEXT | Description multilingue. |
 | `item_details` | JSONB | Données techniques (ex: {marque: "Toyota", année: "2022"}). |
+| `buy_now_price` | DECIMAL | Option Achat Immédiat. |
+| `start_time` | TIMESTAMP | Date et heure de début de l'enchère. |
 | `start_price` | DECIMAL | Prix d'ouverture. |
 | `current_price` | DECIMAL | Prix actuel (mis à jour à chaque bid valide). |
 | `insurance_amount` | DECIMAL | Caution requise pour miser (affichée en MRU). |
 | `status` | VARCHAR | `pending`, `active`, `ended`, `canceled`. |
-| `lot_number` | VARCHAR | Numéro de lot unique (ex: MP-1234). |
+| `lot_number` | VARCHAR | Numéro de lot unique, auto-incrémenté (ex: LOT-01). |
 | `end_time` | TIMESTAMP | Date et heure de clôture calculée. |
 
 #### Table: `bids`
@@ -734,9 +743,78 @@ Cette section présente le détail de chaque table pour garantir une implémenta
 | Champ | Type | Description |
 | :--- | :--- | :--- |
 | `id` | UUID | Identifiant unique. |
+| `user_id` | UUID | L'auteur de la transaction. |
+| `auction_id` | UUID | L'enchère liée (si caution ou achat). |
 | `type` | VARCHAR | `deposit`, `withdraw`, `bid_hold`, `payment`. |
 | `status` | VARCHAR | `pending`, `pending_review`, `completed`, `failed`. |
-| `receipt_url` | TEXT | URL de l'image du reçu bancaire (si manuel). |
+| `amount` | DECIMAL | Montant de l'opération. |
+| `gateway` | VARCHAR | Bankily, Masrivi, Sedad, Click. |
+| `receipt_url` | TEXT | URL de l'image du reçu bancaire. |
+| `admin_notes` | TEXT | Raison du refus ou notes internes. |
+
+---
+
+### 5.4. Domaine : Taxonomie & Localisation
+
+#### Table: `categories`
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `id` | SERIAL | Identifiant unique. |
+| `name_ar/fr/en` | VARCHAR | Nom de la catégorie en 3 langues. |
+| `parent_id` | INT | Hiérarchie (parent NULL pour les catégories racines). |
+| `icon_name` | VARCHAR | Identifiant de l'icône Flutter/Lucide. |
+
+#### Table: `locations`
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `id` | SERIAL | Identifiant unique. |
+| `city_name_ar/fr` | VARCHAR | Nom de la ville (Mauritanie). |
+| `area_name_ar/fr` | VARCHAR | Zone, quartier ou moughataa. |
+
+---
+
+### 5.5. Domaine : CMS & Contenu
+
+#### Table: `banners`
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `image_url` | TEXT | Image haute résolution. |
+| `title_ar/fr` | VARCHAR | Titre accrocheur. |
+| `target_url` | TEXT | Lien interne (ex: auction id) ou externe. |
+| `is_active` | BOOLEAN | Visibilité sur la Home. |
+
+#### Table: `faq_items`
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `question_ar/fr` | TEXT | La question posée. |
+| `answer_ar/fr` | TEXT | La réponse détaillée. |
+
+#### Table: `tutorials`
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `video_url` | TEXT | YouTube ou stockage direct. |
+| `title_ar/fr` | VARCHAR | Libellé du tutoriel. |
+
+---
+
+### 5.6. Domaine : Modération & KYC
+
+#### Table: `kyc_verifications`
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `user_id` | UUID | PK + FK vers l'utilisateur. |
+| `id_card_front_url` | TEXT | Photo recto. |
+| `id_card_back_url` | TEXT | Photo verso. |
+| `nni_number` | VARCHAR | Numéro National d'Identité. |
+| `status` | VARCHAR | `pending`, `approved`, `rejected`. |
+
+#### Table: `reports`
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `auction_id` | UUID | Enchère signalée. |
+| `reason` | TEXT | Motif du signalement. |
+| `status` | VARCHAR | `pending`, `reviewed`. |
+
 
 ---
 
