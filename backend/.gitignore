@@ -1,7 +1,38 @@
-test/
-test-mazadpay-5f85f4f194e6.json
-.env
-.env.*
-*.json
+# Binaires compilés
 *.exe
 *.exe~
+*.dll
+*.so
+*.dylib
+
+# Fichiers temporaires
+test/
+test-mazadpay-5f85f4f194e6.json
+scratch/
+bin/
+
+# Environnement
+.env
+.env.*
+!.env.example
+
+# Dépendances
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+log/
+logs/
+
+# Build outputs
+*.json
+!go.sum
+!go.mod
