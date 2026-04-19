@@ -15,7 +15,6 @@ export function TransactionDetailPage() {
   const navigate = useNavigate()
   const [notes, setNotes] = useState('')
   const [confirmAction, setConfirmAction] = useState<'approve' | 'reject' | null>(null)
-  const [imgZoomed, setImgZoomed] = useState(false)
 
   const { data: txn, isLoading, isError } = useTransaction(id!)
   const validate = useValidateTransaction()

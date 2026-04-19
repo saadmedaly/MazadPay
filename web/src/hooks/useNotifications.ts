@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { messaging, requestNotificationPermission } from '../lib/firebase';
 import { onMessage } from 'firebase/messaging';
 import { useAuthStore } from '../stores/authStore';
@@ -6,33 +6,35 @@ import api from '../api/client';
 
 export const useNotifications = () => {
   const { user, isAuthenticated } = useAuthStore();
-  const [permission, setPermission] = useState<NotificationPermission>(Notification.permission);
+  const [permission, setPermission] = useState<NotificationPermission | null>(null);
   const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const initialized = useRef(false);
 
   useEffect(() => {
-    if (isAuthenticated && user) {
-      handlePermission();
-    }
-  }, [isAuthenticated, user]);
+    const initPermissions = async () => {
+      if (initialized.current === true) return;
+      if (!isAuthenticated || !user) return;
+      initialized.current = true;
 
-  const handlePermission = async () => {
-    const token = await requestNotificationPermission();
-    if (token) {
-      setFcmToken(token);
-      setPermission('granted');
-      
-      // Sauvegarder le token sur le backend
-      try {
-        await api.post('/v1/api/notifications/push-tokens', {
-          fcm_token: token,
-          device_id: navigator.userAgent, // Simple device ID
-          platform: 'web'
-        });
-      } catch (err) {
-        console.error('Failed to sync FCM token:', err);
+      const token = await requestNotificationPermission();
+      if (token) {
+        setFcmToken(token);
+        setPermission('granted');
+
+        try {
+          await api.post('/v1/api/notifications/push-tokens', {
+            fcm_token: token,
+            device_id: navigator.userAgent,
+            platform: 'web'
+          });
+        } catch (err) {
+          console.error('Failed to sync FCM token:', err);
+        }
       }
-    }
-  };
+    };
+
+    initPermissions();
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     if (!messaging) return;
@@ -51,5 +53,27 @@ export const useNotifications = () => {
     return () => unsubscribe();
   }, []);
 
-  return { permission, fcmToken, requestPermission: handlePermission };
+  const requestPermission = async () => {
+    if (initialized.current === true) return;
+    if (!isAuthenticated || !user) return;
+    initialized.current = true;
+
+    const token = await requestNotificationPermission();
+    if (token) {
+      setFcmToken(token);
+      setPermission('granted');
+
+      try {
+        await api.post('/v1/api/notifications/push-tokens', {
+          fcm_token: token,
+          device_id: navigator.userAgent,
+          platform: 'web'
+        });
+      } catch (err) {
+        console.error('Failed to sync FCM token:', err);
+      }
+    }
+  };
+
+  return { permission, fcmToken, requestPermission };
 };

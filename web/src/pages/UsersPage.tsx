@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Eye, Shield, ShieldOff, Users, UserPlus, X, Copy, Link as LinkIcon, Check } from 'lucide-react'
+import { Search, Eye, Shield, ShieldOff, UserPlus, X, Copy, Link as LinkIcon, Check } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'

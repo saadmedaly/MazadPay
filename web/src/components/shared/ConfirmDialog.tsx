@@ -9,18 +9,20 @@ interface Props {
   open: boolean
   onOpenChange: (v: boolean) => void
   title: string
-  description: React.ReactNode
+  description?: React.ReactNode
+  message?: string
   confirmLabel?: string
   cancelLabel?: string
   variant?: 'danger' | 'success' | 'default'
   onConfirm: () => void
+  onCancel?: () => void
   loading?: boolean
 }
 
 export function ConfirmDialog({
-  open, onOpenChange, title, description,
+  open, onOpenChange, title, description, message,
   confirmLabel = 'تأكيد', cancelLabel = 'إلغاء',
-  variant = 'default', onConfirm, loading
+  variant = 'default', onConfirm, onCancel, loading
 }: Props) {
   const btnCls = {
     danger:  'bg-red-500 hover:bg-red-600 text-white',
@@ -28,15 +30,17 @@ export function ConfirmDialog({
     default: 'bg-mazad-primary hover:bg-mazad-primary-dk text-white',
   }[variant]
 
+  const handleCancel = onCancel ?? (() => onOpenChange(false))
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent className="bg-surface-card border-surface-border" dir="rtl">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-white font-display text-right">{title}</AlertDialogTitle>
-          <AlertDialogDescription className="text-surface-muted text-right">{description}</AlertDialogDescription>
+          <AlertDialogDescription className="text-surface-muted text-right">{description || message}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="flex-row-reverse gap-3">
-          <AlertDialogCancel className="border-surface-border text-surface-muted hover:bg-surface-border hover:text-white mt-0">
+          <AlertDialogCancel onClick={handleCancel} className="border-surface-border text-surface-muted hover:bg-surface-border hover:text-white mt-0">
             {cancelLabel}
           </AlertDialogCancel>
           <AlertDialogAction

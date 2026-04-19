@@ -1,6 +1,5 @@
-import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Flag, Eye, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
+import { Flag, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'

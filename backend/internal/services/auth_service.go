@@ -30,13 +30,19 @@ type JWTClaims struct {
 }
 
 type authService struct {
-	userRepo  repository.UserRepository
-	jwtSecret string
-	jwtExpiry int
+	userRepo       repository.UserRepository
+	jwtSecret      string
+	jwtExpiry      int
+	env            string
+	developmentOTP string // Code OTP de développement
 }
 
-func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExpiry int) AuthService {
-	return &authService{userRepo: userRepo, jwtSecret: jwtSecret, jwtExpiry: jwtExpiry}
+func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExpiry int, env string, devOTP string) AuthService {
+	// En production, devOTP doit être vide
+	if env != "development" {
+		devOTP = ""
+	}
+	return &authService{userRepo: userRepo, jwtSecret: jwtSecret, jwtExpiry: jwtExpiry, env: env, developmentOTP: devOTP}
 }
 
 func (s *authService) Register(ctx context.Context, phone, pin string) error {
@@ -87,14 +93,17 @@ func (s *authService) Login(ctx context.Context, phone, pin string) (string, *mo
 		return "", nil, err
 	}
 
-	_ = s.userRepo.UpdateLastLogin(ctx, user.ID)
+	if err := s.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
+		// Log l'erreur mais ne bloque pas la connexion
+		fmt.Println("Warning: failed to update last login for user", user.ID, ":", err)
+	}
 	return token, user, nil
 }
 
 func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) error {
 	// STUB : En développement, le code OTP est "123456".
 	// À remplacer par l'intégration Termii dans une étape dédiée.
-	
+
 	otp := &models.OTPVerification{
 		ID:          uuid.New(),
 		Phone:       phone,
@@ -123,9 +132,16 @@ func (s *authService) VerifyOTP(ctx context.Context, phone, code, purpose string
 		return apperr.ErrOTPMaxAttempts
 	}
 
-	// STUB : En dev, le code valide est toujours "123456"
-	if code != "123456" {
-		_ = s.userRepo.IncrementOTPAttempts(ctx, otp.ID)
+	// Vérifier le code OTP
+	// En développement, accepter le code configuré
+	// En production, rejeter les codes de développement
+	if s.env == "development" && s.developmentOTP != "" && code == s.developmentOTP {
+		// OK - Mode développement avec code autorisé
+	} else if code != otp.TermiiPinID {
+		// En production ou si code incorrect, incrémenter les tentatives
+		if err := s.userRepo.IncrementOTPAttempts(ctx, otp.ID); err != nil {
+			return err
+		}
 		return apperr.ErrOTPInvalid
 	}
 
@@ -134,7 +150,9 @@ func (s *authService) VerifyOTP(ctx context.Context, phone, code, purpose string
 	}
 
 	if purpose == "register" {
-		return s.userRepo.SetVerified(ctx, phone)
+		if err := s.userRepo.SetVerified(ctx, phone); err != nil {
+			return err
+		}
 	}
 
 	return nil

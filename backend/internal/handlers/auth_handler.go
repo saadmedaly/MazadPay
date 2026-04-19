@@ -22,9 +22,8 @@ func NewAuthHandler(service services.AuthService, logger *zap.Logger) *AuthHandl
 	}
 }
 
-
 type RegisterRequest struct {
-	Phone string `json:"phone" validate:"required,min=8,max=20"`
+	Phone string `json:"phone" validate:"required,min=8,max=20,numeric"`
 	Pin   string `json:"pin"   validate:"required,len=4,numeric"`
 }
 

@@ -56,7 +56,6 @@ interface SidebarProps {
 
 export function Sidebar({ badges = {} }: SidebarProps) {
   const logout = useAuthStore((s) => s.logout)
-  const user = useAuthStore((s) => s.user)
 
   return (
     <aside className="w-64 h-screen bg-surface-card border-l border-surface-border flex flex-col shrink-0">
@@ -105,16 +104,7 @@ export function Sidebar({ badges = {} }: SidebarProps) {
 
       {/* User + Logout */}
       <div className="border-t border-surface-border p-4 bg-surface-base/30">
-        <div className="flex items-center gap-3 px-2 py-3 mb-2 rounded-lg border border-transparent hover:border-surface-border transition-colors">
-          <div className="w-8 h-8 rounded-full bg-mazad-primary/20 flex items-center justify-center
-                          text-mazad-primary text-xs font-bold uppercase ring-2 ring-mazad-primary/10">
-            {user?.full_name?.[0] ?? 'أ'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-white truncate">{user?.full_name ?? 'المدير'}</p>
-            <p className="text-[10px] text-surface-muted truncate">مسؤول النظام</p>
-          </div>
-        </div>
+  
         <button
           onClick={logout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-surface-muted

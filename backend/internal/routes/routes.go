@@ -34,7 +34,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 	// Services
 	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath)
-	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours)
+	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode)
 	auctionSvc := services.NewAuctionService(auctionRepo, reportRepo, notifSvc)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
@@ -59,7 +59,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	app.Get("/ws/auction/:id", websocket.New(wsHandler.HandleAuction))
 
 	// Routes registration
-	setupAuthRoutes(api, authSvc, adminHandler, cfg.JWT.Secret, logger)
+	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
 	setupAuctionRoutes(api, auctionSvc, bidHandler, cfg.JWT.Secret, logger)
 	setupUserRoutes(api, userHandler, walletHandler, cfg.JWT.Secret, logger)
 	setupAdminRoutes(api, adminHandler, cfg.JWT.Secret, logger)
@@ -70,19 +70,21 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	return auctionSvc, notifSvc
 }
 
-func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, adminHandler *handlers.AdminHandler, jwtSecret string, logger *zap.Logger) {
-	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+// setupAuthRoutes enregistre les routes d'authentification avec rate limiting
+func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, adminHandler *handlers.AdminHandler, rdb *redis.Client, cfg *config.Config, logger *zap.Logger) {
+	jwtMiddleware := middleware.JWT(cfg.JWT.Secret, logger)
+	rateLimitMiddleware := middleware.RateLimitByPhone(rdb, cfg.Redis.RateLimitWindowSeconds, cfg.Redis.RateLimitMaxAttempts, logger)
 	h := handlers.NewAuthHandler(authSvc, logger)
 
 	auth := api.Group("/auth")
 
-	// Public routes
-	auth.Post("/register", h.Register)
-	auth.Post("/login", h.Login)
-	auth.Post("/otp/send", h.SendOTP)
-	auth.Post("/otp/verify", h.VerifyOTP)
-	auth.Post("/reset-password", h.ResetPassword)
-	auth.Post("/register-admin", adminHandler.RegisterWithInvitation)
+	// Public routes avec rate limiting sur phone
+	auth.Post("/register", rateLimitMiddleware, h.Register)
+	auth.Post("/login", rateLimitMiddleware, h.Login)
+	auth.Post("/otp/send", rateLimitMiddleware, h.SendOTP)
+	auth.Post("/otp/verify", rateLimitMiddleware, h.VerifyOTP)
+	auth.Post("/reset-password", rateLimitMiddleware, h.ResetPassword)
+	auth.Post("/register-admin", rateLimitMiddleware, adminHandler.RegisterWithInvitation)
 
 	// Protected routes
 	auth.Post("/logout", jwtMiddleware, h.Logout)
@@ -216,7 +218,7 @@ func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, jwtSecret st
 
 	// Public routes
 	api.Get("/banners", h.List)
-	
+
 	// Protected routes
 	api.Post("/banners/request", jwtMiddleware, h.Request) // CONCEPTION Demandes d'annonces
 
@@ -254,13 +256,11 @@ func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, jwtSecret 
 
 func setupNotificationRoutes(api fiber.Router, h *handlers.NotificationHandler, jwtSecret string, logger *zap.Logger) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger)
-	
+
 	notif := api.Group("/notifications", jwtMiddleware)
-	
+
 	notif.Post("/push-tokens", h.SaveToken)
 	notif.Get("/", h.List)
 	notif.Put("/read-all", h.MarkAllAsRead)
 	notif.Put("/:id/read", h.MarkAsRead)
 }
-
-

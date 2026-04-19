@@ -3,7 +3,6 @@ import { Sidebar } from './Sidebar'
 import { useAdminBadges } from '@/hooks/useDashboard'
 import { useNotifications } from '@/hooks/useNotifications'
 import { NotificationBell } from '../shared/NotificationBell'
-import { Search } from 'lucide-react'
 
 export function AdminLayout() {
   const { badges } = useAdminBadges()

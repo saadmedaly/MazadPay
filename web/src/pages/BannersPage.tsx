@@ -147,7 +147,7 @@ export function BannersPage() {
         <div className="admin-card p-20 text-center">
            <LoadingSpinner label="جاري تحميل الإعلانات..." />
         </div>
-      ) : banners.length === 0 ? (
+      ) : !banners || banners.length === 0 ? (
         <div className="admin-card">
           <EmptyState
             icon={ImageIcon}

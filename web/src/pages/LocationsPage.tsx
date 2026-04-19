@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  Plus, Search, Pencil, Trash2, MapPin,
+  Plus, Search, Pencil, Trash2,
   AlertCircle, Loader2
 } from 'lucide-react'
 import { useLocations, useCreateLocation, useUpdateLocation, useDeleteLocation } from '@/hooks/useMetadata'

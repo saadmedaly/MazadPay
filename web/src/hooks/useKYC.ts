@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import client from '@/api/client'
-import type { KYCVerification, APIResponse } from '@/types/api'
+import type { KYCVerification } from '@/types/api'
 
 export const kycKeys = {
   all: ['kyc'] as const,

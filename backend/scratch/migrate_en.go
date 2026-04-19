@@ -10,7 +10,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func main() {
+func fix() {
 	godotenv.Load(".env")
 	host := os.Getenv("DB_HOST")
 	port := os.Getenv("DB_PORT")

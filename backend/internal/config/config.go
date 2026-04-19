@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"log"
 	"os"
 	"strconv"
@@ -21,9 +22,10 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Env  string
-	Port string
-	Name string
+	Env        string
+	Port       string
+	Name       string
+	DevOTPCode string // Code OTP de développement (ignoré en production)
 }
 
 type DBConfig struct {
@@ -82,9 +84,10 @@ func Load() *Config {
 
 	return &Config{
 		App: AppConfig{
-			Env:  getEnv("APP_ENV", "development"),
-			Port: getEnv("APP_PORT", "8082"),
-			Name: getEnv("APP_NAME", "MazadPay"),
+			Env:        getEnv("APP_ENV", "development"),
+			Port:       getEnv("APP_PORT", "8082"),
+			Name:       getEnv("APP_NAME", "MazadPay"),
+			DevOTPCode: getEnv("DEV_OTP_CODE", ""),
 		},
 		DB: DBConfig{
 			Host:            getEnv("DB_HOST", "localhost"),
@@ -163,4 +166,15 @@ func getEnvBool(key string, fallback bool) bool {
 		}
 	}
 	return fallback
+}
+
+// Validate vérifie que les valeurs critique de la config sont configurées
+func (c *Config) Validate() error {
+	if c.JWT.Secret == "" {
+		return errors.New("JWT_SECRET must be set in environment")
+	}
+	if c.App.Port == "" {
+		return errors.New("APP_PORT must be set")
+	}
+	return nil
 }

@@ -19,17 +19,27 @@ import (
 
 func main() {
 	println("--- Starting MazadPay Backend ---")
-	
+
 	cfg := config.Load()
-	
+
+	// Valider la configuration critique
+	if err := cfg.Validate(); err != nil {
+		println("Configuration error:", err.Error())
+		os.Exit(1)
+	}
+
 	var logger *zap.Logger
+	var err error
 	if cfg.App.Env == "development" {
-		logger, _ = zap.NewDevelopment()
+		logger, err = zap.NewDevelopment()
 	} else {
-		logger, _ = zap.NewProduction()
+		logger, err = zap.NewProduction()
+	}
+	if err != nil {
+		println("Failed to initialize logger:", err.Error())
+		os.Exit(1)
 	}
 	defer logger.Sync()
-
 
 	logger.Info("Connecting to PostgreSQL...", zap.String("host", cfg.DB.Host))
 	db, err := database.NewPostgres(cfg, logger)
@@ -83,11 +93,7 @@ func main() {
 	app.Use(fiberLogger.New(fiberLogger.Config{
 		Format: "[${time}] ${status} - ${latency} ${method} ${path}\n",
 	}))
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
-	}))
+	app.Use(cors.New())
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"success": true, "data": fiber.Map{"status": "ok"}})
@@ -98,7 +104,7 @@ func main() {
 	})
 
 	auctionSvc, notifSvc := routes.Setup(app, db, rdb, cfg, logger)
-	
+
 	// --- Background Tasks ---
 	go func() {
 		auctionTicker := time.NewTicker(30 * time.Second)
@@ -110,10 +116,14 @@ func main() {
 			select {
 			case <-auctionTicker.C:
 				logger.Debug("Running background: CloseExpiredAuctions")
-				_ = auctionSvc.CloseExpiredAuctions(context.Background())
+				if err := auctionSvc.CloseExpiredAuctions(context.Background()); err != nil {
+					logger.Error("Failed to close expired auctions", zap.Error(err))
+				}
 			case <-cleanupTicker.C:
 				logger.Info("Running background: CleanupOldNotifications")
-				_ = notifSvc.CleanupOldNotifications(context.Background())
+				if err := notifSvc.CleanupOldNotifications(context.Background()); err != nil {
+					logger.Error("Failed to cleanup old notifications", zap.Error(err))
+				}
 			}
 		}
 	}()
@@ -135,7 +145,8 @@ func main() {
 	logger.Info("Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = ctx
-	app.Shutdown()
+	if err := app.ShutdownWithContext(ctx); err != nil {
+		logger.Error("Error during shutdown", zap.Error(err))
+	}
 	logger.Info("Server stopped")
 }

@@ -4,8 +4,44 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/mazadpay/backend/internal/models"
 	"go.uber.org/zap"
 )
+
+// ResponseUser retourne un User avec le téléphone masqué pour la sécurité
+type ResponseUser struct {
+	ID                   string  `json:"id"`
+	Phone                string  `json:"phone"` // Masqué: ####4709
+	FullName             *string `json:"full_name"`
+	Email                *string `json:"email"`
+	ProfilePicURL        *string `json:"profile_pic_url"`
+	City                 *string `json:"city"`
+	LanguagePref         string  `json:"language_pref"`
+	NotificationsEnabled bool    `json:"notifications_enabled"`
+	IsActive             bool    `json:"is_active"`
+	Role                 string  `json:"role"`
+	LastLoginAt          *string `json:"last_login_at"`
+}
+
+// MaskUserPhone retourne un User avec le téléphone masqué
+func MaskUserPhone(user *models.User) *ResponseUser {
+	if user == nil {
+		return nil
+	}
+	return &ResponseUser{
+		ID:                   user.ID.String(),
+		Phone:                user.MaskPhone(),
+		FullName:             user.FullName,
+		Email:                user.Email,
+		ProfilePicURL:        user.ProfilePicURL,
+		City:                 user.City,
+		LanguagePref:         user.LanguagePref,
+		NotificationsEnabled: user.NotificationsEnabled,
+		IsActive:             user.IsActive,
+		Role:                 user.Role,
+		LastLoginAt:          (*string)(nil), // TODO: Format time to string
+	}
+}
 
 func OK(c *fiber.Ctx, data interface{}) error {
 
@@ -121,7 +157,7 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 			logger.Info("Auction date validation failed", logFields...)
 			return BadRequest(c, "تاريخ الإغلاق يجب أن يكون في المستقبل")
 		}
-		
+
 		// Gestion des erreurs de base de données courantes (Postgres)
 		if contains(errStr, "23505") || contains(errStr, "duplicate key") {
 			logger.Warn("Database unique constraint violation", logFields...)
@@ -148,6 +184,3 @@ func contains(s, substr string) bool {
 		return false
 	})()))
 }
-
-
-

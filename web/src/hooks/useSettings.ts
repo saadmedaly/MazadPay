@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getSettings, updateSetting } from '@/api/settings'
+import { toast } from 'sonner'
 
 export function useSettings() {
   return useQuery({
@@ -14,6 +15,8 @@ export function useUpdateSetting() {
     mutationFn: updateSetting,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
+      toast.success('تم تحديث الإعداد بنجاح')
     },
+    onError: (err: Error) => toast.error(err.message),
   })
 }

@@ -7,7 +7,6 @@ import {
 import { ChevronRight, ChevronLeft, Inbox } from 'lucide-react'
 import { LoadingSpinner } from './LoadingSpinner'
 import { EmptyState } from './EmptyState'
-import { cn } from '@/lib/utils'
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -18,6 +17,7 @@ interface DataTableProps<TData, TValue> {
   onPageChange?: (page: number) => void
   emptyTitle?: string
   emptyDescription?: string
+  emptyMessage?: string
 }
 
 export function DataTable<TData, TValue>({

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getRatings, deleteRating, type RatingsParams } from '@/api/ratings'
+import { toast } from 'sonner'
 
 export function useRatings(params?: RatingsParams) {
   return useQuery({
@@ -12,6 +13,10 @@ export function useDeleteRating() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: deleteRating,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ratings'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ratings'] })
+      toast.success('تم حذف التقييم بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message),
   })
 }

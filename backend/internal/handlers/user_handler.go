@@ -1,23 +1,22 @@
 package handlers
 
 import (
-    "github.com/gofiber/fiber/v2"
-    "github.com/google/uuid"
-    "github.com/mazadpay/backend/internal/models"
-    "github.com/mazadpay/backend/internal/middleware"
-    "github.com/mazadpay/backend/internal/services"
-    "go.uber.org/zap"
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"github.com/mazadpay/backend/internal/middleware"
+	"github.com/mazadpay/backend/internal/models"
+	"github.com/mazadpay/backend/internal/services"
+	"go.uber.org/zap"
 )
 
 type UserHandler struct {
-    service services.UserService
-    logger  *zap.Logger
+	service services.UserService
+	logger  *zap.Logger
 }
 
 func NewUserHandler(svc services.UserService, logger *zap.Logger) *UserHandler {
-    return &UserHandler{service: svc, logger: logger}
+	return &UserHandler{service: svc, logger: logger}
 }
-
 
 func (h *UserHandler) GetMe(c *fiber.Ctx) error {
 	userID, err := middleware.GetUserID(c)
@@ -29,7 +28,7 @@ func (h *UserHandler) GetMe(c *fiber.Ctx) error {
 	if err != nil {
 		return MapError(c, h.logger, err)
 	}
-	return OK(c, user)
+	return OK(c, MaskUserPhone(user))
 }
 
 func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {

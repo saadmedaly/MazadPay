@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAuctionPayments, markAuctionPaymentAsPaid, type AuctionPaymentsParams } from '@/api/auctionPayments'
+import { toast } from 'sonner'
 
 export function useAuctionPayments(params?: AuctionPaymentsParams) {
   return useQuery({
@@ -12,6 +13,10 @@ export function useMarkAuctionPaymentAsPaid() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: markAuctionPaymentAsPaid,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['auctionPayments'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['auctionPayments'] })
+      toast.success('تم تحديدالدفع بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message),
   })
 }

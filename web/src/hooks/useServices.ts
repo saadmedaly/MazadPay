@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getServiceRequests, getServiceRequestById, updateServiceRequest, type ServicesParams } from '@/api/services'
+import { toast } from 'sonner'
 
 export function useServiceRequests(params?: ServicesParams) {
   return useQuery({
@@ -24,6 +25,8 @@ export function useUpdateServiceRequest() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['serviceRequests'] })
       qc.invalidateQueries({ queryKey: ['serviceRequest'] })
+      toast.success('تم تحديث طلب الخدمة بنجاح')
     },
+    onError: (err: Error) => toast.error(err.message),
   })
 }
