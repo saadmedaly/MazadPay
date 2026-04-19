@@ -1,13 +1,17 @@
 @baseUrl = http://localhost:8082/v1/api
 @authToken = {{login.response.body.data.token}}
+@devOtpCode = {{$dotenv DEV_OTP_CODE}}
 
-### 1. Register
+### 1. Register (with all required user info)
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 {
-    "phone": "+22247601175",
-    "pin": "1234"
+    "phone": "+22244444444",
+    "pin": "1234",
+    "full_name": "Test User",
+    "email": "mdja@example.com",
+    "city": "Casablanca"
 }
 
 ### 2. Send OTP (register)
@@ -25,7 +29,7 @@ Content-Type: application/json
 
 {
     "phone": "+22247601175",
-    "code": "123456",
+    "code": "{{devOtpCode}}",
     "purpose": "register"
 }
 
@@ -83,4 +87,7 @@ Content-Type: application/json
 
 ### 10. Logout
 POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{authToken}}
+### voir les notifications
+GET {{baseUrl}}/notifications
 Authorization: Bearer {{authToken}}

@@ -23,8 +23,11 @@ func NewAuthHandler(service services.AuthService, logger *zap.Logger) *AuthHandl
 }
 
 type RegisterRequest struct {
-	Phone string `json:"phone" validate:"required,min=8,max=20,numeric"`
-	Pin   string `json:"pin"   validate:"required,len=4,numeric"`
+	Phone    string `json:"phone"     validate:"required,min=8,max=20,numeric"`
+	Pin      string `json:"pin"       validate:"required,len=4,numeric"`
+	FullName string `json:"full_name" validate:"required,min=2,max=100"`
+	Email    string `json:"email"     validate:"required,email"`
+	City     string `json:"city"      validate:"omitempty,max=100"`
 }
 
 type LoginRequest struct {
@@ -62,7 +65,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return BadRequest(c, err.Error())
 	}
 
-	if err := h.service.Register(c.Context(), req.Phone, req.Pin); err != nil {
+	if err := h.service.Register(c.Context(), req.Phone, req.Pin, req.FullName, req.Email, req.City); err != nil {
 		return MapError(c, h.logger, err)
 	}
 

@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react';
-import { 
-  Bell, 
-  CheckCircle, 
-  Clock, 
-  AlertTriangle, 
-  Package, 
+import {
+  Bell,
+  CheckCircle,
+  Clock,
+  AlertTriangle,
+  Package,
   CreditCard,
   Check,
-  SearchX
+  SearchX,
+  Send
 } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../api/client';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface Notification {
   id: string;
@@ -28,9 +33,13 @@ interface Notification {
 }
 
 export const NotificationsPage = () => {
+  const qc = useQueryClient()
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [showSendModal, setShowSendModal] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [newNotif, setNewNotif] = useState({ title: '', body: '', type: 'general', user_id: '' })
 
   const fetchNotifications = async () => {
     try {
@@ -52,6 +61,26 @@ export const NotificationsPage = () => {
       console.error('Failed to mark all as read:', err);
     }
   };
+
+  const sendNotif = useMutation({
+    mutationFn: (data: typeof newNotif) => api.post('/v1/api/admin/notifications/send', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-notifications'] })
+      toast.success('تم إرسال الإشعار')
+      setShowSendModal(false)
+      setNewNotif({ title: '', body: '', type: 'general', user_id: '' })
+    },
+    onError: () => toast.error('فشل إرسال الإشعار')
+  })
+  const deleteNotif = useMutation({
+    mutationFn: (id: string) => api.delete(`/v1/api/admin/notifications/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-notifications'] })
+      toast.success('تم حذف الإشعار')
+      setDeleteId(null)
+    },
+    onError: () => toast.error('فشل حذف الإشعار')
+  })
 
   useEffect(() => {
     fetchNotifications();
@@ -77,10 +106,15 @@ export const NotificationsPage = () => {
 
   return (
     <div className="animate-fade-in space-y-6" dir="rtl">
-      <PageHeader 
-        title="الإشعارات" 
+      <PageHeader
+        title="الإشعارات"
         subtitle="إدارة الإشعارات والأنشطة الأخيرة في المنصة"
         icon={Bell}
+        action={{
+          label: 'إرسال إشعار',
+          icon: Send,
+          onClick: () => setShowSendModal(true)
+        }}
       >
         <div className="flex items-center gap-3">
           <div className="flex bg-surface-card border border-surface-border p-1 rounded-xl">
@@ -188,6 +222,59 @@ export const NotificationsPage = () => {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={showSendModal}
+        onOpenChange={setShowSendModal}
+        title="إرسال إشعار"
+        description={
+          <div className="space-y-4 pt-4 text-right" dir="rtl">
+            <div className="space-y-2">
+              <label className="text-xs text-surface-muted font-bold block">عنوان الإشعار</label>
+              <Input
+                value={newNotif.title}
+                onChange={(e) => setNewNotif({ ...newNotif, title: e.target.value })}
+                placeholder="مثال: مزاد جديد متاح"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-surface-muted font-bold block">محتوى الإشعار</label>
+              <textarea
+                value={newNotif.body}
+                onChange={(e) => setNewNotif({ ...newNotif, body: e.target.value })}
+                className="w-full bg-surface-bg border border-surface-border rounded-xl p-3 text-sm text-white min-h-[100px]"
+                placeholder="نص الإشعار..."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-surface-muted font-bold block">نوع الإشعار</label>
+              <select
+                value={newNotif.type}
+                onChange={(e) => setNewNotif({ ...newNotif, type: e.target.value })}
+                className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white"
+              >
+                <option value="general">عام</option>
+                <option value="new_auction">مزاد جديد</option>
+                <option value="transaction">معاملة</option>
+              </select>
+            </div>
+          </div>
+        }
+        confirmLabel="إرسال"
+        loading={sendNotif.isPending}
+        onConfirm={() => sendNotif.mutate(newNotif)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteId}
+        onOpenChange={(v) => !v && setDeleteId(null)}
+        title="حذف الإشعار"
+        description="هل أنت متأكد من حذف هذا الإشعار؟"
+        variant="danger"
+        confirmLabel="حذف"
+        loading={deleteNotif.isPending}
+        onConfirm={() => deleteId && deleteNotif.mutate(deleteId)}
+      />
     </div>
   );
 };

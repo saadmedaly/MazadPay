@@ -218,6 +218,22 @@ func (h *AdminHandler) BlockUser(c *fiber.Ctx) error {
 	})
 }
 
+func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid user ID")
+	}
+
+	if err := h.svc.DeleteUser(c.Context(), id); err != nil {
+		return InternalError(c, "Failed to delete user")
+	}
+
+	return OK(c, fiber.Map{
+		"message": "User deleted successfully",
+		"user_id": id.String(),
+	})
+}
+
 // List auctions
 func (h *AdminHandler) ListAuctions(c *fiber.Ctx) error {
 	status := c.Query("status")
@@ -367,7 +383,6 @@ func (h *AdminHandler) DeleteAuction(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{"message": "Auction deleted", "id": id.String()})
 }
 
-
 // List all transactions (Admin view)
 func (h *AdminHandler) ListTransactions(c *fiber.Ctx) error {
 	status := c.Query("status")
@@ -483,7 +498,7 @@ func (h *AdminHandler) ReviewReport(c *fiber.Ctx) error {
 		"report_id": id.String(),
 		"status":    req.Status,
 	})
-}// KYC management
+} // KYC management
 func (h *AdminHandler) ListKYCs(c *fiber.Ctx) error {
 	status := c.Query("status")
 	kycs, err := h.svc.ListKYC(c.Context(), status)
@@ -595,8 +610,8 @@ func (h *AdminHandler) ListBlockedPhones(c *fiber.Ctx) error {
 
 func (h *AdminHandler) BlockPhone(c *fiber.Ctx) error {
 	type Request struct {
-		Phone   string `json:"phone"`
-		Reason  string `json:"reason"`
+		Phone  string `json:"phone"`
+		Reason string `json:"reason"`
 	}
 	var req Request
 	if err := c.BodyParser(&req); err != nil {

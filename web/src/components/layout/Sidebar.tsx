@@ -36,8 +36,9 @@ const NAV_SECTIONS = [
       { label: 'توثيق الحسابات', icon: ShieldCheck,     to: '/kyc',          badgeKey: 'pendingKYCs' },
       { label: 'الفئات',      icon: LayoutDashboard, to: '/categories',   badgeKey: null },
       { label: 'المواقع',      icon: Flag,            to: '/locations',    badgeKey: null },
-      { label: 'الإعدادات',    icon: Settings,        to: '/settings',     badgeKey: null },
       { label: 'أرقام محظورة', icon: PhoneOff,        to: '/blocked-phones', badgeKey: null },
+      { label: 'الإعدادات',    icon: Settings,        to: '/settings',     badgeKey: null },
+
     ]
   },
   {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, ToggleLeft, ToggleRight, Image as ImageIcon, Loader2, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, ToggleLeft, ToggleRight, Image as ImageIcon, Loader2, AlertCircle, Edit2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -14,7 +14,9 @@ interface Banner {
   id: number
   title_fr: string | null
   title_ar: string | null
+  title_en: string | null
   image_url: string
+  target_url: string | null
   is_active: boolean
   display_order: number
   starts_at: string | null
@@ -35,7 +37,15 @@ export function BannersPage() {
   const qc = useQueryClient()
   const { data: banners = [], isLoading, isError } = useBanners()
   const [showForm, setShowForm] = useState(false)
-  const [newBanner, setNewBanner] = useState({ title_fr: '', title_ar: '', image_url: '' })
+  const [editingBanner, setEditingBanner] = useState<Banner | null>(null)
+  const [newBanner, setNewBanner] = useState({
+    title_fr: '',
+    title_ar: '',
+    title_en: '',
+    image_url: '',
+    target_url: '',
+    display_order: 1
+  })
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
   const createMutation = useMutation({
@@ -44,7 +54,7 @@ export function BannersPage() {
       qc.invalidateQueries({ queryKey: ['banners'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       setShowForm(false)
-      setNewBanner({ title_fr: '', title_ar: '', image_url: '' })
+      setNewBanner({ title_fr: '', title_ar: '', title_en: '', image_url: '', target_url: '', display_order: 1 })
       toast.success('تم إنشاء الإعلان بنجاح')
     },
     onError: (err: Error) => toast.error(err.message),
@@ -56,6 +66,16 @@ export function BannersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['banners'] })
       toast.success('تم تحديث حالة الإعلان')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (b: Banner) => client.put(`/v1/api/admin/banners/${b.id}`, b),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['banners'] })
+      toast.success('تم تحديث الإعلان')
+      setEditingBanner(null)
     },
     onError: (err: Error) => toast.error(err.message),
   })
@@ -93,7 +113,7 @@ export function BannersPage() {
       {showForm && (
         <div className="admin-card p-6 mb-8 border-mazad-primary/30 animate-slide-in">
           <h3 className="font-display font-bold text-white text-lg mb-6">إضافة إعلان ترويجي جديد</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">العنوان (بالعربية)</label>
               <Input
@@ -107,20 +127,52 @@ export function BannersPage() {
               <Input
                 value={newBanner.title_fr}
                 onChange={(e) => setNewBanner({ ...newBanner, title_fr: e.target.value })}
-                placeholder="Ex: Vente de voitures de luxe..."
+                placeholder="Ex: Vente de voitures..."
+                dir="ltr"
+                className="text-left"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">Title (English)</label>
+              <Input
+                value={newBanner.title_en}
+                onChange={(e) => setNewBanner({ ...newBanner, title_en: e.target.value })}
+                placeholder="Ex: Luxury Auction"
+                dir="ltr"
+                className="text-left"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">رابط الصورة (URL) <span className="text-red-400">*</span></label>
+              <Input
+                value={newBanner.image_url}
+                onChange={(e) => setNewBanner({ ...newBanner, image_url: e.target.value })}
+                placeholder="https://example.com/image.jpg"
+                dir="ltr"
+                className="text-left"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">رابط الويب (اختياري)</label>
+              <Input
+                value={newBanner.target_url}
+                onChange={(e) => setNewBanner({ ...newBanner, target_url: e.target.value })}
+                placeholder="https://example.com/..."
                 dir="ltr"
                 className="text-left"
               />
             </div>
           </div>
           <div className="mb-6">
-            <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">رابط الصورة (URL)</label>
+            <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">ترتيب العرض</label>
             <Input
-              value={newBanner.image_url}
-              onChange={(e) => setNewBanner({ ...newBanner, image_url: e.target.value })}
-              placeholder="https://example.com/image.jpg"
-              dir="ltr"
-              className="text-left"
+              type="number"
+              value={newBanner.display_order}
+              onChange={(e) => setNewBanner({ ...newBanner, display_order: parseInt(e.target.value) || 1 })}
+              placeholder="1"
+              className="w-32"
             />
           </div>
           <div className="flex gap-3 justify-end">
@@ -184,6 +236,13 @@ export function BannersPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => setEditingBanner(banner)}
+                      className="p-2 rounded-xl text-mazad-primary border border-transparent hover:border-mazad-primary/20 hover:bg-mazad-primary/10 transition-all"
+                      title="تعديل"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+                    <button
                       onClick={() => toggleActive.mutate({ id: banner.id, active: !banner.is_active })}
                       className={`p-2 rounded-xl transition-all border ${
                         banner.is_active 
@@ -230,6 +289,88 @@ export function BannersPage() {
         onConfirm={() => {
           if (deleteId) deleteBanner.mutate(deleteId, { onSuccess: () => setDeleteId(null) })
         }}
+      />
+
+      <ConfirmDialog
+        open={!!editingBanner}
+        onOpenChange={(v) => !v && setEditingBanner(null)}
+        title="تعديل الإعلان"
+        description={
+          editingBanner && (
+            <div className="space-y-4 pt-4 text-right" dir="rtl">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-xs text-surface-muted font-bold block mb-2">العنوان (عربي)</label>
+                  <Input
+                    value={editingBanner.title_ar ?? ''}
+                    onChange={(e) => setEditingBanner({ ...editingBanner, title_ar: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-surface-muted font-bold block mb-2">Titre (Français)</label>
+                  <Input
+                    value={editingBanner.title_fr ?? ''}
+                    onChange={(e) => setEditingBanner({ ...editingBanner, title_fr: e.target.value })}
+                    dir="ltr"
+                    className="text-left"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-surface-muted font-bold block mb-2">Title (English)</label>
+                  <Input
+                    value={editingBanner.title_en ?? ''}
+                    onChange={(e) => setEditingBanner({ ...editingBanner, title_en: e.target.value })}
+                    dir="ltr"
+                    className="text-left"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-surface-muted font-bold block mb-2">رابط الصورة</label>
+                  <Input
+                    value={editingBanner.image_url}
+                    onChange={(e) => setEditingBanner({ ...editingBanner, image_url: e.target.value })}
+                    dir="ltr"
+                    className="text-left"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-surface-muted font-bold block mb-2">رابط الويب</label>
+                  <Input
+                    value={editingBanner.target_url ?? ''}
+                    onChange={(e) => setEditingBanner({ ...editingBanner, target_url: e.target.value })}
+                    dir="ltr"
+                    className="text-left"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-surface-muted font-bold block mb-2">ترتيب العرض</label>
+                <Input
+                  type="number"
+                  value={editingBanner.display_order}
+                  onChange={(e) => setEditingBanner({ ...editingBanner, display_order: parseInt(e.target.value) || 1 })}
+                  className="w-32"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editingBanner.is_active}
+                    onChange={(e) => setEditingBanner({ ...editingBanner, is_active: e.target.checked })}
+                    className="w-4 h-4 rounded border-surface-border bg-surface-base text-mazad-primary"
+                  />
+                  <span className="text-sm text-white font-bold">نشط</span>
+                </label>
+              </div>
+            </div>
+          )
+        }
+        confirmLabel="حفظ"
+        loading={updateMutation.isPending}
+        onConfirm={() => editingBanner && updateMutation.mutate(editingBanner)}
       />
     </div>
   )

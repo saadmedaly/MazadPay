@@ -2,13 +2,13 @@ package services
 
 import (
 	"context"
-	"log"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
+	"go.uber.org/zap"
 	"google.golang.org/api/option"
 )
 
@@ -20,26 +20,31 @@ type NotificationService interface {
 	MarkAllAsRead(ctx context.Context, userID uuid.UUID) error
 	MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 	CleanupOldNotifications(ctx context.Context) error
+
+	// Admin methods
+	AdminListNotifications(ctx context.Context, status string, limit int) ([]models.Notification, error)
+	DeleteNotification(ctx context.Context, id uuid.UUID) error
 }
 
 type notificationService struct {
 	repo     repository.NotificationRepository
 	userRepo repository.UserRepository
 	fcm      *messaging.Client
+	logger   *zap.Logger
 }
 
-func NewNotificationService(repo repository.NotificationRepository, userRepo repository.UserRepository, serviceAccountPath string) NotificationService {
+func NewNotificationService(repo repository.NotificationRepository, userRepo repository.UserRepository, serviceAccountPath string, logger *zap.Logger) NotificationService {
 	var fcmClient *messaging.Client
 
 	if serviceAccountPath != "" {
 		opt := option.WithCredentialsFile(serviceAccountPath)
 		app, err := firebase.NewApp(context.Background(), nil, opt)
 		if err != nil {
-			log.Printf("error initializing firebase app: %v", err)
+			logger.Error("error initializing firebase app", zap.Error(err))
 		} else {
 			client, err := app.Messaging(context.Background())
 			if err != nil {
-				log.Printf("error getting messaging client: %v", err)
+				logger.Error("error getting messaging client", zap.Error(err))
 			} else {
 				fcmClient = client
 			}
@@ -50,6 +55,7 @@ func NewNotificationService(repo repository.NotificationRepository, userRepo rep
 		repo:     repo,
 		userRepo: userRepo,
 		fcm:      fcmClient,
+		logger:   logger,
 	}
 }
 
@@ -81,7 +87,10 @@ func (s *notificationService) SendPush(ctx context.Context, userID uuid.UUID, ti
 			notification.Data[k] = v
 		}
 	}
-	_ = s.repo.Create(ctx, notification)
+	if err := s.repo.Create(ctx, notification); err != nil {
+		s.logger.Error("error saving notification to db", zap.Error(err), zap.String("userID", userID.String()))
+		// Continue anyway - don't fail the whole operation (FCM is still sent)
+	}
 
 	// 2. Send via FCM
 	if s.fcm == nil {
@@ -146,4 +155,12 @@ func (s *notificationService) MarkAsRead(ctx context.Context, id uuid.UUID, user
 
 func (s *notificationService) CleanupOldNotifications(ctx context.Context) error {
 	return s.repo.DeleteOld(ctx, 30)
+}
+
+func (s *notificationService) AdminListNotifications(ctx context.Context, status string, limit int) ([]models.Notification, error) {
+	return s.repo.AdminList(ctx, status, limit)
+}
+
+func (s *notificationService) DeleteNotification(ctx context.Context, id uuid.UUID) error {
+	return s.repo.Delete(ctx, id)
 }

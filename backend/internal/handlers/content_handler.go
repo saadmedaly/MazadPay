@@ -26,6 +26,14 @@ func (h *ContentHandler) FAQ(c *fiber.Ctx) error {
 	return OK(c, items)
 }
 
+func (h *ContentHandler) AdminListFAQ(c *fiber.Ctx) error {
+	items, err := h.svc.GetFAQ(c.Context())
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, items)
+}
+
 func (h *ContentHandler) CreateFAQ(c *fiber.Ctx) error {
 	var item models.FAQItem
 	if err := c.BodyParser(&item); err != nil {
@@ -59,6 +67,14 @@ func (h *ContentHandler) DeleteFAQ(c *fiber.Ctx) error {
 }
 
 func (h *ContentHandler) Tutorials(c *fiber.Ctx) error {
+	items, err := h.svc.GetTutorials(c.Context())
+	if err != nil {
+		return InternalError(c, "Failed to get tutorials")
+	}
+	return OK(c, items)
+}
+
+func (h *ContentHandler) AdminListTutorials(c *fiber.Ctx) error {
 	items, err := h.svc.GetTutorials(c.Context())
 	if err != nil {
 		return InternalError(c, "Failed to get tutorials")

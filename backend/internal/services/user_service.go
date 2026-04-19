@@ -1,11 +1,11 @@
 package services
 
 import (
-    "context"
+	"context"
 
-    "github.com/google/uuid"
-    "github.com/mazadpay/backend/internal/models"
-    "github.com/mazadpay/backend/internal/repository"
+	"github.com/google/uuid"
+	"github.com/mazadpay/backend/internal/models"
+	"github.com/mazadpay/backend/internal/repository"
 )
 
 type UserService interface {
@@ -14,6 +14,7 @@ type UserService interface {
 	UpdateAvatar(ctx context.Context, id uuid.UUID, url string) error
 	UpdateLanguage(ctx context.Context, id uuid.UUID, lang string) error
 	UpdateNotificationSettings(ctx context.Context, id uuid.UUID, enabled bool) error
+	DeleteUser(ctx context.Context, id uuid.UUID) error
 
 	// Favorites
 	AddFavorite(ctx context.Context, userID, auctionID uuid.UUID) error
@@ -31,7 +32,7 @@ type UserService interface {
 }
 
 type userService struct {
-	repo        repository.UserRepository
+	repo         repository.UserRepository
 	favoriteRepo repository.FavoriteRepository
 	auctionRepo  repository.AuctionRepository
 	kycRepo      repository.KYCRepository
@@ -44,7 +45,7 @@ func NewUserService(
 	kycRepo repository.KYCRepository,
 ) UserService {
 	return &userService{
-		repo:        repo,
+		repo:         repo,
 		favoriteRepo: favoriteRepo,
 		auctionRepo:  auctionRepo,
 		kycRepo:      kycRepo,
@@ -69,6 +70,10 @@ func (s *userService) UpdateLanguage(ctx context.Context, id uuid.UUID, lang str
 
 func (s *userService) UpdateNotificationSettings(ctx context.Context, id uuid.UUID, enabled bool) error {
 	return s.repo.UpdateNotificationSettings(ctx, id, enabled)
+}
+
+func (s *userService) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	return s.repo.UpdateStatus(ctx, id, false)
 }
 
 func (s *userService) AddFavorite(ctx context.Context, userID, auctionID uuid.UUID) error {

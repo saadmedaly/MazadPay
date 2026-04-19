@@ -143,10 +143,23 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+	// Graceful shutdown timeout adapté selon l'environnement
+	shutdownTimeout := 30 * time.Second
+	if cfg.App.Env == "development" {
+		shutdownTimeout = 10 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
+
 	if err := app.ShutdownWithContext(ctx); err != nil {
-		logger.Error("Error during shutdown", zap.Error(err))
+		// "context deadline exceeded" est normal = timeout atteint, fermeture forcée
+		if err == context.DeadlineExceeded {
+			logger.Info("Graceful shutdown timeout reached, forcing closure", zap.Duration("timeout", shutdownTimeout))
+		} else {
+			logger.Error("Error during shutdown", zap.Error(err))
+		}
 	}
 	logger.Info("Server stopped")
 }

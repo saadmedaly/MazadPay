@@ -8,10 +8,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// ResponseUser retourne un User avec le téléphone masqué pour la sécurité
-type ResponseUser struct {
+ type ResponseUser struct {
 	ID                   string  `json:"id"`
-	Phone                string  `json:"phone"` // Masqué: ####4709
+	Phone                string  `json:"phone"`  
 	FullName             *string `json:"full_name"`
 	Email                *string `json:"email"`
 	ProfilePicURL        *string `json:"profile_pic_url"`
@@ -151,6 +150,24 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "phone_already_registered":
 		logger.Info("Registration attempt with existing phone", logFields...)
 		return Fail(c, 409, "duplicate_phone", "Phone number already registered")
+	case "invalid_pin":
+		logger.Info("Invalid PIN attempt", logFields...)
+		return Fail(c, 401, "invalid_pin", "Invalid PIN code")
+	case "account_blocked":
+		logger.Warn("Account blocked", logFields...)
+		return Fail(c, 403, "account_blocked", "Account is temporarily blocked")
+	case "cannot_bid_own_auction":
+		logger.Info("Self-bid attempt", logFields...)
+		return Fail(c, 400, "self_bid", "You cannot bid on your own auction")
+	case "wallet_locked":
+		logger.Warn("Wallet locked", logFields...)
+		return Fail(c, 403, "wallet_locked", "Wallet is currently locked")
+	case "receipt_required":
+		logger.Info("Receipt required for transaction", logFields...)
+		return Fail(c, 400, "receipt_required", "Receipt is required for this transaction")
+	case "otp_rate_limited":
+		logger.Warn("OTP rate limited", logFields...)
+		return Fail(c, 429, "otp_rate_limited", "Too many OTP requests, please try again later")
 	default:
 		errStr := err.Error()
 		if strings.Contains(errStr, "at least 1 minute in the future") {
@@ -158,18 +175,22 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 			return BadRequest(c, "تاريخ الإغلاق يجب أن يكون في المستقبل")
 		}
 
-		// Gestion des erreurs de base de données courantes (Postgres)
-		if contains(errStr, "23505") || contains(errStr, "duplicate key") {
-			logger.Warn("Database unique constraint violation", logFields...)
-			return Fail(c, 409, "duplicate_record", "A record with this unique identifier already exists")
-		}
-		if contains(errStr, "23503") || contains(errStr, "foreign key") {
-			logger.Warn("Database foreign key violation", logFields...)
-			return Fail(c, 400, "invalid_reference", "The provided reference is invalid or does not exist")
-		}
+// Gestion des erreurs de base de données courantes (Postgres)
+	if contains(errStr, "23505") || contains(errStr, "duplicate key") {
+		logger.Warn("Database unique constraint violation", logFields...)
+		return Fail(c, 409, "duplicate_record", "A record with this unique identifier already exists")
+	}
+	if contains(errStr, "23503") || contains(errStr, "foreign key") {
+		logger.Warn("Database foreign key violation", logFields...)
+		return Fail(c, 400, "invalid_reference", "The provided reference is invalid or does not exist")
+	}
+	if contains(errStr, "42703") || contains(errStr, "column") && contains(errStr, "does not exist") {
+		logger.Error("Database schema mismatch - missing column", logFields...)
+		return Fail(c, 500, "schema_error", "Database schema error: please run migrations")
+	}
 
-		// Erreur interne imprévue : Log au niveau ERROR
-		logger.Error("Unhandled internal error", logFields...)
+	// Erreur interne imprévue : Log au niveau ERROR
+	logger.Error("Unhandled internal error", logFields...)
 		return InternalError(c)
 	}
 }

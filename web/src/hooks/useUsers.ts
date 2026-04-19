@@ -115,3 +115,17 @@ export function useBlockUser() {
     onError: (err: Error) => toast.error(err.message),
   })
 }
+
+export function useDeleteUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      client.delete(`/v1/api/admin/users/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.all })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast.success('تم حذف المستخدم بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+}

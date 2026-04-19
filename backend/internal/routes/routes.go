@@ -33,7 +33,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	hub := ws.NewHub(logger)
 
 	// Services
-	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath)
+	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath, logger)
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode)
 	auctionSvc := services.NewAuctionService(auctionRepo, reportRepo, notifSvc)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
@@ -175,6 +175,7 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwt
 	admin.Get("/users/:id/transactions", adminHandler.GetUserTransactions)
 	admin.Post("/invitations", adminHandler.GenerateInvitation)
 	admin.Put("/users/:id/block", adminHandler.BlockUser)
+	admin.Delete("/users/:id", adminHandler.DeleteUser)
 
 	// Auction management routes
 	admin.Get("/auctions", adminHandler.ListAuctions)
@@ -222,11 +223,15 @@ func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, jwtSecret st
 	// Protected routes
 	api.Post("/banners/request", jwtMiddleware, h.Request) // CONCEPTION Demandes d'annonces
 
+	// Admin create banner (direct)
+	api.Post("/banners", jwtMiddleware, adminMiddleware, h.Create)
+
 	// Admin routes
 	admin := api.Group("/admin/banners", jwtMiddleware, adminMiddleware)
 	admin.Get("/", h.AdminList)
 	admin.Post("/", h.Create)
 	admin.Put("/:id/toggle", h.Toggle)
+	admin.Put("/:id", h.Update)
 	admin.Delete("/:id", h.Delete)
 }
 
@@ -244,11 +249,13 @@ func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, jwtSecret 
 	admin := api.Group("/admin", jwtMiddleware, adminMiddleware)
 
 	// FAQ CRUD
+	admin.Get("/faq", h.AdminListFAQ)
 	admin.Post("/faq", h.CreateFAQ)
 	admin.Put("/faq/:id", h.UpdateFAQ)
 	admin.Delete("/faq/:id", h.DeleteFAQ)
 
 	// Tutorials CRUD
+	admin.Get("/tutorials", h.AdminListTutorials)
 	admin.Post("/tutorials", h.CreateTutorial)
 	admin.Put("/tutorials/:id", h.UpdateTutorial)
 	admin.Delete("/tutorials/:id", h.DeleteTutorial)
@@ -256,6 +263,7 @@ func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, jwtSecret 
 
 func setupNotificationRoutes(api fiber.Router, h *handlers.NotificationHandler, jwtSecret string, logger *zap.Logger) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+	adminMiddleware := middleware.AdminOnly(logger)
 
 	notif := api.Group("/notifications", jwtMiddleware)
 
@@ -263,4 +271,9 @@ func setupNotificationRoutes(api fiber.Router, h *handlers.NotificationHandler, 
 	notif.Get("/", h.List)
 	notif.Put("/read-all", h.MarkAllAsRead)
 	notif.Put("/:id/read", h.MarkAsRead)
+
+	adminNotif := api.Group("/admin/notifications", jwtMiddleware, adminMiddleware)
+	adminNotif.Get("/", h.AdminList)
+	adminNotif.Post("/send", h.SendNotification)
+	adminNotif.Delete("/:id", h.AdminDelete)
 }

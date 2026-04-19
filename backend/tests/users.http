@@ -1,41 +1,115 @@
+### ============================================
+### MazadPay API - User Authentication Flow
+### ============================================
+
 ### Variables
 @baseUrl = http://localhost:8082/v1/api
 @adminToken = {{$dotenv ADMIN_TOKEN}}
+@devOtpCode = {{$dotenv DEV_OTP_CODE}}
+@userPhone = 33333333
+@userPin = 1234
+@userFullName = Ahmed Harrouni
+@userEmail = ahmed@example.com
+@userCity = Tunis
 
-### 1. Register a new regular user
+### ============================================
+### 🔐 AUTHENTICATION FLOW (Required order!)
+### ============================================
+
+### 1️⃣ REGISTER - Create a new unverified user
+### Required fields: phone, pin, full_name, email
+### Optional fields: city
+### Response: { success: true, message: "Registration successful. OTP will be sent." }
 # @name registerUser
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 {
-    "phone": "22233334444",
-    "pin": "1234"
+    "phone": "{{userPhone}}",
+    "pin": "{{userPin}}",
+    "full_name": "{{userFullName}}",
+    "email": "{{userEmail}}",
+    "city": "{{userCity}}"
 }
 
-### 2. Login as the regular user (will fail if OTP not verified, but let's assume DEV bypass or we verify manually via DB)
+### 2️⃣ SEND OTP - Request OTP code for verification
+### Response: { success: true, message: "OTP sent successfully" }
+### ⚠️ In DEV mode, OTP code is in .env: DEV_OTP_CODE
+# @name sendOTP
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "{{userPhone}}",
+    "purpose": "register"
+}
+
+### 3️⃣ VERIFY OTP - Verify OTP code (marks user as verified)
+### Use code from DEV_OTP_CODE in .env or "123456" in development
+### Response: { success: true, message: "OTP verified successfully" }
+# @name verifyOTP
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "{{userPhone}}",
+    "code": "{{devOtpCode}}",
+    "purpose": "register"
+}
+
+### 4️⃣ LOGIN - Now login works! ✅
+### Response: { success: true, data: { token: "jwt_token", user: {...} } }
 # @name loginUser
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
-    "phone": "22233334444",
-    "pin": "1234"
+    "phone": "{{userPhone}}",
+    "pin": "{{userPin}}"
 }
 
-### 3. Generate Admin Invitation (Requires Admin Token)
+### ============================================
+### 👤 USER ENDPOINTS (Requires Token from Login)
+### ============================================
+
+### 5️⃣ GET ME - Get current user info
+### Requires: Authorization Bearer token from login
+# @name getMe
+GET {{baseUrl}}/users/me
+Authorization: Bearer {{loginUser.response.body.data.token}}
+
+### 6️⃣ GET NOTIFICATIONS - User notifications
+# @name getNotifications
+GET {{baseUrl}}/notifications
+Authorization: Bearer {{loginUser.response.body.data.token}}
+
+### 7️⃣ GET FAVORITES - User favorite auctions
+# @name getFavorites
+GET {{baseUrl}}/users/favorites
+Authorization: Bearer {{loginUser.response.body.data.token}}
+
+### ============================================
+### 🔐 ADMIN SECTION
+### ============================================
+
+### 8️⃣ GENERATE ADMIN INVITATION (Admin only)
+### Requires: ADMIN_TOKEN from .env
 # @name generateInvitation
 POST {{baseUrl}}/admin/invitations
 Content-Type: application/json
 Authorization: Bearer {{adminToken}}
 
-### 4. Register new Admin using the generated token (Replace the token below)
+{}
+
+### 9️⃣ REGISTER NEW ADMIN using invitation token
+### Use token from generateInvitation response
 # @name registerAdmin
 POST {{baseUrl}}/auth/register-admin
 Content-Type: application/json
 
 {
     "token": "{{generateInvitation.response.body.data.token}}",
-    "phone": "22299998888",
+    "phone": "99999999",
     "full_name": "New Admin User",
     "email": "newadmin@mazadpay.com",
     "pin": "1234"

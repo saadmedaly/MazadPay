@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Eye, Shield, ShieldOff, UserPlus, X, Copy, Link as LinkIcon, Check } from 'lucide-react'
+import { Search, Eye, Shield, ShieldOff, UserPlus, X, Copy, Link as LinkIcon, Check, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { formatDate, maskPhone, shortID } from '@/lib/formatters'
 import type { AdminUser } from '@/types/api'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useUsers, useBlockUser, useGenerateInvitation } from '@/hooks/useUsers'
+import { useUsers, useBlockUser, useGenerateInvitation, useDeleteUser } from '@/hooks/useUsers'
 import { toast } from 'sonner'
 
 export function UsersPage() {
@@ -17,12 +17,14 @@ export function UsersPage() {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [blockTarget, setBlockTarget] = useState<{ id: string; block: boolean; name: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [token, setToken] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
   const { data, isLoading, isError } = useUsers(q, page)
   const blockUser = useBlockUser()
+  const deleteUser = useDeleteUser()
   const generateInvitation = useGenerateInvitation()
 
   const handleGenerateLink = () => {
@@ -110,17 +112,26 @@ export function UsersPage() {
               <Eye className="w-4 h-4" />
             </button>
             {user.role !== 'admin' && (
-              <button
-                onClick={() => setBlockTarget({ id: user.id, block: user.is_active, name: user.full_name ?? shortID(user.id) })}
-                className={`p-2 rounded-lg transition-all ${
-                  user.is_active
-                    ? 'text-red-400 hover:bg-red-500/10 hover:border-red-500/20'
-                    : 'text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20'
-                } border border-transparent`}
-                title={user.is_active ? 'حظر المستخدم' : 'إلغاء الحظر'}
-              >
-                {user.is_active ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
-              </button>
+              <>
+                <button
+                  onClick={() => setBlockTarget({ id: user.id, block: user.is_active, name: user.full_name ?? shortID(user.id) })}
+                  className={`p-2 rounded-lg transition-all ${
+                    user.is_active
+                      ? 'text-red-400 hover:bg-red-500/10 hover:border-red-500/20'
+                      : 'text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20'
+                  } border border-transparent`}
+                  title={user.is_active ? 'حظر المستخدم' : 'إلغاء الحظر'}
+                >
+                  {user.is_active ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => setDeleteTarget({ id: user.id, name: user.full_name ?? shortID(user.id) })}
+                  className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
+                  title="حذف المستخدم نهائياً"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
             )}
           </div>
         )
@@ -139,8 +150,7 @@ export function UsersPage() {
     <div className="animate-fade-in" dir="rtl">
       <PageHeader title="إدارة المستخدمين" subtitle={`${data?.total ?? 0} حساب مسجل في النظام`} />
 
-      {/* Header & Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div className="relative flex-1 max-w-md group">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-muted group-focus-within:text-mazad-primary transition-colors" />
           <Input
@@ -195,6 +205,21 @@ export function UsersPage() {
         }} 
       />
 
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title={`هل أنت متأكد من حذف ${deleteTarget?.name}؟`}
+        description="هذا الإجراء لا يمكن التراجع عنه. سيتم حذف المستخدم وجميع بياناته نهائياً من النظام."
+        confirmLabel="حذف نهائياً"
+        variant="danger"
+        loading={deleteUser.isPending}
+        onConfirm={() => {
+          if (deleteTarget) deleteUser.mutate(
+            deleteTarget.id,
+            { onSuccess: () => setDeleteTarget(null) }
+          )
+        }}
+      />
 
       {/* Invite Admin Modal */}
       {showInviteModal && (

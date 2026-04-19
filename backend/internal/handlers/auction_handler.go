@@ -40,7 +40,7 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 
     auctions, err := h.service.List(c.Context(), f)
     if err != nil {
-        return InternalError(c)
+        return MapError(c, h.logger, err)
     }
 
     return OK(c, auctions)
@@ -205,7 +205,7 @@ func (h *AuctionHandler) IncrementView(c *fiber.Ctx) error {
 func (h *AuctionHandler) GetCategories(c *fiber.Ctx) error {
 	categories, err := h.service.GetCategories(c.Context())
 	if err != nil {
-		return InternalError(c)
+		return MapError(c, h.logger, err)
 	}
 
 	return OK(c, categories)
@@ -214,7 +214,7 @@ func (h *AuctionHandler) GetCategories(c *fiber.Ctx) error {
 func (h *AuctionHandler) GetLocations(c *fiber.Ctx) error {
 	locations, err := h.service.GetLocations(c.Context())
 	if err != nil {
-		return InternalError(c)
+		return MapError(c, h.logger, err)
 	}
 
 	return OK(c, locations)

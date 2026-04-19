@@ -41,7 +41,7 @@ func NewPostgres(cfg *config.Config, logger *zap.Logger) (*sqlx.DB, error) {
 	return db, nil
 }
 
-  func WithTransaction(db *sqlx.DB, fn func(tx *sqlx.Tx) error) error {
+func WithTransaction(db *sqlx.DB, fn func(tx *sqlx.Tx) error) error {
 	tx, err := db.Beginx()
 	if err != nil {
 		return err

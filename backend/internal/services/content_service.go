@@ -22,6 +22,7 @@ type ContentService interface {
 	CreateBanner(ctx context.Context, banner *models.Banner) error
 	RequestBanner(ctx context.Context, banner *models.Banner) error
 	ToggleBanner(ctx context.Context, id int, active bool) error
+	UpdateBanner(ctx context.Context, banner *models.Banner) error
 	DeleteBanner(ctx context.Context, id int) error
 }
 
@@ -102,6 +103,10 @@ func (s *contentService) RequestBanner(ctx context.Context, banner *models.Banne
 
 func (s *contentService) ToggleBanner(ctx context.Context, id int, active bool) error {
 	return s.repo.UpdateBannerStatus(ctx, id, active)
+}
+
+func (s *contentService) UpdateBanner(ctx context.Context, banner *models.Banner) error {
+	return s.repo.UpdateBanner(ctx, banner)
 }
 
 func (s *contentService) DeleteBanner(ctx context.Context, id int) error {

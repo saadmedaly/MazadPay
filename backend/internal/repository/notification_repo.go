@@ -19,6 +19,10 @@ type NotificationRepository interface {
 	GetPushTokens(ctx context.Context, userID uuid.UUID) ([]string, error)
 	DeactivateToken(ctx context.Context, fcmToken string) error
 	DeleteOld(ctx context.Context, days int) error
+
+	// Admin methods
+	AdminList(ctx context.Context, status string, limit int) ([]models.Notification, error)
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type notificationRepo struct {
@@ -80,5 +84,29 @@ func (r *notificationRepo) DeactivateToken(ctx context.Context, fcmToken string)
 
 func (r *notificationRepo) DeleteOld(ctx context.Context, days int) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM notifications WHERE created_at < now() - ($1 || ' days')::interval`, days)
+	return err
+}
+
+func (r *notificationRepo) AdminList(ctx context.Context, status string, limit int) ([]models.Notification, error) {
+	var notifications []models.Notification
+	query := `SELECT * FROM notifications`
+	args := []interface{}{}
+
+	if status != "all" {
+		if status == "unread" {
+			query += ` WHERE is_read = false`
+		} else if status == "read" {
+			query += ` WHERE is_read = true`
+		}
+	}
+	query += ` ORDER BY created_at DESC LIMIT $1`
+	args = append(args, limit)
+
+	err := r.db.SelectContext(ctx, &notifications, query, args...)
+	return notifications, err
+}
+
+func (r *notificationRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM notifications WHERE id = $1`, id)
 	return err
 }

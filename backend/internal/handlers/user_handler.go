@@ -219,3 +219,15 @@ func (h *UserHandler) UpdateNotificationPrefs(c *fiber.Ctx) error {
 	}
 	return OK(c, fiber.Map{"message": "Notification settings updated"})
 }
+
+func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
+	userID, err := uuid.Parse(c.Params("user_id"))
+	if err != nil {
+		return BadRequest(c, "Invalid user ID")
+	}
+
+	if err := h.service.DeleteUser(c.Context(), userID); err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, fiber.Map{"message": "User deleted successfully"})
+}

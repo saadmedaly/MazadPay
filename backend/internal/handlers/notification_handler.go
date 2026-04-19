@@ -95,3 +95,67 @@ func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
 
 	return c.SendStatus(fiber.StatusOK)
 }
+
+type AdminListNotificationsRequest struct {
+	UserID string `query:"user_id"`
+	Status string `query:"status"`
+	Limit  int    `query:"limit,20"`
+}
+
+func (h *NotificationHandler) AdminList(c *fiber.Ctx) error {
+	limitStr := c.Query("limit", "20")
+	limit, _ := strconv.Atoi(limitStr)
+	status := c.Query("status", "all")
+
+	notifications, err := h.svc.AdminListNotifications(c.Context(), status, limit)
+	if err != nil {
+		h.logger.Error("failed to list notifications", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list notifications"})
+	}
+
+	return c.JSON(fiber.Map{"data": notifications})
+}
+
+type SendNotificationRequest struct {
+	UserID   string `json:"user_id"`
+	Title    string `json:"title" validate:"required"`
+	Body     string `json:"body" validate:"required"`
+	Type     string `json:"type"`
+	Data     map[string]string `json:"data"`
+}
+
+func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
+	var req SendNotificationRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	if req.UserID != "" {
+		userUUID, err := uuid.Parse(req.UserID)
+		if err != nil {
+			return BadRequest(c, "Invalid user ID")
+		}
+		if err := h.svc.SendPush(c.Context(), userUUID, req.Title, req.Body, req.Data); err != nil {
+			return MapError(c, h.logger, err)
+		}
+	} else {
+		if err := h.svc.NotifyAdmins(c.Context(), req.Title, req.Body, req.Data); err != nil {
+			return MapError(c, h.logger, err)
+		}
+	}
+
+	return OK(c, fiber.Map{"message": "Notification sent"})
+}
+
+func (h *NotificationHandler) AdminDelete(c *fiber.Ctx) error {
+	notifID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid notification ID")
+	}
+
+	if err := h.svc.DeleteNotification(c.Context(), notifID); err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, fiber.Map{"message": "Notification deleted"})
+}

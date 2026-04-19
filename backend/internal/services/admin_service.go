@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/google/uuid"
@@ -23,6 +24,7 @@ type AdminService interface {
 	ListUsers(ctx context.Context, page, perPage int, query string) ([]models.User, int, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error)
 	BlockUser(ctx context.Context, id uuid.UUID, block bool) error
+	DeleteUser(ctx context.Context, id uuid.UUID) error
 	ListAuctions(ctx context.Context, page, perPage int, status, query string, sellerID *uuid.UUID) ([]models.Auction, int, error)
 	ValidateAuction(ctx context.Context, id uuid.UUID, approve bool, reason string) error
 	UpdateAuction(ctx context.Context, id uuid.UUID, input UpdateAuctionInput) error
@@ -217,6 +219,10 @@ func (s *adminService) BlockUser(ctx context.Context, id uuid.UUID, block bool) 
 	return s.userRepo.UpdateStatus(ctx, id, !block)
 }
 
+func (s *adminService) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	return s.userRepo.UpdateStatus(ctx, id, false)
+}
+
 func (s *adminService) ListAuctions(ctx context.Context, page, perPage int, status, query string, sellerID *uuid.UUID) ([]models.Auction, int, error) {
 	filters := repository.AuctionFilters{
 		Status:   status,
@@ -242,34 +248,46 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 
 	var tFr, tEn *string
 	var dAr, dFr, dEn *string
-	if input.TitleFr != "" { tFr = &input.TitleFr }
-	if input.TitleEn != "" { tEn = &input.TitleEn }
-	if input.DescriptionAr != "" { dAr = &input.DescriptionAr }
-	if input.DescriptionFr != "" { dFr = &input.DescriptionFr }
-	if input.DescriptionEn != "" { dEn = &input.DescriptionEn }
+	if input.TitleFr != "" {
+		tFr = &input.TitleFr
+	}
+	if input.TitleEn != "" {
+		tEn = &input.TitleEn
+	}
+	if input.DescriptionAr != "" {
+		dAr = &input.DescriptionAr
+	}
+	if input.DescriptionFr != "" {
+		dFr = &input.DescriptionFr
+	}
+	if input.DescriptionEn != "" {
+		dEn = &input.DescriptionEn
+	}
 
 	var phone *string
-	if input.PhoneContact != "" { phone = &input.PhoneContact }
+	if input.PhoneContact != "" {
+		phone = &input.PhoneContact
+	}
 
-	auction.CategoryID    = input.CategoryID
-	auction.LocationID    = input.LocationID
-	auction.TitleAr       = input.TitleAr
-	auction.TitleFr       = tFr
-	auction.TitleEn       = tEn
+	auction.CategoryID = input.CategoryID
+	auction.LocationID = input.LocationID
+	auction.TitleAr = input.TitleAr
+	auction.TitleFr = tFr
+	auction.TitleEn = tEn
 	auction.DescriptionAr = dAr
 	auction.DescriptionFr = dFr
 	auction.DescriptionEn = dEn
-	auction.StartPrice    = input.StartPrice
-	auction.MinIncrement  = input.MinIncrement
+	auction.StartPrice = input.StartPrice
+	auction.MinIncrement = input.MinIncrement
 	auction.InsuranceAmount = input.InsuranceAmount
-	auction.EndTime       = input.EndTime
-	auction.PhoneContact  = phone
-	auction.BuyNowPrice   = input.BuyNowPrice
-	auction.ItemDetails   = input.ItemDetails
+	auction.EndTime = input.EndTime
+	auction.PhoneContact = phone
+	auction.BuyNowPrice = input.BuyNowPrice
+	auction.ItemDetails = input.ItemDetails
 	if input.StartTime != nil {
 		auction.StartTime = *input.StartTime
 	}
-	
+
 	if err := s.auctionRepo.Update(ctx, auction); err != nil {
 		return err
 	}
@@ -279,7 +297,9 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 		return err
 	}
 	for i, url := range input.Images {
-		if url == "" { continue }
+		if url == "" {
+			continue
+		}
 		err := s.auctionRepo.AddImage(ctx, &models.AuctionImage{
 			AuctionID:    id,
 			URL:          url,
@@ -427,7 +447,7 @@ func (s *adminService) RegisterAdminWithToken(ctx context.Context, token, phone,
 	if existingUser != nil {
 		// Promote existing user to admin
 		if err := s.userRepo.PromoteToAdmin(ctx, existingUser.ID, fullName, email, string(hash)); err != nil {
-		    return err
+			return err
 		}
 	} else {
 		// Create new admin user

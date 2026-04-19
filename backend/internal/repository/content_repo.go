@@ -24,6 +24,7 @@ type ContentRepository interface {
 	ListBanners(ctx context.Context, onlyActive bool) ([]models.Banner, error)
 	CreateBanner(ctx context.Context, banner *models.Banner) error
 	UpdateBannerStatus(ctx context.Context, id int, isActive bool) error
+	UpdateBanner(ctx context.Context, banner *models.Banner) error
 	DeleteBanner(ctx context.Context, id int) error
 }
 
@@ -101,7 +102,7 @@ func (r *contentRepo) UpdateTutorial(ctx context.Context, tutorial *models.Tutor
 }
 
 func (r *contentRepo) ListBanners(ctx context.Context, onlyActive bool) ([]models.Banner, error) {
-	query := `SELECT * FROM banners`
+	query := `SELECT id, title_ar, title_fr, title_en, image_url, target_url, is_active, starts_at, ends_at, display_order FROM banners`
 	if onlyActive {
 		query += ` WHERE is_active = true`
 	}
@@ -109,19 +110,46 @@ func (r *contentRepo) ListBanners(ctx context.Context, onlyActive bool) ([]model
 
 	var banners []models.Banner
 	err := r.db.SelectContext(ctx, &banners, query)
-	return banners, err
+	if err != nil {
+		return nil, err
+	}
+	if banners == nil {
+		banners = []models.Banner{}
+	}
+	return banners, nil
 }
 
 func (r *contentRepo) CreateBanner(ctx context.Context, banner *models.Banner) error {
-	_, err := r.db.NamedExecContext(ctx, `
-		INSERT INTO banners (title_ar, title_fr, image_url, target_url, is_active, starts_at, ends_at, display_order)
-		VALUES (:title_ar, :title_fr, :image_url, :target_url, :is_active, :starts_at, :ends_at, :display_order)
-	`, banner)
+	query := `
+		INSERT INTO banners (title_ar, title_fr, title_en, image_url, target_url, is_active, starts_at, ends_at, display_order)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id`
+	err := r.db.GetContext(ctx, banner, query,
+		banner.TitleAr, banner.TitleFr, banner.TitleEn,
+		banner.ImageURL, banner.TargetURL, banner.IsActive,
+		banner.StartsAt, banner.EndsAt, banner.DisplayOrder)
 	return err
 }
 
 func (r *contentRepo) UpdateBannerStatus(ctx context.Context, id int, isActive bool) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE banners SET is_active = $1 WHERE id = $2`, isActive, id)
+	return err
+}
+
+func (r *contentRepo) UpdateBanner(ctx context.Context, banner *models.Banner) error {
+	_, err := r.db.NamedExecContext(ctx, `
+		UPDATE banners SET
+			title_ar = :title_ar,
+			title_fr = :title_fr,
+			title_en = :title_en,
+			image_url = :image_url,
+			target_url = :target_url,
+			is_active = :is_active,
+			starts_at = :starts_at,
+			ends_at = :ends_at,
+			display_order = :display_order
+		WHERE id = :id
+	`, banner)
 	return err
 }
 

@@ -14,7 +14,7 @@ import (
 )
 
 type AuthService interface {
-	Register(ctx context.Context, phone, pin string) error
+	Register(ctx context.Context, phone, pin, fullName, email, city string) error
 	Login(ctx context.Context, phone, pin string) (string, *models.User, error) // token, user, err
 	SendOTP(ctx context.Context, phone, purpose, ip string) error
 	VerifyOTP(ctx context.Context, phone, code, purpose string) error
@@ -45,7 +45,7 @@ func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExp
 	return &authService{userRepo: userRepo, jwtSecret: jwtSecret, jwtExpiry: jwtExpiry, env: env, developmentOTP: devOTP}
 }
 
-func (s *authService) Register(ctx context.Context, phone, pin string) error {
+func (s *authService) Register(ctx context.Context, phone, pin, fullName, email, city string) error {
 	// Vérifier si le numéro existe déjà
 	existing, _ := s.userRepo.FindByPhone(ctx, phone)
 	if existing != nil {
@@ -61,6 +61,9 @@ func (s *authService) Register(ctx context.Context, phone, pin string) error {
 		ID:           uuid.New(),
 		Phone:        phone,
 		PasswordHash: string(hash),
+		FullName:     &fullName,
+		Email:        &email,
+		City:         &city,
 		LanguagePref: "ar",
 		Role:         "user",
 		IsVerified:   false,

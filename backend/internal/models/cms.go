@@ -27,6 +27,7 @@ type Banner struct {
 	ID           int       `db:"id"             json:"id"`
 	TitleAr      *string   `db:"title_ar"       json:"title_ar"`
 	TitleFr      *string   `db:"title_fr"       json:"title_fr"`
+	TitleEn      *string   `db:"title_en"       json:"title_en"`
 	ImageURL     string    `db:"image_url"      json:"image_url"`
 	TargetURL    *string   `db:"target_url"     json:"target_url"`
 	IsActive     bool      `db:"is_active"      json:"is_active"`
