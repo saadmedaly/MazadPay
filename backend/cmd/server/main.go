@@ -13,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/mazadpay/backend/internal/config"
 	"github.com/mazadpay/backend/internal/database"
+	"github.com/mazadpay/backend/internal/repository"
 	"github.com/mazadpay/backend/internal/routes"
 	"go.uber.org/zap"
 )
@@ -104,6 +105,21 @@ func main() {
 	})
 
 	auctionSvc, notifSvc := routes.Setup(app, db, rdb, cfg, logger)
+
+	// --- Seed Default Super Admin ---
+	if cfg.App.DefaultSuperAdminPhone != "" && cfg.App.DefaultSuperAdminPin != "" {
+		userRepo := repository.NewUserRepository(db)
+		if err := userRepo.SeedDefaultSuperAdmin(context.Background(), 
+			cfg.App.DefaultSuperAdminPhone, 
+			cfg.App.DefaultSuperAdminPin,
+			"Super Admin",
+			"admin@mazadpay.com",
+		); err != nil {
+			logger.Error("Failed to seed default super admin", zap.Error(err))
+		} else {
+			logger.Info("Default super admin seeded successfully")
+		}
+	}
 
 	// --- Background Tasks ---
 	go func() {

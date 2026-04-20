@@ -26,6 +26,8 @@ type AppConfig struct {
 	Port       string
 	Name       string
 	DevOTPCode string // Code OTP de développement (ignoré en production)
+	DefaultSuperAdminPhone string // Téléphone du super admin par défaut
+	DefaultSuperAdminPin   string // PIN du super admin par défaut
 }
 
 type DBConfig struct {
@@ -88,6 +90,8 @@ func Load() *Config {
 			Port:       getEnv("APP_PORT", "8082"),
 			Name:       getEnv("APP_NAME", "MazadPay"),
 			DevOTPCode: getEnv("DEV_OTP_CODE", ""),
+			DefaultSuperAdminPhone: getEnv("DEFAULT_SUPER_ADMIN_PHONE", ""),
+			DefaultSuperAdminPin:   getEnv("DEFAULT_SUPER_ADMIN_PIN", ""),
 		},
 		DB: DBConfig{
 			Host:            getEnv("DB_HOST", "localhost"),

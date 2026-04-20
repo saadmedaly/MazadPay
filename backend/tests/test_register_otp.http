@@ -1,8 +1,29 @@
+# ===========================================
+# TESTS API AUTHENTIFICATION AVEC SMS OTP
+# ===========================================
+#
+# FLOW COMPLET:
+# 1. Register → Envoi automatique OTP
+# 2. Send OTP → Relance si expiré
+# 3. Verify OTP → Validation code
+# 4. Login → Accès avec PIN
+#
+# VALIDATIONS PIN:
+# ✅ Valide: 1357, 2468, 9753 (mélangés)
+# ❌ Rejeté: 1234, 1111 (séquentiel/répétitif)
+#
+# CODES OTP:
+# - Développement: 123456 (fixe)
+# - Production: Aléatoire 4-6 chiffres
+#
+# ===========================================
+
 @baseUrl = http://localhost:8082/v1/api
-@testPhone = +22241448045
+@testPhone = +22237141001
+@devOtpCode = {{$dotenv DEV_OTP_CODE}}
 
 ### ========================
-### 1. Register New User
+### 1. Register New User (avec PIN fort)
 ### ========================
 # @name registerUser
 POST {{baseUrl}}/auth/register
@@ -10,10 +31,10 @@ Content-Type: application/json
 
 {
     "phone": "{{testPhone}}",
-    "pin": "1234",
-    "full_name": "Test UserMS",
-    "email": "test5{{$randomInt}}@example.com",
-    "city": "Nuakchott",
+    "pin": "1957",
+    "full_name": "Test 4 API",
+    "email": "test_ap4i{{$randomInt}}@example.com",
+    "city": "Nouakchott"
 }
 
 ### ========================
@@ -29,7 +50,7 @@ Content-Type: application/json
 }
 
 ### ========================
-### 3. Verify OTP
+### 3. Verify OTP (code de développement: 123456)
 ### ========================
 # @name verifyOTP
 POST {{baseUrl}}/auth/otp/verify
@@ -42,23 +63,138 @@ Content-Type: application/json
 }
 
 ### ========================
-### 4. Login
-### ========================
-# @name login
-POST {{baseUrl}}/auth/login
-Content-Type: application/json
-
-{
-    "phone": "{{testPhone}}",
-    "pin": "1234"
-}
-
-### ========================
 ### 5. Get User Profile (avec token du login)
 ### ========================
 # @name getProfile
 GET {{baseUrl}}/users/me
 Authorization: Bearer {{login.response.body.data.token}}
+
+### ========================
+### TEST COMPLET: Register + SMS OTP + Login
+### ========================
+@flowPhone = +222323232326
+
+# @name fullFlowRegister
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "phone": "{{flowPhone}}",
+    "pin": "2468",
+    "full_name": "Test Full Flow",
+    "email": "full_flow{{$randomInt}}@example.com",
+    "city": "Nouakchott"
+}
+
+###
+# @name fullFlowSendOTP
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "{{flowPhone}}",
+    "purpose": "register"
+}
+
+###
+# @name fullFlowVerifyOTP
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "{{flowPhone}}",
+    "code": "{{devOtpCode}}",
+    "purpose": "register"
+}
+
+###
+# @name fullFlowLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "{{flowPhone}}",
+    "pin": "2468"
+}
+
+### ========================
+### TESTS DE VALIDATION
+### ========================
+
+### Test: PIN trop faible (séquentiel) - DOIT ÉCHOUER
+# @name weakPinTest
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "phone": "+222323232327",
+    "pin": "1234",
+    "full_name": "Test Weak PIN",
+    "email": "weak_pin{{$randomInt}}@example.com",
+    "city": "Test"
+}
+
+### Test: PIN répétitif - DOIT ÉCHOUER
+# @name repetitivePinTest
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "phone": "+222323232328",
+    "pin": "1111",
+    "full_name": "Test Repetitive PIN",
+    "email": "repetitive_pin{{$randomInt}}@example.com",
+    "city": "Test"
+}
+
+### Test: PIN valide
+# @name validPinTest
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "phone": "+222323232329",
+    "pin": "9753",
+    "full_name": "Test Valid PIN",
+    "email": "valid_pin{{$randomInt}}@example.com",
+    "city": "Test"
+}
+
+### ========================
+### TESTS DE SÉCURITÉ
+### ========================
+
+### Test: Login sans vérification OTP - DOIT ÉCHOUER
+# @name loginWithoutOTP
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "+222323232329",
+    "pin": "9753"
+}
+
+### Test: Reset Password avec PIN faible - DOIT ÉCHOUER
+# @name resetWeakPassword
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "code": "123456",
+    "new_pin": "1111"
+}
+
+### Test: Reset Password valide
+# @name resetValidPassword
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "code": "123456",
+    "new_pin": "8642"
+}
 
 ### ========================
 ### 6. Send OTP for Password Reset

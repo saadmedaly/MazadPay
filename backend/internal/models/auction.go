@@ -10,7 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
- type JSONB map[string]interface{}
+type JSONB map[string]interface{}
 
 func (j JSONB) Value() (driver.Value, error) {
 	if j == nil {
@@ -95,9 +95,21 @@ type Category struct {
 }
 
 type Location struct {
-	ID         int    `db:"id"           json:"id"`
-	CityNameAr string `db:"city_name_ar" json:"city_name_ar"`
-	CityNameFr string `db:"city_name_fr" json:"city_name_fr"`
-	AreaNameAr string `db:"area_name_ar" json:"area_name_ar"`
-	AreaNameFr string `db:"area_name_fr" json:"area_name_fr"`
+	ID         int      `db:"id"            json:"id"`
+	CountryID  *int     `db:"country_id"    json:"country_id"`
+	CityNameAr string   `db:"city_name_ar"  json:"city_name_ar"`
+	CityNameFr string   `db:"city_name_fr"  json:"city_name_fr"`
+	AreaNameAr string   `db:"area_name_ar"  json:"area_name_ar"`
+	AreaNameFr string   `db:"area_name_fr"  json:"area_name_fr"`
+	Country    *Country `db:"-"            json:"country,omitempty"`
+}
+
+type Country struct {
+	ID        int    `db:"id"        json:"id"`
+	Code      string `db:"code"      json:"code"`
+	NameAr    string `db:"name_ar"   json:"name_ar"`
+	NameFr    string `db:"name_fr"   json:"name_fr"`
+	NameEn    string `db:"name_en"   json:"name_en"`
+	FlagEmoji string `db:"flag_emoji" json:"flag_emoji"`
+	IsActive  bool   `db:"is_active" json:"is_active"`
 }

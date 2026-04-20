@@ -42,12 +42,13 @@ type SendOTPRequest struct {
 
 type VerifyOTPRequest struct {
 	Phone   string `json:"phone"   validate:"required"`
-	Code    string `json:"code"    validate:"required,len=6"`
+	Code    string `json:"code"    validate:"required,min=4,max=6,numeric"`
 	Purpose string `json:"purpose" validate:"required,oneof=register reset_password"`
 }
 
 type ResetPasswordRequest struct {
 	Phone  string `json:"phone"   validate:"required"`
+	Code   string `json:"code"    validate:"required,min=4,max=6,numeric"`
 	NewPin string `json:"new_pin" validate:"required,len=4,numeric"`
 }
 
@@ -65,6 +66,11 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return BadRequest(c, err.Error())
 	}
 
+	// Validate PIN strength
+	if err := services.ValidatePINStrength(req.Pin); err != nil {
+		return BadRequest(c, "PIN is too weak. Avoid repeating digits (1111) or sequences (1234)")
+	}
+
 	ip := c.IP()
 	if err := h.service.Register(c.Context(), req.Phone, req.Pin, req.FullName, req.Email, req.City); err != nil {
 		return MapError(c, h.logger, err)
@@ -72,10 +78,10 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 	// Automatically send OTP after registration
 	if err := h.service.SendOTP(c.Context(), req.Phone, "register", ip); err != nil {
-		h.logger.Error("Failed to send OTP after registration", zap.Error(err))
+		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, fiber.Map{"message": "Registration successful. OTP has been sent."})
+	return OK(c, fiber.Map{"message": "Registration successful. OTP has been sent via SMS."})
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
@@ -138,6 +144,26 @@ func (h *AuthHandler) ResetPassword(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+	if err := h.validate.Struct(req); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	// Validate new PIN strength
+	if err := services.ValidatePINStrength(req.NewPin); err != nil {
+		return BadRequest(c, "New PIN is too weak. Avoid repeating digits (1111) or sequences (1234)")
+	}
+
+	// Verify OTP code
+	if err := h.service.VerifyOTP(c.Context(), req.Phone, req.Code, "reset_password"); err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	// Track password reset attempt
+	ip := c.IP()
+	if err := h.service.TrackPasswordReset(c.Context(), req.Phone, ip); err != nil {
+		h.logger.Warn("failed to track password reset attempt", zap.Error(err))
+		// Don't return error, continue with reset
+	}
 
 	if err := h.service.ResetPassword(c.Context(), req.Phone, req.NewPin); err != nil {
 		return MapError(c, h.logger, err)
@@ -150,6 +176,11 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 	var req ChangePasswordRequest
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
+	}
+
+	// Validate new PIN strength
+	if err := services.ValidatePINStrength(req.NewPin); err != nil {
+		return BadRequest(c, "New PIN is too weak. Avoid repeating digits (1111) or sequences (1234)")
 	}
 
 	userID, err := middleware.GetUserID(c)

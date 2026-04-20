@@ -9,6 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type UserRepository interface {
@@ -30,6 +31,10 @@ type UserRepository interface {
 	IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error
 	MarkOTPVerified(ctx context.Context, id uuid.UUID) error
 	CleanExpiredOTPs(ctx context.Context) error
+
+	// Password Reset
+	LogPasswordResetAttempt(ctx context.Context, phone, ip string) error
+	SeedDefaultSuperAdmin(ctx context.Context, phone, pin, fullName, email string) error
 
 	// Admin
 	ListPaginated(ctx context.Context, page, perPage int, query string) ([]models.User, int, error)
@@ -290,4 +295,48 @@ func (r *userRepo) FindAllAdmins(ctx context.Context) ([]models.User, error) {
 	var users []models.User
 	err := r.db.SelectContext(ctx, &users, "SELECT * FROM users WHERE role = 'admin' AND is_active = true")
 	return users, err
+}
+
+func (r *userRepo) LogPasswordResetAttempt(ctx context.Context, phone, ip string) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO password_reset_attempts (id, phone, ip_address, success, created_at)
+		VALUES ($1, $2, $3, true, now())
+	`, uuid.New(), phone, ip)
+	return err
+}
+
+// SeedDefaultSuperAdmin crée un super admin par défaut s'il n'existe pas
+func (r *userRepo) SeedDefaultSuperAdmin(ctx context.Context, phone, pin, fullName, email string) error {
+	if phone == "" || pin == "" {
+		return nil // Skip si pas configuré
+	}
+
+	// Vérifier si l'utilisateur existe déjà
+	existing, _ := r.FindByPhone(ctx, phone)
+	if existing != nil {
+		// Mettre à jour en super admin si nécessaire
+		if !existing.IsSuperAdmin {
+			_, err := r.db.ExecContext(ctx, `
+				UPDATE users SET is_super_admin = true WHERE phone = $1
+			`, phone)
+			return err
+		}
+		return nil // Déjà existe et est super admin
+	}
+
+	// Créer le super admin
+	hash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	_, err = r.db.ExecContext(ctx, `
+		INSERT INTO users (
+			id, phone, password_hash, full_name, email, language_pref, 
+			role, is_verified, is_active, is_super_admin, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, uuid.New(), phone, string(hash), fullName, email, "ar", "admin", true, true, true, now, now)
+
+	return err
 }

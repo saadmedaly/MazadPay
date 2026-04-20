@@ -21,12 +21,13 @@ type AuthService interface {
 	ResetPassword(ctx context.Context, phone, newPin string) error
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPin, newPin string) error
 	GenerateJWT(userID uuid.UUID, role string, isSuperAdmin bool) (string, error)
+	TrackPasswordReset(ctx context.Context, phone, ip string) error
 }
 
 type JWTClaims struct {
-	UserID         string `json:"user_id"`
-	Role          string `json:"role"`
-	IsSuperAdmin   bool   `json:"is_super_admin"`
+	UserID       string `json:"user_id"`
+	Role         string `json:"role"`
+	IsSuperAdmin bool   `json:"is_super_admin"`
 	jwt.RegisteredClaims
 }
 
@@ -37,7 +38,7 @@ type authService struct {
 	env            string
 	developmentOTP string // Code OTP de développement
 	smsService     SMSService
-	otpLength     int
+	otpLength      int
 }
 
 func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExpiry int, env string, devOTP string, sms SMSService, otpLength int) AuthService {
@@ -52,10 +53,10 @@ func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExp
 		userRepo:       userRepo,
 		jwtSecret:      jwtSecret,
 		jwtExpiry:      jwtExpiry,
-		env:           env,
+		env:            env,
 		developmentOTP: devOTP,
 		smsService:     sms,
-		otpLength:     otpLength,
+		otpLength:      otpLength,
 	}
 }
 
@@ -125,7 +126,14 @@ func (s *authService) Login(ctx context.Context, phone, pin string) (string, *mo
 func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) error {
 	code := GenerateOTP(s.otpLength)
 
-	// Save OTP to database for verification
+	// Vérifier s'il existe déjà un OTP en cours de validité
+	existingOTP, _ := s.userRepo.FindLatestOTP(ctx, phone, purpose)
+	if existingOTP != nil && time.Now().Before(existingOTP.ExpiresAt) {
+		// Un OTP valide existe déjà, retourner un message clair
+		return fmt.Errorf("an OTP verification code is already active for this phone number. Please wait before requesting a new one")
+	}
+
+	// Save new OTP to database for verification
 	otp := &models.OTPVerification{
 		ID:          uuid.New(),
 		Phone:       phone,
@@ -226,7 +234,7 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 func (s *authService) GenerateJWT(userID uuid.UUID, role string, isSuperAdmin bool) (string, error) {
 	claims := JWTClaims{
 		UserID:       userID.String(),
-		Role:        role,
+		Role:         role,
 		IsSuperAdmin: isSuperAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(s.jwtExpiry) * time.Hour)),
@@ -236,4 +244,10 @@ func (s *authService) GenerateJWT(userID uuid.UUID, role string, isSuperAdmin bo
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
+}
+
+// TrackPasswordReset enregistre une tentative de réinitialisation de mot de passe
+// pour détecter les abus (brute force attempts)
+func (s *authService) TrackPasswordReset(ctx context.Context, phone, ip string) error {
+	return s.userRepo.LogPasswordResetAttempt(ctx, phone, ip)
 }
