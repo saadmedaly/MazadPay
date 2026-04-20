@@ -19,6 +19,7 @@ type User struct {
 	TermsAcceptedAt      *time.Time `db:"terms_accepted_at"     json:"terms_accepted_at"`
 	IsActive             bool       `db:"is_active"             json:"is_active"`
 	Role                 string     `db:"role"                  json:"role"`
+	IsSuperAdmin         bool       `db:"is_super_admin"        json:"-"`
 	IsVerified           bool       `db:"is_verified"           json:"is_verified"`
 	BlockedUntil         *time.Time `db:"blocked_until"         json:"-"`
 	LastLoginAt          *time.Time `db:"last_login_at"         json:"last_login_at"`

@@ -102,14 +102,19 @@ func (r *contentRepo) UpdateTutorial(ctx context.Context, tutorial *models.Tutor
 }
 
 func (r *contentRepo) ListBanners(ctx context.Context, onlyActive bool) ([]models.Banner, error) {
-	query := `SELECT id, title_ar, title_fr, title_en, image_url, target_url, is_active, starts_at, ends_at, display_order FROM banners`
-	if onlyActive {
-		query += ` WHERE is_active = true`
-	}
-	query += ` ORDER BY display_order ASC`
-
 	var banners []models.Banner
-	err := r.db.SelectContext(ctx, &banners, query)
+	var err error
+
+	query := "SELECT id, COALESCE(title_ar, '') as title_ar, COALESCE(title_fr, '') as title_fr, COALESCE(title_en, '') as title_en, image_url, target_url, is_active, starts_at, ends_at, display_order FROM banners"
+	
+	if onlyActive {
+		query += " WHERE is_active = true ORDER BY display_order ASC"
+	} else {
+		query += " ORDER BY id DESC"
+	}
+
+	err = r.db.SelectContext(ctx, &banners, query)
+
 	if err != nil {
 		return nil, err
 	}

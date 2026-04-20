@@ -32,14 +32,28 @@ func (h *BannerHandler) List(c *fiber.Ctx) error {
 
 // Admin List all banners
 func (h *BannerHandler) AdminList(c *fiber.Ctx) error {
-	h.logger.Debug("AdminList: fetching all banners")
 	banners, err := h.service.GetBanners(c.Context(), false)
 	if err != nil {
-		h.logger.Error("AdminList: failed to fetch banners", zap.Error(err))
 		return MapError(c, h.logger, err)
 	}
-	h.logger.Debug("AdminList: found banners", zap.Int("count", len(banners)))
+	if banners == nil {
+		banners = []models.Banner{}
+	}
 	return OK(c, banners)
+}
+
+// Admin List ALL banners (including inactive) - explicit endpoint for debugging
+func (h *BannerHandler) AdminListAll(c *fiber.Ctx) error {
+	banners, err := h.service.GetBanners(c.Context(), false)
+	if err != nil {
+		h.logger.Error("AdminListAll: failed", zap.Error(err))
+		return MapError(c, h.logger, err)
+	}
+	h.logger.Info("AdminListAll: found banners", zap.Int("count", len(banners)), zap.Any("banners", banners))
+	if banners == nil {
+		banners = []models.Banner{}
+	}
+	return OK(c, fiber.Map{"success": true, "data": banners, "total": len(banners)})
 }
 
 // Update banner status

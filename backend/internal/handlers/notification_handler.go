@@ -117,11 +117,12 @@ func (h *NotificationHandler) AdminList(c *fiber.Ctx) error {
 }
 
 type SendNotificationRequest struct {
-	UserID   string `json:"user_id"`
-	Title    string `json:"title" validate:"required"`
-	Body     string `json:"body" validate:"required"`
-	Type     string `json:"type"`
-	Data     map[string]string `json:"data"`
+	UserID     string `json:"user_id"`
+	Title      string `json:"title" validate:"required"`
+	Body       string `json:"body" validate:"required"`
+	Type       string `json:"type"`
+	Data       map[string]string `json:"data"`
+	Broadcast  bool   `json:"broadcast"`
 }
 
 func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
@@ -130,21 +131,38 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
+	h.logger.Info("SendNotification request", zap.Any("req", req))
+
+	// Priority: broadcast > specific user > admins
+	if req.Broadcast {
+		// Send to all users
+		if err := h.svc.SendBroadcast(c.Context(), req.Title, req.Body, req.Type, req.Data); err != nil {
+			h.logger.Error("broadcast failed", zap.Error(err))
+			return MapError(c, h.logger, err)
+		}
+		return OK(c, fiber.Map{"message": "Notification sent to all users", "type": "broadcast"})
+	}
+
 	if req.UserID != "" {
+		// Send to specific user
 		userUUID, err := uuid.Parse(req.UserID)
 		if err != nil {
 			return BadRequest(c, "Invalid user ID")
 		}
 		if err := h.svc.SendPush(c.Context(), userUUID, req.Title, req.Body, req.Data); err != nil {
+			h.logger.Error("send to user failed", zap.Error(err))
 			return MapError(c, h.logger, err)
 		}
-	} else {
-		if err := h.svc.NotifyAdmins(c.Context(), req.Title, req.Body, req.Data); err != nil {
-			return MapError(c, h.logger, err)
-		}
+		return OK(c, fiber.Map{"message": "Notification sent to user", "user_id": req.UserID})
 	}
 
-	return OK(c, fiber.Map{"message": "Notification sent"})
+	// Default: notify admins only
+	if err := h.svc.NotifyAdmins(c.Context(), req.Title, req.Body, req.Data); err != nil {
+		h.logger.Error("notify admins failed", zap.Error(err))
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, fiber.Map{"message": "Notification sent to admins"})
 }
 
 func (h *NotificationHandler) AdminDelete(c *fiber.Ctx) error {

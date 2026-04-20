@@ -112,27 +112,25 @@ export function UsersPage() {
               <Eye className="w-4 h-4" />
             </button>
             {user.role !== 'admin' && (
-              <>
-                <button
-                  onClick={() => setBlockTarget({ id: user.id, block: user.is_active, name: user.full_name ?? shortID(user.id) })}
-                  className={`p-2 rounded-lg transition-all ${
-                    user.is_active
-                      ? 'text-red-400 hover:bg-red-500/10 hover:border-red-500/20'
-                      : 'text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20'
-                  } border border-transparent`}
-                  title={user.is_active ? 'حظر المستخدم' : 'إلغاء الحظر'}
-                >
-                  {user.is_active ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
-                </button>
-                <button
-                  onClick={() => setDeleteTarget({ id: user.id, name: user.full_name ?? shortID(user.id) })}
-                  className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
-                  title="حذف المستخدم نهائياً"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </>
+              <button
+                onClick={() => setBlockTarget({ id: user.id, block: user.is_active, name: user.full_name ?? shortID(user.id) })}
+                className={`p-2 rounded-lg transition-all ${
+                  user.is_active
+                    ? 'text-red-400 hover:bg-red-500/10 hover:border-red-500/20'
+                    : 'text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20'
+                } border border-transparent`}
+                title={user.is_active ? 'حظر المستخدم' : 'إلغاء الحظر'}
+              >
+                {user.is_active ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
+              </button>
             )}
+            <button
+              onClick={() => setDeleteTarget({ id: user.id, name: user.full_name ?? shortID(user.id) })}
+              className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
+              title="حذف المستخدم نهائياً"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         )
       }

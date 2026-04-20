@@ -73,7 +73,7 @@ func (s *userService) UpdateNotificationSettings(ctx context.Context, id uuid.UU
 }
 
 func (s *userService) DeleteUser(ctx context.Context, id uuid.UUID) error {
-	return s.repo.UpdateStatus(ctx, id, false)
+	return s.repo.Delete(ctx, id)
 }
 
 func (s *userService) AddFavorite(ctx context.Context, userID, auctionID uuid.UUID) error {

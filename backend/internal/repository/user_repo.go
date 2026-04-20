@@ -35,6 +35,7 @@ type UserRepository interface {
 	ListPaginated(ctx context.Context, page, perPage int, query string) ([]models.User, int, error)
 	Count(ctx context.Context, query string) (int, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, isActive bool) error
+	Delete(ctx context.Context, id uuid.UUID) error
 	GetStats(ctx context.Context) (int, int, error) // Total, Verified
 	PromoteToAdmin(ctx context.Context, id uuid.UUID, fullName, email, hash string) error
 	FindAllAdmins(ctx context.Context) ([]models.User, error)
@@ -59,7 +60,7 @@ func (r *userRepo) FindByPhone(ctx context.Context, phone string) (*models.User,
 
 func (r *userRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	var u models.User
-	err := r.db.GetContext(ctx, &u, `SELECT * FROM users WHERE id = $1 AND is_active = true`, id)
+	err := r.db.GetContext(ctx, &u, `SELECT * FROM users WHERE id = $1`, id)
 	if err != nil {
 		return nil, apperr.ErrNotFound
 	}
@@ -124,7 +125,7 @@ func (r *userRepo) MarkOTPVerified(ctx context.Context, id uuid.UUID) error {
 
 func (r *userRepo) CleanExpiredOTPs(ctx context.Context) error {
 	_, err := r.db.ExecContext(ctx,
-		`DELETE FROM otp_verifications WHERE expires_at < now() - interval '10 minutes'`)
+		`DELETE FROM otp_verifications WHERE expires_at < now()`)
 	return err
 }
 
@@ -179,9 +180,9 @@ func (r *userRepo) ListPaginated(ctx context.Context, page, perPage int, query s
 	}
 
 	offset := (page - 1) * perPage
-	q := fmt.Sprintf("SELECT * FROM users %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", 
+	q := fmt.Sprintf("SELECT * FROM users %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d",
 		where, len(args)+1, len(args)+2)
-	
+
 	listArgs := append(args, perPage, offset)
 	users := make([]models.User, 0)
 	err = r.db.SelectContext(ctx, &users, q, listArgs...)
@@ -206,6 +207,68 @@ func (r *userRepo) UpdateStatus(ctx context.Context, id uuid.UUID, isActive bool
 	return err
 }
 
+func (r *userRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, "DELETE FROM bids WHERE user_id = $1", id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM transactions WHERE user_id = $1", id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM notifications WHERE user_id = $1", id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM push_tokens WHERE user_id = $1", id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM wallet_holds WHERE user_id = $1", id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM app_ratings WHERE user_id = $1", id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM kyc_verifications WHERE user_id = $1", id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM reports WHERE reporter_id = $1", id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM system_settings WHERE updated_by = $1", id)
+	if err != nil {
+		return err
+	}
+	// Delete auctions where seller_id = id
+	_, err = tx.ExecContext(ctx, "DELETE FROM auctions WHERE seller_id = $1", id)
+	if err != nil {
+		return err
+	}
+	// Delete wallet
+	_, err = tx.ExecContext(ctx, "DELETE FROM wallets WHERE user_id = $1", id)
+	if err != nil {
+		return err
+	}
+	// Finally delete user
+	_, err = tx.ExecContext(ctx, "DELETE FROM users WHERE id = $1", id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (r *userRepo) GetStats(ctx context.Context) (int, int, error) {
 	var total, verified int
 	err := r.db.GetContext(ctx, &total, "SELECT COUNT(*) FROM users")
@@ -217,7 +280,7 @@ func (r *userRepo) GetStats(ctx context.Context) (int, int, error) {
 }
 
 func (r *userRepo) PromoteToAdmin(ctx context.Context, id uuid.UUID, fullName, email, hash string) error {
-	_, err := r.db.ExecContext(ctx, 
+	_, err := r.db.ExecContext(ctx,
 		`UPDATE users SET role = 'admin', is_verified = true, full_name = $1, email = $2, password_hash = $3 WHERE id = $4`,
 		fullName, email, hash, id)
 	return err

@@ -16,6 +16,7 @@ type NotificationService interface {
 	SavePushToken(ctx context.Context, userID uuid.UUID, fcmToken, deviceID, platform string) error
 	SendPush(ctx context.Context, userID uuid.UUID, title, body string, data map[string]string) error
 	NotifyAdmins(ctx context.Context, title, body string, data map[string]string) error
+	SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) error
 	ListNotifications(ctx context.Context, userID uuid.UUID, limit int) ([]models.Notification, error)
 	MarkAllAsRead(ctx context.Context, userID uuid.UUID) error
 	MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
@@ -138,6 +139,28 @@ func (s *notificationService) NotifyAdmins(ctx context.Context, title, body stri
 	for _, admin := range admins {
 		_ = s.SendPush(ctx, admin.ID, title, body, data)
 	}
+	return nil
+}
+
+func (s *notificationService) SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) error {
+	// Get all users with active push tokens
+	tokens, err := s.repo.GetAllActiveTokens(ctx)
+	if err != nil {
+		s.logger.Error("failed to get active tokens", zap.Error(err))
+		return err
+	}
+
+	if len(tokens) == 0 {
+		s.logger.Info("no active tokens found for broadcast")
+		return nil
+	}
+
+	// Send to all tokens in batches
+	for _, token := range tokens {
+		_ = s.SendPush(ctx, token.UserID, title, body, data)
+	}
+
+	s.logger.Info("broadcast sent", zap.Int("count", len(tokens)))
 	return nil
 }
 

@@ -16,7 +16,7 @@ type Config struct {
 	Redis    RedisConfig
 	JWT      JWTConfig
 	R2       R2Config
-	Termii   TermiiConfig
+	Twilio  TwilioConfig
 	Business BusinessConfig
 	Firebase FirebaseConfig
 }
@@ -61,10 +61,10 @@ type R2Config struct {
 	PublicURL   string
 }
 
-type TermiiConfig struct {
-	APIKey   string
-	BaseURL  string
-	SenderID string
+type TwilioConfig struct {
+	AccountSID   string
+	AuthToken   string
+	PhoneNumber string
 }
 
 type BusinessConfig struct {
@@ -118,10 +118,10 @@ func Load() *Config {
 			BucketMedia: getEnv("R2_BUCKET_MEDIA", "mazadpay-media"),
 			PublicURL:   getEnv("R2_PUBLIC_URL", "https://pub-xxxxxx.r2.dev"),
 		},
-		Termii: TermiiConfig{
-			APIKey:   getEnv("TERMII_API_KEY", ""),
-			BaseURL:  getEnv("TERMII_BASE_URL", "https://api.ng.termii.com"),
-			SenderID: getEnv("TERMII_SENDER_ID", "MazadPay"),
+		Twilio: TwilioConfig{
+			AccountSID:   getEnv("TWILIO_ACCOUNT_SID", ""),
+			AuthToken:   getEnv("TWILIO_AUTH_TOKEN", ""),
+			PhoneNumber: getEnv("TWILIO_PHONE_NUMBER", ""),
 		},
 		Business: BusinessConfig{
 			BidMinIncrement:      getEnvFloat("BID_MIN_INCREMENT", 100),

@@ -18,6 +18,7 @@ type NotificationRepository interface {
 	SavePushToken(ctx context.Context, token *models.PushToken) error
 	GetPushTokens(ctx context.Context, userID uuid.UUID) ([]string, error)
 	DeactivateToken(ctx context.Context, fcmToken string) error
+	GetAllActiveTokens(ctx context.Context) ([]models.PushToken, error)
 	DeleteOld(ctx context.Context, days int) error
 
 	// Admin methods
@@ -46,7 +47,13 @@ func (r *notificationRepo) ListByUserID(ctx context.Context, userID uuid.UUID, l
 	err := r.db.SelectContext(ctx, &notifications, `
 		SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
 	`, userID, limit)
-	return notifications, err
+	if err != nil {
+		return nil, err
+	}
+	if notifications == nil {
+		notifications = []models.Notification{}
+	}
+	return notifications, nil
 }
 
 func (r *notificationRepo) MarkAllAsRead(ctx context.Context, userID uuid.UUID) error {
@@ -82,6 +89,18 @@ func (r *notificationRepo) DeactivateToken(ctx context.Context, fcmToken string)
 	return err
 }
 
+func (r *notificationRepo) GetAllActiveTokens(ctx context.Context) ([]models.PushToken, error) {
+	var tokens []models.PushToken
+	err := r.db.SelectContext(ctx, &tokens, `SELECT * FROM push_tokens WHERE is_active = true`)
+	if err != nil {
+		return nil, err
+	}
+	if tokens == nil {
+		tokens = []models.PushToken{}
+	}
+	return tokens, nil
+}
+
 func (r *notificationRepo) DeleteOld(ctx context.Context, days int) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM notifications WHERE created_at < now() - ($1 || ' days')::interval`, days)
 	return err
@@ -90,9 +109,8 @@ func (r *notificationRepo) DeleteOld(ctx context.Context, days int) error {
 func (r *notificationRepo) AdminList(ctx context.Context, status string, limit int) ([]models.Notification, error) {
 	var notifications []models.Notification
 	query := `SELECT * FROM notifications`
-	args := []interface{}{}
 
-	if status != "all" {
+	if status != "all" && status != "" {
 		if status == "unread" {
 			query += ` WHERE is_read = false`
 		} else if status == "read" {
@@ -100,10 +118,15 @@ func (r *notificationRepo) AdminList(ctx context.Context, status string, limit i
 		}
 	}
 	query += ` ORDER BY created_at DESC LIMIT $1`
-	args = append(args, limit)
 
-	err := r.db.SelectContext(ctx, &notifications, query, args...)
-	return notifications, err
+	err := r.db.SelectContext(ctx, &notifications, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	if notifications == nil {
+		notifications = []models.Notification{}
+	}
+	return notifications, nil
 }
 
 func (r *notificationRepo) Delete(ctx context.Context, id uuid.UUID) error {

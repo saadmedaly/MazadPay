@@ -220,7 +220,7 @@ func (s *adminService) BlockUser(ctx context.Context, id uuid.UUID, block bool) 
 }
 
 func (s *adminService) DeleteUser(ctx context.Context, id uuid.UUID) error {
-	return s.userRepo.UpdateStatus(ctx, id, false)
+	return s.userRepo.Delete(ctx, id)
 }
 
 func (s *adminService) ListAuctions(ctx context.Context, page, perPage int, status, query string, sellerID *uuid.UUID) ([]models.Auction, int, error) {

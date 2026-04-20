@@ -52,6 +52,7 @@ func JWT(jwtSecret string, logger *zap.Logger) fiber.Handler {
 
 		c.Locals("user_id", uid)
 		c.Locals("user_role", claims.Role)
+		c.Locals("is_super_admin", claims.IsSuperAdmin)
 
 		return c.Next()
 	}
@@ -60,14 +61,30 @@ func JWT(jwtSecret string, logger *zap.Logger) fiber.Handler {
 func AdminOnly(logger *zap.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		role, ok := c.Locals("user_role").(string)
-		if !ok || strings.ToLower(role) != "admin" {
-			logger.Warn("Access denied: Admin role required", 
-				zap.String("path", c.Path()), 
+		if !ok || (strings.ToLower(role) != "admin" && strings.ToLower(role) != "super_admin") {
+			logger.Warn("Access denied: Admin role required",
+				zap.String("path", c.Path()),
 				zap.String("user_role", role),
 			)
 			return c.Status(403).JSON(fiber.Map{
 				"success": false,
 				"error":   fiber.Map{"code": "forbidden", "message": "Admin access required"},
+			})
+		}
+		return c.Next()
+	}
+}
+
+func SuperAdminOnly(logger *zap.Logger) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		isSuperAdmin, ok := c.Locals("is_super_admin").(bool)
+		if !ok || !isSuperAdmin {
+			logger.Warn("Access denied: Super Admin required",
+				zap.String("path", c.Path()),
+			)
+			return c.Status(403).JSON(fiber.Map{
+				"success": false,
+				"error":   fiber.Map{"code": "forbidden", "message": "Super Admin access required"},
 			})
 		}
 		return c.Next()

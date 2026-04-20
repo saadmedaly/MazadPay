@@ -34,7 +34,8 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 	// Services
 	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath, logger)
-	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode)
+	smsSvc := services.NewSMSService(cfg.Twilio.AccountSID, cfg.Twilio.AuthToken, cfg.Twilio.PhoneNumber, logger)
+	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4)
 	auctionSvc := services.NewAuctionService(auctionRepo, reportRepo, notifSvc)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
@@ -175,7 +176,9 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwt
 	admin.Get("/users/:id/transactions", adminHandler.GetUserTransactions)
 	admin.Post("/invitations", adminHandler.GenerateInvitation)
 	admin.Put("/users/:id/block", adminHandler.BlockUser)
-	admin.Delete("/users/:id", adminHandler.DeleteUser)
+
+	// Super Admin only - Delete user
+	admin.Delete("/users/:id", middleware.SuperAdminOnly(logger), adminHandler.DeleteUser)
 
 	// Auction management routes
 	admin.Get("/auctions", adminHandler.ListAuctions)
@@ -229,6 +232,7 @@ func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, jwtSecret st
 	// Admin routes
 	admin := api.Group("/admin/banners", jwtMiddleware, adminMiddleware)
 	admin.Get("/", h.AdminList)
+	admin.Get("/all", h.AdminListAll) // Debug - explicit all banners
 	admin.Post("/", h.Create)
 	admin.Put("/:id/toggle", h.Toggle)
 	admin.Put("/:id", h.Update)

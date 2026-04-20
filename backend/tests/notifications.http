@@ -1,0 +1,86 @@
+@baseUrl = http://localhost:8082/v1/api
+@userId = f1bf7eb6-c575-4a27-8a05-db2c92b45f8b
+@notifId = 00000000-0000-0000-0000-000000000001
+
+### 1. Login User (pour test)
+# @name loginUser
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "+22247601175",
+    "pin": "1234"
+}
+
+### 2. Login Admin (pour test)
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "41448045",
+    "pin": "1234"
+}
+
+### 3. Save Push Token
+POST {{baseUrl}}/notifications/push-tokens
+Authorization: Bearer {{loginUser.response.body.data.token}}
+Content-Type: application/json
+
+{
+    "fcm_token": "test_fcm_token_12345",
+    "device_id": "device_123",
+    "platform": "android"
+}
+
+### 4. Get User Notifications
+GET {{baseUrl}}/notifications
+Authorization: Bearer {{loginUser.response.body.data.token}}
+
+### 5. Mark All as Read
+PUT {{baseUrl}}/notifications/read-all
+Authorization: Bearer {{loginUser.response.body.data.token}}
+
+### 6. Mark One as Read
+PUT {{baseUrl}}/notifications/{{notifId}}/read
+Authorization: Bearer {{loginUser.response.body.data.token}}
+
+### 7. Admin - Get All Notifications
+GET {{baseUrl}}/admin/notifications
+Authorization: Bearer {{loginAdmin.response.body.data.token}}
+
+### 8. Admin - Send to Specific User
+POST {{baseUrl}}/admin/notifications/send
+Authorization: Bearer {{loginAdmin.response.body.data.token}}
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "title": "Test Notification",
+    "body": "Hello user!"
+}
+
+### 9. Admin - Send Broadcast (TO ALL USERS)
+POST {{baseUrl}}/admin/notifications/send
+Authorization: Bearer {{loginAdmin.response.body.data.token}}
+Content-Type: application/json
+
+{
+    "broadcast": true,
+    "title": "إشعار للجميع",
+    "body": "هذا إشعار لجميع المستخدمين"
+}
+
+### 10. Admin - Send to Admins Only
+POST {{baseUrl}}/admin/notifications/send
+Authorization: Bearer {{loginAdmin.response.body.data.token}}
+Content-Type: application/json
+
+{
+    "title": "Alert",
+    "body": "Message to admins only"
+}
+
+### 11. Admin - Delete Notification
+DELETE {{baseUrl}}/admin/notifications/{{notifId}}
+Authorization: Bearer {{loginAdmin.response.body.data.token}}

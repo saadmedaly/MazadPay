@@ -1,0 +1,86 @@
+@baseUrl = http://localhost:8082/v1/api
+@testPhone = +22241448045
+
+### ========================
+### 1. Register New User
+### ========================
+# @name registerUser
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "pin": "1234",
+    "full_name": "Test UserMS",
+    "email": "test5{{$randomInt}}@example.com",
+    "city": "Nuakchott",
+}
+
+### ========================
+### 2. Send OTP (for registration)
+### ========================
+# @name sendOTP
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "purpose": "register"
+}
+
+### ========================
+### 3. Verify OTP
+### ========================
+# @name verifyOTP
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "code": "123456",
+    "purpose": "register"
+}
+
+### ========================
+### 4. Login
+### ========================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "pin": "1234"
+}
+
+### ========================
+### 5. Get User Profile (avec token du login)
+### ========================
+# @name getProfile
+GET {{baseUrl}}/users/me
+Authorization: Bearer {{login.response.body.data.token}}
+
+### ========================
+### 6. Send OTP for Password Reset
+### ========================
+# @name sendResetOTP
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "purpose": "reset_password"
+}
+
+### ========================
+### 7. Verify OTP for Password Reset
+### ========================
+# @name verifyResetOTP
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "code": "123456",
+    "purpose": "reset_password"
+}

@@ -20,12 +20,13 @@ type AuthService interface {
 	VerifyOTP(ctx context.Context, phone, code, purpose string) error
 	ResetPassword(ctx context.Context, phone, newPin string) error
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPin, newPin string) error
-	GenerateJWT(userID uuid.UUID, role string) (string, error)
+	GenerateJWT(userID uuid.UUID, role string, isSuperAdmin bool) (string, error)
 }
 
 type JWTClaims struct {
-	UserID string `json:"user_id"`
-	Role   string `json:"role"`
+	UserID         string `json:"user_id"`
+	Role          string `json:"role"`
+	IsSuperAdmin   bool   `json:"is_super_admin"`
 	jwt.RegisteredClaims
 }
 
@@ -35,14 +36,27 @@ type authService struct {
 	jwtExpiry      int
 	env            string
 	developmentOTP string // Code OTP de développement
+	smsService     SMSService
+	otpLength     int
 }
 
-func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExpiry int, env string, devOTP string) AuthService {
+func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExpiry int, env string, devOTP string, sms SMSService, otpLength int) AuthService {
 	// En production, devOTP doit être vide
 	if env != "development" {
 		devOTP = ""
 	}
-	return &authService{userRepo: userRepo, jwtSecret: jwtSecret, jwtExpiry: jwtExpiry, env: env, developmentOTP: devOTP}
+	if otpLength == 0 {
+		otpLength = 4 // Default 4 digits
+	}
+	return &authService{
+		userRepo:       userRepo,
+		jwtSecret:      jwtSecret,
+		jwtExpiry:      jwtExpiry,
+		env:           env,
+		developmentOTP: devOTP,
+		smsService:     sms,
+		otpLength:     otpLength,
+	}
 }
 
 func (s *authService) Register(ctx context.Context, phone, pin, fullName, email, city string) error {
@@ -78,10 +92,15 @@ func (s *authService) Login(ctx context.Context, phone, pin string) (string, *mo
 		return "", nil, apperr.ErrUnauthorized
 	}
 
-	// Vérifier le blocage temporaire (pourrait être ajouté à models.User via STEP3)
-	// if user.BlockedUntil != nil && time.Now().Before(*user.BlockedUntil) {
-	//     return "", nil, apperr.ErrAccountBlocked
-	// }
+	// Vérifier si le compte est actif
+	if !user.IsActive {
+		return "", nil, apperr.ErrAccountBlocked
+	}
+
+	// Vérifier le blocage temporaire
+	if user.BlockedUntil != nil && time.Now().Before(*user.BlockedUntil) {
+		return "", nil, apperr.ErrAccountBlocked
+	}
 
 	if !user.IsVerified {
 		return "", nil, apperr.ErrUnauthorized
@@ -91,7 +110,7 @@ func (s *authService) Login(ctx context.Context, phone, pin string) (string, *mo
 		return "", nil, apperr.ErrInvalidPin
 	}
 
-	token, err := s.GenerateJWT(user.ID, user.Role)
+	token, err := s.GenerateJWT(user.ID, user.Role, user.IsSuperAdmin)
 	if err != nil {
 		return "", nil, err
 	}
@@ -104,13 +123,13 @@ func (s *authService) Login(ctx context.Context, phone, pin string) (string, *mo
 }
 
 func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) error {
-	// STUB : En développement, le code OTP est "123456".
-	// À remplacer par l'intégration Termii dans une étape dédiée.
+	code := GenerateOTP(s.otpLength)
 
+	// Save OTP to database for verification
 	otp := &models.OTPVerification{
 		ID:          uuid.New(),
 		Phone:       phone,
-		TermiiPinID: fmt.Sprintf("stub-%s-%d", phone, time.Now().Unix()), // sera remplacé par Termii
+		TermiiPinID: code,
 		Purpose:     purpose,
 		Attempts:    0,
 		MaxAttempts: 3,
@@ -118,7 +137,18 @@ func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) er
 		IPAddress:   &ip,
 	}
 
-	return s.userRepo.CreateOTP(ctx, otp)
+	if err := s.userRepo.CreateOTP(ctx, otp); err != nil {
+		return err
+	}
+
+	// Send SMS via Twilio
+	if s.smsService != nil {
+		if err := s.smsService.SendOTP(phone, code); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *authService) VerifyOTP(ctx context.Context, phone, code, purpose string) error {
@@ -193,10 +223,11 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 	return s.userRepo.UpdatePin(ctx, userID, string(hash))
 }
 
-func (s *authService) GenerateJWT(userID uuid.UUID, role string) (string, error) {
+func (s *authService) GenerateJWT(userID uuid.UUID, role string, isSuperAdmin bool) (string, error) {
 	claims := JWTClaims{
-		UserID: userID.String(),
-		Role:   role,
+		UserID:       userID.String(),
+		Role:        role,
+		IsSuperAdmin: isSuperAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(s.jwtExpiry) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

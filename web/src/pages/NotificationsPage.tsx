@@ -242,7 +242,7 @@ export const NotificationsPage = () => {
               <textarea
                 value={newNotif.body}
                 onChange={(e) => setNewNotif({ ...newNotif, body: e.target.value })}
-                className="w-full bg-surface-bg border border-surface-border rounded-xl p-3 text-sm text-white min-h-[100px]"
+                className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white min-h-[100px]"
                 placeholder="نص الإشعار..."
               />
             </div>

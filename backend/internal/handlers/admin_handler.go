@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -225,7 +226,8 @@ func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
 	}
 
 	if err := h.svc.DeleteUser(c.Context(), id); err != nil {
-		return InternalError(c, "Failed to delete user")
+		fmt.Printf("Error deleting user %s: %v\n", id, err)
+		return InternalError(c, fmt.Sprintf("Failed to delete user: %v", err))
 	}
 
 	return OK(c, fiber.Map{
@@ -344,6 +346,11 @@ func (h *AdminHandler) UpdateAuction(c *fiber.Ctx) error {
 		buyNow = &b
 	}
 
+	var itemDetails models.JSONB
+	if req.ItemDetails != nil {
+		itemDetails = models.JSONB(req.ItemDetails)
+	}
+
 	if err := h.svc.UpdateAuction(c.Context(), id, services.UpdateAuctionInput{
 		CategoryID:      req.CategoryID,
 		LocationID:      req.LocationID,
@@ -361,8 +368,9 @@ func (h *AdminHandler) UpdateAuction(c *fiber.Ctx) error {
 		PhoneContact:    req.PhoneContact,
 		BuyNowPrice:     buyNow,
 		Images:          req.Images,
-		ItemDetails:     req.ItemDetails,
+		ItemDetails:     itemDetails,
 	}); err != nil {
+		h.logger.Error("UpdateAuction failed", zap.Error(err), zap.String("auction_id", id.String()))
 		return MapError(c, h.logger, err)
 	}
 

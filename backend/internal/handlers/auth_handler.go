@@ -65,11 +65,17 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return BadRequest(c, err.Error())
 	}
 
+	ip := c.IP()
 	if err := h.service.Register(c.Context(), req.Phone, req.Pin, req.FullName, req.Email, req.City); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, fiber.Map{"message": "Registration successful. OTP will be sent."})
+	// Automatically send OTP after registration
+	if err := h.service.SendOTP(c.Context(), req.Phone, "register", ip); err != nil {
+		h.logger.Error("Failed to send OTP after registration", zap.Error(err))
+	}
+
+	return OK(c, fiber.Map{"message": "Registration successful. OTP has been sent."})
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {

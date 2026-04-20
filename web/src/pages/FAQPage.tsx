@@ -125,11 +125,11 @@ export function FAQPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs text-surface-muted font-bold block">الإجابة (بالعربية)</label>
+              <label className="text-xs  font-bold block">الإجابة (بالعربية)</label>
               <textarea
                 value={newFAQ.answer_ar}
                 onChange={(e) => setNewFAQ({...newFAQ, answer_ar: e.target.value})}
-                className="w-full bg-surface-bg border border-surface-border rounded-xl p-3 text-sm text-white focus:outline-none focus:border-mazad-primary min-h-[150px]"
+                className="w-full  text-white border bg-surface-border rounded-xl p-3 text-sm   focus:outline-none focus:border-mazad-primary min-h-[150px]"
                 placeholder="اكتب الإجابة المفصلة هنا..."
               />
             </div>
@@ -164,11 +164,11 @@ export function FAQPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-surface-muted font-bold block">الإجابة (بالعربية)</label>
+                <label className="text-xs   text-surface-muted font-bold block">الإجابة (بالعربية)</label>
                 <textarea
                   value={editingFAQ.answer_ar ?? ''}
                   onChange={(e) => setEditingFAQ({...editingFAQ, answer_ar: e.target.value})}
-                  className="w-full bg-surface-bg border border-surface-border rounded-xl p-3 text-sm text-white focus:outline-none focus:border-mazad-primary min-h-[150px]"
+                  className="w-full bg-surface-border border border-surface-border rounded-xl p-3 text-sm text-white focus:outline-none focus:border-mazad-primary min-h-[150px]"
                 />
               </div>
               <div className="space-y-2">

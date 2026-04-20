@@ -2,6 +2,7 @@ package repository
 
 import (
     "context"
+    "encoding/json"
     "fmt"
 
     "github.com/google/uuid"
@@ -337,31 +338,36 @@ func (r *auctionRepo) ListByUserBids(ctx context.Context, userID uuid.UUID) ([]m
 }
 
 func (r *auctionRepo) Update(ctx context.Context, a *models.Auction) error {
-    _, err := r.db.ExecContext(ctx, `
-        UPDATE auctions SET
-            category_id      = $1,
-            location_id      = $2,
-            title_ar         = $3,
-            title_fr         = $4,
-            title_en         = $5,
-            description_ar   = $6,
-            description_fr   = $7,
-            description_en   = $8,
-            start_price      = $9,
-            min_increment    = $10,
-            insurance_amount = $11,
-            start_time       = $12,
-            end_time         = $13,
-            phone_contact    = $14,
-            buy_now_price    = $15,
-            item_details     = $16
-        WHERE id = $17`,
-        a.CategoryID, a.LocationID, a.TitleAr, a.TitleFr, a.TitleEn,
-        a.DescriptionAr, a.DescriptionFr, a.DescriptionEn,
-        a.StartPrice, a.MinIncrement, a.InsuranceAmount,
-        a.StartTime, a.EndTime, a.PhoneContact, a.BuyNowPrice, a.ItemDetails,
-        a.ID)
-    return err
+	query := `
+		UPDATE auctions SET
+			category_id = $1,
+			location_id = $2,
+			title_ar = $3,
+			title_fr = $4,
+			title_en = $5,
+			description_ar = $6,
+			description_fr = $7,
+			description_en = $8,
+			start_price = $9,
+			min_increment = $10,
+			insurance_amount = $11,
+			start_time = $12,
+			end_time = $13,
+			phone_contact = $14,
+			buy_now_price = $15,
+			item_details = $16,
+			version = version + 1
+		WHERE id = $17`
+
+	itemDetailsJSON, _ := json.Marshal(a.ItemDetails)
+
+	_, err := r.db.ExecContext(ctx, query,
+		a.CategoryID, a.LocationID, a.TitleAr, a.TitleFr, a.TitleEn,
+		a.DescriptionAr, a.DescriptionFr, a.DescriptionEn,
+		a.StartPrice, a.MinIncrement, a.InsuranceAmount,
+		a.StartTime, a.EndTime, a.PhoneContact, a.BuyNowPrice, itemDetailsJSON,
+		a.ID)
+	return err
 }
 
 func (r *auctionRepo) Delete(ctx context.Context, id uuid.UUID) error {

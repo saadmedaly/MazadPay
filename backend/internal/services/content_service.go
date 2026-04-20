@@ -92,7 +92,7 @@ func (s *contentService) RequestBanner(ctx context.Context, banner *models.Banne
 				"إليك طلب جديد لإضافة إعلان على المنصة.",
 				map[string]string{
 					"type":  "banner_request",
-					"title": func() string { if banner.TitleAr != nil { return *banner.TitleAr }; return "بدون عنوان" }(),
+					"title": banner.TitleAr,
 				},
 			)
 		}()
