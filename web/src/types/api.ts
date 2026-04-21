@@ -89,6 +89,8 @@ export interface DashboardStats {
   today_revenue: number
   week_deposits: number
   pending_kycs: number
+  pending_auction_requests: number
+  pending_banner_requests: number
 }
 
 export interface KYCVerification {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { messaging, requestNotificationPermission } from '../lib/firebase';
 import { onMessage } from 'firebase/messaging';
 import { useAuthStore } from '../stores/authStore';
@@ -82,8 +82,6 @@ export const useNotifications = () => {
 
 // Hook for sending notifications (admin functionality)
 export const useSendNotification = () => {
-  const qc = useQueryClient();
-
   return useMutation({
     mutationFn: async (data: {
       user_id?: string;
@@ -117,12 +115,20 @@ export const useFetchNotifications = () => {
 
 // Hook for fetching admin notifications (all notifications)
 export const useFetchAdminNotifications = (status: string = 'all', limit: number = 50) => {
-  return useMutation({
-    mutationFn: async () => {
+  return useQuery({
+    queryKey: ['admin-notifications', status, limit],
+    queryFn: async () => {
       const response = await api.get('/v1/api/admin/notifications', {
         params: { status, limit }
       });
-      return response.data.data || [];
+      const data = response.data.data || [];
+      // Remove duplicates by ID
+      const uniqueIds = new Set();
+      return data.filter((notif: any) => {
+        if (uniqueIds.has(notif.id)) return false;
+        uniqueIds.add(notif.id);
+        return true;
+      });
     },
   });
 };

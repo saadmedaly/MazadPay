@@ -18,6 +18,7 @@ type Client struct {
     conn   *websocket.Conn
     send   chan []byte
     userID string
+    Role   string // Admin role (admin, super_admin) for admin connections
     logger *zap.Logger
 }
 

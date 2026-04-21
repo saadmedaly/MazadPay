@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Bell,
   AlertTriangle,
@@ -19,52 +19,24 @@ import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { useSendNotification, useFetchAdminNotifications, useDeleteNotification, useMarkNotificationAsRead, useMarkAllAsReadAdmin } from '@/hooks/useNotifications';
 
-interface Notification {
-  id: string;
-  user_id: string;
-  type: string;
-  title: string;
-  body: string | null;
-  is_read: boolean;
-  reference_id: string | null;
-  reference_type: string | null;
-  created_at: string;
-}
-
 export const NotificationsPage = () => {
   const sendNotification = useSendNotification();
-  const fetchAdminNotifications = useFetchAdminNotifications();
+  const { data: notifications = [], isLoading: loading, refetch } = useFetchAdminNotifications();
   const deleteNotification = useDeleteNotification();
   const markAsRead = useMarkNotificationAsRead();
   const markAllAsRead = useMarkAllAsReadAdmin();
-  
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [showSendModal, setShowSendModal] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [newNotif, setNewNotif] = useState({ title: '', body: '', type: 'general', user_id: '', broadcast: true })
-
-  const handleFetchNotifications = async () => {
-    try {
-      setLoading(true);
-      console.log('Fetching admin notifications...');
-      const data = await fetchAdminNotifications.mutateAsync();
-      console.log('Admin notifications fetched:', data);
-      setNotifications(data);
-    } catch (err) {
-      console.error('Failed to fetch notifications:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSendNotification = async () => {
     try {
       await sendNotification.mutateAsync(newNotif);
       setShowSendModal(false);
       setNewNotif({ title: '', body: '', type: 'general', user_id: '', broadcast: true });
-      handleFetchNotifications();
+      refetch();
     } catch (err) {
       // Error handling is done in the hook
     }
@@ -73,7 +45,7 @@ export const NotificationsPage = () => {
   const handleDeleteNotification = async (id: string) => {
     try {
       await deleteNotification.mutateAsync(id);
-      handleFetchNotifications();
+      refetch();
     } catch (err) {
       // Error handling is done in the hook
     }
@@ -82,7 +54,7 @@ export const NotificationsPage = () => {
   const handleMarkAsRead = async (id: string) => {
     try {
       await markAsRead.mutateAsync(id);
-      handleFetchNotifications();
+      refetch();
     } catch (err) {
       // Error handling is done in the hook
     }
@@ -91,15 +63,11 @@ export const NotificationsPage = () => {
   const handleMarkAllAsRead = async () => {
     try {
       await markAllAsRead.mutateAsync();
-      handleFetchNotifications();
+      refetch();
     } catch (err) {
       // Error handling is done in the hook
     }
   };
-
-  useEffect(() => {
-    handleFetchNotifications();
-  }, []);
 
   const getIcon = (type: string, isRead: boolean) => {
     const iconClass = cn(
@@ -115,9 +83,14 @@ export const NotificationsPage = () => {
     }
   };
 
+  // Deduplicate notifications by ID
+  const uniqueNotifications = notifications.filter((notif: any, index: number, self: any[]) => 
+    index === self.findIndex((n) => n.id === notif.id)
+  );
+  
   const filtered = filter === 'unread' 
-    ? notifications.filter(n => !n.is_read) 
-    : notifications;
+    ? uniqueNotifications.filter(n => !n.is_read) 
+    : uniqueNotifications;
 
   return (
     <div className="animate-fade-in space-y-6" dir="rtl">

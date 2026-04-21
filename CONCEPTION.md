@@ -264,7 +264,7 @@ CREATE TABLE otp_verifications (
     attempts INT DEFAULT 0,                   -- Nombre de tentatives de vérification
     max_attempts INT DEFAULT 3,               -- Limite de 3 tentatives
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL, -- TTL 5 minutes
-    verified_at TIMESTAMP WITH TIME ZONE,     -- NULL si non encore vérifié
+    verified_at TIMESTAMP WITH TIME ZONE,     -- NULL si no n encore vérifié
     ip_address VARCHAR(45),                   -- IP de la requête (sécurité / traçabilité)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 

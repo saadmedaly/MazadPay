@@ -28,36 +28,46 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	favoriteRepo := repository.NewFavoriteRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 	invRepo := repository.NewAdminInvitationRepository(db)
+	reqRepo := repository.NewRequestRepository(db)
+	auditRepo := repository.NewAuditRepository(db)
 
 	// Hub
 	hub := ws.NewHub(logger)
+	adminHub := ws.NewAdminHub(logger)
 
 	// Services
-	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath, logger)
+	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath, logger, adminHub)
 	smsSvc := services.NewSMSService(cfg.Twilio.AccountSID, cfg.Twilio.AuthToken, cfg.Twilio.PhoneNumber, logger)
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4)
 	auctionSvc := services.NewAuctionService(auctionRepo, reportRepo, notifSvc)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
-	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo)
+	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo)
 	walletSvc := services.NewWalletService(walletRepo, txRepo)
 	contentSvc := services.NewContentService(contentRepo, notifSvc)
+	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, auditRepo, notifSvc)
 
 	api := app.Group("/v1/api")
 
 	// Handlers
 	wsHandler := handlers.NewWSHandler(hub, logger)
+	adminWSHandler := handlers.NewAdminWSHandler(adminHub, cfg.JWT.Secret, logger)
 	bidHandler := handlers.NewBidHandler(bidSvc, logger)
 	userHandler := handlers.NewUserHandler(userSvc, logger)
 	adminHandler := handlers.NewAdminHandler(adminSvc, logger)
 	bannerHandler := handlers.NewBannerHandler(contentSvc, logger)
 	walletHandler := handlers.NewWalletHandler(walletSvc, logger)
+	reqHandler := handlers.NewRequestHandler(reqSvc, logger)
 	contentHandler := handlers.NewContentHandler(contentSvc, logger)
 	notifHandler := handlers.NewNotificationHandler(notifSvc, logger)
 
 	// WebSocket registration
 	app.Use("/ws", wsHandler.UpgradeMiddleware())
 	app.Get("/ws/auction/:id", websocket.New(wsHandler.HandleAuction))
+
+	// Admin WebSocket
+	app.Use("/ws/admin", adminWSHandler.UpgradeMiddleware())
+	app.Get("/ws/admin", websocket.New(adminWSHandler.HandleAdmin))
 
 	// Public routes for countries (no auth required)
 	api.Get("/countries", adminHandler.ListCountries)
@@ -70,6 +80,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	setupBannerRoutes(api, bannerHandler, cfg.JWT.Secret, logger)
 	setupContentRoutes(api, contentHandler, cfg.JWT.Secret, logger)
 	setupNotificationRoutes(api, notifHandler, cfg.JWT.Secret, logger)
+	setupRequestRoutes(api, reqHandler, cfg.JWT.Secret, logger, auditRepo, rdb, cfg)
 
 	return auctionSvc, notifSvc
 }
@@ -295,4 +306,43 @@ func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.Notificati
 	admin.Put("/read-all", notifHandler.MarkAllAsRead)
 	admin.Delete("/:id", notifHandler.AdminDelete)
 	admin.Get("/templates", notifHandler.GetTemplates)
+}
+
+func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, jwtSecret string, logger *zap.Logger, auditRepo repository.AuditRepository, rdb *redis.Client, cfg *config.Config) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+	adminMiddleware := middleware.AdminOnly(logger)
+
+	// Rate limiting for request submissions: 5 requests per hour per user
+	rateLimitSubmit := middleware.RateLimit(rdb, 3600, 5, logger)
+
+	// Public routes for users to submit requests (protected by JWT + rate limiting)
+	user := api.Group("/requests", jwtMiddleware)
+	user.Post("/auctions", rateLimitSubmit, reqHandler.CreateAuctionRequest)
+	user.Post("/banners", rateLimitSubmit, reqHandler.CreateBannerRequest)
+	user.Get("/auctions/my", reqHandler.GetUserAuctionRequests)
+	user.Get("/banners/my", reqHandler.GetUserBannerRequests)
+
+	// Admin request management
+	admin := api.Group("/admin/requests", jwtMiddleware, adminMiddleware)
+
+	// Auction requests
+	admin.Get("/auctions", reqHandler.GetAuctionRequests)
+	admin.Get("/auctions/:id", reqHandler.GetAuctionRequestByID)
+	admin.Put("/auctions/:id/review", reqHandler.ReviewAuctionRequest)
+	admin.Delete("/auctions/:id", reqHandler.DeleteAuctionRequest)
+	admin.Post("/auctions/bulk/review", reqHandler.BulkReviewAuctionRequests)
+	admin.Post("/auctions/bulk/delete", reqHandler.BulkDeleteAuctionRequests)
+
+	// Banner requests
+	admin.Get("/banners", reqHandler.GetBannerRequests)
+	admin.Get("/banners/:id", reqHandler.GetBannerRequestByID)
+	admin.Put("/banners/:id/review", reqHandler.ReviewBannerRequest)
+	admin.Delete("/banners/:id", reqHandler.DeleteBannerRequest)
+	admin.Post("/banners/bulk/review", reqHandler.BulkReviewBannerRequests)
+	admin.Post("/banners/bulk/delete", reqHandler.BulkDeleteBannerRequests)
+
+	// Audit logs (admin only)
+	auditHandler := handlers.NewAuditHandler(services.NewAuditService(auditRepo), logger)
+	admin.Get("/audit/logs", auditHandler.GetAuditLogs)
+	admin.Get("/audit/logs/:entity_type/:entity_id", auditHandler.GetAuditLogsByEntity)
 }

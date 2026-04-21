@@ -100,6 +100,7 @@ type adminService struct {
 	kycRepo     repository.KYCRepository
 	contentRepo repository.ContentRepository
 	invRepo     repository.AdminInvitationRepository
+	reqRepo     repository.RequestRepository
 }
 
 func NewAdminService(
@@ -112,6 +113,7 @@ func NewAdminService(
 	kycRepo repository.KYCRepository,
 	contentRepo repository.ContentRepository,
 	invRepo repository.AdminInvitationRepository,
+	reqRepo repository.RequestRepository,
 ) AdminService {
 	return &adminService{
 		db:          db,
@@ -123,6 +125,7 @@ func NewAdminService(
 		kycRepo:     kycRepo,
 		contentRepo: contentRepo,
 		invRepo:     invRepo,
+		reqRepo:     reqRepo,
 	}
 }
 
@@ -154,18 +157,23 @@ func (s *adminService) GetDashboardStats(ctx context.Context) (map[string]interf
 	pendingTransactions, _ := s.txRepo.GetPendingCount(ctx)
 	weekDeposits, _ := s.txRepo.GetWeeklySum(ctx)
 
+	pendingAuctionRequests, _ := s.reqRepo.CountPendingAuctionRequests(ctx)
+	pendingBannerRequests, _ := s.reqRepo.CountPendingBannerRequests(ctx)
+
 	return map[string]interface{}{
-		"total_users":          totalUsers,
-		"total_auctions":       totalAuctions,
-		"total_bids":           totalBids,
-		"total_revenue":        totalRevenue,
-		"today_revenue":        todayRevenue,
-		"active_auctions":      activeAuctions,
-		"pending_auctions":     pendingAuctions,
-		"pending_reports":      pendingReports,
-		"pending_kycs":         len(pendingKYCs),
-		"pending_transactions": pendingTransactions,
-		"week_deposits":        weekDeposits,
+		"total_users":               totalUsers,
+		"total_auctions":            totalAuctions,
+		"total_bids":                totalBids,
+		"total_revenue":             totalRevenue,
+		"today_revenue":             todayRevenue,
+		"active_auctions":           activeAuctions,
+		"pending_auctions":          pendingAuctions,
+		"pending_reports":           pendingReports,
+		"pending_kycs":              len(pendingKYCs),
+		"pending_transactions":      pendingTransactions,
+		"week_deposits":             weekDeposits,
+		"pending_auction_requests":  pendingAuctionRequests,
+		"pending_banner_requests":   pendingBannerRequests,
 	}, nil
 }
 

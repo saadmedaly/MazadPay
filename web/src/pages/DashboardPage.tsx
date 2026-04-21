@@ -11,13 +11,6 @@ import {
 import { PageHeader } from '@/components/shared/PageHeader'
  import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { useDashboardStats, useRevenueChart, useActivityFeed } from '@/hooks/useDashboard'
-import { 
-  useDashboardWidgets, 
-  useCreateDashboardWidget, 
-  useUpdateDashboardWidget, 
-  useDeleteDashboardWidget,
-  useRepositionWidgets 
-} from '@/hooks/useDashboardWidgets'
 import { formatPrice, formatRelative, formatDateShort } from '@/lib/formatters'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -47,12 +40,13 @@ export function DashboardPage() {
   const { data: activityData } = useActivityFeed()
   const activity = Array.isArray(activityData) ? activityData : []
 
-  // Widget management hooks
-  const { data: widgets = [] } = useDashboardWidgets()
-  const createWidget = useCreateDashboardWidget()
-  const updateWidget = useUpdateDashboardWidget()
-  const deleteWidget = useDeleteDashboardWidget()
-  const repositionWidgets = useRepositionWidgets()
+  // Widget management - DISABLED (API not implemented)
+  // const { data: widgets = [] } = useDashboardWidgets()
+  // const createWidget = useCreateDashboardWidget()
+  // const updateWidget = useUpdateDashboardWidget()
+  // const deleteWidget = useDeleteDashboardWidget()
+  // const repositionWidgets = useRepositionWidgets()
+  const widgets: any[] = []
 
   const [newWidget, setNewWidget] = useState({
     title: '',
@@ -61,47 +55,15 @@ export function DashboardPage() {
     config: {}
   })
 
-  // Widget handlers
-  const handleCreateWidget = () => {
-    createWidget.mutate(newWidget, {
-      onSuccess: () => {
-        setShowWidgetModal(false)
-        setNewWidget({
-          title: '',
-          type: 'metric',
-          position: { x: 0, y: 0, w: 4, h: 2 },
-          config: {}
-        })
-      }
-    })
-  }
-
-  const handleUpdateWidget = () => {
-    if (!editingWidget) return
-    updateWidget.mutate({
-      id: editingWidget.id,
-      data: newWidget
-    }, {
-      onSuccess: () => {
-        setShowWidgetModal(false)
-        setEditingWidget(null)
-        setNewWidget({
-          title: '',
-          type: 'metric',
-          position: { x: 0, y: 0, w: 4, h: 2 },
-          config: {}
-        })
-      }
-    })
-  }
-
   const handleDeleteWidget = () => {
-    if (!deleteConfirm) return
-    deleteWidget.mutate(deleteConfirm, {
-      onSuccess: () => {
-        setDeleteConfirm(null)
-      }
-    })
+    // DISABLED - API not implemented
+    // if (!deleteConfirm) return
+    // deleteWidget.mutate(deleteConfirm, {
+    //   onSuccess: () => {
+    //     setDeleteConfirm(null)
+    //   }
+    // })
+    setDeleteConfirm(null)
   }
 
   const METRICS = [
@@ -181,20 +143,20 @@ export function DashboardPage() {
             icon: isEditMode ? AlertCircle : Edit2,
             onClick: () => setIsEditMode(!isEditMode)
           },
-          {
-            label: "إضافة widget",
-            icon: Plus,
-            onClick: () => setShowWidgetModal(true)
-          },
-          {
-            label: "إدارة widgets",
-            icon: Settings,
-            onClick: () => {/* Navigate to widget management */}}
+          // {
+          //   label: "إضافة widget",
+          //   icon: Plus,
+          //   onClick: () => setShowWidgetModal(true)
+          // },
+          // {
+          //   label: "إدارة widgets",
+          //   icon: Settings,
+          //   onClick: () => {/* Navigate to widget management */}}
         ]}
       />
 
-      {/* Widget Management Modal */}
-      {showWidgetModal && (
+      {/* Widget Management Modal - DISABLED (API not implemented) */}
+      {/* {showWidgetModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-card border border-surface-border rounded-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-white font-bold text-lg mb-4">
@@ -247,17 +209,17 @@ export function DashboardPage() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
-      {/* Delete Confirmation */}
-      {deleteConfirm && (
+      {/* Delete Confirmation - DISABLED (API not implemented) */}
+      {/* {deleteConfirm && (
         <ConfirmDialog
           title="حذف widget"
           description="هل أنت متأكد من حذف widget هذا؟"
           onConfirm={handleDeleteWidget}
           onCancel={() => setDeleteConfirm(null)}
         />
-      )}
+      )} */}
 
       {/* Métriques */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">

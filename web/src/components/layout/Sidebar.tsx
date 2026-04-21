@@ -33,7 +33,7 @@ const NAV_SECTIONS = [
       { label: 'المعاملات',    icon: CreditCard,      to: '/transactions', badgeKey: 'pendingTxns' },
       { label: 'المستخدمين',    icon: Users,           to: '/users',        badgeKey: null },
       { label: 'البلاغات',     icon: Flag,            to: '/reports',      badgeKey: 'pendingReports' },
-      { label: 'توثيق الحسابات', icon: ShieldCheck,     to: '/kyc',          badgeKey: 'pendingKYCs' },
+      { label: 'إدارة الطلبات', icon: ShieldCheck,     to: '/kyc',          badgeKey: null },
       { label: 'الفئات',      icon: LayoutDashboard, to: '/categories',   badgeKey: null },
       { label: 'المواقع(المدن/المناطق)',      icon: Flag,            to: '/locations',    badgeKey: null },
       { label: 'أرقام محظورة', icon: PhoneOff,        to: '/blocked-phones', badgeKey: null },

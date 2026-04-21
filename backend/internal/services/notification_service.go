@@ -2,12 +2,14 @@ package services
 
 import (
 	"context"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
+	ws "github.com/mazadpay/backend/internal/websocket"
 	"go.uber.org/zap"
 	"google.golang.org/api/option"
 )
@@ -25,16 +27,22 @@ type NotificationService interface {
 	// Admin methods
 	AdminListNotifications(ctx context.Context, status string, limit int) ([]models.Notification, error)
 	DeleteNotification(ctx context.Context, id uuid.UUID) error
+
+	// WebSocket real-time notifications
+	NotifyNewAuctionRequest(requestID, userID, userName, title string)
+	NotifyNewBannerRequest(requestID, userID, userName, title string)
+	NotifyRequestReviewed(requestID, requestType, status, updatedBy string)
 }
 
 type notificationService struct {
-	repo     repository.NotificationRepository
-	userRepo repository.UserRepository
-	fcm      *messaging.Client
-	logger   *zap.Logger
+	repo      repository.NotificationRepository
+	userRepo  repository.UserRepository
+	fcm       *messaging.Client
+	adminHub  *ws.AdminHub
+	logger    *zap.Logger
 }
 
-func NewNotificationService(repo repository.NotificationRepository, userRepo repository.UserRepository, serviceAccountPath string, logger *zap.Logger) NotificationService {
+func NewNotificationService(repo repository.NotificationRepository, userRepo repository.UserRepository, serviceAccountPath string, logger *zap.Logger, adminHub *ws.AdminHub) NotificationService {
 	var fcmClient *messaging.Client
 
 	if serviceAccountPath != "" {
@@ -53,10 +61,11 @@ func NewNotificationService(repo repository.NotificationRepository, userRepo rep
 	}
 
 	return &notificationService{
-		repo:     repo,
-		userRepo: userRepo,
-		fcm:      fcmClient,
-		logger:   logger,
+		repo:      repo,
+		userRepo:  userRepo,
+		fcm:       fcmClient,
+		adminHub:  adminHub,
+		logger:    logger,
 	}
 }
 
@@ -186,4 +195,59 @@ func (s *notificationService) AdminListNotifications(ctx context.Context, status
 
 func (s *notificationService) DeleteNotification(ctx context.Context, id uuid.UUID) error {
 	return s.repo.Delete(ctx, id)
+}
+
+// WebSocket Real-time Notifications
+
+func (s *notificationService) BroadcastNewRequest(requestType string, payload ws.NewRequestPayload) {
+	if s.adminHub == nil {
+		s.logger.Warn("AdminHub not initialized, skipping real-time notification",
+			zap.String("request_type", requestType),
+			zap.String("request_id", payload.RequestID))
+		return
+	}
+	s.adminHub.BroadcastNewRequest(requestType, payload)
+}
+
+func (s *notificationService) BroadcastRequestUpdated(payload ws.RequestUpdatedPayload) {
+	if s.adminHub == nil {
+		s.logger.Warn("AdminHub not initialized, skipping real-time notification",
+			zap.String("request_type", payload.RequestType),
+			zap.String("request_id", payload.RequestID),
+			zap.String("status", payload.Status))
+		return
+	}
+	s.adminHub.BroadcastRequestUpdated(payload)
+}
+
+func (s *notificationService) NotifyNewAuctionRequest(requestID, userID, userName, title string) {
+	s.BroadcastNewRequest("auction", ws.NewRequestPayload{
+		RequestID:   requestID,
+		RequestType: "auction",
+		UserID:      userID,
+		UserName:    userName,
+		Title:       title,
+		CreatedAt:   time.Now().Format(time.RFC3339),
+	})
+}
+
+func (s *notificationService) NotifyNewBannerRequest(requestID, userID, userName, title string) {
+	s.BroadcastNewRequest("banner", ws.NewRequestPayload{
+		RequestID:   requestID,
+		RequestType: "banner",
+		UserID:      userID,
+		UserName:    userName,
+		Title:       title,
+		CreatedAt:   time.Now().Format(time.RFC3339),
+	})
+}
+
+func (s *notificationService) NotifyRequestReviewed(requestID, requestType, status, updatedBy string) {
+	s.BroadcastRequestUpdated(ws.RequestUpdatedPayload{
+		RequestID:   requestID,
+		RequestType: requestType,
+		Status:      status,
+		UpdatedBy:   updatedBy,
+		UpdatedAt:   time.Now().Format(time.RFC3339),
+	})
 }
