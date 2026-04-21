@@ -195,7 +195,7 @@ ALTER TABLE transactions ADD COLUMN wallet_hold_id UUID REFERENCES wallet_holds(
 -- 5. NOTIFICATIONS
 -- ============================================================
 
-CREATE TABLE notifications (
+CREATE OR REPLACE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     type VARCHAR(20) NOT NULL,
@@ -207,7 +207,7 @@ CREATE TABLE notifications (
     data JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT chk_notif_type CHECK (type IN ('bid', 'win', 'payment', 'system', 'ad'))
+    CONSTRAINT chk_notif_type CHECK (type IN ('bid', 'win', 'payment', 'system', 'ad', 'general', 'new_auction', 'transaction', 'report', 'auction_sold'))
 );
 
 -- ============================================================

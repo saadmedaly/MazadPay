@@ -14,7 +14,7 @@ import (
 
 type NotificationService interface {
 	SavePushToken(ctx context.Context, userID uuid.UUID, fcmToken, deviceID, platform string) error
-	SendPush(ctx context.Context, userID uuid.UUID, title, body string, data map[string]string) error
+	SendPush(ctx context.Context, userID uuid.UUID, title, body string, notifType string, data map[string]string) error
 	NotifyAdmins(ctx context.Context, title, body string, data map[string]string) error
 	SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) error
 	ListNotifications(ctx context.Context, userID uuid.UUID, limit int) ([]models.Notification, error)
@@ -72,12 +72,12 @@ func (s *notificationService) SavePushToken(ctx context.Context, userID uuid.UUI
 	return s.repo.SavePushToken(ctx, token)
 }
 
-func (s *notificationService) SendPush(ctx context.Context, userID uuid.UUID, title, body string, data map[string]string) error {
+func (s *notificationService) SendPush(ctx context.Context, userID uuid.UUID, title, body string, notifType string, data map[string]string) error {
 	// 1. Log in database
 	notification := &models.Notification{
 		ID:     uuid.New(),
 		UserID: userID,
-		Type:   "push",
+		Type:   notifType,
 		Title:  title,
 		Body:   &body,
 		IsRead: false,
@@ -137,7 +137,7 @@ func (s *notificationService) NotifyAdmins(ctx context.Context, title, body stri
 	}
 
 	for _, admin := range admins {
-		_ = s.SendPush(ctx, admin.ID, title, body, data)
+		_ = s.SendPush(ctx, admin.ID, title, body, "system", data)
 	}
 	return nil
 }
@@ -157,7 +157,7 @@ func (s *notificationService) SendBroadcast(ctx context.Context, title, body, no
 
 	// Send to all tokens in batches
 	for _, token := range tokens {
-		_ = s.SendPush(ctx, token.UserID, title, body, data)
+		_ = s.SendPush(ctx, token.UserID, title, body, notifType, data)
 	}
 
 	s.logger.Info("broadcast sent", zap.Int("count", len(tokens)))

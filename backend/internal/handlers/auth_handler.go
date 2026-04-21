@@ -98,10 +98,11 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{
 		"token": token,
 		"user": fiber.Map{
-			"id":       user.ID,
-			"phone":    user.MaskPhone(),
-			"role":     user.Role,
-			"language": user.LanguagePref,
+			"id":            user.ID,
+			"phone":         user.MaskPhone(),
+			"role":          user.Role,
+			"language":      user.LanguagePref,
+			"is_super_admin": user.IsSuperAdmin,
 		},
 	})
 }

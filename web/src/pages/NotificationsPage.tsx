@@ -1,24 +1,23 @@
 import { useEffect, useState } from 'react';
 import {
   Bell,
-  CheckCircle,
-  Clock,
   AlertTriangle,
   Package,
   CreditCard,
+  Send,
   Check,
   SearchX,
-  Send
+  Clock,
+  CheckCircle,
+  Trash2
 } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../api/client';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { useSendNotification, useFetchAdminNotifications, useDeleteNotification, useMarkNotificationAsRead, useMarkAllAsReadAdmin } from '@/hooks/useNotifications';
 
 interface Notification {
   id: string;
@@ -33,19 +32,26 @@ interface Notification {
 }
 
 export const NotificationsPage = () => {
-  const qc = useQueryClient()
+  const sendNotification = useSendNotification();
+  const fetchAdminNotifications = useFetchAdminNotifications();
+  const deleteNotification = useDeleteNotification();
+  const markAsRead = useMarkNotificationAsRead();
+  const markAllAsRead = useMarkAllAsReadAdmin();
+  
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [showSendModal, setShowSendModal] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [newNotif, setNewNotif] = useState({ title: '', body: '', type: 'general', user_id: '' })
+  const [newNotif, setNewNotif] = useState({ title: '', body: '', type: 'general', user_id: '', broadcast: true })
 
-  const fetchNotifications = async () => {
+  const handleFetchNotifications = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/v1/api/notifications');
-      setNotifications(res.data.data || []);
+      console.log('Fetching admin notifications...');
+      const data = await fetchAdminNotifications.mutateAsync();
+      console.log('Admin notifications fetched:', data);
+      setNotifications(data);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     } finally {
@@ -53,37 +59,46 @@ export const NotificationsPage = () => {
     }
   };
 
-  const markAllRead = async () => {
+  const handleSendNotification = async () => {
     try {
-      await api.put('/v1/api/notifications/read-all');
-      setNotifications(notifications.map(n => ({ ...n, is_read: true })));
+      await sendNotification.mutateAsync(newNotif);
+      setShowSendModal(false);
+      setNewNotif({ title: '', body: '', type: 'general', user_id: '', broadcast: true });
+      handleFetchNotifications();
     } catch (err) {
-      console.error('Failed to mark all as read:', err);
+      // Error handling is done in the hook
     }
   };
 
-  const sendNotif = useMutation({
-    mutationFn: (data: typeof newNotif) => api.post('/v1/api/admin/notifications/send', data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-notifications'] })
-      toast.success('تم إرسال الإشعار')
-      setShowSendModal(false)
-      setNewNotif({ title: '', body: '', type: 'general', user_id: '' })
-    },
-    onError: () => toast.error('فشل إرسال الإشعار')
-  })
-  const deleteNotif = useMutation({
-    mutationFn: (id: string) => api.delete(`/v1/api/admin/notifications/${id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-notifications'] })
-      toast.success('تم حذف الإشعار')
-      setDeleteId(null)
-    },
-    onError: () => toast.error('فشل حذف الإشعار')
-  })
+  const handleDeleteNotification = async (id: string) => {
+    try {
+      await deleteNotification.mutateAsync(id);
+      handleFetchNotifications();
+    } catch (err) {
+      // Error handling is done in the hook
+    }
+  };
+
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await markAsRead.mutateAsync(id);
+      handleFetchNotifications();
+    } catch (err) {
+      // Error handling is done in the hook
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllAsRead.mutateAsync();
+      handleFetchNotifications();
+    } catch (err) {
+      // Error handling is done in the hook
+    }
+  };
 
   useEffect(() => {
-    fetchNotifications();
+    handleFetchNotifications();
   }, []);
 
   const getIcon = (type: string, isRead: boolean) => {
@@ -143,7 +158,7 @@ export const NotificationsPage = () => {
           </div>
           
           <button 
-            onClick={markAllRead}
+            onClick={handleMarkAllAsRead}
             disabled={!notifications.some(n => !n.is_read)}
             className="flex items-center gap-2 px-4 py-2 bg-surface-card border border-surface-border rounded-xl text-xs font-bold text-white hover:bg-surface-border transition-all disabled:opacity-30"
           >
@@ -212,6 +227,25 @@ export const NotificationsPage = () => {
                       <CheckCircle className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
                     </button>
                   )}
+                  
+                  <div className="flex gap-2 mt-3">
+                    {!notif.is_read && (
+                      <button 
+                        onClick={() => handleMarkAsRead(notif.id)}
+                        className="text-xs font-bold text-mazad-primary hover:text-white flex items-center gap-1 transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        تحديد كمقروء
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => setDeleteId(notif.id)}
+                      className="text-xs font-bold text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      حذف
+                    </button>
+                  </div>
                 </div>
 
                 {!notif.is_read && (
@@ -227,43 +261,43 @@ export const NotificationsPage = () => {
         open={showSendModal}
         onOpenChange={setShowSendModal}
         title="إرسال إشعار"
-        description={
-          <div className="space-y-4 pt-4 text-right" dir="rtl">
-            <div className="space-y-2">
-              <label className="text-xs text-surface-muted font-bold block">عنوان الإشعار</label>
-              <Input
-                value={newNotif.title}
-                onChange={(e) => setNewNotif({ ...newNotif, title: e.target.value })}
-                placeholder="مثال: مزاد جديد متاح"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-surface-muted font-bold block">محتوى الإشعار</label>
-              <textarea
-                value={newNotif.body}
-                onChange={(e) => setNewNotif({ ...newNotif, body: e.target.value })}
-                className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white min-h-[100px]"
-                placeholder="نص الإشعار..."
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-surface-muted font-bold block">نوع الإشعار</label>
-              <select
-                value={newNotif.type}
-                onChange={(e) => setNewNotif({ ...newNotif, type: e.target.value })}
-                className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white"
-              >
-                <option value="general">عام</option>
-                <option value="new_auction">مزاد جديد</option>
-                <option value="transaction">معاملة</option>
-              </select>
-            </div>
-          </div>
-        }
+        description="Remplissez le formulaire ci-dessous pour envoyer une notification"
         confirmLabel="إرسال"
-        loading={sendNotif.isPending}
-        onConfirm={() => sendNotif.mutate(newNotif)}
-      />
+        loading={sendNotification.isPending}
+        onConfirm={handleSendNotification}
+      >
+        <div className="space-y-4 pt-4 text-right" dir="rtl">
+          <div className="space-y-2">
+            <label className="text-xs text-surface-muted font-bold block">عنوان الإشعار</label>
+            <Input
+              value={newNotif.title}
+              onChange={(e) => setNewNotif({ ...newNotif, title: e.target.value })}
+              placeholder="مثال: مزاد جديد متاح"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs text-surface-muted font-bold block">محتوى الإشعار</label>
+            <textarea
+              value={newNotif.body}
+              onChange={(e) => setNewNotif({ ...newNotif, body: e.target.value })}
+              className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white min-h-[100px]"
+              placeholder="نص الإشعار..."
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs text-surface-muted font-bold block">نوع الإشعار</label>
+            <select
+              value={newNotif.type}
+              onChange={(e) => setNewNotif({ ...newNotif, type: e.target.value })}
+              className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white"
+            >
+              <option value="general">عام</option>
+              <option value="new_auction">مزاد جديد</option>
+              <option value="transaction">معاملة</option>
+            </select>
+          </div>
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={!!deleteId}
@@ -272,8 +306,8 @@ export const NotificationsPage = () => {
         description="هل أنت متأكد من حذف هذا الإشعار؟"
         variant="danger"
         confirmLabel="حذف"
-        loading={deleteNotif.isPending}
-        onConfirm={() => deleteId && deleteNotif.mutate(deleteId)}
+        loading={deleteNotification.isPending}
+        onConfirm={() => deleteId && handleDeleteNotification(deleteId)}
       />
     </div>
   );

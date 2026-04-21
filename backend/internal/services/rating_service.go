@@ -33,41 +33,34 @@ func NewRatingService(db *sqlx.DB, ratingRepo repository.RatingRepository) Ratin
 func (s *ratingService) CreateRating(ctx context.Context, userID, auctionID uuid.UUID, rating int, comment string) error {
 	// Validate rating (1-5 stars)
 	if rating < 1 || rating > 5 {
-		return apperr.ErrInvalidRating
+		return apperr.ErrBadRequest
 	}
 
 	// Check if user won the auction
-	auction, err := s.db.QueryRowContext(ctx, `
+	var winnerID *uuid.UUID
+	err := s.db.QueryRowContext(ctx, `
 		SELECT winner_id FROM auctions WHERE id = $1 AND status = 'ended'
-	`, auctionID).Scan()
+	`, auctionID).Scan(&winnerID)
 	if err != nil {
 		return err
 	}
 
-	var winnerID *uuid.UUID
-	if auction != nil {
-		err := auction.Scan(&winnerID)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Only the winner can rate
 	if winnerID == nil || *winnerID != userID {
-		return apperr.ErrNotAuctionWinner
+		return apperr.ErrForbidden
 	}
 
 	// Create rating
-	rating := &models.AppRating{
-		ID:         uuid.New(),
-		UserID:     userID,
-		AuctionID:  auctionID,
-		Rating:     rating,
-		Comment:    &comment,
-		CreatedAt:  time.Now(),
+	newRating := &models.AppRating{
+		ID:        uuid.New(),
+		UserID:    userID,
+		AuctionID: auctionID,
+		Rating:    rating,
+		Comment:   &comment,
+		CreatedAt: time.Now(),
 	}
 
-	return s.ratingRepo.Create(ctx, rating)
+	return s.ratingRepo.Create(ctx, newRating)
 }
 
 func (s *ratingService) GetUserRatings(ctx context.Context, userID uuid.UUID) ([]models.AppRating, error) {

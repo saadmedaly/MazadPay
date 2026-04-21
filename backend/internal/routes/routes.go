@@ -197,10 +197,6 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwt
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)
 
-	// Notification management routes
-	admin.Get("/notifications", adminHandler.AdminList)
-	admin.Delete("/notifications/:id", adminHandler.AdminDelete)
-
 	// KYC management
 	admin.Get("/kyc", adminHandler.ListKYCs)
 	admin.Put("/kyc/:user_id", adminHandler.ReviewKYC)
@@ -285,13 +281,18 @@ func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.Notificati
 	
 	notifications := api.Group("/notifications", jwtMiddleware)
 	notifications.Post("/token", notifHandler.SaveToken)
+	notifications.Post("/push-tokens", notifHandler.SaveToken)
 	notifications.Get("/", notifHandler.List)
 	notifications.Put("/:id/read", notifHandler.MarkAsRead)
 	notifications.Put("/read-all", notifHandler.MarkAllAsRead)
 	
 	// Admin notification management
 	admin := api.Group("/admin/notifications", jwtMiddleware)
+	admin.Get("", notifHandler.AdminList)
 	admin.Post("/send", notifHandler.SendNotification)
 	admin.Post("/broadcast", notifHandler.SendNotification)
+	admin.Put("/:id/read", notifHandler.MarkAsRead)
+	admin.Put("/read-all", notifHandler.MarkAllAsRead)
+	admin.Delete("/:id", notifHandler.AdminDelete)
 	admin.Get("/templates", notifHandler.GetTemplates)
 }

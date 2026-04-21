@@ -17,12 +17,13 @@ interface Props {
   onConfirm: () => void
   onCancel?: () => void
   loading?: boolean
+  children?: React.ReactNode
 }
 
 export function ConfirmDialog({
   open, onOpenChange, title, description, message,
   confirmLabel = 'تأكيد', cancelLabel = 'إلغاء',
-  variant = 'default', onConfirm, onCancel, loading
+  variant = 'default', onConfirm, onCancel, loading, children
 }: Props) {
   const btnCls = {
     danger:  'bg-red-500 hover:bg-red-600 text-white',
@@ -39,6 +40,7 @@ export function ConfirmDialog({
           <AlertDialogTitle className="text-white font-display text-right">{title}</AlertDialogTitle>
           <AlertDialogDescription className="text-surface-muted text-right">{description || message}</AlertDialogDescription>
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter className="flex-row-reverse gap-3">
           <AlertDialogCancel onClick={handleCancel} className="border-surface-border text-surface-muted hover:bg-surface-border hover:text-white mt-0">
             {cancelLabel}

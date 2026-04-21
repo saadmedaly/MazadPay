@@ -1,6 +1,7 @@
 import {
   Gavel, CreditCard, Users, Flag,
-  TrendingUp, RefreshCw, AlertTriangle, AlertCircle, ShieldCheck
+  TrendingUp, RefreshCw, AlertTriangle, AlertCircle, ShieldCheck,
+  Plus, Settings, Edit2, Trash2, Grid3x3
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -10,8 +11,18 @@ import {
 import { PageHeader } from '@/components/shared/PageHeader'
  import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { useDashboardStats, useRevenueChart, useActivityFeed } from '@/hooks/useDashboard'
+import { 
+  useDashboardWidgets, 
+  useCreateDashboardWidget, 
+  useUpdateDashboardWidget, 
+  useDeleteDashboardWidget,
+  useRepositionWidgets 
+} from '@/hooks/useDashboardWidgets'
 import { formatPrice, formatRelative, formatDateShort } from '@/lib/formatters'
 import { MetricCard } from '@/components/shared/MetricCard'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { Input } from '@/components/ui/input'
+import { useState } from 'react'
 
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
@@ -25,12 +36,73 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 export function DashboardPage() {
   const navigate = useNavigate()
+  const [showWidgetModal, setShowWidgetModal] = useState(false)
+  const [editingWidget, setEditingWidget] = useState<any>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+
   const { data: stats, isLoading, isError, refetch, isFetching } = useDashboardStats()
   const { data: revenueData } = useRevenueChart()
   const revenue = Array.isArray(revenueData) ? revenueData : []
   const { data: activityData } = useActivityFeed()
   const activity = Array.isArray(activityData) ? activityData : []
 
+  // Widget management hooks
+  const { data: widgets = [] } = useDashboardWidgets()
+  const createWidget = useCreateDashboardWidget()
+  const updateWidget = useUpdateDashboardWidget()
+  const deleteWidget = useDeleteDashboardWidget()
+  const repositionWidgets = useRepositionWidgets()
+
+  const [newWidget, setNewWidget] = useState({
+    title: '',
+    type: 'metric' as const,
+    position: { x: 0, y: 0, w: 4, h: 2 },
+    config: {}
+  })
+
+  // Widget handlers
+  const handleCreateWidget = () => {
+    createWidget.mutate(newWidget, {
+      onSuccess: () => {
+        setShowWidgetModal(false)
+        setNewWidget({
+          title: '',
+          type: 'metric',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+          config: {}
+        })
+      }
+    })
+  }
+
+  const handleUpdateWidget = () => {
+    if (!editingWidget) return
+    updateWidget.mutate({
+      id: editingWidget.id,
+      data: newWidget
+    }, {
+      onSuccess: () => {
+        setShowWidgetModal(false)
+        setEditingWidget(null)
+        setNewWidget({
+          title: '',
+          type: 'metric',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+          config: {}
+        })
+      }
+    })
+  }
+
+  const handleDeleteWidget = () => {
+    if (!deleteConfirm) return
+    deleteWidget.mutate(deleteConfirm, {
+      onSuccess: () => {
+        setDeleteConfirm(null)
+      }
+    })
+  }
 
   const METRICS = [
     {
@@ -100,20 +172,92 @@ export function DashboardPage() {
 
   return (
     <div className="animate-fade-in" dir="rtl">
-      <PageHeader
+      <PageHeader 
         title="لوحة التحكم"
         subtitle="نظرة مباشرة على منصة MazadPay"
-      >
-        <button
-          onClick={() => refetch()}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold
-                     text-surface-muted hover:text-white border border-surface-border
-                     hover:bg-surface-border/50 transition-all active:scale-95"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-          تحديث
-        </button>
-      </PageHeader>
+        actions={[
+          {
+            label: isEditMode ? "إيقاف تعديل" : "وضع التعديل",
+            icon: isEditMode ? AlertCircle : Edit2,
+            onClick: () => setIsEditMode(!isEditMode)
+          },
+          {
+            label: "إضافة widget",
+            icon: Plus,
+            onClick: () => setShowWidgetModal(true)
+          },
+          {
+            label: "إدارة widgets",
+            icon: Settings,
+            onClick: () => {/* Navigate to widget management */}}
+        ]}
+      />
+
+      {/* Widget Management Modal */}
+      {showWidgetModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-card border border-surface-border rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-white font-bold text-lg mb-4">
+              {editingWidget ? "تعديل widget" : "إضافة widget"}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-surface-muted text-sm block mb-1">العنوان</label>
+                <Input
+                  value={newWidget.title}
+                  onChange={(e) => setNewWidget({...newWidget, title: e.target.value})}
+                  placeholder="اسم widget"
+                />
+              </div>
+              <div>
+                <label className="text-surface-muted text-sm block mb-1">النوع</label>
+                <select 
+                  value={newWidget.type}
+                  onChange={(e) => setNewWidget({...newWidget, type: e.target.value as any})}
+                  className="w-full bg-surface-base border border-surface-border rounded-lg px-3 py-2 text-white"
+                >
+                  <option value="metric">مقياس</option>
+                  <option value="chart">رسم بياني</option>
+                  <option value="table">جدول</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={editingWidget ? handleUpdateWidget : handleCreateWidget}
+                  className="flex-1 bg-mazad-primary text-white px-4 py-2 rounded-lg font-bold"
+                >
+                  {editingWidget ? "تحديث" : "إنشاء"}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowWidgetModal(false)
+                    setEditingWidget(null)
+                    setNewWidget({
+                      title: '',
+                      type: 'metric',
+                      position: { x: 0, y: 0, w: 4, h: 2 },
+                      config: {}
+                    })
+                  }}
+                  className="flex-1 bg-surface-border text-white px-4 py-2 rounded-lg font-bold"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation */}
+      {deleteConfirm && (
+        <ConfirmDialog
+          title="حذف widget"
+          description="هل أنت متأكد من حذف widget هذا؟"
+          onConfirm={handleDeleteWidget}
+          onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
 
       {/* Métriques */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">

@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Save, Settings as SettingsIcon, Shield, Clock, Phone, AlertTriangle, Check } from 'lucide-react'
-import { useSettings, useUpdateSetting } from '@/hooks/useSettings'
+import { Save, Settings as SettingsIcon, Shield, Clock, Phone, AlertTriangle, Check, Plus, Edit2, Trash2 } from 'lucide-react'
+import { useSettings, useUpdateSetting, useCreateSetting, useDeleteSetting, useBulkUpdateSettings } from '@/hooks/useSettingsCRUD'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 
 interface Setting {
@@ -100,13 +102,25 @@ function getSettingValue(settings: Setting[], key: string): string {
 }
 
 export function SettingsPage() {
-  const { data, isLoading, refetch } = useSettings()
-  const updateSettings = useUpdateSetting()
+  const { data: settings, isLoading } = useSettings()
+  const { mutate: updateSetting } = useUpdateSetting()
+  const createSetting = useCreateSetting()
+  const deleteSetting = useDeleteSetting()
+  
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [newSetting, setNewSetting] = useState({
+    key: '',
+    value: '',
+    type: 'text' as const,
+    description: '',
+    group: 'general'
+  })
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const settings = (data as Setting[]) || []
+  const settingsData = (settings as Setting[]) || []
 
   const handleSave = async (key: string, type: string) => {
     setSaving(true)

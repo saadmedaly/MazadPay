@@ -333,8 +333,8 @@ func (s *auctionService) BuyNow(ctx context.Context, auctionID, buyerID uuid.UUI
 	if s.notifSvc != nil {
 		go func() {
 			_ = s.notifSvc.SendPush(context.Background(), auction.SellerID,
-				"تم بيعienst!", fmt.Sprintf("تم شراء مزاد %s بسعر fijo", auction.TitleAr),
-				map[string]string{"type": "auction_sold", "id": auction.ID.String()})
+				"تم بيع!", fmt.Sprintf("تم شراء مزاد %s بسعر نهائي", auction.TitleAr),
+				"auction_sold", map[string]string{"type": "auction_sold", "id": auction.ID.String()})
 		}()
 	}
 

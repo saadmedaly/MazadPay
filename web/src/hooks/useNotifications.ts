@@ -1,8 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { messaging, requestNotificationPermission } from '../lib/firebase';
 import { onMessage } from 'firebase/messaging';
 import { useAuthStore } from '../stores/authStore';
 import api from '../api/client';
+import { toast } from 'sonner';
 
 export const useNotifications = () => {
   const { user, isAuthenticated } = useAuthStore();
@@ -76,4 +78,105 @@ export const useNotifications = () => {
   };
 
   return { permission, fcmToken, requestPermission };
+};
+
+// Hook for sending notifications (admin functionality)
+export const useSendNotification = () => {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      user_id?: string;
+      title: string;
+      body: string;
+      type?: string;
+      data?: Record<string, string>;
+      broadcast?: boolean;
+    }) => {
+      const response = await api.post('/v1/api/admin/notifications/send', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Notification envoyée avec succès');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Erreur lors de l\'envoi de la notification');
+    },
+  });
+};
+
+// Hook for fetching notifications (user)
+export const useFetchNotifications = () => {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.get('/v1/api/notifications');
+      return response.data.data || [];
+    },
+  });
+};
+
+// Hook for fetching admin notifications (all notifications)
+export const useFetchAdminNotifications = (status: string = 'all', limit: number = 50) => {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.get('/v1/api/admin/notifications', {
+        params: { status, limit }
+      });
+      return response.data.data || [];
+    },
+  });
+};
+
+// Hook for deleting notifications
+export const useDeleteNotification = () => {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/v1/api/admin/notifications/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+      toast.success('Notification supprimée avec succès');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Erreur lors de la suppression');
+    },
+  });
+};
+
+// Hook for marking notification as read (admin)
+export const useMarkNotificationAsRead = () => {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.put(`/v1/api/admin/notifications/${id}/read`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+      toast.success('Notification marquée comme lue');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Erreur lors du marquage');
+    },
+  });
+};
+
+// Hook for marking all notifications as read (admin)
+export const useMarkAllAsReadAdmin = () => {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      await api.put(`/v1/api/admin/notifications/read-all`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+      toast.success('Toutes les notifications marquées comme lues');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Erreur lors du marquage');
+    },
+  });
 };

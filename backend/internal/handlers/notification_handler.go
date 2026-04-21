@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -236,7 +234,7 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 		if err != nil {
 			return BadRequest(c, "Invalid user ID")
 		}
-		if err := h.svc.SendPush(c.Context(), userUUID, req.Title, message, req.Data); err != nil {
+		if err := h.svc.SendPush(c.Context(), userUUID, req.Title, message, req.Type, req.Data); err != nil {
 			h.logger.Error("send to user failed", zap.Error(err))
 			return MapError(c, h.logger, err)
 		}
