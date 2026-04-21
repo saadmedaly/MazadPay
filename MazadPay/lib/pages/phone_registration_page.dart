@@ -1,7 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'otp_entry_page.dart';
-import 'set_password_page.dart';
 
 class PhoneRegistrationPage extends StatefulWidget {
   const PhoneRegistrationPage({super.key});

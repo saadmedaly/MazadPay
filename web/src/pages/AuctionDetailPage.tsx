@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, 
@@ -7,16 +7,18 @@ import {
   Clock, 
   Check, 
   X, 
-   Gavel,
+  Gavel,
   Loader2,
   AlertCircle,
   ImageIcon,
   ChevronRight,
   ChevronLeft,
   Eye,
-  Calendar
+  Calendar,
+  User,
+  Send,
+  TrendingUp,
 } from 'lucide-react'
-import { useEffect, useCallback, useRef } from 'react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -45,12 +47,60 @@ export function AuctionDetailPage() {
   const [rejectionReason, setRejectionReason] = useState('')
   const [approveConfirm, setApproveConfirm] = useState(false)
   const [activeImage, setActiveImage] = useState<string | null>(null)
+  const [now, setNow] = useState(Date.now())
+  const [bidAmount, setBidAmount] = useState('')
+  const [wsConnected, setWsConnected] = useState(false)
+  const [currentPrice, setCurrentPrice] = useState(0)
+  const [bidHistory, setBidHistory] = useState<any[]>([])
 
   const { data: auction, isLoading, isError } = useAuction(id!)
   const validate = useValidateAuction()
   const [selectedImg, setSelectedImg] = useState<string | null>(null)
   const thumbScrollRef = useRef<HTMLDivElement>(null)
   const [activeLang, setActiveLang] = useState<'ar' | 'fr' | 'en'>('ar')
+
+  // WebSocket connection for real-time bidding
+  useEffect(() => {
+    if (!auction) return
+
+    const wsUrl = `ws://localhost:8082/ws/auction/${id}?user_id=anonymous`
+    const ws = new WebSocket(wsUrl)
+
+    ws.onopen = () => {
+      console.log('WebSocket connected')
+      setWsConnected(true)
+    }
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      
+      if (data.type === 'bid_placed') {
+        setCurrentPrice(data.payload.new_price)
+        setBidHistory(prev => [data.payload, ...prev.slice(0, 9)])
+      }
+      
+      if (data.type === 'auction_ended') {
+        // Handle auction end
+        console.log('Auction ended:', data.payload)
+      }
+    }
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected')
+      setWsConnected(false)
+    }
+
+    return () => {
+      ws.close()
+    }
+  }, [id, auction])
+
+  // Update current price when auction data loads
+  useEffect(() => {
+    if (auction) {
+      setCurrentPrice(parseFloat(auction.current_price))
+    }
+  }, [auction])
 
    const images = (() => {
     if (!auction) return []
@@ -100,6 +150,11 @@ export function AuctionDetailPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleNext, handlePrev])
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   // Scroll active thumbnail into view
   useEffect(() => {
     if (currentIndex >= 0 && thumbScrollRef.current) {
@@ -132,6 +187,24 @@ export function AuctionDetailPage() {
     if (realUrl.startsWith('http') || realUrl.startsWith('data:')) return realUrl
     const baseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8082'
     return `${baseUrl}${realUrl.startsWith('/') ? '' : '/'}${realUrl}`
+  }
+
+  const formatRemainingTime = (endTime: string) => {
+    const diff = new Date(endTime).getTime() - now
+    if (isNaN(diff)) return 'غير متوفر'
+    if (diff <= 0) return 'انتهى'
+
+    const days = Math.floor(diff / 86400000)
+    const hours = Math.floor((diff % 86400000) / 3600000)
+    const minutes = Math.floor((diff % 3600000) / 60000)
+    const seconds = Math.floor((diff % 60000) / 1000)
+
+    return [
+      days > 0 ? `${days}ي` : null,
+      hours > 0 ? `${hours}س` : null,
+      minutes > 0 ? `${minutes}د` : null,
+      `${seconds}ث`,
+    ].filter(Boolean).join(' ')
   }
 
   if (isLoading) return <LoadingSpinner fullPage label="جاري تحميل تفاصيل المزاد..." />
@@ -370,24 +443,124 @@ export function AuctionDetailPage() {
             
             <div className="relative">
               <StatusBadge status={auction.status} className="mb-4" />
-              <h1 className="text-2xl font-display font-bold text-white mb-6 leading-tight">{auction.title_ar}</h1>
-              
+              <h1 className="text-2xl font-display font-bold text-white mb-4 leading-tight">{auction.title_ar}</h1>
+
+              <div className="grid gap-3 mb-6">
+                <div className="flex items-center justify-between gap-4 bg-surface-base/60 rounded-2xl p-4 border border-surface-border">
+                  <div>
+                    <p className="text-[10px] font-bold text-surface-muted uppercase mb-1 tracking-widest">الوقت المتبقي</p>
+                    <p className="text-sm font-bold text-emerald-300">{formatRemainingTime(auction.end_time)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-surface-muted">
+                    <Clock className="w-4 h-4" />
+                    <span>وقت</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => navigate(`/users/${auction.seller_id}`)}
+                  className="flex items-center justify-between gap-3 bg-surface-base/60 rounded-2xl p-4 border border-surface-border hover:border-mazad-primary/40 transition-all"
+                >
+                  <div className="min-w-0 text-left">
+                    <p className="text-[10px] font-bold text-surface-muted uppercase mb-1 tracking-widest flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-mazad-primary" /> البائع
+                    </p>
+                    <p className="text-sm font-bold text-white truncate">
+                      {auction.seller?.full_name || auction.seller?.phone || shortID(auction.seller_id)}
+                    </p>
+                    <p className="text-[10px] text-surface-muted truncate">
+                      {auction.seller?.phone ? auction.seller.phone : auction.seller_id}
+                    </p>
+                  </div>
+                  <Eye className="w-4 h-4 text-mazad-primary" />
+                </button>
+              </div>
+
               <div className="space-y-6">
-                 <div>
-                    <span className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-1">السعر الحالي</span>
-                    <div className="text-3xl font-display font-bold text-mazad-accent">{formatPrice(parseFloat(auction.current_price))}</div>
-                 </div>
-                 
-                 <div className="grid grid-cols-2 gap-4 border-t border-surface-border pt-6">
-                    <div>
-                       <span className="text-[10px] font-bold text-surface-muted uppercase block">المزايدين</span>
-                       <div className="text-lg font-bold text-white">{auction.bidder_count}</div>
+                 {/* Real-time Price Display */}
+                 <div className="bg-surface-base/60 rounded-2xl p-6 border border-surface-border">
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs font-bold text-surface-muted uppercase tracking-widest flex items-center gap-2">
+                        <TrendingUp className="w-3 h-3 text-mazad-primary" />
+                        السعر الحالي
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span className="text-xs text-emerald-400">مباشر</span>
+                      </div>
                     </div>
-                    <div>
-                       <span className="text-[10px] font-bold text-surface-muted uppercase block">وقت البدء</span>
-                       <div className="text-sm font-medium text-white">{formatDate(auction.start_time )}</div>
-                    </div>
+                    <div className="text-3xl font-display font-bold text-mazad-accent">{formatPrice(currentPrice)}</div>
+                    {wsConnected && (
+                      <div className="text-xs text-emerald-400 mt-2 animate-pulse">
+                        تحديث مباشر...
+                      </div>
+                    )}
                  </div>
+
+                 {/* Bidding Interface */}
+                 {auction.status === 'active' && (
+                   <div className="bg-surface-base/60 rounded-2xl p-6 border border-surface-border">
+                     <div className="space-y-4">
+                       <div>
+                         <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">
+                           قيمة المزايدة
+                         </label>
+                         <div className="relative">
+                           <input
+                             type="number"
+                             value={bidAmount}
+                             onChange={(e) => setBidAmount(e.target.value)}
+                             placeholder="أدخل المبلغ..."
+                             className="w-full px-4 py-3 bg-surface-input border border-surface-border rounded-xl text-white text-lg font-bold focus:outline-none focus:border-mazad-primary focus:ring-2 focus:ring-mazad-primary/20"
+                             min={parseFloat(auction.current_price) + parseFloat(auction.min_increment)}
+                             step={parseFloat(auction.min_increment)}
+                           />
+                           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-surface-muted">
+                             {formatPrice(parseFloat(auction.current_price) + parseFloat(auction.min_increment))}
+                           </span>
+                         </div>
+                       </div>
+                       
+                       <button
+                         onClick={() => {
+                           // Send bid via WebSocket
+                           const ws = new WebSocket(`ws://localhost:8082/ws/auction/${id}?user_id=current_user`)
+                           ws.onopen = () => {
+                             ws.send(JSON.stringify({
+                               type: 'place_bid',
+                               amount: parseFloat(bidAmount)
+                             }))
+                           }
+                         }}
+                         disabled={!bidAmount || parseFloat(bidAmount) <= currentPrice}
+                         className="w-full py-4 bg-mazad-primary hover:bg-mazad-primary/90 text-white font-bold rounded-xl shadow-lg shadow-mazad-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                       >
+                         <Send className="w-5 h-5" />
+                         إرسال المزايدة
+                       </button>
+                     </div>
+                   </div>
+                 )}
+
+                 {/* Bid History */}
+                 {bidHistory.length > 0 && (
+                   <div className="bg-surface-base/60 rounded-2xl p-6 border border-surface-border">
+                     <h3 className="text-xs font-bold text-surface-muted uppercase tracking-widest mb-4 flex items-center gap-2">
+                       <Clock className="w-3 h-3 text-mazad-primary" />
+                       آخر المزايدات
+                     </h3>
+                     <div className="space-y-3 max-h-40 overflow-y-auto">
+                       {bidHistory.map((bid, index) => (
+                         <div key={index} className="flex items-center justify-between p-3 bg-surface-base/30 rounded-lg border border-surface-border/50">
+                           <div className="flex items-center gap-3">
+                             <span className="text-xs text-surface-muted">#{bidHistory.length - index}</span>
+                             <span className="text-sm font-bold text-white">{bid.bidder_masked}</span>
+                           </div>
+                           <span className="text-sm font-bold text-mazad-accent">{formatPrice(bid.new_price)}</span>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                 )}
               </div>
             </div>
 
@@ -464,7 +637,7 @@ export function AuctionDetailPage() {
             <div className="flex gap-3 justify-end leading-none">
               <button 
                 onClick={() => setRejectDialog(false)}
-                className="px-6 py-2.5 rounded-xl text-sm font-bold text-surface-muted border border-surface-border hover:bg-surface-border/50 transition-all font-bold"
+                className="px-6 py-2.5 rounded-xl text-sm font-bold text-surface-muted border border-surface-border hover:bg-surface-border/50 transition-all"
               >
                 إلغاء
               </button>

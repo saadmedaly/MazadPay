@@ -137,7 +137,7 @@ func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) er
 	otp := &models.OTPVerification{
 		ID:          uuid.New(),
 		Phone:       phone,
-		TermiiPinID: code,
+		TwilioSid:   code,
 		Purpose:     purpose,
 		Attempts:    0,
 		MaxAttempts: 3,
@@ -178,7 +178,7 @@ func (s *authService) VerifyOTP(ctx context.Context, phone, code, purpose string
 	// En production, rejeter les codes de développement
 	if s.env == "development" && s.developmentOTP != "" && code == s.developmentOTP {
 		// OK - Mode développement avec code autorisé
-	} else if code != otp.TermiiPinID {
+	} else if code != otp.TwilioSid {
 		// En production ou si code incorrect, incrémenter les tentatives
 		if err := s.userRepo.IncrementOTPAttempts(ctx, otp.ID); err != nil {
 			return err

@@ -10,10 +10,13 @@ import { formatDate, maskPhone, shortID } from '@/lib/formatters'
 import type { AdminUser } from '@/types/api'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useUsers, useBlockUser, useGenerateInvitation, useDeleteUser } from '@/hooks/useUsers'
+import { useAuthStore } from '@/stores/authStore'
 import { toast } from 'sonner'
 
 export function UsersPage() {
   const navigate = useNavigate()
+  const currentUser = useAuthStore((s) => s.user)
+  const isSuperAdmin = currentUser?.is_super_admin ?? false
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [blockTarget, setBlockTarget] = useState<{ id: string; block: boolean; name: string } | null>(null)
@@ -124,13 +127,15 @@ export function UsersPage() {
                 {user.is_active ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
               </button>
             )}
-            <button
-              onClick={() => setDeleteTarget({ id: user.id, name: user.full_name ?? shortID(user.id) })}
-              className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
-              title="حذف المستخدم نهائياً"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {isSuperAdmin && (
+              <button
+                onClick={() => setDeleteTarget({ id: user.id, name: user.full_name ?? shortID(user.id) })}
+                className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
+                title="حذف المستخدم نهائياً (Super Admin فقط)"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         )
       }

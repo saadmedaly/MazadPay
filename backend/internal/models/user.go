@@ -38,7 +38,7 @@ func (u *User) MaskPhone() string {
 type OTPVerification struct {
 	ID          uuid.UUID  `db:"id"`
 	Phone       string     `db:"phone"`
-	TermiiPinID string     `db:"termii_pin_id"`
+	TwilioSid   string     `db:"twilio_sid"`
 	Purpose     string     `db:"purpose"`
 	Attempts    int        `db:"attempts"`
 	MaxAttempts int        `db:"max_attempts"`

@@ -19,7 +19,7 @@ graph TD
         API[REST API - Gin/Fiber]
         WS[WebSocket Hub - Realtime Bids]
         Cron[Cron Service - Auto Closure]
-        Auth[Auth Service - Termii/JWT]
+        Auth[Auth Service - Twilio/JWT]
     end
 
     subgraph "Data & Storage"
@@ -29,14 +29,14 @@ graph TD
     end
 
     subgraph "External Services"
-        Termii[Termii SMS Gateway]
+        Twilio[Twilio SMS Gateway]
         FCM[Firebase Cloud Messaging]
     end
 
     App -- "HTTPS / JSON" --> API
     App -- "WSS" --> WS
     API --> Auth
-    Auth -- "Validate/Send" --> Termii
+    Auth -- "Validate/Send" --> Twilio
     API --> DB
     API --> Cache
     API --> S3
@@ -69,17 +69,17 @@ graph TD
 | F1.5  | Inscription par numéro de téléphone + PIN 4 chiffres | `login_page.dart`                       | `POST /v1/api/auth/register`         |
 | F1.6  | Connexion par téléphone + PIN                        | `login_page.dart`                       | `POST /v1/api/auth/login`            |
 | F1.7  | Sélection du pays (code +222 Mauritanie)             | `login_page.dart`                       | Validation côté serveur           |
-| F1.8  | Envoi OTP via SMS (Termii)                           | `otp_entry_page.dart`                   | `POST /v1/api/auth/otp/send`         |
+| F1.8  | Envoi OTP via SMS (Twilio)                           | `otp_entry_page.dart`                   | `POST /v1/api/auth/otp/send`         |
 | F1.9  | Vérification OTP (6 chiffres, timer pour renvoi)     | `otp_entry_page.dart`                   | `POST /v1/api/auth/otp/verify`       |
 | F1.10 | Mot de passe oublié (reset via OTP)                  | `login_page.dart`                       | `POST /v1/api/auth/reset-password`   |
 | F1.11 | Déconnexion                                          | `account_profile_page.dart`             | `POST /v1/api/auth/logout`           |
 
 > [!IMPORTANT]
-> **Service SMS/OTP — Termii** : Le fournisseur retenu pour l'envoi des OTP par SMS est **[Termii](https://termii.com)**.
-> - **Endpoint Termii** : `POST {BASE_URL}/v1/api/sms/otp/send`
+> **Service SMS/OTP — Twilio** : Le fournisseur retenu pour l'envoi des OTP par SMS est **[Twilio](https://twilio.com)**.
+> - **Endpoint Twilio** : `POST {BASE_URL}/v1/api/sms/otp/send`
 > - **Paramètres clés** : `api_key`, `to` (format international ex: `2222XXXXXXXX`), `from` (Sender ID enregistré), `channel` (`generic`), `pin_type` (`NUMERIC`), `pin_length` (6), `pin_time_to_live` (5 min), `pin_attempts` (3).
 > - **Vérification** : `POST {BASE_URL}/v1/api/sms/otp/verify` avec `pin_id` + `pin` saisi par l'utilisateur.
-> - Le `pin_id` retourné par Termii est stocké temporairement (Redis ou table `otp_verifications`) pour la vérification ultérieure.
+> - Le `pin_id` retourné par Twilio est stocké temporairement (Redis ou table `otp_verifications`) pour la vérification ultérieure.
 > - Rate-limit : **3 tentatives max**, blocage **15 min** après échec.
 > - Le canal SMS couvre le réseau mauritanien (+222).
 
@@ -259,7 +259,7 @@ CREATE TABLE users (
 CREATE TABLE otp_verifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     phone VARCHAR(20) NOT NULL,               -- Numéro au format international (+222XXXXXXXX)
-    termii_pin_id VARCHAR(100) NOT NULL,      -- PIN ID retourné par l'API Termii (pour vérification)
+    twilio_sid VARCHAR(100) NOT NULL,      -- SID retourné par l'API Twilio (pour vérification)
     purpose VARCHAR(20) NOT NULL DEFAULT 'register', -- 'register', 'reset_password'
     attempts INT DEFAULT 0,                   -- Nombre de tentatives de vérification
     max_attempts INT DEFAULT 3,               -- Limite de 3 tentatives
@@ -291,12 +291,25 @@ CREATE TABLE categories (
     display_order INT DEFAULT 0
 );
 
+CREATE TABLE countries (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(2) UNIQUE NOT NULL,
+    name_ar VARCHAR(100) NOT NULL,
+    name_fr VARCHAR(100) NOT NULL,
+    name_en VARCHAR(100),
+    flag_emoji VARCHAR(10),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE locations (
     id SERIAL PRIMARY KEY,
     city_name_ar VARCHAR(100) NOT NULL,
     city_name_fr VARCHAR(100) NOT NULL DEFAULT '',
     area_name_ar VARCHAR(100) NOT NULL,
-    area_name_fr VARCHAR(100) NOT NULL DEFAULT ''
+    area_name_fr VARCHAR(100) NOT NULL DEFAULT '',
+    country_id INT REFERENCES countries(id) ON DELETE SET NULL
 );
 
 -- ============================================================
@@ -761,7 +774,7 @@ Cette section présente le détail de chaque table pour garantir une implémenta
 | Champ | Type | Description |
 | :--- | :--- | :--- |
 | `phone` | VARCHAR(20) | Numéro cible. |
-| `termii_pin_id` | VARCHAR(100) | ID de session renvoyé par Termii pour vérification ultérieure. |
+| `twilio_sid` | VARCHAR(100) | SID renvoyé par Twilio pour vérification ultérieure. |
 | `expires_at` | TIMESTAMP | Expiration (5 min). |
 | `verified_at` | TIMESTAMP | Date de réussite (NULL par défaut). |
 
@@ -823,13 +836,17 @@ Cette section présente le détail de chaque table pour garantir une implémenta
 
 ### 5.4. Domaine : Taxonomie & Localisation
 
-#### Table: `categories`
-| Champ | Type | Description |
-| :--- | :--- | :--- |
-| `id` | SERIAL | Identifiant unique. |
-| `name_ar/fr/en` | VARCHAR | Nom de la catégorie en 3 langues. |
-| `parent_id` | INT | Hiérarchie (parent NULL pour les catégories racines). |
-| `icon_name` | VARCHAR | Identifiant de l'icône Flutter/Lucide. |
+#### Tables (23)
+
+| # | Table | Description | Clés |
+|:--|:---|:---|:---|
+| 1 | `users` | Profils utilisateurs (rôles, vérification) | PK: `id` (UUID) |
+| 2 | `otp_verifications` | Codes OTP et traçabilité IP | FK: `phone` |
+| 3 | `categories` | Catégories hiérarchiques | FK: `parent_id` |
+| 4 | `countries` | Pays (code, noms multilingues, drapeau) | PK: `id` (SERIAL) |
+| 5 | `locations` | Villes et quartiers (avec FK vers pays) | FK: `country_id` |
+| 6 | `auctions` | Enchères (featured, winner link) | FK: `seller_id`, `category_id`, `location_id` |
+| 6 | `auctions` | Enchères (featured, winner link) | FK: `seller_id`, `category_id`, `location_id` |
 
 #### Table: `locations`
 | Champ | Type | Description |
@@ -939,7 +956,7 @@ Lorsqu'un utilisateur mise pour la première fois sur une enchère `A` :
 
 | Service | Rôle | Technologie |
 | :--- | :--- | :--- |
-| **SMS Service** | Intégration API **Termii**. Envoi des PIN à 6 chiffres. | Termii SDK / REST |
+| **SMS Service** | Intégration API **Twilio**. Envoi des PIN à 6 chiffres. | Twilio SDK / REST |
 | **Realtime Service** | Diffusion des events via WebSockets (`bid_placed`, `timer_ticked`). | Gorilla WebSockets |
 | **Financial Service** | Gestion atomique des transferts inner-wallet. | PostgreSQL Transactions |
 

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -634,9 +635,21 @@ func (h *AdminHandler) BlockPhone(c *fiber.Ctx) error {
 
 func (h *AdminHandler) UnblockPhone(c *fiber.Ctx) error {
 	phone := c.Params("phone")
-	if err := h.svc.UnblockPhone(c.Context(), phone); err != nil {
+	// Decode URL encoded phone number
+	decodedPhone, err := url.QueryUnescape(phone)
+	if err != nil {
+		h.logger.Error("Failed to decode phone parameter", zap.String("phone", phone), zap.Error(err))
+		return BadRequest(c, "Invalid phone parameter")
+	}
+	
+	h.logger.Info("Attempting to unblock phone", zap.String("phone", phone), zap.String("decodedPhone", decodedPhone))
+	
+	if err := h.svc.UnblockPhone(c.Context(), decodedPhone); err != nil {
+		h.logger.Error("Failed to unblock phone", zap.String("phone", phone), zap.String("decodedPhone", decodedPhone), zap.Error(err))
 		return InternalError(c, "Failed to unblock phone")
 	}
+	
+	h.logger.Info("Successfully unblocked phone", zap.String("phone", phone), zap.String("decodedPhone", decodedPhone))
 	return OK(c, fiber.Map{"message": "Phone unblocked successfully"})
 }
 
@@ -663,4 +676,79 @@ func (h *AdminHandler) UpdateSetting(c *fiber.Ctx) error {
 		return InternalError(c, "Failed to update setting")
 	}
 	return OK(c, fiber.Map{"message": "Setting updated successfully"})
+}
+
+// Countries management
+func (h *AdminHandler) ListCountries(c *fiber.Ctx) error {
+	countries, err := h.svc.GetCountries(c.Context())
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	if countries == nil {
+		countries = []models.Country{}
+	}
+
+	return OK(c, countries)
+}
+
+func (h *AdminHandler) CreateCountry(c *fiber.Ctx) error {
+	type Request struct {
+		Code      string `json:"code"      validate:"required,len=2"`
+		NameAr    string `json:"name_ar"   validate:"required"`
+		NameFr    string `json:"name_fr"   validate:"required"`
+		NameEn    string `json:"name_en"   validate:"required"`
+		FlagEmoji string `json:"flag_emoji" validate:"required"`
+	}
+
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	if err := h.svc.CreateCountry(c.Context(), req.Code, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji); err != nil {
+		return InternalError(c, "Failed to create country")
+	}
+
+	return OK(c, fiber.Map{"message": "Country created successfully"})
+}
+
+func (h *AdminHandler) UpdateCountry(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id", 0)
+	if err != nil {
+		return BadRequest(c, "Invalid country ID")
+	}
+
+	type Request struct {
+		Code      string `json:"code"      validate:"required,len=2"`
+		NameAr    string `json:"name_ar"   validate:"required"`
+		NameFr    string `json:"name_fr"   validate:"required"`
+		NameEn    string `json:"name_en"   validate:"required"`
+		FlagEmoji string `json:"flag_emoji" validate:"required"`
+		IsActive  *bool  `json:"is_active"`
+	}
+
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	if err := h.svc.UpdateCountry(c.Context(), id, req.Code, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji, req.IsActive); err != nil {
+		return InternalError(c, "Failed to update country")
+	}
+
+	return OK(c, fiber.Map{"message": "Country updated successfully"})
+}
+
+func (h *AdminHandler) DeleteCountry(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id", 0)
+	if err != nil {
+		return BadRequest(c, "Invalid country ID")
+	}
+
+	if err := h.svc.DeleteCountry(c.Context(), id); err != nil {
+		return InternalError(c, "Failed to delete country")
+	}
+
+	return OK(c, fiber.Map{"message": "Country deleted successfully"})
 }

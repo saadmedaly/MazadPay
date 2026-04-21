@@ -59,6 +59,9 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	app.Use("/ws", wsHandler.UpgradeMiddleware())
 	app.Get("/ws/auction/:id", websocket.New(wsHandler.HandleAuction))
 
+	// Public routes for countries (no auth required)
+	api.Get("/countries", adminHandler.ListCountries)
+
 	// Routes registration
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
 	setupAuctionRoutes(api, auctionSvc, bidHandler, cfg.JWT.Secret, logger)
@@ -99,6 +102,8 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	// Public routes
 	api.Get("/categories", h.GetCategories)
 	api.Get("/locations", h.GetLocations)
+	api.Get("/countries", h.GetCountries)
+	api.Get("/locations/:countryId", h.GetLocationsByCountry)
 	api.Get("/auctions", h.List)
 	api.Get("/auctions/:id", h.GetByID)
 	api.Post("/auctions/:id/view", h.IncrementView)
@@ -192,6 +197,10 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwt
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)
 
+	// Notification management routes
+	admin.Get("/notifications", adminHandler.AdminList)
+	admin.Delete("/notifications/:id", adminHandler.AdminDelete)
+
 	// KYC management
 	admin.Get("/kyc", adminHandler.ListKYCs)
 	admin.Put("/kyc/:user_id", adminHandler.ReviewKYC)
@@ -205,6 +214,12 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwt
 	admin.Post("/locations", adminHandler.CreateLocation)
 	admin.Put("/locations/:id", adminHandler.UpdateLocation)
 	admin.Delete("/locations/:id", adminHandler.DeleteLocation)
+
+	// Country management
+	admin.Get("/countries", adminHandler.ListCountries)
+	admin.Post("/countries", adminHandler.CreateCountry)
+	admin.Put("/countries/:id", adminHandler.UpdateCountry)
+	admin.Delete("/countries/:id", adminHandler.DeleteCountry)
 
 	// Blocked phones management
 	admin.Get("/blocked-phones", adminHandler.ListBlockedPhones)
@@ -265,19 +280,18 @@ func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, jwtSecret 
 	admin.Delete("/tutorials/:id", h.DeleteTutorial)
 }
 
-func setupNotificationRoutes(api fiber.Router, h *handlers.NotificationHandler, jwtSecret string, logger *zap.Logger) {
+func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.NotificationHandler, jwtSecret string, logger *zap.Logger) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger)
-	adminMiddleware := middleware.AdminOnly(logger)
-
-	notif := api.Group("/notifications", jwtMiddleware)
-
-	notif.Post("/push-tokens", h.SaveToken)
-	notif.Get("/", h.List)
-	notif.Put("/read-all", h.MarkAllAsRead)
-	notif.Put("/:id/read", h.MarkAsRead)
-
-	adminNotif := api.Group("/admin/notifications", jwtMiddleware, adminMiddleware)
-	adminNotif.Get("/", h.AdminList)
-	adminNotif.Post("/send", h.SendNotification)
-	adminNotif.Delete("/:id", h.AdminDelete)
+	
+	notifications := api.Group("/notifications", jwtMiddleware)
+	notifications.Post("/token", notifHandler.SaveToken)
+	notifications.Get("/", notifHandler.List)
+	notifications.Put("/:id/read", notifHandler.MarkAsRead)
+	notifications.Put("/read-all", notifHandler.MarkAllAsRead)
+	
+	// Admin notification management
+	admin := api.Group("/admin/notifications", jwtMiddleware)
+	admin.Post("/send", notifHandler.SendNotification)
+	admin.Post("/broadcast", notifHandler.SendNotification)
+	admin.Get("/templates", notifHandler.GetTemplates)
 }

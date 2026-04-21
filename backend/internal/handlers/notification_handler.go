@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/services"
@@ -11,12 +14,17 @@ import (
 )
 
 type NotificationHandler struct {
-	svc    services.NotificationService
-	logger *zap.Logger
+	svc      services.NotificationService
+	logger   *zap.Logger
+	validate *validator.Validate
 }
 
 func NewNotificationHandler(svc services.NotificationService, logger *zap.Logger) *NotificationHandler {
-	return &NotificationHandler{svc: svc, logger: logger}
+	return &NotificationHandler{
+		svc:      svc,
+		logger:   logger,
+		validate: validator.New(),
+	}
 }
 
 type SaveTokenRequest struct {
@@ -26,22 +34,26 @@ type SaveTokenRequest struct {
 }
 
 func (h *NotificationHandler) SaveToken(c *fiber.Ctx) error {
-		userID, err := middleware.GetUserID(c)
-		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-		}
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
 
-		var req SaveTokenRequest
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
-		}
+	var req SaveTokenRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
 
-		if err := h.svc.SavePushToken(c.Context(), userID, req.FCMToken, req.DeviceID, req.Platform); err != nil {
-			h.logger.Error("failed to save push token", zap.Error(err))
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to save token"})
-		}
+	if err := h.validate.Struct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
 
-		return c.SendStatus(fiber.StatusOK)
+	if err := h.svc.SavePushToken(c.Context(), userID, req.FCMToken, req.DeviceID, req.Platform); err != nil {
+		h.logger.Error("Failed to save push token", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save push token"})
+	}
+
+	return c.JSON(fiber.Map{"message": "Push token saved successfully"})
 }
 
 func (h *NotificationHandler) List(c *fiber.Ctx) error {
@@ -125,18 +137,93 @@ type SendNotificationRequest struct {
 	Broadcast  bool   `json:"broadcast"`
 }
 
+// Get notification templates
+func (h *NotificationHandler) getTemplate(lang, notifType string) string {
+	templates := map[string]map[string]string{
+		"ar": {
+			"bid_placed":    "تم تقديم مزايدة جديدة على {auction_title}",
+			"bid_outbid":    "لقد تم تجاوز مزايدتك في {auction_title}",
+			"auction_won":   "تهانينا ! لقد فزت بمزاد {auction_title}",
+			"auction_lost":   "لللأسف، لم تفز بمزاد {auction_title}",
+			"payment_received": "تم استلام مبلغ الدفع بنجاح",
+			"auction_started": "بدأ المزاد {auction_title}",
+			"auction_ended":   "انتهى المزاد {auction_title}",
+		},
+		"fr": {
+			"bid_placed":    "Nouvelle enchère placée sur {auction_title}",
+			"bid_outbid":    "Votre enchère sur {auction_title} a été dépassée",
+			"auction_won":   "Félicitations ! Vous avez remporté l'enchère {auction_title}",
+			"auction_lost":   "Désolé, vous n'avez pas remporté l'enchère {auction_title}",
+			"payment_received": "Paiement reçu avec succès",
+			"auction_started": "L'enchère {auction_title} a commencé",
+			"auction_ended":   "L'enchère {auction_title} est terminée",
+		},
+		"en": {
+			"bid_placed":    "New bid placed on {auction_title}",
+			"bid_outbid":    "Your bid on {auction_title} has been outbid",
+			"auction_won":   "Congratulations! You won auction {auction_title}",
+			"auction_lost":   "Sorry, you didn't win auction {auction_title}",
+			"payment_received": "Payment received successfully",
+			"auction_started": "Auction {auction_title} has started",
+			"auction_ended":   "Auction {auction_title} has ended",
+		},
+	}
+
+	if langTemplates, exists := templates[lang]; exists {
+		if template, templateExists := langTemplates[notifType]; templateExists {
+			return template
+		}
+	}
+	
+	// Default to Arabic
+	if arTemplate, exists := templates["ar"]; exists {
+		if template, templateExists := arTemplate[notifType]; templateExists {
+			return template
+		}
+	}
+	
+	return notifType
+}
+
 func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 	var req SendNotificationRequest
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	h.logger.Info("SendNotification request", zap.Any("req", req))
+	if err := h.validate.Struct(req); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	// Get user language preference (default to Arabic)
+	lang := c.Get("Accept-Language", "ar")
+	if len(lang) > 2 {
+		lang = lang[:2] // Extract "ar", "fr", "en"
+	}
+
+	// Generate localized message
+	message := req.Body
+	if template, exists := map[string]string{
+		"bid_placed":    h.getTemplate(lang, "bid_placed"),
+		"bid_outbid":    h.getTemplate(lang, "bid_outbid"),
+		"auction_won":   h.getTemplate(lang, "auction_won"),
+		"auction_lost":   h.getTemplate(lang, "auction_lost"),
+		"payment_received": h.getTemplate(lang, "payment_received"),
+		"auction_started": h.getTemplate(lang, "auction_started"),
+		"auction_ended":   h.getTemplate(lang, "auction_ended"),
+	}[req.Type]; exists {
+		message = template
+	}
+
+	h.logger.Info("SendNotification request", 
+		zap.String("type", req.Type),
+		zap.String("lang", lang),
+		zap.String("title", req.Title))
 
 	// Priority: broadcast > specific user > admins
 	if req.Broadcast {
 		// Send to all users
-		if err := h.svc.SendBroadcast(c.Context(), req.Title, req.Body, req.Type, req.Data); err != nil {
+		if err := h.svc.SendBroadcast(c.Context(), req.Title, message, req.Type, req.Data); err != nil {
 			h.logger.Error("broadcast failed", zap.Error(err))
 			return MapError(c, h.logger, err)
 		}
@@ -149,7 +236,7 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 		if err != nil {
 			return BadRequest(c, "Invalid user ID")
 		}
-		if err := h.svc.SendPush(c.Context(), userUUID, req.Title, req.Body, req.Data); err != nil {
+		if err := h.svc.SendPush(c.Context(), userUUID, req.Title, message, req.Data); err != nil {
 			h.logger.Error("send to user failed", zap.Error(err))
 			return MapError(c, h.logger, err)
 		}
@@ -157,12 +244,52 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 	}
 
 	// Default: notify admins only
-	if err := h.svc.NotifyAdmins(c.Context(), req.Title, req.Body, req.Data); err != nil {
+	if err := h.svc.NotifyAdmins(c.Context(), req.Title, message, req.Data); err != nil {
 		h.logger.Error("notify admins failed", zap.Error(err))
 		return MapError(c, h.logger, err)
 	}
 
 	return OK(c, fiber.Map{"message": "Notification sent to admins"})
+}
+
+func (h *NotificationHandler) GetTemplates(c *fiber.Ctx) error {
+	lang := c.Query("lang", "ar")
+	
+	templates := map[string]map[string]string{
+		"ar": {
+			"bid_placed":    "تم تقديم مزايدة جديدة على {auction_title}",
+			"bid_outbid":    "لقد تم تجاوز مزايدتك في {auction_title}",
+			"auction_won":   "تهانينا ! لقد فزت بمزاد {auction_title}",
+			"auction_lost":   "لللأسف، لم تفز بمزاد {auction_title}",
+			"payment_received": "تم استلام مبلغ الدفع بنجاح",
+			"auction_started": "بدأ المزاد {auction_title}",
+			"auction_ended":   "انتهى المزاد {auction_title}",
+		},
+		"fr": {
+			"bid_placed":    "Nouvelle enchère placée sur {auction_title}",
+			"bid_outbid":    "Votre enchère sur {auction_title} a été dépassée",
+			"auction_won":   "Félicitations ! Vous avez remporté l'enchère {auction_title}",
+			"auction_lost":   "Désolé, vous n'avez pas remporté l'enchère {auction_title}",
+			"payment_received": "Paiement reçu avec succès",
+			"auction_started": "L'enchère {auction_title} a commencé",
+			"auction_ended":   "L'enchère {auction_title} est terminée",
+		},
+		"en": {
+			"bid_placed":    "New bid placed on {auction_title}",
+			"bid_outbid":    "Your bid on {auction_title} has been outbid",
+			"auction_won":   "Congratulations! You won auction {auction_title}",
+			"auction_lost":   "Sorry, you didn't win auction {auction_title}",
+			"payment_received": "Payment received successfully",
+			"auction_started": "Auction {auction_title} has started",
+			"auction_ended":   "Auction {auction_title} has ended",
+		},
+	}
+
+	if langTemplates, exists := templates[lang]; exists {
+		return OK(c, langTemplates)
+	}
+
+	return OK(c, templates["ar"]) // Default to Arabic
 }
 
 func (h *NotificationHandler) AdminDelete(c *fiber.Ctx) error {

@@ -1,16 +1,15 @@
 package services
 
 import (
-	ntext"
-	t"
-	me"
+	"context"
+	"fmt"
+	"time"
 
-	thub.com/google/uuid"
-	apperr	err "github.mazad/ayababkend/internal/errors"
+	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/shopspring/decimal"
-	"github.com/valyala/fasthttp"
 )
 
 type CreateAuctionInput struct {
@@ -51,11 +50,10 @@ type AuctionService interface {
 	CloseExpiredAuctions(ctx context.Context) error
 	GetCategories(ctx context.Context) ([]models.Category, error)
 	GetLocations(ctx context.Context) ([]models.Location, error)
+	GetCountries(ctx context.Context) ([]models.Country, error)
+	GetLocationsByCountry(ctx context.Context, countryID int) ([]models.Location, error)
 }
 
-func (a AuctionService) GetCountries(ctx *fasthttp.RequestCtx) (any, any) {
-	panic("unimplemented")
-}
 
 type auctionService struct {
 	auctionRepo repository.AuctionRepository
@@ -265,7 +263,7 @@ func (s *auctionService) ReportAuction(ctx context.Context, auctionID, reporterI
 	// Notifier les admins
 	if s.notifSvc != nil {
 		go func() {
-			title := "⚠️ بلاغ جديد (Signalement)"
+			title := " بلاغ جديد (Signalement)"
 			body := fmt.Sprintf("تم الإبلاغ عن المزاد رقم %s. السبب: %s", auctionID.String()[:8], reason)
 			_ = s.notifSvc.NotifyAdmins(context.Background(), title, body, map[string]string{
 				"type":         "report",
@@ -397,34 +395,6 @@ func (s *auctionService) ExtendAuction(ctx context.Context, auctionID, sellerID 
 func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 	auctions, err := s.auctionRepo.FindExpiredActive(ctx)
 	if err != nil {
-		.Status = "pending"
-	tion.EndTime = newEndTime
-	tion.WinnerID = nil
-		.CurrentPrice = auction.StartPrice
-		s.auctionRepo.Update(ctx, auction)
-	
-	
-func (s *auctionService) ExtendAuction(ctx context.Context, auctionID, sellerID uuid.UUID, hours int) error {
-	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
-	if err != nil {
-	turn apperr.ErrNotFound
-	}
-	if auction.SellerID != sellerID {
-		return apperr.ErrUnauthorized
-	
-	if auction.Status != "active" {
-		return fmt.Errorf("can only extend active auctions")
-	}
-
-	newEndTime := auction.EndTime.Add(time.Duration(hours) * time.Hour)
-	auction.EndTime = newEndTime
-	return s.auctionRepo.Update(ctx, auction)
-}
-
-// CloseExpiredAuctions — appelé par le Cron toutes les 30 secondes
-func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
-	auctions, err := s.auctionRepo.FindExpiredActive(ctx)
-	if err != nil {
 		return err
 	}
 	for _, a := range auctions {
@@ -440,4 +410,12 @@ func (s *auctionService) GetCategories(ctx context.Context) ([]models.Category, 
 
 func (s *auctionService) GetLocations(ctx context.Context) ([]models.Location, error) {
 	return s.auctionRepo.GetLocations(ctx)
+}
+
+func (s *auctionService) GetCountries(ctx context.Context) ([]models.Country, error) {
+	return s.auctionRepo.GetCountries(ctx)
+}
+
+func (s *auctionService) GetLocationsByCountry(ctx context.Context, countryID int) ([]models.Location, error) {
+	return s.auctionRepo.GetLocationsByCountry(ctx, countryID)
 }

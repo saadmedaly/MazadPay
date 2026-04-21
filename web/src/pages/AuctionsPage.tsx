@@ -51,6 +51,7 @@ export function AuctionsPage() {
   const [approveId, setApproveId]       = useState<string | null>(null)
   const [deleteId, setDeleteId]         = useState<string | null>(null)
   const [q, setQ]                       = useState('')
+  const [now, setNow]                   = useState(Date.now())
 
   // Mode: null = list, 'create' = new form, 'edit' = edit form
   const [mode, setMode]           = useState<null | 'create' | 'edit'>(null)
@@ -70,6 +71,11 @@ export function AuctionsPage() {
 
   const { data: categories } = useCategories()
   const { data: locations }  = useLocations()
+
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   // Set default location to Nouakchott
   React.useEffect(() => {
@@ -91,6 +97,24 @@ export function AuctionsPage() {
     const d = new Date(s)
     if (isNaN(d.getTime())) throw new Error()
     return d.toISOString()
+  }
+
+  const formatRemainingTime = (endTime: string) => {
+    const diff = new Date(endTime).getTime() - now
+    if (isNaN(diff)) return 'غير متوفر'
+    if (diff <= 0) return 'انتهى'
+
+    const days = Math.floor(diff / 86400000)
+    const hours = Math.floor((diff % 86400000) / 3600000)
+    const minutes = Math.floor((diff % 3600000) / 60000)
+    const seconds = Math.floor((diff % 60000) / 1000)
+
+    return [
+      days > 0 ? `${days}ي` : null,
+      hours > 0 ? `${hours}س` : null,
+      minutes > 0 ? `${minutes}د` : null,
+      `${seconds}ث`,
+    ].filter(Boolean).join(' ')
   }
 
   const buildPayload = (): AuctionPayload | null => {
@@ -226,6 +250,31 @@ export function AuctionsPage() {
         const a = row.original
         const title = activeLang === 'ar' ? a.title_ar : activeLang === 'fr' ? (a.title_fr || a.title_ar) : (a.title_en || a.title_fr || a.title_ar)
         return <p className="text-white font-bold truncate max-w-[300px]" title={title}>{title}</p>
+      }
+    },
+    {
+      header: 'البائع',
+      accessorKey: 'seller_id',
+      cell: ({ row }) => {
+        const auction = row.original
+        const sellerName = auction.seller?.full_name || auction.seller?.phone || shortID(auction.seller_id)
+        return (
+          <button
+            onClick={() => navigate(`/users/${auction.seller_id}`)}
+            className="text-emerald-300 text-xs font-bold hover:text-emerald-100 hover:underline transition-all"
+            title="عرض تفاصيل المستخدم"
+          >
+            {sellerName}
+          </button>
+        )
+      }
+    },
+    {
+      header: 'الوقت المتبقي',
+      accessorKey: 'end_time',
+      cell: ({ getValue }) => {
+        const value = getValue<string>()
+        return <span className="text-xs font-bold text-emerald-200">{formatRemainingTime(value)}</span>
       }
     },
     {

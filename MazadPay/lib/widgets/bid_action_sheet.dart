@@ -67,7 +67,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
             children: [
                _buildInfoColumn('11', AppLocalizations.of(context)!.text_369, Colors.red),
                _buildVerticalDivider(),
-               _buildInfoColumn('${auction.currentPrice.toStringAsFixed(0)}', AppLocalizations.of(context)!.text_370, Colors.black),
+               _buildInfoColumn(auction.currentPrice.toStringAsFixed(0), AppLocalizations.of(context)!.text_370, Colors.black),
                _buildVerticalDivider(),
                _buildInfoColumn('09 : 00', AppLocalizations.of(context)!.text_371, Colors.red),
             ],

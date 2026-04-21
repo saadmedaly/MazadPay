@@ -1,4 +1,3 @@
-import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/auction.dart';
 

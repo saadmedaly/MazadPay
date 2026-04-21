@@ -232,9 +232,9 @@ export function BlockedPhonesPage() {
               <div>
                 <label className="text-sm text-surface-muted mb-1.5 block">رقم الهاتف</label>
                 <Input
-                  placeholder="22212345678"
+                  placeholder="+22212345678"
                   value={manualPhone}
-                  onChange={(e) => setManualPhone(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => setManualPhone(e.target.value.replace(/[^\d+]/g, ''))}
                   className="font-mono text-lg"
                   dir="ltr"
                 />
@@ -262,7 +262,9 @@ export function BlockedPhonesPage() {
                 onClick={async () => {
                   if (!manualPhone || manualPhone.length < 8) return
                   try {
-                    await blockPhone.mutateAsync({ phone: manualPhone, reason: manualReason })
+                    // Format phone number with +222 prefix if not present
+                    const formattedPhone = manualPhone.startsWith('+') ? manualPhone : `+222${manualPhone}`
+                    await blockPhone.mutateAsync({ phone: formattedPhone, reason: manualReason })
                     refetch()
                     setShowAddManual(false)
                     setManualPhone('')

@@ -14,6 +14,7 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/shopspring/decimal v1.4.0
+	github.com/twilio/twilio-go v1.30.5
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.50.0
 	google.golang.org/api v0.276.0
@@ -64,7 +65,6 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
-	github.com/twilio/twilio-go v1.30.5 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect

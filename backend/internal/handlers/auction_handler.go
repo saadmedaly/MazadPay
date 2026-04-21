@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/middleware"
+	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/shopspring/decimal"
@@ -225,9 +226,7 @@ func (h *AuctionHandler) GetCountries(c *fiber.Ctx) error {
 	}
 
 	if countries == nil {
-		countries = []fiber.Map{
-			
-		}
+		countries = []models.Country{}
 	}
 
 	return OK(c, countries)

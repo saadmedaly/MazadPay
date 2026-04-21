@@ -1,26 +1,32 @@
 # ===========================================
-# TESTS API AUTHENTIFICATION AVEC SMS OTP
+# TESTS API AUTHENTIFICATION AVEC SMS OTP - MAZADPAY
 # ===========================================
 #
-# FLOW COMPLET:
-# 1. Register → Envoi automatique OTP
-# 2. Send OTP → Relance si expiré
-# 3. Verify OTP → Validation code
-# 4. Login → Accès avec PIN
+# FLOW COMPLET SMS:
+# 1. Register -> Envoi automatique OTP via Twilio
+# 2. Send OTP -> Relance si expiré/rate limit
+# 3. Verify OTP -> Validation code SMS reçu
+# 4. Login -> Accès avec PIN (seulement après OTP vérifié)
+#
+# CONFIGURATION TWILIO REQUISE:
+# - TWILIO_ACCOUNT_SID
+# - TWILIO_AUTH_TOKEN  
+# - TWILIO_PHONE_NUMBER
 #
 # VALIDATIONS PIN:
-# ✅ Valide: 1357, 2468, 9753 (mélangés)
-# ❌ Rejeté: 1234, 1111 (séquentiel/répétitif)
+# - Valide: 1957, 2468, 9753 (mélangés)
+# - Rejeté: 1234, 1111 (séquentiel/répétitif)
 #
 # CODES OTP:
-# - Développement: 123456 (fixe)
-# - Production: Aléatoire 4-6 chiffres
+# - Développement: 123456 (fixe via DEV_OTP_CODE)
+# - Production: Aléatoire 4-6 chiffres envoyé par SMS
 #
 # ===========================================
 
 @baseUrl = http://localhost:8082/v1/api
-@testPhone = +22237141001
-@devOtpCode = {{$dotenv DEV_OTP_CODE}}
+@testPhone = +222323232326
+@devOtpCode = 123456
+@smsTestPhone = +22237141002
 
 ### ========================
 ### 1. Register New User (avec PIN fort)
@@ -28,12 +34,11 @@
 # @name registerUser
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
-
 {
     "phone": "{{testPhone}}",
     "pin": "1957",
-    "full_name": "Test 4 API",
-    "email": "test_ap4i{{$randomInt}}@example.com",
+    "full_name": "usertest added",
+    "email": "test_api.med@example.com",
     "city": "Nouakchott"
 }
 
@@ -50,7 +55,7 @@ Content-Type: application/json
 }
 
 ### ========================
-### 3. Verify OTP (code de développement: 123456)
+### 3. Verify OTP (code de développement: {{devOtpCode}})
 ### ========================
 # @name verifyOTP
 POST {{baseUrl}}/auth/otp/verify
@@ -58,8 +63,20 @@ Content-Type: application/json
 
 {
     "phone": "{{testPhone}}",
-    "code": "123456",
+    "code": "{{devOtpCode}}",
     "purpose": "register"
+}
+
+### ========================
+### 4. Login (après OTP vérifié)
+### ========================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "pin": "1957"
 }
 
 ### ========================
@@ -81,7 +98,7 @@ Content-Type: application/json
 {
     "phone": "{{flowPhone}}",
     "pin": "2468",
-    "full_name": "Test Full Flow",
+    "full_name": "test full flow",
     "email": "full_flow{{$randomInt}}@example.com",
     "city": "Nouakchott"
 }
@@ -161,7 +178,55 @@ Content-Type: application/json
 }
 
 ### ========================
-### TESTS DE SÉCURITÉ
+### TESTS SPÉCIFIQUES SMS OTP
+### ========================
+
+### Test: SMS OTP - Envoi et validation complète
+# @name smsOTPFULL
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "phone": "{{smsTestPhone}}",
+    "pin": "1957",
+    "full_name": "SMS Test User",
+    "email": "sms_test{{$randomInt}}@example.com",
+    "city": "Nouakchott"
+}
+
+### Test: Vérifier que SMS a été envoyé (OTP envoyé automatiquement après register)
+# @name checkSMSOTP
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "{{smsTestPhone}}",
+    "purpose": "register"
+}
+
+### Test: Valider OTP SMS reçu
+# @name validateSMSOTP
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "{{smsTestPhone}}",
+    "code": "{{devOtpCode}}",
+    "purpose": "register"
+}
+
+### Test: Login après validation SMS OTP
+# @name loginAfterSMS
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "{{smsTestPhone}}",
+    "pin": "1957"
+}
+
+### ========================
+### TESTS DE SÉCURITÉ SMS
 ### ========================
 
 ### Test: Login sans vérification OTP - DOIT ÉCHOUER
@@ -172,6 +237,65 @@ Content-Type: application/json
 {
     "phone": "+222323232329",
     "pin": "9753"
+}
+
+### Test: OTP invalide - DOIT ÉCHOUER
+# @name invalidOTP
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "code": "999999",
+    "purpose": "register"
+}
+
+### Test: OTP expiré - simulation (après 5 minutes)
+# @name expiredOTP
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "code": "{{devOtpCode}}",
+    "purpose": "register"
+}
+
+### Test: Rate limiting OTP - DOIT ÉCHOUER après 3 tentatives
+# @name rateLimitOTP1
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "+22237141003",
+    "purpose": "register"
+}
+
+# @name rateLimitOTP2
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "+22237141003",
+    "purpose": "register"
+}
+
+# @name rateLimitOTP3
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "+22237141003",
+    "purpose": "register"
+}
+
+# @name rateLimitOTP4 - DOIT ÉCHOUER (4ème tentative)
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "+22237141003",
+    "purpose": "register"
 }
 
 ### Test: Reset Password avec PIN faible - DOIT ÉCHOUER
@@ -217,6 +341,128 @@ Content-Type: application/json
 
 {
     "phone": "{{testPhone}}",
-    "code": "123456",
+    "code": "{{devOtpCode}}",
     "purpose": "reset_password"
 }
+
+### ========================
+### TESTS TWILIO CONFIGURATION
+### ========================
+
+### Test: Vérifier configuration Twilio (si non configuré, erreur attendue)
+# @name checkTwilioConfig
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "+22237141099",
+    "purpose": "register"
+}
+
+### Test: SMS avec numéro invalide - DOIT ÉCHOUER
+# @name invalidPhoneSMS
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "123",
+    "purpose": "register"
+}
+
+### Test: SMS avec format incorrect - DOIT ÉCHOUER
+# @name wrongFormatSMS
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "abc123",
+    "purpose": "register"
+}
+
+### ========================
+### TESTS FLOW COMPLET AVEC SMS RÉEL
+### ========================
+
+### Test: Flow complet avec simulation SMS réel
+# @name realSMSFlow
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "phone": "+22237141088",
+    "pin": "2468",
+    "full_name": "Real SMS Flow Test",
+    "email": "real_sms_flow{{$randomInt}}@example.com",
+    "city": "Nouakchott"
+}
+
+### Test: Envoyer OTP pour flow SMS réel
+# @name realSMSOTP
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "+22237141088",
+    "purpose": "register"
+}
+
+### Test: Vérifier OTP SMS réel
+# @name realSMSVerify
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "+22237141088",
+    "code": "{{devOtpCode}}",
+    "purpose": "register"
+}
+
+### Test: Login final après SMS
+# @name realSMSLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "phone": "+22237141088",
+    "pin": "2468"
+}
+
+### ========================
+### TESTS EDGE CASES SMS
+### ========================
+
+### Test: Double envoi OTP (rate limit)
+# @name doubleOTPSend
+POST {{baseUrl}}/auth/otp/send
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "purpose": "register"
+}
+
+### Test: OTP avec mauvais purpose
+# @name wrongPurposeOTP
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "{{testPhone}}",
+    "code": "{{devOtpCode}}",
+    "purpose": "wrong_purpose"
+}
+
+### Test: OTP avec téléphone non existant
+# @name nonExistentPhoneOTP
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+    "phone": "+22299999999",
+    "code": "{{devOtpCode}}",
+    "purpose": "register"
+}
+
+
+
+ 

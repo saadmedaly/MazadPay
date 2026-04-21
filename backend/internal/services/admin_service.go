@@ -59,6 +59,12 @@ type AdminService interface {
 	BlockPhone(ctx context.Context, phone, reason string, blockedBy uuid.UUID) error
 	UnblockPhone(ctx context.Context, phone string) error
 
+	// Countries
+	GetCountries(ctx context.Context) ([]models.Country, error)
+	CreateCountry(ctx context.Context, code, nameAr, nameFr, nameEn, flagEmoji string) error
+	UpdateCountry(ctx context.Context, id int, code, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool) error
+	DeleteCountry(ctx context.Context, id int) error
+
 	// Settings
 	ListSettings(ctx context.Context) ([]models.SystemSettings, error)
 	UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID) error
@@ -510,8 +516,20 @@ func (s *adminService) BlockPhone(ctx context.Context, phone, reason string, blo
 }
 
 func (s *adminService) UnblockPhone(ctx context.Context, phone string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM blocked_phones WHERE phone = $1`, phone)
-	return err
+	result, err := s.db.ExecContext(ctx, `DELETE FROM blocked_phones WHERE phone = $1`, phone)
+	if err != nil {
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("no blocked phone found with number: %s", phone)
+	}
+	
+	return nil
 }
 
 func (s *adminService) ListSettings(ctx context.Context) ([]models.SystemSettings, error) {
@@ -539,4 +557,42 @@ func (s *adminService) UpdateSetting(ctx context.Context, key, value, settingTyp
 		ON CONFLICT (key) DO UPDATE SET value = $2, type = $3, updated_by = $4, updated_at = now()
 	`, key, value, settingType, userID)
 	return err
+}
+
+func (s *adminService) GetCountries(ctx context.Context) ([]models.Country, error) {
+	return s.auctionRepo.GetCountries(ctx)
+}
+
+func (s *adminService) CreateCountry(ctx context.Context, code, nameAr, nameFr, nameEn, flagEmoji string) error {
+	country := &models.Country{
+		Code:      code,
+		NameAr:    nameAr,
+		NameFr:    nameFr,
+		NameEn:    nameEn,
+		FlagEmoji: flagEmoji,
+		IsActive:  true,
+	}
+	return s.auctionRepo.CreateCountry(ctx, country)
+}
+
+func (s *adminService) UpdateCountry(ctx context.Context, id int, code, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool) error {
+	country := &models.Country{
+		ID:        id,
+		Code:      code,
+		NameAr:    nameAr,
+		NameFr:    nameFr,
+		NameEn:    nameEn,
+		FlagEmoji: flagEmoji,
+		IsActive:  true,
+	}
+	
+	if isActive != nil {
+		country.IsActive = *isActive
+	}
+	
+	return s.auctionRepo.UpdateCountry(ctx, country)
+}
+
+func (s *adminService) DeleteCountry(ctx context.Context, id int) error {
+	return s.auctionRepo.DeleteCountry(ctx, id)
 }

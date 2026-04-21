@@ -27,7 +27,7 @@ function useBanners() {
   return useQuery({
     queryKey: ['banners'],
     queryFn: async () => {
-      const { data } = await client.get('/v1/api/banners')
+      const { data } = await client.get('/v1/api/admin/banners')
       return data.data as Banner[]
     },
   })
@@ -44,7 +44,8 @@ export function BannersPage() {
     title_en: '',
     image_url: '',
     target_url: '',
-    display_order: 1
+    display_order: 1,
+    is_active: true
   })
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
@@ -54,7 +55,7 @@ export function BannersPage() {
       qc.invalidateQueries({ queryKey: ['banners'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       setShowForm(false)
-      setNewBanner({ title_fr: '', title_ar: '', title_en: '', image_url: '', target_url: '', display_order: 1 })
+      setNewBanner({ title_fr: '', title_ar: '', title_en: '', image_url: '', target_url: '', display_order: 1, is_active: true })
       toast.success('تم إنشاء الإعلان بنجاح')
     },
     onError: (err: Error) => toast.error(err.message),
@@ -174,6 +175,17 @@ export function BannersPage() {
               placeholder="1"
               className="w-32"
             />
+          </div>
+          <div className="mb-6">
+            <label className="flex items-center gap-3 text-xs font-bold text-surface-muted uppercase tracking-widest">
+              <input
+                type="checkbox"
+                checked={newBanner.is_active}
+                onChange={(e) => setNewBanner({ ...newBanner, is_active: e.target.checked })}
+                className="w-4 h-4 rounded border-surface-border"
+              />
+              نشط
+            </label>
           </div>
           <div className="flex gap-3 justify-end">
             <button

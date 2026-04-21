@@ -64,7 +64,7 @@
 
 | Service | Rôle | Technologie |
 |:---|:---|:---|
-| **Auth Service** | Inscription, OTP via **Termii SMS**, JWT, Sessions | Bcrypt + JWT + Redis + Termii API |
+| **Auth Service** | Inscription, OTP via **Twilio SMS**, JWT, Sessions | Bcrypt + JWT + Redis + Twilio API |
 | **Auction Service** | CRUD enchères, logique de mise atomique | PostgreSQL + Verrouillage optimiste |
 | **Realtime Service** | Prix live, timer, notifications surenchère | Go WebSockets |
 | **Payment Service** | Dépôt, retrait, validation admin | Transactions SQL atomiques |
@@ -88,8 +88,8 @@
 | Inscription | Par numéro de téléphone + code PIN (4 chiffres) |
 | Connexion | Téléphone + PIN |
 | Sélecteur de pays | Code pays +222 (Mauritanie) |
-| Envoi OTP | Via **SMS (Termii)** — code à 6 chiffres, TTL 5 min, 3 tentatives max |
-| Vérification OTP | Code à 6 chiffres avec limite de 3 tentatives |
+| Envoi OTP | Via **SMS (Twilio)** — code à 6 chiffres, TTL 5 min, 3 tentatives max |
+| Vérification OTP | Code à 6 chiffres avec limite de 3 tentatives |  
 | Mot de passe oublié | Réinitialisation via OTP |
 | Déconnexion | Invalidation de la session JWT |
 
@@ -284,15 +284,16 @@ backend/
 
 ## 🗃 Schéma de Base de Données
 
-### Tables (21)
+### Tables (24)
 
 | # | Table | Description | Clés |
 |:--|:---|:---|:---|
 | 1 | `users` | Profils utilisateurs (rôles, vérification) | PK: `id` (UUID) |
 | 2 | `otp_verifications` | Codes OTP et traçabilité IP | FK: `phone` |
 | 3 | `categories` | Catégories hiérarchiques | FK: `parent_id` |
-| 5 | `locations` | Villes et quartiers | — |
-| 6 | `auctions` | Enchères (featured, winner link) | FK: `seller_id`, `category_id` |
+| 4 | `countries` | Pays (code, noms multilingues, drapeau) | PK: `id` (SERIAL) |
+| 5 | `locations` | Villes et quartiers (avec FK vers pays) | FK: `country_id` |
+| 6 | `auctions` | Enchères (featured, winner link) | FK: `seller_id`, `category_id`, `location_id` |
 | 7 | `auction_images` | Médias des enchères | FK: `auction_id` |
 | 8 | `bids` | Mises individuelles (indexées) | FK: `auction_id`, `user_id` |
 | 9 | `user_favorites` | Favoris | PK composite |
@@ -308,11 +309,38 @@ backend/
 | 19 | `auction_payments` | Suivi paiements post-victoire | FK: `auction_id`, `winner_id` |
 | 20 | `blocked_phones` | Blacklist modération | — |
 | 21 | `faq_items` | Questions fréquentes | — |
+| 22 | `admin_invitations` | Invitations d'administration | FK: `created_by` |
+| 23 | `audit_logs` | Logs d'audit admin | FK: `admin_id` |
+| 24 | `system_settings` | Configuration globale | FK: `updated_by` |
+
+#### Table: `countries`
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `id` | SERIAL | Identifiant unique (PK). |
+| `code` | VARCHAR(2) | Code pays ISO 3166-1 alpha-2 (ex: MR, SN). |
+| `name_ar` | VARCHAR(100) | Nom du pays en arabe. |
+| `name_fr` | VARCHAR(100) | Nom du pays en français. |
+| `name_en` | VARCHAR(100) | Nom du pays en anglais. |
+| `flag_emoji` | VARCHAR(10) | Drapeau emoji (ex: 🇲🇷, 🇸🇳). |
+| `is_active` | BOOLEAN | Pays actif pour les enchères. |
+| `created_at` | TIMESTAMP | Date de création. |
+| `updated_at` | TIMESTAMP | Date de dernière modification. |
+
+#### Table: `locations`
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `id` | SERIAL | Identifiant unique (PK). |
+| `city_name_ar` | VARCHAR(100) | Nom de la ville en arabe. |
+| `city_name_fr` | VARCHAR(100) | Nom de la ville en français. |
+| `area_name_ar` | VARCHAR(100) | Nom de la zone/quartier en arabe. |
+| `area_name_fr` | VARCHAR(100) | Nom de la zone/quartier en français. |
+| `country_id` | INT | FK vers `countries.id`. |
 
 ### Diagramme Relationnel (ERD)
 
 ```mermaid
 erDiagram
+    countries ||--o{ locations : "contient"
     users ||--o{ auctions : "vend"
     users ||--o{ bids : "enchérit"
     users ||--|| wallets : "possède"
@@ -500,7 +528,7 @@ go run cmd/server/main.go
 | **JWT (golang-jwt)** | Authentification stateless |
 | **Cloudflare R2** | Stockage media (S3-compatible, 10Go gratuits, puis 0.015$/Go/mois) |
 | **Firebase FCM** | Push notifications |
-| **Termii SMS API** | Envoi et vérification des OTP par SMS (marché mauritanien) |
+| **Twilioi SMS API** | Envoi et vérification des OTP par SMS (marché mauritanien) |
 
 ---
 
@@ -511,8 +539,8 @@ go run cmd/server/main.go
 - [x] Conception du schéma SQL (20+ tables)
 - [x] Définition des endpoints API (~45 routes)
 - [/] Génération des structs Go
-- [ ] Implémentation Auth Service (OTP via **Termii** + JWT)
-- [ ] Intégration SDK Termii (envoi + vérification OTP `termii_pin_id`)
+- [ ] Implémentation Auth Service (OTP via **Twilioi** + JWT)
+- [ ] Intégration SDK Twilioi (envoi + vérification OTP `Twilioi_pin_id`)
 - [ ] Implémentation Auction CRUD
 
 ### Phase 2 — Core Features

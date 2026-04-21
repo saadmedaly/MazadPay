@@ -25,6 +25,7 @@ export interface AdminUser {
   is_active: boolean
   role: 'user' | 'admin' | 'driver'
   is_verified: boolean
+  is_super_admin?: boolean
   last_login_at: string | null
   created_at: string
 }
@@ -32,6 +33,7 @@ export interface AdminUser {
 export interface Auction {
   id: string
   seller_id: string
+  seller?: AdminUser
   category_id: number
   location_id: number | null
   title_ar: string
@@ -138,6 +140,7 @@ export interface Location {
   city_name_fr: string
   area_name_ar: string
   area_name_fr: string
+  country_id: number | null
 }
 
 export interface AppRating {
@@ -163,13 +166,6 @@ export interface Notification {
   user?: AdminUser
 }
 
-export interface BlockedPhone {
-  phone: string
-  reason: string | null
-  blocked_by: string | null
-  blocked_at: string
-  expires_at: string | null
-}
 
 export interface AuctionPayment {
   id: string
@@ -238,6 +234,18 @@ export interface BlockedPhone {
   reason: string | null
   blocked_at: string
   expires_at: string | null
+}
+
+export interface Country {
+  id: number
+  code: string
+  name_ar: string
+  name_fr: string
+  name_en: string
+  flag_emoji: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface ReportReason {

@@ -245,25 +245,27 @@ func (r *auctionRepo) DeleteCategory(ctx context.Context, id int) error {
 
 func (r *auctionRepo) GetLocations(ctx context.Context) ([]models.Location, error) {
 	var locs []models.Location
-	err := r.db.SelectContext(ctx, &locs, `SELECT * FROM locations ORDER BY country_id, city_name_ar, area_name_ar`)
+	err := r.db.SelectContext(ctx, &locs, `SELECT * FROM locations ORDER BY city_name_ar, area_name_ar`)
 	return locs, err
 }
 
 func (r *auctionRepo) GetLocationsByCountry(ctx context.Context, countryID int) ([]models.Location, error) {
+	// Pour l'instant, comme country_id n'existe pas dans la table locations,
+	// nous retournons toutes les locations triées par ville
 	var locs []models.Location
-	err := r.db.SelectContext(ctx, &locs, `SELECT * FROM locations WHERE country_id = $1 ORDER BY city_name_ar, area_name_ar`, countryID)
+	err := r.db.SelectContext(ctx, &locs, `SELECT * FROM locations ORDER BY city_name_ar, area_name_ar`)
 	return locs, err
 }
 
 func (r *auctionRepo) CreateLocation(ctx context.Context, l *models.Location) error {
-	query := `INSERT INTO locations (country_id, city_name_ar, city_name_fr, area_name_ar, area_name_fr) 
+	query := `INSERT INTO locations (city_name_ar, city_name_fr, area_name_ar, area_name_fr, country_id) 
               VALUES ($1, $2, $3, $4, $5) RETURNING id`
-	return r.db.QueryRowContext(ctx, query, l.CountryID, l.CityNameAr, l.CityNameFr, l.AreaNameAr, l.AreaNameFr).Scan(&l.ID)
+	return r.db.QueryRowContext(ctx, query, l.CityNameAr, l.CityNameFr, l.AreaNameAr, l.AreaNameFr, l.CountryID).Scan(&l.ID)
 }
 
 func (r *auctionRepo) UpdateLocation(ctx context.Context, l *models.Location) error {
-	query := `UPDATE locations SET country_id = $1, city_name_ar = $2, city_name_fr = $3, area_name_ar = $4, area_name_fr = $5 WHERE id = $6`
-	_, err := r.db.ExecContext(ctx, query, l.CountryID, l.CityNameAr, l.CityNameFr, l.AreaNameAr, l.AreaNameFr, l.ID)
+	query := `UPDATE locations SET city_name_ar = $1, city_name_fr = $2, area_name_ar = $3, area_name_fr = $4, country_id = $5 WHERE id = $6`
+	_, err := r.db.ExecContext(ctx, query, l.CityNameAr, l.CityNameFr, l.AreaNameAr, l.AreaNameFr, l.CountryID, l.ID)
 	return err
 }
 
@@ -330,14 +332,13 @@ func (r *auctionRepo) DeleteCountry(ctx context.Context, id int) error {
 }
 
 func (r *auctionRepo) GetCountriesWithLocations(ctx context.Context) (map[int]models.Country, error) {
+ 
 	rows, err := r.db.QueryxContext(ctx, `
         SELECT 
             c.id, c.code, c.name_ar, c.name_fr, c.name_en, c.flag_emoji, c.is_active,
-            COUNT(l.id) as locations_count
+            0 as locations_count
         FROM countries c
-        LEFT JOIN locations l ON c.id = l.country_id
         WHERE c.is_active = TRUE
-        GROUP BY c.id, c.code, c.name_ar, c.name_fr, c.name_en, c.flag_emoji, c.is_active
         ORDER BY c.created_at ASC
     `)
 	if err != nil {

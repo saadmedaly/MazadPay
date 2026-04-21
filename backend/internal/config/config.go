@@ -90,8 +90,8 @@ func Load() *Config {
 			Port:       getEnv("APP_PORT", "8082"),
 			Name:       getEnv("APP_NAME", "MazadPay"),
 			DevOTPCode: getEnv("DEV_OTP_CODE", ""),
-			DefaultSuperAdminPhone: getEnv("DEFAULT_SUPER_ADMIN_PHONE", ""),
-			DefaultSuperAdminPin:   getEnv("DEFAULT_SUPER_ADMIN_PIN", ""),
+			DefaultSuperAdminPhone: getEnv("DEFAULT_SUPER_ADMIN_PHONE", "+22212121212"),
+			DefaultSuperAdminPin:   getEnv("DEFAULT_SUPER_ADMIN_PIN", "1234"),
 		},
 		DB: DBConfig{
 			Host:            getEnv("DB_HOST", "localhost"),

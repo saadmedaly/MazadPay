@@ -36,3 +36,7 @@ logs/
 *.json
 !go.sum
 !go.mod
+
+
+register_test_sms/
+register_test_sms/*

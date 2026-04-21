@@ -29,7 +29,7 @@ CREATE TABLE users (
 CREATE TABLE otp_verifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     phone VARCHAR(20) NOT NULL,
-    termii_pin_id VARCHAR(100) NOT NULL,
+    twilio_sid VARCHAR(100) NOT NULL,
     purpose VARCHAR(20) NOT NULL DEFAULT 'register',
     attempts INT DEFAULT 0,
     max_attempts INT DEFAULT 3,

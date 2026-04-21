@@ -112,7 +112,7 @@ func main() {
 		if err := userRepo.SeedDefaultSuperAdmin(context.Background(), 
 			cfg.App.DefaultSuperAdminPhone, 
 			cfg.App.DefaultSuperAdminPin,
-			"Super Admin",
+			"mazadpay superadmin",
 			"admin@mazadpay.com",
 		); err != nil {
 			logger.Error("Failed to seed default super admin", zap.Error(err))

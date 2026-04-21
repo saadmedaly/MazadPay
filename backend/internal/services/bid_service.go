@@ -116,6 +116,35 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 			return err
 		}
 
+		// 7. Broadcast WebSocket en temps réel
+		go func() {
+			// Récupérer les infos utilisateur pour le masquage
+			var userPhone string
+			err := s.db.QueryRowContext(ctx, "SELECT phone FROM users WHERE id = $1", userID).Scan(&userPhone)
+			if err != nil {
+				return
+			}
+			// Masquer le numéro (garder 4 derniers chiffres)
+			if len(userPhone) >= 4 {
+				userPhone = "####" + userPhone[len(userPhone)-4:]
+			}
+
+			// Préparer le payload WebSocket
+			payload := ws.WSEvent{
+				Type: "bid_placed",
+				Payload: ws.BidPlacedPayload{
+					AuctionID:    auctionID.String(),
+					NewPrice:     amount.InexactFloat64(),
+					BidderMasked: userPhone,
+					BidCount:     0, // À calculer depuis la base
+					SecondsLeft:  int64(auction.EndTime.Sub(time.Now()).Seconds()),
+				},
+			}
+
+			// Envoyer à tous les clients de l'enchère
+			s.hub.Broadcast(auctionID, payload)
+		}()
+
 		createdBid = bid
 		return nil
 	})

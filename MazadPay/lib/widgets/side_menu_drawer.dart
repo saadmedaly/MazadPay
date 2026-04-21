@@ -8,7 +8,6 @@ import 'package:mezadpay/pages/about_mazad_pay_page.dart';
 import 'package:mezadpay/pages/how_to_bid_page.dart';
 import 'package:mezadpay/pages/my_auctions_page.dart';
 import 'package:mezadpay/pages/favorites_page.dart';
-import 'package:mezadpay/pages/support_page.dart';
 import 'package:mezadpay/pages/all_auctions_page.dart';
 import 'package:mezadpay/pages/privacy_policy_page.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
