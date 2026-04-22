@@ -401,15 +401,15 @@ export function LocationsPage() {
             {editingLocation || activeTab === 'locations' ? (
               <form onSubmit={handleSubmit} className="p-6 space-y-6">
                 <div className="mb-6">
-                  <label className="text-xs text-mazad-primary font-bold block">اختر الدولة</label>
+                  <label className="text-xs  text-mazad-primary font-bold block">اختر الدولة</label>
                   <select
                     value={form.country_id}
                     onChange={e => setForm(f => ({ ...f, country_id: e.target.value }))}
-                    className="w-full px-4 py-3 bg-surface-input border border-surface-border rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-mazad-primary/50 focus:border-mazad-primary"
+                    className="w-full px-4 py-3 bg-[#0f1117] border border-surface-border rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-mazad-primary/50 focus:border-mazad-primary"
                   >
-                    <option value="">اختر الدولة...</option>
+                    <option value="" className='bg-[#0f1117]'>اختر الدولة...</option>
                     {countries?.map(country => (
-                      <option key={country.id} value={country.id}>
+                      <option key={country.id} value={country.id} className='bg-[#0f1117]'>
                         {country.flag_emoji} {country.name_ar}
                       </option>
                     ))}

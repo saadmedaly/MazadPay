@@ -82,6 +82,7 @@ export const useNotifications = () => {
 
 // Hook for sending notifications (admin functionality)
 export const useSendNotification = () => {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (data: {
       user_id?: string;
@@ -95,6 +96,7 @@ export const useSendNotification = () => {
       return response.data;
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-notifications'] });
       toast.success('Notification envoyée avec succès');
     },
     onError: (error: any) => {
@@ -113,7 +115,6 @@ export const useFetchNotifications = () => {
   });
 };
 
-// Hook for fetching admin notifications (all notifications)
 export const useFetchAdminNotifications = (status: string = 'all', limit: number = 50) => {
   return useQuery({
     queryKey: ['admin-notifications', status, limit],
@@ -122,7 +123,6 @@ export const useFetchAdminNotifications = (status: string = 'all', limit: number
         params: { status, limit }
       });
       const data = response.data.data || [];
-      // Remove duplicates by ID
       const uniqueIds = new Set();
       return data.filter((notif: any) => {
         if (uniqueIds.has(notif.id)) return false;
@@ -142,7 +142,7 @@ export const useDeleteNotification = () => {
       await api.delete(`/v1/api/admin/notifications/${id}`);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications'] });
+      qc.invalidateQueries({ queryKey: ['admin-notifications'] });
       toast.success('Notification supprimée avec succès');
     },
     onError: (error: any) => {
@@ -160,7 +160,7 @@ export const useMarkNotificationAsRead = () => {
       await api.put(`/v1/api/admin/notifications/${id}/read`);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications'] });
+      qc.invalidateQueries({ queryKey: ['admin-notifications'] });
       toast.success('Notification marquée comme lue');
     },
     onError: (error: any) => {
@@ -178,7 +178,7 @@ export const useMarkAllAsReadAdmin = () => {
       await api.put(`/v1/api/admin/notifications/read-all`);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications'] });
+      qc.invalidateQueries({ queryKey: ['admin-notifications'] });
       toast.success('Toutes les notifications marquées comme lues');
     },
     onError: (error: any) => {

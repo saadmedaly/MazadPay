@@ -25,7 +25,7 @@ type NotificationService interface {
 	CleanupOldNotifications(ctx context.Context) error
 
 	// Admin methods
-	AdminListNotifications(ctx context.Context, status string, limit int) ([]models.Notification, error)
+	AdminListNotifications(ctx context.Context, userID uuid.UUID, status string, limit int) ([]models.Notification, error)
 	DeleteNotification(ctx context.Context, id uuid.UUID) error
 
 	// WebSocket real-time notifications
@@ -189,8 +189,8 @@ func (s *notificationService) CleanupOldNotifications(ctx context.Context) error
 	return s.repo.DeleteOld(ctx, 30)
 }
 
-func (s *notificationService) AdminListNotifications(ctx context.Context, status string, limit int) ([]models.Notification, error) {
-	return s.repo.AdminList(ctx, status, limit)
+func (s *notificationService) AdminListNotifications(ctx context.Context, userID uuid.UUID, status string, limit int) ([]models.Notification, error) {
+	return s.repo.AdminList(ctx, userID, status, limit)
 }
 
 func (s *notificationService) DeleteNotification(ctx context.Context, id uuid.UUID) error {

@@ -87,17 +87,16 @@ func (h *NotificationHandler) MarkAllAsRead(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
-	_, err := strconv.ParseUint(c.Params("id"), 10, 32)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
-	}
-
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
-	notifUUID := uuid.Must(uuid.Parse(c.Params("id")))
+	notifUUID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
+	}
+
 	if err := h.svc.MarkAsRead(c.Context(), notifUUID, userID); err != nil {
 		h.logger.Error("failed to mark notification as read", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to mark as read"})
@@ -117,7 +116,12 @@ func (h *NotificationHandler) AdminList(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(limitStr)
 	status := c.Query("status", "all")
 
-	notifications, err := h.svc.AdminListNotifications(c.Context(), status, limit)
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
+
+	notifications, err := h.svc.AdminListNotifications(c.Context(), userID, status, limit)
 	if err != nil {
 		h.logger.Error("failed to list notifications", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list notifications"})

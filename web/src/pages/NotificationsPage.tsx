@@ -39,15 +39,18 @@ export const NotificationsPage = () => {
       refetch();
     } catch (err) {
       // Error handling is done in the hook
+      console.log(err, 'send notification error');
     }
   };
 
   const handleDeleteNotification = async (id: string) => {
     try {
       await deleteNotification.mutateAsync(id);
+      setDeleteId(null);
       refetch();
+ 
     } catch (err) {
-      // Error handling is done in the hook
+      console.log(err, 'delete notification error');
     }
   };
 
@@ -56,6 +59,7 @@ export const NotificationsPage = () => {
       await markAsRead.mutateAsync(id);
       refetch();
     } catch (err) {
+      console.log(err, 'mark as read error');
       // Error handling is done in the hook
     }
   };
@@ -65,6 +69,7 @@ export const NotificationsPage = () => {
       await markAllAsRead.mutateAsync();
       refetch();
     } catch (err) {
+      console.log(err, 'mark all as read error');
       // Error handling is done in the hook
     }
   };
@@ -83,8 +88,7 @@ export const NotificationsPage = () => {
     }
   };
 
-  // Deduplicate notifications by ID
-  const uniqueNotifications = notifications.filter((notif: any, index: number, self: any[]) => 
+   const uniqueNotifications = notifications.filter((notif: any, index: number, self: any[]) => 
     index === self.findIndex((n) => n.id === notif.id)
   );
   

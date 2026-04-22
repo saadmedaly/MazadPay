@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/mazadpay/backend/internal/models"
@@ -22,7 +22,7 @@ type NotificationRepository interface {
 	DeleteOld(ctx context.Context, days int) error
 
 	// Admin methods
-	AdminList(ctx context.Context, status string, limit int) ([]models.Notification, error)
+	AdminList(ctx context.Context, userID uuid.UUID, status string, limit int) ([]models.Notification, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
@@ -39,7 +39,10 @@ func (r *notificationRepo) Create(ctx context.Context, n *models.Notification) e
 		INSERT INTO notifications (id, user_id, type, title, body, reference_id, reference_type, data)
 		VALUES (:id, :user_id, :type, :title, :body, :reference_id, :reference_type, :data)
 	`, n)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to create notification: %w", err)
+	}
+	return nil
 }
 
 func (r *notificationRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit int) ([]models.Notification, error) {
@@ -58,12 +61,18 @@ func (r *notificationRepo) ListByUserID(ctx context.Context, userID uuid.UUID, l
 
 func (r *notificationRepo) MarkAllAsRead(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE notifications SET is_read = true WHERE user_id = $1`, userID)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to mark notifications as read: %w", err)
+	}
+	return nil
 }
 
 func (r *notificationRepo) MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2`, id, userID)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to mark notification as read: %w", err)
+	}
+	return nil
 }
 
 func (r *notificationRepo) SavePushToken(ctx context.Context, token *models.PushToken) error {
@@ -75,7 +84,10 @@ func (r *notificationRepo) SavePushToken(ctx context.Context, token *models.Push
 			is_active = true,
 			updated_at = now()
 	`, token)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to save push token: %w", err)
+	}
+	return nil
 }
 
 func (r *notificationRepo) GetPushTokens(ctx context.Context, userID uuid.UUID) ([]string, error) {
@@ -86,7 +98,10 @@ func (r *notificationRepo) GetPushTokens(ctx context.Context, userID uuid.UUID) 
 
 func (r *notificationRepo) DeactivateToken(ctx context.Context, fcmToken string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE push_tokens SET is_active = false WHERE fcm_token = $1`, fcmToken)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to deactivate token: %w", err)
+	}
+	return nil
 }
 
 func (r *notificationRepo) GetAllActiveTokens(ctx context.Context) ([]models.PushToken, error) {
@@ -103,23 +118,28 @@ func (r *notificationRepo) GetAllActiveTokens(ctx context.Context) ([]models.Pus
 
 func (r *notificationRepo) DeleteOld(ctx context.Context, days int) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM notifications WHERE created_at < now() - ($1 || ' days')::interval`, days)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to delete old notifications: %w", err)
+	}
+	return nil
 }
 
-func (r *notificationRepo) AdminList(ctx context.Context, status string, limit int) ([]models.Notification, error) {
+func (r *notificationRepo) AdminList(ctx context.Context, userID uuid.UUID, status string, limit int) ([]models.Notification, error) {
 	var notifications []models.Notification
-	query := `SELECT * FROM notifications`
+	query := `SELECT * FROM notifications WHERE user_id = $1`
+	params := []interface{}{userID}
 
 	if status != "all" && status != "" {
 		if status == "unread" {
-			query += ` WHERE is_read = false`
+			query += ` AND is_read = false`
 		} else if status == "read" {
-			query += ` WHERE is_read = true`
+			query += ` AND is_read = true`
 		}
 	}
-	query += ` ORDER BY created_at DESC LIMIT $1`
+	params = append(params, limit)
+	query += ` ORDER BY created_at DESC LIMIT $` + fmt.Sprintf("%d", len(params))
 
-	err := r.db.SelectContext(ctx, &notifications, query, limit)
+	err := r.db.SelectContext(ctx, &notifications, query, params...)
 	if err != nil {
 		return nil, err
 	}
@@ -131,5 +151,8 @@ func (r *notificationRepo) AdminList(ctx context.Context, status string, limit i
 
 func (r *notificationRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM notifications WHERE id = $1`, id)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to delete notification: %w", err)
+	}
+	return nil
 }
