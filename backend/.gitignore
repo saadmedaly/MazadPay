@@ -42,3 +42,6 @@ register_test_sms/
 register_test_sms/*
 configs/*
 test_user_interface/
+.env 
+.env.*
+*.env
