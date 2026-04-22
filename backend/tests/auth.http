@@ -21,7 +21,7 @@ Content-Type: application/json
     "title": "iPhone 15 Pro Max",
     "description": "Smartphone Apple en excellent état",
     "starting_price": 15000,
-    "category_id": 1,
+    "category_id": "1",
     "location": "Casablanca"
 }
 
@@ -31,9 +31,15 @@ Authorization: Bearer {{login.response.body.data.token}}
 Content-Type: application/json
 
 {
-    "title": "Promo Ramadan 2025",
-    "description": "Bannière publicitaire pour les offres spéciales",
+    "title_ar": "إعلان رمضان 2025",
+    "title_fr": "Promo Ramadan 2025",
+    "title_en": "Ramadan Promo 2025",
+    "description_ar": "إعلان ترويجي للعروض الخاصة",
+    "description_fr": "Bannière publicitaire pour les offres spéciales",
+    "description_en": "Promotional banner for special offers",
     "image_url": "https://example.com/banner.jpg",
-    "link_url": "https://mazadpay.com/offres"
+    "link_url": "https://mazadpay.com/offres",
+    "starts_at": "2025-03-01T00:00:00Z",
+    "ends_at": "2025-04-30T23:59:59Z"
 }
 

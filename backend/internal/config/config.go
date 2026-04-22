@@ -108,7 +108,7 @@ func Load() *Config {
 			URL:                    getEnv("REDIS_URL", "redis://localhost:6379/0"),
 			OTPTTLMinutes:          getEnvInt("REDIS_OTP_TTL_MINUTES", 5),
 			RateLimitWindowSeconds: getEnvInt("REDIS_RATE_LIMIT_WINDOW_SECONDS", 900),
-			RateLimitMaxAttempts:   getEnvInt("REDIS_RATE_LIMIT_MAX_ATTEMPTS", 3),
+			RateLimitMaxAttempts:   getEnvInt("REDIS_RATE_LIMIT_MAX_ATTEMPTS", 6),
 		},
 		JWT: JWTConfig{
 			Secret:            getEnv("JWT_SECRET", ""),
