@@ -12,7 +12,7 @@ import (
 
 type WalletService interface {
 	GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error)
-	InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error)
+	InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string) (*models.Transaction, error)
 	UploadReceipt(ctx context.Context, txID uuid.UUID, receiptURL string) error
 	RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error)
 	GetTransactions(ctx context.Context, userID uuid.UUID, page, perPage int) ([]models.Transaction, int, error)
@@ -32,14 +32,16 @@ func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*mode
 	return s.walletRepo.GetByUserID(ctx, userID)
 }
 
-func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error) {
+func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string) (*models.Transaction, error) {
 	tx := &models.Transaction{
-		ID:        uuid.New(),
-		UserID:    userID,
-		Type:      "deposit",
-		Amount:    amount,
-		Gateway:   &gateway,
-		Status:    "pending",
+		ID:                 uuid.New(),
+		UserID:             userID,
+		Type:               "deposit",
+		Amount:             amount,
+		Gateway:            &gateway,
+		Status:             "pending",
+		PaymentMethod:      &paymentMethod,
+		ReceiptImageTemp:   &receiptImageTemp,
 	}
 	if err := s.txRepo.Create(ctx, tx); err != nil {
 		return nil, err

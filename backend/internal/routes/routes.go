@@ -39,13 +39,19 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath, logger, adminHub)
 	smsSvc := services.NewSMSService(cfg.Twilio.AccountSID, cfg.Twilio.AuthToken, cfg.Twilio.PhoneNumber, logger)
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4)
-	auctionSvc := services.NewAuctionService(auctionRepo, reportRepo, notifSvc)
+	auctionSvc := services.NewAuctionService(auctionRepo, reportRepo, notifSvc, userRepo)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
 	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo)
 	walletSvc := services.NewWalletService(walletRepo, txRepo)
 	contentSvc := services.NewContentService(contentRepo, notifSvc)
 	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, auditRepo, notifSvc)
+	
+	// New services from migration 000031
+	paymentMethodSvc := services.NewPaymentMethodService(db)
+	auctionBoostSvc := services.NewAuctionBoostService(db)
+	deliveryDriverSvc := services.NewDeliveryDriverService(db)
+	bidAutoBidSvc := services.NewBidAutoBidService(db, bidSvc, walletSvc)
 
 	api := app.Group("/v1/api")
 
@@ -60,6 +66,11 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	reqHandler := handlers.NewRequestHandler(reqSvc, logger)
 	contentHandler := handlers.NewContentHandler(contentSvc, logger)
 	notifHandler := handlers.NewNotificationHandler(notifSvc, logger)
+	// New handlers with services
+	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodSvc, logger)
+	auctionBoostHandler := handlers.NewAuctionBoostHandler(auctionBoostSvc, logger)
+	deliveryDriverHandler := handlers.NewDeliveryDriverHandler(deliveryDriverSvc, logger)
+	bidAutoBidHandler := handlers.NewBidAutoBidHandler(bidAutoBidSvc, logger)
 
 	// WebSocket registration
 	app.Use("/ws", wsHandler.UpgradeMiddleware())
@@ -74,13 +85,18 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 	// Routes registration
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
-	setupAuctionRoutes(api, auctionSvc, bidHandler, cfg.JWT.Secret, logger)
+	setupAuctionRoutes(api, auctionSvc, bidHandler, userHandler, cfg.JWT.Secret, logger)
 	setupUserRoutes(api, userHandler, walletHandler, cfg.JWT.Secret, logger)
-	setupAdminRoutes(api, adminHandler, cfg.JWT.Secret, logger)
+	setupAdminRoutes(api, adminHandler, userHandler, cfg.JWT.Secret, logger)
 	setupBannerRoutes(api, bannerHandler, cfg.JWT.Secret, logger)
 	setupContentRoutes(api, contentHandler, cfg.JWT.Secret, logger)
 	setupNotificationRoutes(api, notifHandler, cfg.JWT.Secret, logger)
 	setupRequestRoutes(api, reqHandler, cfg.JWT.Secret, logger, auditRepo, rdb, cfg)
+	// New routes
+	setupPaymentMethodRoutes(api, paymentMethodHandler, cfg.JWT.Secret, logger)
+	setupAuctionBoostRoutes(api, auctionBoostHandler, cfg.JWT.Secret, logger)
+	setupDeliveryDriverRoutes(api, deliveryDriverHandler, cfg.JWT.Secret, logger)
+	setupBidAutoBidRoutes(api, bidAutoBidHandler, cfg.JWT.Secret, logger)
 
 	return auctionSvc, notifSvc
 }
@@ -106,7 +122,7 @@ func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, adminHandle
 	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
 }
 
-func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bidHandler *handlers.BidHandler, jwtSecret string, logger *zap.Logger) {
+func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bidHandler *handlers.BidHandler, userHandler *handlers.UserHandler, jwtSecret string, logger *zap.Logger) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger)
 	h := handlers.NewAuctionHandler(auctionSvc, logger)
 
@@ -126,12 +142,29 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	// Protected routes
 	auctions := api.Group("/auctions", jwtMiddleware)
 	auctions.Post("/", h.Create)
+	auctions.Put("/:id", h.Update) // Modifier son enchère
+	auctions.Delete("/:id", h.Delete) // Supprimer son enchère
 	auctions.Post("/:id/report", h.Report) // CONCEPTION Signalements
 	auctions.Post("/:id/images", h.AddImages)
 	auctions.Post("/:id/buy-now", h.BuyNow)
 	auctions.Post("/:id/cancel", h.Cancel)
 	auctions.Post("/:id/relist", h.Relist)
 	auctions.Post("/:id/extend", h.Extend)
+	auctions.Get("/:id/bid-status", h.GetBidStatus) // Statut de ma bid
+	auctions.Get("/:id/winner", h.GetWinner) // Détails du gagnant
+	auctions.Post("/:id/contact", h.ContactSeller) // Contacter vendeur
+
+	// Consolidation endpoints /my/*
+	my := api.Group("/my", jwtMiddleware)
+	my.Get("/auctions", userHandler.MyAuctions) // Consolidation endpoint
+	my.Get("/auctions/active", userHandler.MyAuctionsActive)
+	my.Get("/auctions/ended", userHandler.MyAuctionsEnded)
+	my.Get("/auctions/pending", userHandler.MyAuctionsPending)
+	my.Get("/bids", userHandler.MyBids) // Consolidation endpoint
+	my.Get("/bids/active", userHandler.MyBidsActive)
+	my.Get("/bids/won", userHandler.MyWinnings)
+	my.Get("/bids/lost", userHandler.MyBidsLost)
+	my.Get("/watchlist", userHandler.ListFavorites) // Enchères suivies
 
 	// Bids (Protected place)
 	api.Post("/auctions/:id/bids", jwtMiddleware, bidHandler.Place)
@@ -151,6 +184,10 @@ func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, wallet
 	users.Put("/me/language", userHandler.UpdateLanguage)
 	users.Put("/me/notification-prefs", userHandler.UpdateNotificationPrefs)
 
+	// User Settings (new)
+	users.Get("/me/settings", userHandler.GetUserSettings)
+	users.Put("/me/settings", userHandler.UpdateUserSettings)
+
 	// Favorites
 	users.Get("/me/favorites", userHandler.ListFavorites)
 	users.Post("/me/favorites/:auction_id", userHandler.AddFavorite)
@@ -168,13 +205,14 @@ func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, wallet
 	users.Post("/wallet/withdraw", walletHandler.Withdraw)
 	users.Get("/wallet/transactions", walletHandler.Transactions)
 	users.Get("/wallet/transactions/:id", walletHandler.GetTransaction)
+	users.Get("/wallet/payment-methods", walletHandler.GetPaymentMethods)
 
 	// KYC
 	users.Get("/kyc", userHandler.GetKYCStatus)
 	users.Post("/kyc", userHandler.SubmitKYC)
 }
 
-func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwtSecret string, logger *zap.Logger) {
+func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, userHandler *handlers.UserHandler, jwtSecret string, logger *zap.Logger) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger)
 	adminMiddleware := middleware.AdminOnly(logger)
 
@@ -211,6 +249,7 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwt
 	// KYC management
 	admin.Get("/kyc", adminHandler.ListKYCs)
 	admin.Put("/kyc/:user_id", adminHandler.ReviewKYC)
+	admin.Put("/users/:user_id/kyc-status", userHandler.UpdateKYCStatus)
 
 	// Category management
 	admin.Post("/categories", adminHandler.CreateCategory)
@@ -236,6 +275,35 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, jwt
 	// Settings management
 	admin.Get("/settings", adminHandler.ListSettings)
 	admin.Put("/settings/:key", adminHandler.UpdateSetting)
+
+	// Payment Methods management (from migration 000031)
+	admin.Get("/payment-methods", adminHandler.ListPaymentMethods)
+	admin.Post("/payment-methods", adminHandler.CreatePaymentMethod)
+	admin.Put("/payment-methods/:id", adminHandler.UpdatePaymentMethod)
+	admin.Delete("/payment-methods/:id", adminHandler.DeletePaymentMethod)
+
+	// Auction Car Details management (from migration 000031)
+	admin.Get("/auctions/:id/car-details", adminHandler.GetAuctionCarDetails)
+	admin.Put("/auctions/:id/car-details", adminHandler.UpdateAuctionCarDetails)
+
+	// Auction Boost management (from migration 000031)
+	admin.Get("/auction-boosts", adminHandler.ListAuctionBoosts)
+	admin.Post("/auction-boosts", adminHandler.CreateAuctionBoost)
+	admin.Delete("/auction-boosts/:id", adminHandler.DeleteAuctionBoost)
+
+	// Delivery Drivers management (from migration 000031)
+	admin.Get("/delivery-drivers", adminHandler.ListDeliveryDrivers)
+	admin.Post("/delivery-drivers", adminHandler.CreateDeliveryDriver)
+	admin.Put("/delivery-drivers/:id", adminHandler.UpdateDeliveryDriver)
+	admin.Delete("/delivery-drivers/:id", adminHandler.DeleteDeliveryDriver)
+
+	// User Settings management (from migration 000031)
+	admin.Get("/users/:id/settings", adminHandler.GetUserSettings)
+	admin.Put("/users/:id/settings", adminHandler.UpdateUserSettings)
+
+	// Bid Auto Bid management (from migration 000031)
+	admin.Get("/auto-bids", adminHandler.ListAutoBids)
+	admin.Put("/auto-bids/:id", adminHandler.UpdateAutoBid)
 }
 
 func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, jwtSecret string, logger *zap.Logger) {
@@ -345,4 +413,69 @@ func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, j
 	auditHandler := handlers.NewAuditHandler(services.NewAuditService(auditRepo), logger)
 	admin.Get("/audit/logs", auditHandler.GetAuditLogs)
 	admin.Get("/audit/logs/:entity_type/:entity_id", auditHandler.GetAuditLogsByEntity)
+}
+
+// New route setup functions for additional features
+
+func setupPaymentMethodRoutes(api fiber.Router, h *handlers.PaymentMethodHandler, jwtSecret string, logger *zap.Logger) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+	adminMiddleware := middleware.AdminOnly(logger)
+
+	// Public routes
+	api.Get("/payment-methods", h.ListPaymentMethods)
+
+	// Admin routes
+	admin := api.Group("/admin/payment-methods", jwtMiddleware, adminMiddleware)
+	admin.Post("/", h.CreatePaymentMethod)
+	admin.Put("/:id", h.UpdatePaymentMethod)
+	admin.Delete("/:id", h.DeletePaymentMethod)
+	admin.Put("/:id/toggle", h.TogglePaymentMethodStatus)
+}
+
+func setupAuctionBoostRoutes(api fiber.Router, h *handlers.AuctionBoostHandler, jwtSecret string, logger *zap.Logger) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+	adminMiddleware := middleware.AdminOnly(logger)
+
+	// User routes
+	api.Post("/auctions/:id/boost", jwtMiddleware, h.CreateBoost)
+	api.Get("/auctions/:id/boosts", jwtMiddleware, h.GetAuctionBoosts)
+	api.Delete("/auctions/:id/boosts/:boost_id", jwtMiddleware, h.CancelBoost)
+
+	// Admin routes
+	admin := api.Group("/admin/boosts", jwtMiddleware, adminMiddleware)
+	admin.Get("/active", h.GetActiveBoosts)
+	admin.Put("/:id/status", h.UpdateBoostStatus)
+}
+
+func setupDeliveryDriverRoutes(api fiber.Router, h *handlers.DeliveryDriverHandler, jwtSecret string, logger *zap.Logger) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+	adminMiddleware := middleware.AdminOnly(logger)
+
+	// Admin routes
+	admin := api.Group("/admin/drivers", jwtMiddleware, adminMiddleware)
+	admin.Post("/register", h.RegisterDriver)
+	admin.Get("/", h.ListDrivers)
+	admin.Get("/:id", h.GetDriver)
+	admin.Put("/:id", h.UpdateDriver)
+	admin.Get("/available", h.GetAvailableDrivers)
+
+	// Driver routes
+	driver := api.Group("/drivers", jwtMiddleware)
+	driver.Put("/location", h.UpdateDriverLocation)
+	driver.Put("/availability", h.ToggleAvailability)
+}
+
+func setupBidAutoBidRoutes(api fiber.Router, h *handlers.BidAutoBidHandler, jwtSecret string, logger *zap.Logger) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger)
+	adminMiddleware := middleware.AdminOnly(logger)
+
+	// User routes
+	api.Post("/auctions/:id/auto-bid", jwtMiddleware, h.CreateAutoBid)
+	api.Get("/users/auto-bids", jwtMiddleware, h.GetMyAutoBids)
+	api.Delete("/auctions/:id/auto-bid", jwtMiddleware, h.CancelAutoBid)
+	api.Put("/auctions/:id/auto-bid", jwtMiddleware, h.UpdateAutoBid)
+
+	// Admin routes
+	admin := api.Group("/admin/auctions", jwtMiddleware, adminMiddleware)
+	admin.Get("/:id/auto-bids", h.GetAuctionAutoBids)
 }

@@ -1,5 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import '../services/wallet_api.dart';
 
 
 class WithdrawPage extends StatefulWidget {
@@ -12,6 +13,76 @@ class WithdrawPage extends StatefulWidget {
 class _WithdrawPageState extends State<WithdrawPage> {
   final TextEditingController _amountController = TextEditingController();
   String _selectedMethod = 'Bank Transfer';
+  final WalletApi _walletApi = WalletApi();
+  bool _isLoading = false;
+  double _balance = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBalance();
+  }
+
+  Future<void> _loadBalance() async {
+    try {
+      final response = await _walletApi.getBalance();
+      if (response.success && response.data != null) {
+        setState(() {
+          _balance = (response.data!['balance'] ?? 0).toDouble();
+        });
+      }
+    } catch (e) {
+      // Handle error silently with localized message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_balance)),
+        );
+      }
+    }
+  }
+
+  Future<void> _makeWithdrawal() async {
+    final amount = double.tryParse(_amountController.text);
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_invalid_amount)),
+      );
+      return;
+    }
+
+    if (amount > _balance) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_insufficient_balance)),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await _walletApi.withdraw(
+        method: _selectedMethod.toLowerCase().replaceAll(' ', '_'),
+        amount: amount,
+      );
+
+      setState(() => _isLoading = false);
+
+      if (response.success) {
+        _showSuccessDialog(context);
+        _amountController.clear();
+        _loadBalance();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response.message ?? AppLocalizations.of(context)!.error_withdraw_failed)),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_connection)),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,18 +145,18 @@ class _WithdrawPageState extends State<WithdrawPage> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    _showSuccessDialog(context);
-                  },
+                  onPressed: _isLoading ? null : _makeWithdrawal,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00C58D),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  child: Text(
-                    AppLocalizations.of(context)!.text_348,
-                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          AppLocalizations.of(context)!.text_348,
+                          style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                 ),
               ),
             ],
@@ -108,7 +179,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
           Text(AppLocalizations.of(context)!.text_349, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey[600], fontSize: 14)),
           const SizedBox(height: 8),
           Text(
-            '350,000 MRU',
+            '${_balance.toStringAsFixed(2)} MRU',
             style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 32, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF)),
           ),
         ],

@@ -2425,20 +2425,140 @@ abstract class AppLocalizations {
   /// No description provided for @text_388.
   ///
   /// In ar, this message translates to:
-  /// **'مشاركة التطبيق'**
+  /// **'مشاركة'**
   String get text_388;
 
   /// No description provided for @text_389.
   ///
   /// In ar, this message translates to:
-  /// **'هل تعرف شخصا مهتما بخدمات والمزايدة ؟'**
+  /// **'هل تعرف شخصًا مهتمًا؟'**
   String get text_389;
 
   /// No description provided for @text_390.
   ///
   /// In ar, this message translates to:
-  /// **'عن مزاد باي'**
+  /// **'حول مزاد أبي'**
   String get text_390;
+
+  /// No description provided for @error_connection.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في الاتصال'**
+  String get error_connection;
+
+  /// No description provided for @error_login_failed.
+  ///
+  /// In ar, this message translates to:
+  /// **'فشل تسجيل الدخول'**
+  String get error_login_failed;
+
+  /// No description provided for @error_invalid_credentials.
+  ///
+  /// In ar, this message translates to:
+  /// **'بيانات الاعتماد غير صالحة'**
+  String get error_invalid_credentials;
+
+  /// No description provided for @error_phone_required.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم الهاتف مطلوب'**
+  String get error_phone_required;
+
+  /// No description provided for @error_otp_required.
+  ///
+  /// In ar, this message translates to:
+  /// **'رمز OTP مطلوب'**
+  String get error_otp_required;
+
+  /// No description provided for @error_otp_invalid.
+  ///
+  /// In ar, this message translates to:
+  /// **'رمز OTP غير صالح'**
+  String get error_otp_invalid;
+
+  /// No description provided for @error_loading_auctions.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تحميل المزادات'**
+  String get error_loading_auctions;
+
+  /// No description provided for @error_loading_auction_details.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تحميل تفاصيل المزاد'**
+  String get error_loading_auction_details;
+
+  /// No description provided for @error_loading_favorites.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تحميل المفضلة'**
+  String get error_loading_favorites;
+
+  /// No description provided for @error_loading_balance.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تحميل الرصيد'**
+  String get error_loading_balance;
+
+  /// No description provided for @error_deposit_failed.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في الإيداع'**
+  String get error_deposit_failed;
+
+  /// No description provided for @error_withdraw_failed.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في السحب'**
+  String get error_withdraw_failed;
+
+  /// No description provided for @error_insufficient_balance.
+  ///
+  /// In ar, this message translates to:
+  /// **'رصيد غير كافٍ'**
+  String get error_insufficient_balance;
+
+  /// No description provided for @error_loading_notifications.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تحميل الإشعارات'**
+  String get error_loading_notifications;
+
+  /// No description provided for @error_create_auction.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في إنشاء الإعلان'**
+  String get error_create_auction;
+
+  /// No description provided for @error_fill_required_fields.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى ملء جميع الحقول المطلوبة'**
+  String get error_fill_required_fields;
+
+  /// No description provided for @error_add_image.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى إضافة صورة واحدة على الأقل'**
+  String get error_add_image;
+
+  /// No description provided for @error_invalid_amount.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى إدخال مبلغ صحيح'**
+  String get error_invalid_amount;
+
+  /// No description provided for @error_no_data.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد بيانات متاحة'**
+  String get error_no_data;
+
+  /// No description provided for @text_391.
+  ///
+  /// In ar, this message translates to:
+  /// **'لديك حساب بالفعل؟'**
+  String get text_391;
 }
 
 class _AppLocalizationsDelegate

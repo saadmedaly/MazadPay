@@ -34,8 +34,10 @@ func (h *WalletHandler) GetMe(c *fiber.Ctx) error {
 
 func (h *WalletHandler) Deposit(c *fiber.Ctx) error {
 	type Request struct {
-		Amount  float64 `json:"amount"`
-		Gateway string  `json:"gateway"`
+		Amount           float64 `json:"amount" validate:"required,gt=0"`
+		Gateway          string  `json:"gateway" validate:"required"`
+		PaymentMethod    string  `json:"payment_method"` // masrvi, bankily, sedad, click, etc.
+		ReceiptImageTemp string  `json:"receipt_image_temp"` // Image uploadée avant validation
 	}
 	var req Request
 	if err := c.BodyParser(&req); err != nil {
@@ -47,7 +49,7 @@ func (h *WalletHandler) Deposit(c *fiber.Ctx) error {
 		return Unauthorized(c)
 	}
 	amount := decimal.NewFromFloat(req.Amount)
-	tx, err := h.svc.InitiateDeposit(c.Context(), userID, amount, req.Gateway)
+	tx, err := h.svc.InitiateDeposit(c.Context(), userID, amount, req.Gateway, req.PaymentMethod, req.ReceiptImageTemp)
 	if err != nil {
 		return InternalError(c, "Failed to initiate deposit")
 	}
@@ -134,4 +136,55 @@ func (h *WalletHandler) GetTransaction(c *fiber.Ctx) error {
 	}
 
 	return OK(c, tx)
+}
+
+// GetPaymentMethods - GET /api/v1/wallet/payment-methods
+func (h *WalletHandler) GetPaymentMethods(c *fiber.Ctx) error {
+	_, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	// Return list of available payment methods
+	// For now, return a static list - in production this would be dynamic
+	paymentMethods := []map[string]interface{}{
+		{
+			"code":       "masrvi",
+			"name_ar":    "مصروفي",
+			"name_fr":    "Masrivi",
+			"name_en":    "Masrivi",
+			"logo_url":   "",
+			"is_active":  true,
+			"country_id": nil,
+		},
+		{
+			"code":       "bankily",
+			"name_ar":    "بنكيلي",
+			"name_fr":    "Bankily",
+			"name_en":    "Bankily",
+			"logo_url":   "",
+			"is_active":  true,
+			"country_id": nil,
+		},
+		{
+			"code":       "sedad",
+			"name_ar":    "سداد",
+			"name_fr":    "Sedad",
+			"name_en":    "Sedad",
+			"logo_url":   "",
+			"is_active":  true,
+			"country_id": nil,
+		},
+		{
+			"code":       "click",
+			"name_ar":    "كليك",
+			"name_fr":    "Click",
+			"name_en":    "Click",
+			"logo_url":   "",
+			"is_active":  true,
+			"country_id": nil,
+		},
+	}
+
+	return OK(c, paymentMethods)
 }

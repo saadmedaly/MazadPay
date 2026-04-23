@@ -14,6 +14,8 @@ type Bid struct {
 	Amount        decimal.Decimal  `db:"amount"         json:"amount"`
 	PreviousPrice *decimal.Decimal `db:"previous_price" json:"previous_price"`
 	IsWinning     bool             `db:"is_winning"     json:"is_winning"`
+	BidderName    string           `db:"bidder_name"    json:"bidder_name,omitempty"` // Pour éviter les JOINs
 	BidderPhone   string           `db:"bidder_phone"   json:"bidder_phone,omitempty"` // Pour masquage ####xxxx
+	IsAnonymous   bool             `db:"is_anonymous"   json:"is_anonymous"`
 	CreatedAt     time.Time        `db:"created_at"     json:"created_at"`
 }

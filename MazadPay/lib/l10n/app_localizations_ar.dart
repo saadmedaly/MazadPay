@@ -1211,11 +1211,71 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_387 => 'عن مزاد أبي';
 
   @override
-  String get text_388 => 'مشاركة التطبيق';
+  String get text_388 => 'مشاركة';
 
   @override
-  String get text_389 => 'هل تعرف شخصا مهتما بخدمات والمزايدة ؟';
+  String get text_389 => 'هل تعرف شخصًا مهتمًا؟';
 
   @override
-  String get text_390 => 'عن مزاد باي';
+  String get text_390 => 'حول مزاد أبي';
+
+  @override
+  String get error_connection => 'خطأ في الاتصال';
+
+  @override
+  String get error_login_failed => 'فشل تسجيل الدخول';
+
+  @override
+  String get error_invalid_credentials => 'بيانات الاعتماد غير صالحة';
+
+  @override
+  String get error_phone_required => 'رقم الهاتف مطلوب';
+
+  @override
+  String get error_otp_required => 'رمز OTP مطلوب';
+
+  @override
+  String get error_otp_invalid => 'رمز OTP غير صالح';
+
+  @override
+  String get error_loading_auctions => 'خطأ في تحميل المزادات';
+
+  @override
+  String get error_loading_auction_details => 'خطأ في تحميل تفاصيل المزاد';
+
+  @override
+  String get error_loading_favorites => 'خطأ في تحميل المفضلة';
+
+  @override
+  String get error_loading_balance => 'خطأ في تحميل الرصيد';
+
+  @override
+  String get error_deposit_failed => 'خطأ في الإيداع';
+
+  @override
+  String get error_withdraw_failed => 'خطأ في السحب';
+
+  @override
+  String get error_insufficient_balance => 'رصيد غير كافٍ';
+
+  @override
+  String get error_loading_notifications => 'خطأ في تحميل الإشعارات';
+
+  @override
+  String get error_create_auction => 'خطأ في إنشاء الإعلان';
+
+  @override
+  String get error_fill_required_fields => 'يرجى ملء جميع الحقول المطلوبة';
+
+  @override
+  String get error_add_image => 'يرجى إضافة صورة واحدة على الأقل';
+
+  @override
+  String get error_invalid_amount => 'يرجى إدخال مبلغ صحيح';
+
+  @override
+  String get error_no_data => 'لا توجد بيانات متاحة';
+
+  @override
+  String get text_391 => 'لديك حساب بالفعل؟';
 }

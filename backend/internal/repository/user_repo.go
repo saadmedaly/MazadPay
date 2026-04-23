@@ -19,6 +19,7 @@ type UserRepository interface {
 	SetVerified(ctx context.Context, phone string) error
 	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateProfile(ctx context.Context, id uuid.UUID, fullName, email, city string) error
+	UpdateProfileExtended(ctx context.Context, id uuid.UUID, fullName, email, city, countryCode, address, postalCode, dateOfBirth, gender string) error
 	UpdateProfilePic(ctx context.Context, id uuid.UUID, url string) error
 	UpdatePin(ctx context.Context, id uuid.UUID, hash string) error
 	UpdateLanguage(ctx context.Context, id uuid.UUID, lang string) error
@@ -44,6 +45,11 @@ type UserRepository interface {
 	GetStats(ctx context.Context) (int, int, error) // Total, Verified
 	PromoteToAdmin(ctx context.Context, id uuid.UUID, fullName, email, hash string) error
 	FindAllAdmins(ctx context.Context) ([]models.User, error)
+
+	// New methods for extended functionality
+	UpdateKYCStatus(ctx context.Context, userID uuid.UUID, status string) error
+	GetUserSettings(ctx context.Context, userID uuid.UUID) (*models.UserSettings, error)
+	UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings interface{}) error
 }
 
 type userRepo struct {
@@ -339,4 +345,85 @@ func (r *userRepo) SeedDefaultSuperAdmin(ctx context.Context, phone, pin, fullNa
 	`, uuid.New(), phone, string(hash), fullName, email, "ar", "admin", true, true, true, now, now)
 
 	return err
+}
+
+// New methods implementations for extended user functionality
+
+func (r *userRepo) UpdateProfileExtended(ctx context.Context, id uuid.UUID, fullName, email, city, countryCode, address, postalCode, dateOfBirth, gender string) error {
+	query := `
+		UPDATE users SET
+			full_name = $1,
+			email = $2,
+			city = $3,
+			country_code = $4,
+			address = $5,
+			postal_code = $6,
+			date_of_birth = $7,
+			gender = $8,
+			updated_at = now()
+		WHERE id = $9
+	`
+	var dob *time.Time
+	if dateOfBirth != "" {
+		// Try different date formats
+		parsedDob, err := time.Parse("2006-01-02", dateOfBirth)
+		if err != nil {
+			// Try RFC3339 format (ISO format from frontend)
+			parsedDob, err = time.Parse(time.RFC3339, dateOfBirth)
+			if err != nil {
+				// Try with just date part
+				parsedDob, err = time.Parse("2006-01-02T15:04:05Z", dateOfBirth)
+			}
+		}
+		if err == nil {
+			dob = &parsedDob
+		}
+	}
+
+	_, err := r.db.ExecContext(ctx, query,
+		nullString(fullName),
+		nullString(email),
+		nullString(city),
+		nullString(countryCode),
+		nullString(address),
+		nullString(postalCode),
+		dob,
+		nullString(gender),
+		id,
+	)
+	return err
+}
+
+func (r *userRepo) UpdateKYCStatus(ctx context.Context, userID uuid.UUID, status string) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE users SET kyc_status = $1, updated_at = now() WHERE id = $2",
+		status, userID,
+	)
+	return err
+}
+
+func (r *userRepo) GetUserSettings(ctx context.Context, userID uuid.UUID) (*models.UserSettings, error) {
+	var settings models.UserSettings
+	err := r.db.GetContext(ctx, &settings,
+		"SELECT * FROM user_settings WHERE user_id = $1", userID,
+	)
+	if err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	return &settings, nil
+}
+
+func (r *userRepo) UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings interface{}) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE user_settings SET updated_at = now() WHERE user_id = $1`,
+		userID,
+	)
+	return err
+}
+
+func nullString(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }

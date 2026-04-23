@@ -41,6 +41,7 @@ type Auction struct {
 	ID              uuid.UUID        `db:"id"               json:"id"`
 	SellerID        uuid.UUID        `db:"seller_id"        json:"seller_id"`
 	CategoryID      int              `db:"category_id"      json:"category_id"`
+	SubCategoryID   *int             `db:"sub_category_id"  json:"sub_category_id"`
 	LocationID      *int             `db:"location_id"      json:"location_id"`
 	TitleAr         string           `db:"title_ar"         json:"title_ar"`
 	TitleFr         *string          `db:"title_fr"         json:"title_fr"`
@@ -70,6 +71,13 @@ type Auction struct {
 	BuyNowPrice     *decimal.Decimal `db:"buy_now_price"    json:"buy_now_price"`
 	Version         int              `db:"version"          json:"version"`
 	CreatedAt       time.Time        `db:"created_at"       json:"created_at"`
+	// New fields from migration 000024
+	Condition       *string          `db:"condition"         json:"condition"`
+	Brand           *string          `db:"brand"             json:"brand"`
+	IsVerified      bool             `db:"is_verified"      json:"is_verified"`
+	BoostedUntil    *time.Time       `db:"boosted_until"    json:"boosted_until"`
+	VideoURL        *string          `db:"video_url"         json:"video_url"`
+	Quantity        int              `db:"quantity"         json:"quantity"` // Nombre d'items disponibles
 
 	// Joined Fields (Metadata)
 	CategoryNameAr *string `db:"category_name_ar" json:"category"`
@@ -85,13 +93,17 @@ type AuctionImage struct {
 }
 
 type Category struct {
-	ID           int     `db:"id"            json:"id"`
-	NameAr       string  `db:"name_ar"       json:"name_ar"`
-	NameFr       string  `db:"name_fr"       json:"name_fr"`
-	NameEn       string  `db:"name_en"       json:"name_en"`
-	ParentID     *int    `db:"parent_id"     json:"parent_id"`
-	IconName     *string `db:"icon_name"     json:"icon_name"`
-	DisplayOrder int     `db:"display_order" json:"display_order"`
+	ID               int      `db:"id"               json:"id"`
+	NameAr           string   `db:"name_ar"          json:"name_ar"`
+	NameFr           string   `db:"name_fr"          json:"name_fr"`
+	NameEn           string   `db:"name_en"          json:"name_en"`
+	ParentID         *int     `db:"parent_id"        json:"parent_id"`
+	IconName         *string  `db:"icon_name"        json:"icon_name"`
+	DisplayOrder     int      `db:"display_order"    json:"display_order"`
+	// New fields from migration 000025
+	IsActive         bool     `db:"is_active"         json:"is_active"`
+	ImageURL         *string  `db:"image_url"         json:"image_url"`
+	HasSubcategories bool     `db:"has_subcategories" json:"has_subcategories"`
 }
 
 type Location struct {
@@ -112,4 +124,82 @@ type Country struct {
 	NameEn    string `db:"name_en"   json:"name_en"`
 	FlagEmoji string `db:"flag_emoji" json:"flag_emoji"`
 	IsActive  bool   `db:"is_active" json:"is_active"`
+}
+
+// New models from migration 000031
+
+type AuctionCarDetails struct {
+	ID           uuid.UUID  `db:"id"           json:"id"`
+	AuctionID    uuid.UUID  `db:"auction_id"   json:"auction_id"`
+	Manufacturer *string    `db:"manufacturer" json:"manufacturer"`
+	Model        *string    `db:"model"        json:"model"`
+	Year         *int       `db:"year"         json:"year"`
+	Mileage      *int       `db:"mileage"      json:"mileage"`
+	FuelType     *string    `db:"fuel_type"    json:"fuel_type"`
+	Transmission *string    `db:"transmission" json:"transmission"`
+	Color        *string    `db:"color"        json:"color"`
+	EngineSize   *string    `db:"engine_size"  json:"engine_size"`
+	VIN          *string    `db:"vin"          json:"vin"`
+	CreatedAt    time.Time  `db:"created_at"   json:"created_at"`
+}
+
+type PaymentMethod struct {
+	ID         int        `db:"id"         json:"id"`
+	Code       string     `db:"code"       json:"code"`
+	NameAr     string     `db:"name_ar"    json:"name_ar"`
+	NameFr     string     `db:"name_fr"    json:"name_fr"`
+	NameEn     *string    `db:"name_en"    json:"name_en"`
+	LogoURL    *string    `db:"logo_url"   json:"logo_url"`
+	IsActive   bool       `db:"is_active"  json:"is_active"`
+	CountryID  *int       `db:"country_id" json:"country_id"`
+	CreatedAt  time.Time  `db:"created_at" json:"created_at"`
+}
+
+type DeliveryDriver struct {
+	ID                  uuid.UUID       `db:"id"                   json:"id"`
+	UserID              *uuid.UUID      `db:"user_id"              json:"user_id"`
+	VehicleType         *string         `db:"vehicle_type"         json:"vehicle_type"`
+	VehiclePlate        *string         `db:"vehicle_plate"        json:"vehicle_plate"`
+	VehicleColor        *string         `db:"vehicle_color"        json:"vehicle_color"`
+	LicenseNumber       *string         `db:"license_number"       json:"license_number"`
+	Rating              *float64        `db:"rating"               json:"rating"`
+	TotalDeliveries     int             `db:"total_deliveries"     json:"total_deliveries"`
+	IsAvailable         bool            `db:"is_available"         json:"is_available"`
+	CurrentLocationLat  *float64        `db:"current_location_lat" json:"current_location_lat"`
+	CurrentLocationLng  *float64        `db:"current_location_lng" json:"current_location_lng"`
+	CreatedAt           time.Time       `db:"created_at"           json:"created_at"`
+}
+
+type AuctionBoost struct {
+	ID         uuid.UUID       `db:"id"         json:"id"`
+	AuctionID  uuid.UUID       `db:"auction_id" json:"auction_id"`
+	BoostType  string          `db:"boost_type" json:"boost_type"`
+	StartAt    time.Time       `db:"start_at"   json:"start_at"`
+	EndAt      time.Time       `db:"end_at"     json:"end_at"`
+	Amount     *decimal.Decimal `db:"amount"     json:"amount"`
+	Status     string          `db:"status"     json:"status"`
+	CreatedAt  time.Time       `db:"created_at" json:"created_at"`
+}
+
+type UserSettings struct {
+	UserID                uuid.UUID  `db:"user_id"                  json:"user_id"`
+	Currency              string     `db:"currency"                  json:"currency"`
+	Theme                 string     `db:"theme"                     json:"theme"`
+	Language              string     `db:"language"                 json:"language"`
+	NotificationsEmail    bool       `db:"notifications_email"     json:"notifications_email"`
+	NotificationsPush     bool       `db:"notifications_push"      json:"notifications_push"`
+	NotificationsSMS      bool       `db:"notifications_sms"       json:"notifications_sms"`
+	TwoFactorEnabled      bool       `db:"two_factor_enabled"      json:"two_factor_enabled"`
+	CreatedAt             time.Time  `db:"created_at"               json:"created_at"`
+	UpdatedAt             time.Time  `db:"updated_at"               json:"updated_at"`
+}
+
+type BidAutoBid struct {
+	ID               uuid.UUID       `db:"id"               json:"id"`
+	UserID           uuid.UUID       `db:"user_id"         json:"user_id"`
+	AuctionID        uuid.UUID       `db:"auction_id"      json:"auction_id"`
+	MaxAmount        decimal.Decimal `db:"max_amount"      json:"max_amount"`
+	CurrentBidAmount *decimal.Decimal `db:"current_bid_amount" json:"current_bid_amount"`
+	IsActive         bool            `db:"is_active"       json:"is_active"`
+	CreatedAt        time.Time       `db:"created_at"      json:"created_at"`
 }

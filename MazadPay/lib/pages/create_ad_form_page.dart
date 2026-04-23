@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'ad_success_page.dart';
 import '../widgets/media_picker_sheet.dart';
+import '../services/auction_api.dart';
 
 class CreateAdFormPage extends StatefulWidget {
   const CreateAdFormPage({super.key});
@@ -21,6 +22,8 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   late String _selectedSubCategory;
   late String _selectedCity;
   final List<String> _selectedImages = []; // List of assets or paths
+  final AuctionApi _auctionApi = AuctionApi();
+  bool _isLoading = false;
 
   @override
   void didChangeDependencies() {
@@ -42,6 +45,59 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   }
 
   Map<String, List<String>> _subCategoriesByMain = {};
+
+  Future<void> _submitAd() async {
+    final name = _nameController.text.trim();
+    final description = _descriptionController.text.trim();
+    final phone = _phoneController.text.trim();
+    final price = double.tryParse(_priceController.text);
+
+    if (name.isEmpty || description.isEmpty || phone.isEmpty || price == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_fill_required_fields)),
+      );
+      return;
+    }
+
+    if (_selectedImages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_add_image)),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await _auctionApi.createAuction(
+        title: name,
+        description: description,
+        startingPrice: price,
+        category: _selectedMainCategory,
+        subCategory: _selectedSubCategory,
+        location: _selectedCity,
+        images: _selectedImages,
+        phone: phone,
+      );
+
+      setState(() => _isLoading = false);
+
+      if (response.success) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const AdSuccessPage()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response.message ?? AppLocalizations.of(context)!.error_create_auction)),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_connection)),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -119,23 +175,21 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const AdSuccessPage()),
-                    );
-                  },
+                  onPressed: _isLoading ? null : _submitAd,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0081FF),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  child: Text(
-                    AppLocalizations.of(context)!.text_102,
-                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          AppLocalizations.of(context)!.text_102,
+                          style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(height: 24),

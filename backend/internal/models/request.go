@@ -32,6 +32,7 @@ type AuctionRequest struct {
 	ReviewedAt      *time.Time      `db:"reviewed_at"        json:"reviewed_at"`
 	CreatedAt       time.Time       `db:"created_at"         json:"created_at"`
 	UpdatedAt       time.Time       `db:"updated_at"         json:"updated_at"`
+	Quantity        int             `db:"quantity"          json:"quantity"` // Nombre d'items (défaut: 1)
 
 	// Relations
 	User *User `db:"-" json:"user,omitempty"`

@@ -1,13 +1,13 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Plus, Search, Pencil, Trash2,
-  AlertCircle, Loader2,  
+  AlertCircle, Loader2, ChevronRight, Folder
 } from 'lucide-react'
- import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '@/hooks/useMetadata'
- import { type ColumnDef } from '@tanstack/react-table'
+import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '@/hooks/useMetadata'
+import { type ColumnDef } from '@tanstack/react-table'
 import { type Category } from '@/types/api'
- import { PageHeader } from '@/components/shared/PageHeader'
- import { DataTable } from '@/components/shared/DataTable'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { DataTable } from '@/components/shared/DataTable'
 import { Input } from '@/components/ui/input'
 
 export function CategoriesPage() {
@@ -28,12 +28,48 @@ export function CategoriesPage() {
     parent_id: null as number | null
   })
 
-  // Filter
-  const filtered = categories?.filter(c => 
-    c.id.toString().includes(search) ||
-    c.name_ar.toLowerCase().includes(search.toLowerCase()) ||
-    c.name_fr.toLowerCase().includes(search.toLowerCase())
-  ) || []
+  // Build category hierarchy
+  const categoryTree = useMemo(() => {
+    if (!categories) return []
+    
+    const parentCategories = categories.filter(c => !c.parent_id).sort((a, b) => a.display_order - b.display_order)
+    const childCategories = categories.filter(c => c.parent_id).sort((a, b) => a.display_order - b.display_order)
+    
+    return parentCategories.map(parent => ({
+      ...parent,
+      children: childCategories.filter(child => child.parent_id === parent.id)
+    }))
+  }, [categories])
+
+  // Flatten tree for display with level indicator
+  const flattenedCategories = useMemo(() => {
+    const result: (Category & { level: number; parentName?: string })[] = []
+    
+    categoryTree.forEach(parent => {
+      result.push({ ...parent, level: 0 })
+      parent.children?.forEach(child => {
+        result.push({ 
+          ...child, 
+          level: 1, 
+          parentName: parent.name_ar 
+        })
+      })
+    })
+    
+    // Filter
+    if (!search) return result
+    return result.filter(c => 
+      c.id.toString().includes(search) ||
+      c.name_ar.toLowerCase().includes(search.toLowerCase()) ||
+      c.name_fr.toLowerCase().includes(search.toLowerCase()) ||
+      c.parentName?.toLowerCase().includes(search.toLowerCase())
+    )
+  }, [categoryTree, search])
+
+  // Get only parent categories for dropdown
+  const parentCategories = useMemo(() => {
+    return categories?.filter(c => !c.parent_id).sort((a, b) => a.display_order - b.display_order) || []
+  }, [categories])
 
   const openAdd = () => {
     setEditingCategory(null)
@@ -79,30 +115,77 @@ export function CategoriesPage() {
     }
   }
 
-  const columns: ColumnDef<Category>[] = [
+  const columns: ColumnDef<Category & { level: number; parentName?: string }>[] = [
     {
       header: 'ID',
       accessorKey: 'id',
-      cell: ({ getValue }) => <span className="font-mono text-xs text-surface-muted">#{getValue<number>()}</span>
+      cell: ({ row }) => {
+        const level = row.original.level
+        return (
+          <div className="flex items-center gap-2">
+            {level === 0 ? (
+              <Folder className="w-4 h-4 text-mazad-primary" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-surface-muted mr-4" />
+            )}
+            <span className="font-mono text-xs text-surface-muted">#{row.original.id}</span>
+          </div>
+        )
+      }
     },
     {
       header: 'الاسم (عربي)',
       accessorKey: 'name_ar',
-      cell: ({ getValue }) => <span className="font-bold text-white">{getValue<string>()}</span>
+      cell: ({ row }) => {
+        const level = row.original.level
+        const hasChildren = level === 0 && (row.original as any).children?.length > 0
+        return (
+          <div className="flex items-center gap-2">
+            <span className={`font-bold ${level === 0 ? 'text-white text-base' : 'text-surface-muted text-sm'}`}>
+              {row.original.name_ar}
+            </span>
+            {hasChildren && (
+              <span className="text-[10px] bg-mazad-primary/20 text-mazad-primary px-2 py-0.5 rounded-full">
+                {(row.original as any).children?.length} فرعية
+              </span>
+            )}
+            {level === 1 && row.original.parentName && (
+              <span className="text-[10px] text-surface-muted">
+                ← {row.original.parentName}
+              </span>
+            )}
+          </div>
+        )
+      }
     },
     {
       header: 'Nom (Français)',
       accessorKey: 'name_fr',
-      cell: ({ getValue }) => <span className="text-surface-muted" dir="ltr">{getValue<string>()}</span>
+      cell: ({ row }) => (
+        <span className={`${row.original.level === 0 ? 'text-white' : 'text-surface-muted text-sm'}`} dir="ltr">
+          {row.original.name_fr}
+        </span>
+      )
     },
     {
-      header: 'Name (English)',
-      accessorKey: 'name_en',
-      cell: ({ getValue }) => <span className="text-surface-muted" dir="ltr">{getValue<string>()}</span>
+      header: 'النوع',
+      accessorKey: 'level',
+      cell: ({ row }) => (
+        <span className={`text-xs px-2 py-1 rounded-full ${
+          row.original.level === 0 
+            ? 'bg-blue-500/20 text-blue-400' 
+            : 'bg-emerald-500/20 text-emerald-400'
+        }`}>
+          {row.original.level === 0 ? 'فئة رئيسية' : 'فئة فرعية'}
+        </span>
+      )
     },
     {
       header: 'الترتيب',
       accessorKey: 'display_order',
+      cell: ({ row }) => (
+        <span className="text-surface-muted">{row.original.display_order}</span>
+      )
     },
     {
       header: 'الإجراءات',
@@ -117,7 +200,11 @@ export function CategoriesPage() {
           </button>
           <button
             onClick={() => {
-              if (confirm('هل أنت متأكد من حذف هذه الفئة؟')) {
+              const hasChildren = (row.original as any).children?.length > 0
+              const msg = hasChildren 
+                ? 'هذه الفئة تحتوي على فئات فرعية. حذفها سيحذف جميع الفئات الفرعية أيضاً. هل أنت متأكد؟'
+                : 'هل أنت متأكد من حذف هذه الفئة؟'
+              if (confirm(msg)) {
                 deleteMut.mutate(row.original.id)
               }
             }}
@@ -163,7 +250,7 @@ export function CategoriesPage() {
         </div>
       ) : (
         <div className="admin-card overflow-hidden">
-          <DataTable columns={columns} data={filtered} />
+          <DataTable columns={columns} data={flattenedCategories} />
         </div>
       )}
 
@@ -216,12 +303,22 @@ export function CategoriesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-surface-muted font-bold block">أيقونة (اختياري)</label>
-                  <Input
-                    value={form.icon_name}
-                    onChange={e => setForm(f => ({ ...f, icon_name: e.target.value }))}
-                    placeholder="car, home, tech..."
-                  />
+                  <label className="text-xs text-surface-muted font-bold block">الفئة الأب (اختياري)</label>
+                  <select
+                    value={form.parent_id || ''}
+                    onChange={e => setForm(f => ({ ...f, parent_id: e.target.value ? parseInt(e.target.value) : null }))}
+                    className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white focus:border-mazad-primary/60 outline-none"
+                  >
+                    <option value="">فئة رئيسية (بدون أب)</option>
+                    {parentCategories.map(parent => (
+                      <option key={parent.id} value={parent.id}>
+                        {parent.name_ar} (ID: {parent.id})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-surface-muted">
+                    اتركه فارغاً لإنشاء فئة رئيسية، أو اختر فئة أب لإنشاء فئة فرعية
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs text-surface-muted font-bold block">الترتيب</label>
@@ -229,6 +326,17 @@ export function CategoriesPage() {
                     type="number"
                     value={form.display_order}
                     onChange={e => setForm(f => ({ ...f, display_order: parseInt(e.target.value) || 0 }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-surface-muted font-bold block">أيقونة (اختياري)</label>
+                  <Input
+                    value={form.icon_name}
+                    onChange={e => setForm(f => ({ ...f, icon_name: e.target.value }))}
+                    placeholder="car, home, tech..."
                   />
                 </div>
               </div>

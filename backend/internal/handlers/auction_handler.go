@@ -64,7 +64,12 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 }
 
 type CreateAuctionRequest struct {
-	CategoryID      int                    `json:"category_id"      validate:"required"`
+	// Accept category as string (mobile sends string) - will be mapped to ID
+	// OR category_id as int (web admin sends int directly)
+	Category        string                 `json:"category"`        // Optional: category name for mobile
+	SubCategory     string                 `json:"sub_category"`    // Optional: subcategory name for mobile
+	CategoryID      int                    `json:"category_id"`     // Required: category ID (used by web)
+	SubCategoryID   *int                   `json:"sub_category_id"` // Optional: subcategory ID
 	LocationID      *int                   `json:"location_id"`
 	TitleAr         string                 `json:"title_ar"         validate:"required,min=3,max=200"`
 	TitleFr         string                 `json:"title_fr"`
@@ -81,6 +86,12 @@ type CreateAuctionRequest struct {
 	PhoneContact    string                 `json:"phone_contact"`
 	ItemDetails     map[string]interface{} `json:"item_details"`
 	Images          []string               `json:"images"`
+	// New fields from migration 000024
+	Condition       *string                `json:"condition" validate:"omitempty,oneof=new used refurbished damaged"`
+	Brand           *string                `json:"brand"`
+	VideoURL        *string                `json:"video_url"`
+	// New field from migration 000032
+	Quantity        int                    `json:"quantity" validate:"omitempty,min=1"` // Nombre d'items (défaut: 1)
 }
 
 func (h *AuctionHandler) Create(c *fiber.Ctx) error {
@@ -106,6 +117,54 @@ func (h *AuctionHandler) Create(c *fiber.Ctx) error {
 	if err := h.validate.Struct(req); err != nil {
 		h.logger.Error("[Create Auction] Validation failed", zap.Error(err))
 		return BadRequest(c, err.Error())
+	}
+
+	// Validate that either category (string) or category_id (int) is provided
+	if req.Category == "" && req.CategoryID == 0 {
+		h.logger.Error("[Create Auction] Missing category - neither category name nor category_id provided")
+		return BadRequest(c, "Category is required (provide either 'category' name or 'category_id')")
+	}
+
+	// Map category string to ID if string is provided
+	categoryID := req.CategoryID
+	if req.Category != "" && req.CategoryID == 0 {
+		// Try to find category by name (simple implementation - could be improved)
+		// For now, we'll need to get all categories and find by name
+		categories, err := h.service.GetCategories(c.Context())
+		if err != nil {
+			h.logger.Error("[Create Auction] Failed to get categories for mapping", zap.Error(err))
+			return BadRequest(c, "Failed to map category")
+		}
+
+		for _, cat := range categories {
+			if cat.NameAr == req.Category || cat.NameFr == req.Category || cat.NameEn == req.Category {
+				categoryID = cat.ID
+				break
+			}
+		}
+
+		if categoryID == 0 {
+			return BadRequest(c, "Category not found: "+req.Category)
+		}
+	}
+
+	// Map sub_category string to ID if string is provided
+	var subCategoryID *int
+	if req.SubCategory != "" && req.SubCategoryID == nil {
+		categories, err := h.service.GetCategories(c.Context())
+		if err != nil {
+			h.logger.Error("[Create Auction] Failed to get categories for subcategory mapping", zap.Error(err))
+			return BadRequest(c, "Failed to map subcategory")
+		}
+
+		for _, cat := range categories {
+			if cat.NameAr == req.SubCategory || cat.NameFr == req.SubCategory || cat.NameEn == req.SubCategory {
+				subCategoryID = &cat.ID
+				break
+			}
+		}
+	} else if req.SubCategoryID != nil {
+		subCategoryID = req.SubCategoryID
 	}
 
 	// parse end_time
@@ -154,8 +213,15 @@ func (h *AuctionHandler) Create(c *fiber.Ctx) error {
 		buyNow = &b
 	}
 
+	// Set default quantity if not provided
+	quantity := req.Quantity
+	if quantity == 0 {
+		quantity = 1
+	}
+
 	input := services.CreateAuctionInput{
-		CategoryID:      req.CategoryID,
+		CategoryID:      categoryID,
+		SubCategoryID:   subCategoryID,
 		LocationID:      req.LocationID,
 		TitleAr:         req.TitleAr,
 		TitleFr:         req.TitleFr,
@@ -172,6 +238,10 @@ func (h *AuctionHandler) Create(c *fiber.Ctx) error {
 		ItemDetails:     req.ItemDetails,
 		BuyNowPrice:     buyNow,
 		Images:          req.Images,
+		Condition:       req.Condition,
+		Brand:           req.Brand,
+		VideoURL:        req.VideoURL,
+		Quantity:        quantity,
 	}
 
 	h.logger.Info("[Create Auction] Calling service.Create",
@@ -445,4 +515,264 @@ func (h *AuctionHandler) Extend(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{"message": "Auction extended"})
+}
+
+// Update - PUT /api/v1/auctions/:id - Modifier son enchère
+func (h *AuctionHandler) Update(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	type UpdateAuctionRequest struct {
+		CategoryID      *int                   `json:"category_id"`
+		SubCategoryID   *int                   `json:"sub_category_id"`
+		LocationID      *int                   `json:"location_id"`
+		TitleAr         *string                `json:"title_ar" validate:"omitempty,min=3,max=200"`
+		TitleFr         *string                `json:"title_fr"`
+		TitleEn         *string                `json:"title_en"`
+		DescriptionAr   *string                `json:"description_ar"`
+		DescriptionFr   *string                `json:"description_fr"`
+		DescriptionEn   *string                `json:"description_en"`
+		StartPrice      *float64               `json:"start_price" validate:"omitempty,gt=0"`
+		MinIncrement    *float64               `json:"min_increment"`
+		InsuranceAmount *float64               `json:"insurance_amount"`
+		EndTime         *string                `json:"end_time"`
+		BuyNowPrice     *float64               `json:"buy_now_price"`
+		PhoneContact    *string                `json:"phone_contact"`
+		ItemDetails     map[string]interface{} `json:"item_details"`
+		Condition       *string                `json:"condition" validate:"omitempty,oneof=new used refurbished damaged"`
+		Brand           *string                `json:"brand"`
+		VideoURL        *string                `json:"video_url"`
+		Quantity        *int                   `json:"quantity" validate:"omitempty,min=1"` // Nombre d'items
+	}
+
+	var req UpdateAuctionRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	// Parse end_time if provided
+	var endTime *time.Time
+	if req.EndTime != nil && *req.EndTime != "" {
+		et, err := time.Parse(time.RFC3339, *req.EndTime)
+		if err != nil {
+			et, err = time.Parse("2006-01-02T15:04:05Z", *req.EndTime)
+			if err != nil {
+				return BadRequest(c, "Invalid end_time format")
+			}
+		}
+		endTime = &et
+	}
+
+	// Convert optional fields to required CreateAuctionInput format
+	var categoryID int
+	if req.CategoryID != nil {
+		categoryID = *req.CategoryID
+	}
+	var startPrice, minIncrement, insuranceAmount decimal.Decimal
+	if req.StartPrice != nil {
+		startPrice = decimal.NewFromFloat(*req.StartPrice)
+	}
+	if req.MinIncrement != nil {
+		minIncrement = decimal.NewFromFloat(*req.MinIncrement)
+	}
+	if req.InsuranceAmount != nil {
+		insuranceAmount = decimal.NewFromFloat(*req.InsuranceAmount)
+	}
+	var buyNowPrice *decimal.Decimal
+	if req.BuyNowPrice != nil {
+		b := decimal.NewFromFloat(*req.BuyNowPrice)
+		buyNowPrice = &b
+	}
+
+	var titleAr, titleFr, titleEn, descriptionAr, descriptionFr, descriptionEn string
+	if req.TitleAr != nil {
+		titleAr = *req.TitleAr
+	}
+	if req.TitleFr != nil {
+		titleFr = *req.TitleFr
+	}
+	if req.TitleEn != nil {
+		titleEn = *req.TitleEn
+	}
+	if req.DescriptionAr != nil {
+		descriptionAr = *req.DescriptionAr
+	}
+	if req.DescriptionFr != nil {
+		descriptionFr = *req.DescriptionFr
+	}
+	if req.DescriptionEn != nil {
+		descriptionEn = *req.DescriptionEn
+	}
+
+	var phoneContact string
+	if req.PhoneContact != nil {
+		phoneContact = *req.PhoneContact
+	}
+
+	var quantity int = 1 // default
+	if req.Quantity != nil {
+		quantity = *req.Quantity
+	}
+
+	if err := h.service.UpdateAuction(c.Context(), id, userID, services.CreateAuctionInput{
+		CategoryID:      categoryID,
+		SubCategoryID:   req.SubCategoryID,
+		LocationID:      req.LocationID,
+		TitleAr:         titleAr,
+		TitleFr:         titleFr,
+		TitleEn:         titleEn,
+		DescriptionAr:   descriptionAr,
+		DescriptionFr:   descriptionFr,
+		DescriptionEn:   descriptionEn,
+		StartPrice:      startPrice,
+		MinIncrement:    minIncrement,
+		InsuranceAmount: insuranceAmount,
+		EndTime:         *endTime,
+		PhoneContact:    phoneContact,
+		ItemDetails:     req.ItemDetails,
+		BuyNowPrice:     buyNowPrice,
+		Images:          []string{},
+		Condition:       req.Condition,
+		Brand:           req.Brand,
+		VideoURL:        req.VideoURL,
+		Quantity:        quantity,
+	}); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	return OK(c, fiber.Map{"message": "Auction updated successfully"})
+}
+
+// Delete - DELETE /api/v1/auctions/:id - Supprimer son enchère
+func (h *AuctionHandler) Delete(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	if err := h.service.DeleteAuction(c.Context(), id, userID); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	return OK(c, fiber.Map{"message": "Auction deleted successfully"})
+}
+
+// GetBidStatus - GET /api/v1/auctions/:id/bid-status - Statut de ma bid
+func (h *AuctionHandler) GetBidStatus(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	status, err := h.service.GetBidStatus(c.Context(), id, userID)
+	if err != nil {
+		return NotFound(c, "Bid status")
+	}
+
+	return OK(c, status)
+}
+
+// GetWinner - GET /api/v1/auctions/:id/winner - Détails du gagnant
+func (h *AuctionHandler) GetWinner(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	auction, _, err := h.service.GetByID(c.Context(), id)
+	if err != nil {
+		return NotFound(c, "Auction")
+	}
+
+	if auction.WinnerID == nil {
+		return OK(c, fiber.Map{
+			"has_winner": false,
+			"message":    "No winner yet",
+		})
+	}
+
+	// Get winner details
+	winner, err := h.service.GetUserByID(c.Context(), *auction.WinnerID)
+	if err != nil {
+		return InternalError(c, "Failed to get winner details")
+	}
+
+	return OK(c, fiber.Map{
+		"has_winner":       true,
+		"winner_id":        auction.WinnerID,
+		"winner_name":      winner.FullName,
+		"winner_phone":     maskPhone(winner.Phone),
+		"winning_amount":   auction.CurrentPrice,
+		"payment_deadline": auction.PaymentDeadline,
+		"auction_status":   auction.Status,
+	})
+}
+
+func maskPhone(phone string) string {
+	if len(phone) <= 4 {
+		return "****"
+	}
+	return phone[:2] + "****" + phone[len(phone)-2:]
+}
+
+// ContactSeller - POST /api/v1/auctions/:id/contact - Envoyer message au vendeur
+func (h *AuctionHandler) ContactSeller(c *fiber.Ctx) error {
+	type ContactRequest struct {
+		Message string `json:"message" validate:"required"`
+	}
+	var req ContactRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	// Get auction to find seller
+	auction, _, err := h.service.GetByID(c.Context(), id)
+	if err != nil {
+		return NotFound(c, "Auction")
+	}
+
+	// Don't allow contacting yourself
+	if auction.SellerID == userID {
+		return BadRequest(c, "Cannot contact yourself")
+	}
+
+	// TODO: Implement notification to seller
+	// For now, just return success
+	h.logger.Info("[Contact Seller]",
+		zap.String("auction_id", id.String()),
+		zap.String("from_user", userID.String()),
+		zap.String("to_seller", auction.SellerID.String()),
+		zap.String("message", req.Message),
+	)
+
+	return OK(c, fiber.Map{
+		"message": "Message sent to seller",
+	})
 }

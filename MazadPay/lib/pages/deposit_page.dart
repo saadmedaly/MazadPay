@@ -1,6 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/payment_details_page.dart';
+import '../services/wallet_api.dart';
 
 class PaymentMethod {
   final String id;
@@ -22,6 +23,8 @@ class DepositPage extends StatefulWidget {
 class _DepositPageState extends State<DepositPage> {
   String? _selectedMethodId;
   bool _hasShownModal = false;
+  final WalletApi _walletApi = WalletApi();
+  bool _isLoading = false;
 
   late List<PaymentMethod> _methods;
 
@@ -70,6 +73,42 @@ class _DepositPageState extends State<DepositPage> {
         _hasShownModal = true;
       }
     });
+  }
+
+  Future<void> _makeDeposit() async {
+    if (_selectedMethodId == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await _walletApi.deposit(
+        method: _selectedMethodId!,
+        amount: 0, // Amount will be set in PaymentDetailsPage
+      );
+
+      setState(() => _isLoading = false);
+
+      if (response.success) {
+        final selectedMethod = _methods.firstWhere((m) => m.id == _selectedMethodId);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PaymentDetailsPage(
+              methodName: selectedMethod.title,
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response.message ?? AppLocalizations.of(context)!.error_deposit_failed)),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_connection)),
+      );
+    }
   }
 
   void _showTermsBottomSheet() {
@@ -270,32 +309,24 @@ class _DepositPageState extends State<DepositPage> {
                     width: double.infinity,
                     height: 54,
                     child: ElevatedButton(
-                      onPressed: () {
-                        final selectedMethod = _methods.firstWhere((m) => m.id == _selectedMethodId);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PaymentDetailsPage(
-                              methodName: selectedMethod.title,
-                            ),
-                          ),
-                        );
-                      },
+                      onPressed: _isLoading ? null : _makeDeposit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0084FF),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.arrow_back, color: Colors.white, size: 20),
-                          const SizedBox(width: 12),
-                          Text(
-                            'ادفع عبر ${_methods.firstWhere((m) => m.id == _selectedMethodId).title}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
-                          ),
-                        ],
-                      ),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'ادفع عبر ${_methods.firstWhere((m) => m.id == _selectedMethodId).title}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                                ),
+                              ],
+                            ),
                     ),
                   ),
                 ),

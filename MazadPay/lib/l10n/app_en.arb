@@ -389,5 +389,26 @@
   "text_387": "About Us",
   "text_388": "Share",
   "text_389": "Know someone interested?",
-  "text_390": "About Mazad Pay"
+  "text_390": "About Mazad Pay",
+  "error_connection": "Connection error",
+  "error_login_failed": "Login failed",
+  "error_invalid_credentials": "Invalid credentials",
+  "error_phone_required": "Phone number required",
+  "error_otp_required": "OTP code required",
+  "error_otp_invalid": "Invalid OTP code",
+  "error_loading_auctions": "Error loading auctions",
+  "error_loading_auction_details": "Error loading auction details",
+  "error_loading_favorites": "Error loading favorites",
+  "error_loading_balance": "Error loading balance",
+  "error_deposit_failed": "Deposit failed",
+  "error_withdraw_failed": "Withdrawal failed",
+  "error_insufficient_balance": "Insufficient balance",
+  "error_loading_notifications": "Error loading notifications",
+  "error_create_auction": "Error creating auction",
+  "error_fill_required_fields": "Please fill all required fields",
+  "error_add_image": "Please add at least one image",
+  "error_invalid_amount": "Please enter a valid amount",
+  "error_no_data": "No data available",
+  "text_391": "Already have an account?"
 }
+

@@ -3,7 +3,14 @@ import 'package:flutter/material.dart';
 import 'home_page.dart';
 
 class SetPasswordPage extends StatefulWidget {
-  const SetPasswordPage({super.key});
+  final String phone;
+  final String otpCode;
+
+  const SetPasswordPage({
+    super.key,
+    required this.phone,
+    required this.otpCode,
+  });
 
   @override
   State<SetPasswordPage> createState() => _SetPasswordPageState();

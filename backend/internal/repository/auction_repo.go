@@ -32,6 +32,7 @@ type AuctionRepository interface {
 	IncrementViews(ctx context.Context, id uuid.UUID) error
 	IncrementBidderCount(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error
 	FindExpiredActive(ctx context.Context) ([]models.Auction, error)
+	GetUserHighestBid(ctx context.Context, auctionID, userID uuid.UUID) (*models.Bid, error)
 
 	// Admin
 	ListPaginated(ctx context.Context, page, perPage int, f AuctionFilters) ([]models.Auction, int, error)
@@ -197,6 +198,17 @@ func (r *auctionRepo) FindExpiredActive(ctx context.Context) ([]models.Auction, 
 	err := r.db.SelectContext(ctx, &auctions,
 		`SELECT * FROM auctions WHERE status = 'active' AND end_time <= now()`)
 	return auctions, err
+}
+
+func (r *auctionRepo) GetUserHighestBid(ctx context.Context, auctionID, userID uuid.UUID) (*models.Bid, error) {
+	var bid models.Bid
+	err := r.db.GetContext(ctx, &bid,
+		`SELECT * FROM bids WHERE auction_id = $1 AND user_id = $2 ORDER BY amount DESC LIMIT 1`,
+		auctionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &bid, nil
 }
 
 func (r *auctionRepo) AddImage(ctx context.Context, img *models.AuctionImage) error {

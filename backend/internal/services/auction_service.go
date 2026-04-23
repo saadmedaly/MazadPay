@@ -14,6 +14,7 @@ import (
 
 type CreateAuctionInput struct {
 	CategoryID      int
+	SubCategoryID   *int
 	LocationID      *int
 	TitleAr         string
 	TitleFr         string
@@ -31,6 +32,10 @@ type CreateAuctionInput struct {
 	ItemDetails     models.JSONB
 	BuyNowPrice     *decimal.Decimal
 	Images          []string
+	Condition       *string
+	Brand           *string
+	VideoURL        *string
+	Quantity        int
 }
 
 type AuctionService interface {
@@ -40,7 +45,11 @@ type AuctionService interface {
 	Create(ctx context.Context, sellerID uuid.UUID, input CreateAuctionInput) (*models.Auction, error)
 	ReportAuction(ctx context.Context, auctionID, reporterID uuid.UUID, reason string) error
 	Update(ctx context.Context, id uuid.UUID, input CreateAuctionInput) (*models.Auction, error)
+	UpdateAuction(ctx context.Context, id uuid.UUID, userID uuid.UUID, input CreateAuctionInput) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	DeleteAuction(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+	GetBidStatus(ctx context.Context, auctionID, userID uuid.UUID) (map[string]interface{}, error)
+	GetUserByID(ctx context.Context, userID uuid.UUID) (*models.User, error)
 	IncrementViews(ctx context.Context, id uuid.UUID) error
 	AddImages(ctx context.Context, auctionID, sellerID uuid.UUID, urls []string) error
 	BuyNow(ctx context.Context, auctionID, buyerID uuid.UUID) (*models.Auction, error)
@@ -59,13 +68,15 @@ type auctionService struct {
 	auctionRepo repository.AuctionRepository
 	reportRepo  repository.ReportRepository
 	notifSvc    NotificationService
+	userRepo    repository.UserRepository
 }
 
-func NewAuctionService(auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService) AuctionService {
+func NewAuctionService(auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository) AuctionService {
 	return &auctionService{
 		auctionRepo: auctionRepo,
 		reportRepo:  reportRepo,
 		notifSvc:    notifSvc,
+		userRepo:    userRepo,
 	}
 }
 
@@ -86,6 +97,42 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 	// Minimum: end_time must be at least 1 minute in the future
 	if input.EndTime.Before(time.Now().Add(1 * time.Minute)) {
 		return nil, fmt.Errorf("end_time must be at least 1 minute in the future (got: %s)", input.EndTime.Format(time.RFC3339))
+	}
+
+	// Vérifier que la catégorie existe
+	if input.CategoryID > 0 {
+		categories, err := s.auctionRepo.GetCategories(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch categories: %w", err)
+		}
+		categoryExists := false
+		for _, c := range categories {
+			if c.ID == input.CategoryID {
+				categoryExists = true
+				break
+			}
+		}
+		if !categoryExists {
+			return nil, fmt.Errorf("category with ID %d does not exist", input.CategoryID)
+		}
+	}
+
+	// Vérifier que la location existe si fournie
+	if input.LocationID != nil && *input.LocationID > 0 {
+		locations, err := s.auctionRepo.GetLocations(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch locations: %w", err)
+		}
+		locationExists := false
+		for _, l := range locations {
+			if l.ID == *input.LocationID {
+				locationExists = true
+				break
+			}
+		}
+		if !locationExists {
+			return nil, fmt.Errorf("location with ID %d does not exist", *input.LocationID)
+		}
 	}
 
 	var st time.Time
@@ -126,6 +173,7 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 		ID:              uuid.New(),
 		SellerID:        sellerID,
 		CategoryID:      input.CategoryID,
+		SubCategoryID:   input.SubCategoryID,
 		LocationID:      input.LocationID,
 		TitleAr:         input.TitleAr,
 		TitleFr:         tFr,
@@ -144,6 +192,10 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 		PhoneContact:    phone,
 		ItemDetails:     input.ItemDetails,
 		BuyNowPrice:     input.BuyNowPrice,
+		Condition:       input.Condition,
+		Brand:           input.Brand,
+		VideoURL:        input.VideoURL,
+		Quantity:        input.Quantity,
 		Version:         1,
 	}
 
@@ -185,6 +237,42 @@ func (s *auctionService) Update(ctx context.Context, id uuid.UUID, input CreateA
 		return nil, apperr.ErrNotFound
 	}
 
+	// Vérifier que la catégorie existe
+	if input.CategoryID > 0 {
+		categories, err := s.auctionRepo.GetCategories(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch categories: %w", err)
+		}
+		categoryExists := false
+		for _, c := range categories {
+			if c.ID == input.CategoryID {
+				categoryExists = true
+				break
+			}
+		}
+		if !categoryExists {
+			return nil, fmt.Errorf("category with ID %d does not exist", input.CategoryID)
+		}
+	}
+
+	// Vérifier que la location existe si fournie
+	if input.LocationID != nil && *input.LocationID > 0 {
+		locations, err := s.auctionRepo.GetLocations(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch locations: %w", err)
+		}
+		locationExists := false
+		for _, l := range locations {
+			if l.ID == *input.LocationID {
+				locationExists = true
+				break
+			}
+		}
+		if !locationExists {
+			return nil, fmt.Errorf("location with ID %d does not exist", *input.LocationID)
+		}
+	}
+
 	var tFr, tEn *string
 	var dAr, dFr, dEn *string
 	if input.TitleFr != "" {
@@ -209,6 +297,7 @@ func (s *auctionService) Update(ctx context.Context, id uuid.UUID, input CreateA
 	}
 
 	auction.CategoryID = input.CategoryID
+	auction.SubCategoryID = input.SubCategoryID
 	auction.LocationID = input.LocationID
 	auction.TitleAr = input.TitleAr
 	auction.TitleFr = tFr
@@ -223,6 +312,10 @@ func (s *auctionService) Update(ctx context.Context, id uuid.UUID, input CreateA
 	auction.PhoneContact = phone
 	auction.BuyNowPrice = input.BuyNowPrice
 	auction.ItemDetails = input.ItemDetails
+	auction.Condition = input.Condition
+	auction.Brand = input.Brand
+	auction.VideoURL = input.VideoURL
+	auction.Quantity = input.Quantity
 	if input.StartTime != nil {
 		auction.StartTime = *input.StartTime
 	}
@@ -278,6 +371,180 @@ func (s *auctionService) ReportAuction(ctx context.Context, auctionID, reporterI
 
 func (s *auctionService) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.auctionRepo.Delete(ctx, id)
+}
+
+// UpdateAuction - Modifier son enchère avec validation du propriétaire
+func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID uuid.UUID, input CreateAuctionInput) error {
+	auction, err := s.auctionRepo.FindByID(ctx, id)
+	if err != nil {
+		return apperr.ErrNotFound
+	}
+
+	// Vérifier que l'utilisateur est le vendeur
+	if auction.SellerID != userID {
+		return apperr.ErrUnauthorized
+	}
+
+	// Ne permettre la modification que si l'enchère est en statut pending
+	if auction.Status != "pending" {
+		return fmt.Errorf("can only update pending auctions")
+	}
+
+	// Vérifier que la catégorie existe
+	if input.CategoryID > 0 {
+		categories, err := s.auctionRepo.GetCategories(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to fetch categories: %w", err)
+		}
+		categoryExists := false
+		for _, c := range categories {
+			if c.ID == input.CategoryID {
+				categoryExists = true
+				break
+			}
+		}
+		if !categoryExists {
+			return fmt.Errorf("category with ID %d does not exist", input.CategoryID)
+		}
+	}
+
+	// Vérifier que la location existe si fournie
+	if input.LocationID != nil && *input.LocationID > 0 {
+		locations, err := s.auctionRepo.GetLocations(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to fetch locations: %w", err)
+		}
+		locationExists := false
+		for _, l := range locations {
+			if l.ID == *input.LocationID {
+				locationExists = true
+				break
+			}
+		}
+		if !locationExists {
+			return fmt.Errorf("location with ID %d does not exist", *input.LocationID)
+		}
+	}
+
+	var tFr, tEn *string
+	var dAr, dFr, dEn *string
+	if input.TitleFr != "" {
+		tFr = &input.TitleFr
+	}
+	if input.TitleEn != "" {
+		tEn = &input.TitleEn
+	}
+	if input.DescriptionAr != "" {
+		dAr = &input.DescriptionAr
+	}
+	if input.DescriptionFr != "" {
+		dFr = &input.DescriptionFr
+	}
+	if input.DescriptionEn != "" {
+		dEn = &input.DescriptionEn
+	}
+
+	var phone *string
+	if input.PhoneContact != "" {
+		phone = &input.PhoneContact
+	}
+
+	auction.CategoryID = input.CategoryID
+	auction.SubCategoryID = input.SubCategoryID
+	auction.LocationID = input.LocationID
+	auction.TitleAr = input.TitleAr
+	auction.TitleFr = tFr
+	auction.TitleEn = tEn
+	auction.DescriptionAr = dAr
+	auction.DescriptionFr = dFr
+	auction.DescriptionEn = dEn
+	auction.StartPrice = input.StartPrice
+	auction.MinIncrement = input.MinIncrement
+	auction.InsuranceAmount = input.InsuranceAmount
+	auction.EndTime = input.EndTime
+	auction.PhoneContact = phone
+	auction.BuyNowPrice = input.BuyNowPrice
+	auction.ItemDetails = input.ItemDetails
+	auction.Condition = input.Condition
+	auction.Brand = input.Brand
+	auction.VideoURL = input.VideoURL
+	if input.StartTime != nil {
+		auction.StartTime = *input.StartTime
+	}
+
+	if err := s.auctionRepo.Update(ctx, auction); err != nil {
+		return err
+	}
+
+	// Mettre à jour les images si fournies
+	if len(input.Images) > 0 {
+		_ = s.auctionRepo.DeleteImages(ctx, id)
+		for i, url := range input.Images {
+			if url == "" {
+				continue
+			}
+			_ = s.auctionRepo.AddImage(ctx, &models.AuctionImage{
+				AuctionID:    id,
+				URL:          url,
+				MediaType:    "image",
+				DisplayOrder: i,
+			})
+		}
+	}
+
+	return nil
+}
+
+// DeleteAuction - Supprimer son enchère avec validation du propriétaire
+func (s *auctionService) DeleteAuction(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	auction, err := s.auctionRepo.FindByID(ctx, id)
+	if err != nil {
+		return apperr.ErrNotFound
+	}
+
+	// Vérifier que l'utilisateur est le vendeur
+	if auction.SellerID != userID {
+		return apperr.ErrUnauthorized
+	}
+
+	// Ne permettre la suppression que si l'enchère est en statut pending
+	if auction.Status != "pending" {
+		return fmt.Errorf("can only delete pending auctions")
+	}
+
+	return s.auctionRepo.Delete(ctx, id)
+}
+
+// GetBidStatus - Statut de ma bid pour une enchère
+func (s *auctionService) GetBidStatus(ctx context.Context, auctionID, userID uuid.UUID) (map[string]interface{}, error) {
+	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+	if err != nil {
+		return nil, apperr.ErrNotFound
+	}
+
+	// Récupérer la plus haute bid de l'utilisateur
+	highestBid, err := s.auctionRepo.GetUserHighestBid(ctx, auctionID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	status := map[string]interface{}{
+		"auction_id":     auctionID,
+		"is_highest_bid": false,
+		"my_bid_amount":  nil,
+		"current_price":  auction.CurrentPrice,
+		"auction_status": auction.Status,
+	}
+
+	if highestBid != nil {
+		status["my_bid_amount"] = highestBid.Amount
+		// Vérifier si c'est la plus haute bid
+		if auction.CurrentPrice.Equal(highestBid.Amount) {
+			status["is_highest_bid"] = true
+		}
+	}
+
+	return status, nil
 }
 
 func (s *auctionService) IncrementViews(ctx context.Context, id uuid.UUID) error {
@@ -418,4 +685,8 @@ func (s *auctionService) GetCountries(ctx context.Context) ([]models.Country, er
 
 func (s *auctionService) GetLocationsByCountry(ctx context.Context, countryID int) ([]models.Location, error) {
 	return s.auctionRepo.GetLocationsByCountry(ctx, countryID)
+}
+
+func (s *auctionService) GetUserByID(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	return s.userRepo.FindByID(ctx, userID)
 }

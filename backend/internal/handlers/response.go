@@ -9,17 +9,25 @@ import (
 )
 
 type ResponseUser struct {
-	ID                   string  `json:"id"`
-	Phone                string  `json:"phone"`
-	FullName             *string `json:"full_name"`
-	Email                *string `json:"email"`
-	ProfilePicURL        *string `json:"profile_pic_url"`
-	City                 *string `json:"city"`
-	LanguagePref         string  `json:"language_pref"`
-	NotificationsEnabled bool    `json:"notifications_enabled"`
-	IsActive             bool    `json:"is_active"`
-	Role                 string  `json:"role"`
-	LastLoginAt          *string `json:"last_login_at"`
+	ID                   string     `json:"id"`
+	Phone                string     `json:"phone"`
+	FullName             *string    `json:"full_name"`
+	Email                *string    `json:"email"`
+	ProfilePicURL        *string    `json:"profile_pic_url"`
+	City                 *string    `json:"city"`
+	CountryCode          *string    `json:"country_code"`
+	Address              *string    `json:"address"`
+	PostalCode           *string    `json:"postal_code"`
+	DateOfBirth          *string    `json:"date_of_birth"`
+	Gender               *string    `json:"gender"`
+	LanguagePref         string     `json:"language_pref"`
+	NotificationsEnabled bool       `json:"notifications_enabled"`
+	IsActive             bool       `json:"is_active"`
+	Role                 string     `json:"role"`
+	IsVerified           bool       `json:"is_verified"`
+	ProfileCompleted     bool       `json:"profile_completed"`
+	CreatedAt            string     `json:"created_at"`
+	LastLoginAt          *string    `json:"last_login_at"`
 }
 
 // MaskUserPhone retourne un User avec le téléphone masqué
@@ -27,6 +35,22 @@ func MaskUserPhone(user *models.User) *ResponseUser {
 	if user == nil {
 		return nil
 	}
+	
+	// Format dates
+	var dobStr, lastLoginStr, createdAtStr *string
+	if user.DateOfBirth != nil {
+		s := user.DateOfBirth.Format("2006-01-02")
+		dobStr = &s
+	}
+	if user.LastLoginAt != nil {
+		s := user.LastLoginAt.Format("2006-01-02T15:04:05Z")
+		lastLoginStr = &s
+	}
+	if !user.CreatedAt.IsZero() {
+		s := user.CreatedAt.Format("2006-01-02T15:04:05Z")
+		createdAtStr = &s
+	}
+	
 	return &ResponseUser{
 		ID:                   user.ID.String(),
 		Phone:                user.MaskPhone(),
@@ -34,11 +58,19 @@ func MaskUserPhone(user *models.User) *ResponseUser {
 		Email:                user.Email,
 		ProfilePicURL:        user.ProfilePicURL,
 		City:                 user.City,
+		CountryCode:          user.CountryCode,
+		Address:              user.Address,
+		PostalCode:           user.PostalCode,
+		DateOfBirth:          dobStr,
+		Gender:               user.Gender,
 		LanguagePref:         user.LanguagePref,
 		NotificationsEnabled: user.NotificationsEnabled,
 		IsActive:             user.IsActive,
 		Role:                 user.Role,
-		LastLoginAt:          (*string)(nil), // TODO: Format time to string
+		IsVerified:           user.IsVerified,
+		ProfileCompleted:     user.ProfileCompleted,
+		CreatedAt:            *createdAtStr,
+		LastLoginAt:          lastLoginStr,
 	}
 }
 

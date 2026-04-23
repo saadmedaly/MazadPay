@@ -8,6 +8,7 @@ import 'package:mezadpay/pages/create_ad_start_page.dart';
 import 'package:mezadpay/pages/account_page.dart';
 import 'package:mezadpay/pages/services_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
+import '../services/auction_api.dart';
 
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
@@ -18,252 +19,20 @@ class AllAuctionsPage extends ConsumerStatefulWidget {
 
 class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   final TextEditingController _searchController = TextEditingController();
+  final AuctionApi _auctionApi = AuctionApi();
 
-  List<Map<String, String>> _allAuctions = [];
-  List<Map<String, String>> _filteredAuctions = [];
+  List<Map<String, dynamic>> _allAuctions = [];
+  List<Map<String, dynamic>> _filteredAuctions = [];
   int _activeTabIndex = 0;
   int _selectedCategoryIndex = 0;
   int _selectedSubCategoryIndex = 0;
-
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final l10n = AppLocalizations.of(context)!;
-    _allAuctions = [
-      {
-        'id': '1',
-        'title': 'Toyota prado tx 2017',
-        'price': '15,000 MRU',
-        'bids': '15',
-        'time': '23h 30m 18s',
-        'location': l10n.text_113,
-        'category': 'cars',
-        'subCategory': '4x4',
-        'image': 'assets/car0.png',
-        'status': 'active',
-        'postedTime': 'منذ 5 ساعات'
-      },
-      {
-        'id': '2',
-        'title': 'هلكس خليجية نظيفة',
-        'price': '760,000 MRU',
-        'bids': '7',
-        'time': '23h 30m 18s',
-        'location': l10n.text_104,
-        'category': 'cars',
-        'subCategory': 'standard',
-        'image': 'assets/car1.jpg',
-        'status': 'active',
-        'postedTime': 'منذ 2 ساعات'
-      },
-      {
-        'id': '5',
-        'title': 'سيارة تاكسي بحالة ممتازة',
-        'price': '450,000 MRU',
-        'bids': '3',
-        'time': '10h 15m 30s',
-        'location': l10n.text_111,
-        'category': 'cars',
-        'subCategory': 'taxi',
-        'image': 'assets/car2.jpg',
-        'status': 'active',
-        'postedTime': 'منذ ساعة'
-      },
-      {
-        'id': '3',
-        'title': 'TOYOTA RAV4 2008 D4D',
-        'price': '420,000 MRU',
-        'bids': '20',
-        'time': l10n.text_364,
-        'location': l10n.text_113,
-        'category': 'cars',
-        'subCategory': '4x4',
-        'image': 'assets/car3.jpg',
-        'status': 'finished',
-        'postedTime': 'منذ يوم'
-      },
-      {
-        'id': '4',
-        'title': 'iPhone 15 Pro Max',
-        'price': '55,000 MRU',
-        'bids': '12',
-        'time': '12h 10m 05s',
-        'location': l10n.text_113,
-        'category': 'phones',
-        'image': 'assets/phone1.jpg',
-        'status': 'active',
-        'postedTime': 'منذ 3 ساعات'
-      },
-      {
-        'id': '6',
-        'title': 'Samsung Galaxy S24 Ultra',
-        'price': '38,000 MRU',
-        'bids': '8',
-        'time': '05h 45m 20s',
-        'location': l10n.text_113,
-        'category': 'phones',
-        'image': 'assets/phone2.jpg',
-        'status': 'active',
-        'postedTime': 'منذ 6 ساعات'
-      },
-      {
-        'id': '7',
-        'title': 'فيلا راقية وسط العاصمة',
-        'price': '2,500,000 MRU',
-        'bids': '5',
-        'time': '48h 00m 00s',
-        'location': l10n.text_113,
-        'category': 'real_estate',
-        'image': 'assets/maison1.jpg',
-        'status': 'active',
-        'postedTime': 'منذ يومين'
-      },
-      {
-        'id': '8',
-        'title': 'شقة 3 غرف للبيع',
-        'price': '850,000 MRU',
-        'bids': '11',
-        'time': '24h 00m 00s',
-        'location': l10n.text_113,
-        'category': 'real_estate',
-        'image': 'assets/maison2.jpg',
-        'status': 'active',
-        'postedTime': 'منذ يوم'
-      },
-      {
-        'id': '9',
-        'title': 'غسالة أوتوماتيك 7 كيلو',
-        'price': '25,000 MRU',
-        'bids': '4',
-        'time': '08h 30m 00s',
-        'location': l10n.text_113,
-        'category': 'home_appliances',
-        'image': 'assets/Appareils de maison1.jpg',
-        'status': 'active',
-        'postedTime': 'منذ 4 ساعات'
-      },
-      {
-        'id': '10',
-        'title': 'ثلاجة سامسونج 500 لتر',
-        'price': '35,000 MRU',
-        'bids': '6',
-        'time': '15h 00m 00s',
-        'location': l10n.text_113,
-        'category': 'home_appliances',
-        'image': 'assets/Appareils de maison2.jpg',
-        'status': 'active',
-        'postedTime': 'منذ 7 ساعات'
-      },
-      // ── أجهزة منزلية (باقي الصور) ───────────────────────
-      {'id': 'ha3', 'title': 'مكيف سبليت 2 طن',           'price': '42,000 MRU',  'bids': '5',  'time': '10h 00m 00s', 'location': l10n.text_113, 'category': 'home_appliances', 'image': 'assets/Appareils de maison3.jpg', 'status': 'active',   'postedTime': 'منذ 3 ساعات'},
-      {'id': 'ha4', 'title': 'بوتوغاز مع أسطوانة',        'price': '12,000 MRU',  'bids': '2',  'time': '06h 00m 00s', 'location': l10n.text_113, 'category': 'home_appliances', 'image': 'assets/Appareils de maison4.jpg', 'status': 'active',   'postedTime': 'منذ 5 ساعات'},
-      {'id': 'ha5', 'title': 'تلفزيون سامسونج 65 بوصة',   'price': '55,000 MRU',  'bids': '7',  'time': '14h 00m 00s', 'location': l10n.text_113, 'category': 'home_appliances', 'image': 'assets/Appareils de maison5.jpg', 'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'ha6', 'title': 'مجفف ملابس LG',              'price': '28,000 MRU',  'bids': '3',  'time': '08h 00m 00s', 'location': l10n.text_113, 'category': 'home_appliances', 'image': 'assets/Appareils de maison6.jpg', 'status': 'active',   'postedTime': 'منذ يومين'},
-      {'id': 'ha7', 'title': 'طباخ كهربائي 6 شعلات',      'price': '18,000 MRU',  'bids': '0',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'home_appliances', 'image': 'assets/Appareils de maison7.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      {'id': 'ha8', 'title': 'مكنسة كهربائية دايسون',      'price': '22,000 MRU',  'bids': '4',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'home_appliances', 'image': 'assets/Appareils de maison8.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوعين'},
-      // ── الإلكترونيات ─────────────────────────────────────
-      {'id': 'el1', 'title': 'لابتوب ماك بوك برو M3',      'price': '120,000 MRU', 'bids': '9',  'time': '18h 00m 00s', 'location': l10n.text_113, 'category': 'electronics', 'image': 'assets/Électronique1.jpg', 'status': 'active',   'postedTime': 'منذ ساعة'},
-      {'id': 'el2', 'title': 'تابلت آيباد برو 12.9',       'price': '75,000 MRU',  'bids': '6',  'time': '14h 00m 00s', 'location': l10n.text_113, 'category': 'electronics', 'image': 'assets/Électronique2.jpg', 'status': 'active',   'postedTime': 'منذ 3 ساعات'},
-      {'id': 'el3', 'title': 'كاميرا سوني A7 IV',          'price': '90,000 MRU',  'bids': '5',  'time': '12h 00m 00s', 'location': l10n.text_113, 'category': 'electronics', 'image': 'assets/Électronique3.jpg', 'status': 'active',   'postedTime': 'منذ 4 ساعات'},
-      {'id': 'el4', 'title': 'بلاي ستيشن 5 جديدة',         'price': '45,000 MRU',  'bids': '11', 'time': '20h 00m 00s', 'location': l10n.text_113, 'category': 'electronics', 'image': 'assets/Électronique4.jpg', 'status': 'active',   'postedTime': 'منذ 5 ساعات'},
-      {'id': 'el5', 'title': 'سماعات سوني WH-1000XM5',     'price': '18,000 MRU',  'bids': '4',  'time': '08h 00m 00s', 'location': l10n.text_113, 'category': 'electronics', 'image': 'assets/Électronique5.jpg', 'status': 'active',   'postedTime': 'منذ 6 ساعات'},
-      {'id': 'el6', 'title': 'شاشة LG UltraWide 34',       'price': '52,000 MRU',  'bids': '3',  'time': '10h 00m 00s', 'location': l10n.text_113, 'category': 'electronics', 'image': 'assets/Électronique6.jpg', 'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'el7', 'title': 'طابعة ليزر HP LaserJet',     'price': '28,000 MRU',  'bids': '0',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'electronics', 'image': 'assets/Électronique7.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      {'id': 'el8', 'title': 'راوتر واي فاي 6 Asus',       'price': '12,000 MRU',  'bids': '2',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'electronics', 'image': 'assets/Électronique8.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوعين'},
-      // ── الهواتف (باقي الصور) ─────────────────────────────
-      {'id': 'ph3', 'title': 'Huawei P60 Pro',             'price': '42,000 MRU',  'bids': '5',  'time': '10h 00m 00s', 'location': l10n.text_113, 'category': 'phones', 'image': 'assets/phone3.jpg', 'status': 'active',   'postedTime': 'منذ 4 ساعات'},
-      {'id': 'ph4', 'title': 'Xiaomi 14 Ultra',            'price': '35,000 MRU',  'bids': '3',  'time': '08h 00m 00s', 'location': l10n.text_113, 'category': 'phones', 'image': 'assets/phone4.jpg', 'status': 'active',   'postedTime': 'منذ 6 ساعات'},
-      {'id': 'ph5', 'title': 'Google Pixel 8 Pro',         'price': '48,000 MRU',  'bids': '7',  'time': '16h 00m 00s', 'location': l10n.text_113, 'category': 'phones', 'image': 'assets/phone5.jpg', 'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'ph6', 'title': 'OnePlus 12 256GB',           'price': '28,000 MRU',  'bids': '2',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'phones', 'image': 'assets/phone6.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      // ── العقارات (باقي الصور) ────────────────────────────
-      {'id': 're3', 'title': 'منزل 5 غرف بحديقة',          'price': '1,800,000 MRU','bids': '8', 'time': '72h 00m 00s', 'location': l10n.text_113, 'category': 'real_estate', 'image': 'assets/maison3.jpg', 'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 're4', 'title': 'شقة مفروشة للإيجار',         'price': '120,000 MRU', 'bids': '4',  'time': '24h 00m 00s', 'location': l10n.text_113, 'category': 'real_estate', 'image': 'assets/maison4.jpg', 'status': 'active',   'postedTime': 'منذ يومين'},
-      {'id': 're5', 'title': 'مبنى تجاري وسط المدينة',     'price': '4,500,000 MRU','bids': '12','time': '96h 00m 00s', 'location': l10n.text_113, 'category': 'real_estate', 'image': 'assets/maison5.jpg', 'status': 'active',   'postedTime': 'منذ 3 أيام'},
-      // ── الأثاث ──────────────────────────────────────────
-      {'id': 'f1',  'title': 'طقم صالون فاخر',         'price': '45,000 MRU',  'bids': '3',  'time': '12h 00m 00s', 'location': l10n.text_113, 'category': 'furniture', 'image': 'assets/Meubles1.jpg',  'status': 'active',   'postedTime': 'منذ ساعتين'},
-      {'id': 'f2',  'title': 'غرفة نوم كاملة',          'price': '60,000 MRU',  'bids': '5',  'time': '18h 00m 00s', 'location': l10n.text_113, 'category': 'furniture', 'image': 'assets/Meubles2.jpg',  'status': 'active',   'postedTime': 'منذ 3 ساعات'},
-      {'id': 'f3',  'title': 'طاولة سفرة خشب طبيعي',   'price': '22,000 MRU',  'bids': '2',  'time': '08h 00m 00s', 'location': l10n.text_113, 'category': 'furniture', 'image': 'assets/Meubles3.jpg',  'status': 'active',   'postedTime': 'منذ 5 ساعات'},
-      {'id': 'f4',  'title': 'مكتبة خشبية كبيرة',       'price': '18,000 MRU',  'bids': '1',  'time': '06h 00m 00s', 'location': l10n.text_113, 'category': 'furniture', 'image': 'assets/Meubles4.jpg',  'status': 'active',   'postedTime': 'منذ 6 ساعات'},
-      {'id': 'f5',  'title': 'كنبة جلد إيطالي',         'price': '35,000 MRU',  'bids': '4',  'time': '10h 00m 00s', 'location': l10n.text_113, 'category': 'furniture', 'image': 'assets/Meubles5.jpg',  'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'f6',  'title': 'طاولة قهوة زجاج',         'price': '8,500 MRU',   'bids': '0',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'furniture', 'image': 'assets/Meubles6.jpg',  'status': 'finished', 'postedTime': 'منذ يومين'},
-      {'id': 'f7',  'title': 'خزانة ملابس 6 أبواب',     'price': '27,000 MRU',  'bids': '2',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'furniture', 'image': 'assets/Meubles7.jpg',  'status': 'finished', 'postedTime': 'منذ 3 أيام'},
-      {'id': 'f8',  'title': 'سرير مع دولاب',           'price': '32,000 MRU',  'bids': '3',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'furniture', 'image': 'assets/Meubles8.jpg',  'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      // ── قطع أرضية ───────────────────────────────────────
-      {'id': 't1',  'title': 'قطعة أرضية حي تفاريغ',    'price': '500,000 MRU', 'bids': '7',  'time': '48h 00m 00s', 'location': l10n.text_113, 'category': 'land_plots', 'image': 'assets/Terrains1.jpg', 'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 't2',  'title': 'أرض سكنية 500م²',          'price': '350,000 MRU', 'bids': '4',  'time': '24h 00m 00s', 'location': l10n.text_113, 'category': 'land_plots', 'image': 'assets/Terrains2.jpg', 'status': 'active',   'postedTime': 'منذ يومين'},
-      {'id': 't3',  'title': 'قطعة تجارية وسط المدينة', 'price': '900,000 MRU', 'bids': '10', 'time': '72h 00m 00s', 'location': l10n.text_113, 'category': 'land_plots', 'image': 'assets/Terrains3.jpg', 'status': 'active',   'postedTime': 'منذ 4 ساعات'},
-      {'id': 't4',  'title': 'أرض زراعية مسورة',         'price': '200,000 MRU', 'bids': '2',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'land_plots', 'image': 'assets/Terrains4.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      // ── معدات ثقيلة ─────────────────────────────────────
-      {'id': 'ml1', 'title': 'حفارة كاتربيلار 2019',    'price': '1,200,000 MRU','bids': '8', 'time': '36h 00m 00s', 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd1.jpg',  'status': 'active',   'postedTime': 'منذ ساعة'},
-      {'id': 'ml2', 'title': 'جرافة كوماتسو',            'price': '950,000 MRU', 'bids': '5',  'time': '20h 00m 00s', 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd2.jpg',  'status': 'active',   'postedTime': 'منذ 3 ساعات'},
-      {'id': 'ml3', 'title': 'رافعة شوكية 5 طن',         'price': '400,000 MRU', 'bids': '3',  'time': '14h 00m 00s', 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd3.jpg',  'status': 'active',   'postedTime': 'منذ 5 ساعات'},
-      {'id': 'ml4', 'title': 'خلاطة خرسانة كبيرة',      'price': '180,000 MRU', 'bids': '2',  'time': '10h 00m 00s', 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd4.jpg',  'status': 'active',   'postedTime': 'منذ 6 ساعات'},
-      {'id': 'ml5', 'title': 'ضاغط هواء صناعي',          'price': '95,000 MRU',  'bids': '1',  'time': '08h 00m 00s', 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd5.jpg',  'status': 'active',   'postedTime': 'منذ 8 ساعات'},
-      {'id': 'ml6', 'title': 'شاحنة قلاب هيونداي',       'price': '620,000 MRU', 'bids': '6',  'time': '16h 00m 00s', 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd6.jpg',  'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'ml7', 'title': 'مضخة مياه صناعية',         'price': '75,000 MRU',  'bids': '0',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd7.jpg',  'status': 'finished', 'postedTime': 'منذ يومين'},
-      {'id': 'ml8', 'title': 'مولد كهرباء 100 كيلوات',  'price': '300,000 MRU', 'bids': '4',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd8.jpg',  'status': 'finished', 'postedTime': 'منذ 3 أيام'},
-      {'id': 'ml9', 'title': 'آلة تسوية أرض',            'price': '550,000 MRU', 'bids': '3',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd9.jpg',  'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      {'id': 'ml10','title': 'كرين متحرك 20 طن',         'price': '2,000,000 MRU','bids': '9', 'time': l10n.text_364, 'location': l10n.text_113, 'category': 'heavy_materials', 'image': 'assets/Matériel lourd10.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوعين'},
-      // ── الدراجات ────────────────────────────────────────
-      {'id': 'mo1', 'title': 'دراجة ياماها R15 2022',    'price': '85,000 MRU',  'bids': '6',  'time': '14h 00m 00s', 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos1.jpg',  'status': 'active',   'postedTime': 'منذ ساعتين'},
-      {'id': 'mo2', 'title': 'دراجة هوندا CB500',         'price': '72,000 MRU',  'bids': '4',  'time': '10h 00m 00s', 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos2.jpg',  'status': 'active',   'postedTime': 'منذ 3 ساعات'},
-      {'id': 'mo3', 'title': 'دراجة سوزوكي GSX',          'price': '65,000 MRU',  'bids': '3',  'time': '08h 00m 00s', 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos3.jpg',  'status': 'active',   'postedTime': 'منذ 5 ساعات'},
-      {'id': 'mo4', 'title': 'دراجة كاوازاكي نينجا',      'price': '110,000 MRU', 'bids': '8',  'time': '22h 00m 00s', 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos4.jpg',  'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'mo5', 'title': 'دراجة BMW G310R',           'price': '130,000 MRU', 'bids': '5',  'time': '18h 00m 00s', 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos5.jpg',  'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'mo6', 'title': 'دراجة كلاسيكية هارلي',      'price': '200,000 MRU', 'bids': '10', 'time': '30h 00m 00s', 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos6.jpg',  'status': 'active',   'postedTime': 'منذ يومين'},
-      {'id': 'mo7', 'title': 'دراجة دوكاتي مونستر',       'price': '160,000 MRU', 'bids': '7',  'time': '16h 00m 00s', 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos7.jpg',  'status': 'active',   'postedTime': 'منذ 3 أيام'},
-      {'id': 'mo8', 'title': 'دراجة ترياومف 2020',        'price': '145,000 MRU', 'bids': '0',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos8.jpg',  'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      {'id': 'mo9', 'title': 'دراجة أبريليا RS 660',      'price': '175,000 MRU', 'bids': '2',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos9.jpg',  'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      {'id': 'mo10','title': 'دراجة KTM Duke 390',        'price': '95,000 MRU',  'bids': '4',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos10.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوعين'},
-      {'id': 'mo11','title': 'دراجة هيوسانج GT650',       'price': '88,000 MRU',  'bids': '1',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos11.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوعين'},
-      {'id': 'mo12','title': 'دراجة موتو غوتسي V7',       'price': '120,000 MRU', 'bids': '3',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'bikes', 'image': 'assets/Motos12.jpg', 'status': 'finished', 'postedTime': 'منذ شهر'},
-      // ── الشاحنات ────────────────────────────────────────
-      {'id': 'c1',  'title': 'شاحنة مرسيدس أكتروس',      'price': '1,500,000 MRU','bids': '9', 'time': '40h 00m 00s', 'location': l10n.text_113, 'category': 'trucks', 'image': 'assets/Camions1.jpg', 'status': 'active',   'postedTime': 'منذ ساعة'},
-      {'id': 'c2',  'title': 'شاحنة مان TGX 480',         'price': '1,200,000 MRU','bids': '6', 'time': '28h 00m 00s', 'location': l10n.text_113, 'category': 'trucks', 'image': 'assets/Camions2.jpg', 'status': 'active',   'postedTime': 'منذ 4 ساعات'},
-      {'id': 'c3',  'title': 'شاحنة فولفو FH16',          'price': '1,800,000 MRU','bids': '11','time': '48h 00m 00s', 'location': l10n.text_113, 'category': 'trucks', 'image': 'assets/Camions3.jpg', 'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'c4',  'title': 'شاحنة سكانيا R500',         'price': '1,600,000 MRU','bids': '7', 'time': '32h 00m 00s', 'location': l10n.text_113, 'category': 'trucks', 'image': 'assets/Camions4.jpg', 'status': 'active',   'postedTime': 'منذ يومين'},
-      {'id': 'c5',  'title': 'شاحنة رينو T520',           'price': '900,000 MRU', 'bids': '4',  'time': '20h 00m 00s', 'location': l10n.text_113, 'category': 'trucks', 'image': 'assets/Camions5.jpg', 'status': 'active',   'postedTime': 'منذ 3 أيام'},
-      {'id': 'c6',  'title': 'شاحنة إيفيكو ستيليس',       'price': '750,000 MRU', 'bids': '3',  'time': '16h 00m 00s', 'location': l10n.text_113, 'category': 'trucks', 'image': 'assets/Camions6.jpg', 'status': 'active',   'postedTime': 'منذ 3 أيام'},
-      {'id': 'c7',  'title': 'شاحنة دايملر أكتروس 1844', 'price': '2,000,000 MRU','bids': '0', 'time': l10n.text_364, 'location': l10n.text_113, 'category': 'trucks', 'image': 'assets/Camions7.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      {'id': 'c8',  'title': 'شاحنة نيسان كوندور',        'price': '680,000 MRU', 'bids': '5',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'trucks', 'image': 'assets/Camions8.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوعين'},
-      // ── مستلزمات رجالية ─────────────────────────────────
-      {'id': 'mh1', 'title': 'ساعة رولكس أصلية',          'price': '250,000 MRU', 'bids': '15', 'time': '24h 00m 00s', 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes1.jpg',  'status': 'active',   'postedTime': 'منذ ساعة'},
-      {'id': 'mh2', 'title': 'حقيبة جلد رجالية فاخرة',   'price': '35,000 MRU',  'bids': '4',  'time': '12h 00m 00s', 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes2.jpg',  'status': 'active',   'postedTime': 'منذ 3 ساعات'},
-      {'id': 'mh3', 'title': 'بدلة رسمية ماركة',          'price': '28,000 MRU',  'bids': '2',  'time': '10h 00m 00s', 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes3.jpg',  'status': 'active',   'postedTime': 'منذ 5 ساعات'},
-      {'id': 'mh4', 'title': 'حذاء جلد إيطالي',           'price': '18,000 MRU',  'bids': '3',  'time': '08h 00m 00s', 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes4.jpg',  'status': 'active',   'postedTime': 'منذ 6 ساعات'},
-      {'id': 'mh5', 'title': 'نظارة شمسية راي بان',        'price': '12,000 MRU',  'bids': '1',  'time': '06h 00m 00s', 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes5.jpg',  'status': 'active',   'postedTime': 'منذ 8 ساعات'},
-      {'id': 'mh6', 'title': 'عطر رجالي كريد',            'price': '22,000 MRU',  'bids': '5',  'time': '14h 00m 00s', 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes6.jpg',  'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'mh7', 'title': 'حزام جلد ماركة هيرمس',      'price': '15,000 MRU',  'bids': '0',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes7.jpg',  'status': 'finished', 'postedTime': 'منذ يومين'},
-      {'id': 'mh8', 'title': 'قميص رسمي بيير كاردان',     'price': '9,500 MRU',   'bids': '2',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes8.jpg',  'status': 'finished', 'postedTime': 'منذ 3 أيام'},
-      {'id': 'mh9', 'title': 'خاتم ذهب رجالي',            'price': '45,000 MRU',  'bids': '6',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes9.jpg',  'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      {'id': 'mh10','title': 'محفظة جلد فاخرة',           'price': '8,000 MRU',   'bids': '1',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'mens', 'image': 'assets/Fournitures pour hommes10.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوعين'},
-      // ── مستلزمات نسائية ─────────────────────────────────
-      {'id': 'wm1', 'title': 'حقيبة شانيل أصلية',         'price': '180,000 MRU', 'bids': '12', 'time': '20h 00m 00s', 'location': l10n.text_113, 'category': 'womens', 'image': 'assets/Fournitures pour femmes1.jpg', 'status': 'active',   'postedTime': 'منذ ساعة'},
-      {'id': 'wm2', 'title': 'عطر شنل نمبر 5',            'price': '30,000 MRU',  'bids': '5',  'time': '14h 00m 00s', 'location': l10n.text_113, 'category': 'womens', 'image': 'assets/Fournitures pour femmes2.jpg', 'status': 'active',   'postedTime': 'منذ 3 ساعات'},
-      {'id': 'wm3', 'title': 'ساعة فندي نسائية',           'price': '95,000 MRU',  'bids': '8',  'time': '18h 00m 00s', 'location': l10n.text_113, 'category': 'womens', 'image': 'assets/Fournitures pour femmes3.jpg', 'status': 'active',   'postedTime': 'منذ 5 ساعات'},
-      {'id': 'wm4', 'title': 'مجوهرات ذهب 18 قيراط',      'price': '120,000 MRU', 'bids': '10', 'time': '24h 00m 00s', 'location': l10n.text_113, 'category': 'womens', 'image': 'assets/Fournitures pour femmes4.jpg', 'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'wm5', 'title': 'فستان سواريه فاخر',          'price': '25,000 MRU',  'bids': '3',  'time': '10h 00m 00s', 'location': l10n.text_113, 'category': 'womens', 'image': 'assets/Fournitures pour femmes5.jpg', 'status': 'active',   'postedTime': 'منذ يومين'},
-      {'id': 'wm6', 'title': 'حذاء كعب عالٍ لويس فيتون', 'price': '42,000 MRU',  'bids': '4',  'time': '12h 00m 00s', 'location': l10n.text_113, 'category': 'womens', 'image': 'assets/Fournitures pour femmes6.jpg', 'status': 'active',   'postedTime': 'منذ 3 أيام'},
-      {'id': 'wm7', 'title': 'نظارة شمسية غوتشي نسائية',  'price': '16,000 MRU',  'bids': '0',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'womens', 'image': 'assets/Fournitures pour femmes7.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      {'id': 'wm8', 'title': 'خاتم ألماس نسائي',           'price': '200,000 MRU', 'bids': '14', 'time': l10n.text_364, 'location': l10n.text_113, 'category': 'womens', 'image': 'assets/Fournitures pour femmes8.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوعين'},
-      // ── حيوانات ──────────────────────────────────────────
-      {'id': 'an1', 'title': 'حصان عربي أصيل',            'price': '300,000 MRU', 'bids': '9',  'time': '36h 00m 00s', 'location': l10n.text_113, 'category': 'animals', 'image': 'assets/animal1.jpg', 'status': 'active',   'postedTime': 'منذ ساعة'},
-      {'id': 'an2', 'title': 'جمل مهجن للبيع',             'price': '150,000 MRU', 'bids': '5',  'time': '24h 00m 00s', 'location': l10n.text_113, 'category': 'animals', 'image': 'assets/animal2.jpg', 'status': 'active',   'postedTime': 'منذ 4 ساعات'},
-      {'id': 'an3', 'title': 'ماعز محلية للبيع',           'price': '25,000 MRU',  'bids': '3',  'time': '12h 00m 00s', 'location': l10n.text_113, 'category': 'animals', 'image': 'assets/animal3.jpg', 'status': 'active',   'postedTime': 'منذ 6 ساعات'},
-      {'id': 'an4', 'title': 'خروف حاشي للعيد',            'price': '40,000 MRU',  'bids': '7',  'time': '08h 00m 00s', 'location': l10n.text_113, 'category': 'animals', 'image': 'assets/animal4.jpg', 'status': 'active',   'postedTime': 'منذ يوم'},
-      {'id': 'an5', 'title': 'بقرة حلوب فريزيان',          'price': '85,000 MRU',  'bids': '4',  'time': '18h 00m 00s', 'location': l10n.text_113, 'category': 'animals', 'image': 'assets/animal5.jpg', 'status': 'active',   'postedTime': 'منذ يومين'},
-      {'id': 'an6', 'title': 'دجاج بلدي 50 رأس',           'price': '15,000 MRU',  'bids': '2',  'time': '06h 00m 00s', 'location': l10n.text_113, 'category': 'animals', 'image': 'assets/animal6.jpg', 'status': 'active',   'postedTime': 'منذ 3 أيام'},
-      {'id': 'an7', 'title': 'كبش إيل دو فرانس',           'price': '55,000 MRU',  'bids': '0',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'animals', 'image': 'assets/animal7.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوع'},
-      {'id': 'an8', 'title': 'إبل للمزرعة',                'price': '220,000 MRU', 'bids': '6',  'time': l10n.text_364, 'location': l10n.text_113, 'category': 'animals', 'image': 'assets/animal8.jpg', 'status': 'finished', 'postedTime': 'منذ أسبوعين'},
-    ];
-    _filterAuctions();
-  }
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    _loadAuctions();
   }
 
   @override
@@ -273,8 +42,38 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     super.dispose();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+  }
+
   void _onSearchChanged() {
     _filterAuctions();
+  }
+
+  Future<void> _loadAuctions() async {
+    try {
+      final response = await _auctionApi.getAuctions(
+        page: 1,
+        limit: 50,
+        status: _activeTabIndex == 0 ? 'active' : 'completed',
+      );
+
+      setState(() {
+        _isLoading = false;
+        if (response.success && response.data != null) {
+          _allAuctions = List.from(response.data!['auctions'] ?? []);
+          _filteredAuctions = List.from(_allAuctions);
+        }
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auctions)),
+        );
+      }
+    }
   }
 
   void _filterAuctions() {
@@ -772,28 +571,34 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
           ),
 
           // Auction List
-          _filteredAuctions.isEmpty
+          _isLoading
               ? SliverFillRemaining(
                   child: Center(
-                    child: Text(
-                      l10n.text_54,
-                      style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 16),
-                    ),
+                    child: CircularProgressIndicator(),
                   ),
                 )
-              : SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) => _buildHorizontalAuctionCard(
-                        context,
-                        isDarkMode,
-                        _filteredAuctions[index],
+              : _filteredAuctions.isEmpty
+                  ? SliverFillRemaining(
+                      child: Center(
+                        child: Text(
+                          l10n.text_54,
+                          style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 16),
+                        ),
                       ),
-                      childCount: _filteredAuctions.length,
+                    )
+                  : SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => _buildHorizontalAuctionCard(
+                            context,
+                            isDarkMode,
+                            _filteredAuctions[index],
+                          ),
+                          childCount: _filteredAuctions.length,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
         ],
       ),
 
@@ -876,14 +681,15 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     );
   }
 
-  Widget _buildHorizontalAuctionCard(BuildContext context, bool isDarkMode, Map<String, String> auction) {
+  Widget _buildHorizontalAuctionCard(BuildContext context, bool isDarkMode, Map<String, dynamic> auction) {
     const Color primaryBlue = Color(0xFF0084FF);
     const Color softRed = Color(0xFFFF3B30);
     const Color lightGreyBg = Color(0xFFF2F2F7);
     const Color darkGreyBg = Color(0xFF2C2C2E);
     
-    final id = auction['id']!;
-    final isFavorite = ref.watch(favoritesProvider).contains(id);
+    final id = auction['id']?.toString() ?? '';
+    final favoritesAsync = ref.watch(favoritesProvider);
+    final isFavorite = favoritesAsync.value?.contains(id) ?? false;
 
     final bool isFinished = auction['status'] == 'finished';
 
@@ -920,7 +726,9 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                 width: 125,
                 height: 110,
                 child: Image.asset(
-                  auction['image']!,
+                  auction['images'] is List && (auction['images'] as List).isNotEmpty 
+                      ? auction['images'][0] 
+                      : auction['image']?.toString() ?? 'assets/car0.png',
                   fit: BoxFit.cover,
                   errorBuilder: (c, e, s) => Container(
                     color: Colors.grey[200],
@@ -938,9 +746,9 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                   children: [
                     // Title
                     Text(
-                      auction['title']!,
+                      auction['title']?.toString() ?? 'Sans titre',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14, // Reduced from 15
+                        fontSize: 14,
                         fontWeight: FontWeight.w800,
                         color: isDarkMode ? Colors.white : Colors.black,
                       ),
@@ -948,12 +756,12 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.right,
                     ),
-                    const SizedBox(height: 1), // Reduced from 2
+                    const SizedBox(height: 1),
                     // Price
                     Text(
-                      "${auction['price']?.split(' ')[0]} أوقية جديدة",
+                      "${auction['current_bid'] ?? auction['price'] ?? 0} MRU",
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13, // Reduced from 14
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: isDarkMode ? Colors.white70 : Colors.black87,
                       ),
@@ -969,18 +777,18 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              auction['bids']!,
+                              auction['bids']?.toString() ?? '0',
                               style: GoogleFonts.plusJakartaSans(
                                 color: softRed,
                                 fontWeight: FontWeight.w900,
-                                fontSize: 14, // Reduced from 16
+                                fontSize: 14,
                               ),
                             ),
                             const SizedBox(width: 3),
                             Icon(
                               Icons.gavel_rounded,
                               color: isDarkMode ? Colors.white54 : Colors.black54,
-                              size: 16, // Reduced from 18
+                              size: 16,
                             ),
                           ],
                         ),
@@ -1000,7 +808,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                             children: [
                               Flexible(
                                 child: Text(
-                                  isFinished ? 'انتهى المزاد' : auction['time']!,
+                                  isFinished ? 'انتهى المزاد' : (auction['ends_at']?.toString() ?? auction['time']?.toString() ?? ''),
                                   style: GoogleFonts.plusJakartaSans(
                                     color: softRed,
                                     fontSize: 11,

@@ -21,6 +21,11 @@ export interface AdminUser {
   email: string | null
   profile_pic_url: string | null
   city: string | null
+  country_code: string | null
+  address: string | null
+  postal_code: string | null
+  date_of_birth: string | null
+  gender: string | null
   language_pref: string
   is_active: boolean
   role: 'user' | 'admin' | 'driver'

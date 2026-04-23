@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/auth_api.dart';
+import '../services/favorites_service.dart';
 
 class LoginState {
   final bool isLoading;
@@ -15,26 +17,45 @@ class LoginState {
 }
 
 class LoginController extends StateNotifier<LoginState> {
+  final AuthApi _authApi = AuthApi();
+  
   LoginController() : super(LoginState());
 
   Future<bool> login(String phone, String password) async {
     state = state.copyWith(isLoading: true, error: null);
     
     try {
-      // Simulation d'appel API (à remplacer par un vrai appel auth plus tard)
-      await Future.delayed(const Duration(seconds: 2));
+      final response = await _authApi.login(
+        phone: phone,
+        pin: password,
+      );
       
-      // Ici, on accepte n'importe quoi pour la démo, 
-      // ou on met des identifiants de test.
-      if (phone.length >= 8 && password.length == 4) {
+      if (response.success) {
         state = state.copyWith(isLoading: false);
+        
+        // Synchroniser les favoris locaux avec le serveur
+        try {
+          final favoritesService = FavoritesService();
+          await favoritesService.syncPendingFavorites();
+          await favoritesService.migrateLocalFavorites();
+        } catch (e) {
+          // Ne pas bloquer le login si la sync échoue
+          print('Erreur synchronisation favoris: $e');
+        }
+        
         return true;
       } else {
-        state = state.copyWith(isLoading: false, error: 'يرجى التحقق من البيانات');
+        state = state.copyWith(
+          isLoading: false,
+          error: response.error?.message ?? 'Erreur de connexion',
+        );
         return false;
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        error: e.toString(),
+      );
       return false;
     }
   }

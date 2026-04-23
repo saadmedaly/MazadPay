@@ -46,6 +46,11 @@ func (h *RequestHandler) CreateAuctionRequest(c *fiber.Ctx) error {
 	req.ID = uuid.New()
 	req.UserID = userID
 
+	// Set default quantity if not provided
+	if req.Quantity == 0 {
+		req.Quantity = 1
+	}
+
 	if err := h.svc.CreateAuctionRequest(c.Context(), &req); err != nil {
 		return MapError(c, h.logger, err)
 	}

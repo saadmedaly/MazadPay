@@ -1,9 +1,64 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/notifications_api.dart';
 
 
-class NotificationsPage extends StatelessWidget {
+class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
+
+  @override
+  ConsumerState<NotificationsPage> createState() => _NotificationsPageState();
+}
+
+class _NotificationsPageState extends ConsumerState<NotificationsPage> {
+  final NotificationsApi _notificationsApi = NotificationsApi();
+  List<Map<String, dynamic>> _notifications = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications() async {
+    try {
+      final response = await _notificationsApi.getNotifications();
+
+      setState(() {
+        _isLoading = false;
+        if (response.success && response.data != null) {
+          _notifications = List.from(response.data!['notifications'] ?? []);
+        }
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_notifications)),
+        );
+      }
+    }
+  }
+
+  Future<void> _markAllAsRead() async {
+    try {
+      await _notificationsApi.markAllAsRead();
+      setState(() {
+        for (var notification in _notifications) {
+          notification['read'] = true;
+        }
+      });
+    } catch (e) {
+      // Handle error silently with localized message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_connection)),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +72,7 @@ class NotificationsPage extends StatelessWidget {
           elevation: 0,
           centerTitle: true,
           title: Text(
-            l10n.text_48, // "الإشعارات"
+            l10n.text_48,
             style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -30,66 +85,64 @@ class NotificationsPage extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () {},
+              onPressed: _markAllAsRead,
               child: Text(
-                l10n.text_245, // "تحديد ككل كمقروء"
+                l10n.text_245,
                 style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontSize: 12),
               ),
             ),
           ],
         ),
-        body: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          itemCount: 5,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            return _buildNotificationItem(context, index, isDarkMode);
-          },
-        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _notifications.isEmpty
+                ? Center(
+                    child: Text(
+                      'Aucune notification',
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    itemCount: _notifications.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      return _buildNotificationItem(context, _notifications[index], isDarkMode);
+                    },
+                  ),
       );
   }
 
-  Widget _buildNotificationItem(BuildContext context, int index, bool isDarkMode) {
-    final types = ['bid', 'win', 'system', 'payment', 'ad'];
-    final type = types[index % types.length];
+  Widget _buildNotificationItem(BuildContext context, Map<String, dynamic> notification, bool isDarkMode) {
+    final type = notification['type']?.toString() ?? 'system';
     final l10n = AppLocalizations.of(context)!;
     
     IconData icon;
     Color color;
-    String title;
-    String description;
-    String time = l10n.text_246; // "منذ 5 دقائق"
+    String title = notification['title']?.toString() ?? '';
+    String description = notification['message']?.toString() ?? notification['description']?.toString() ?? '';
+    String time = notification['created_at']?.toString() ?? l10n.text_246;
 
     switch (type) {
       case 'bid':
         icon = Icons.gavel_outlined;
         color = Colors.orange;
-        title = l10n.text_247;
-        description = l10n.text_248;
         break;
       case 'win':
         icon = Icons.emoji_events_outlined;
         color = const Color(0xFF00C58D);
-        title = l10n.text_249;
-        description = l10n.text_250;
         break;
       case 'payment':
         icon = Icons.payment_outlined;
         color = const Color(0xFF0081FF);
-        title = l10n.text_251;
-        description = l10n.text_252;
         break;
       case 'system':
         icon = Icons.notifications_active_outlined;
         color = Colors.blueGrey;
-        title = l10n.text_253;
-        description = l10n.text_254;
         break;
       default:
         icon = Icons.info_outline;
         color = Colors.grey;
-        title = l10n.text_255;
-        description = l10n.text_256;
     }
 
     return Container(

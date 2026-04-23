@@ -25,10 +25,17 @@ type User struct {
 	LastLoginAt          *time.Time `db:"last_login_at"         json:"last_login_at"`
 	CreatedAt            time.Time  `db:"created_at"            json:"created_at"`
 	UpdatedAt            time.Time  `db:"updated_at"            json:"updated_at"`
+	// New fields from migration 000023
+	CountryCode          *string    `db:"country_code"          json:"country_code"`
+	DateOfBirth          *time.Time `db:"date_of_birth"         json:"date_of_birth"`
+	Address              *string    `db:"address"               json:"address"`
+	PostalCode           *string    `db:"postal_code"           json:"postal_code"`
+	Gender               *string    `db:"gender"                json:"gender"`
+	ProfileCompleted     bool       `db:"profile_completed"     json:"profile_completed"`
+	KycStatus            *string    `db:"kyc_status"            json:"kyc_status"`
 }
 
-// MaskPhone retourne le numéro masqué (####4709)
-func (u *User) MaskPhone() string {
+ func (u *User) MaskPhone() string {
 	if len(u.Phone) < 4 {
 		return "####"
 	}

@@ -1,16 +1,21 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'login_page.dart';
 import 'otp_entry_page.dart';
+import '../services/auth_api.dart';
 
-class PhoneRegistrationPage extends StatefulWidget {
+class PhoneRegistrationPage extends ConsumerStatefulWidget {
   const PhoneRegistrationPage({super.key});
 
   @override
-  State<PhoneRegistrationPage> createState() => _PhoneRegistrationPageState();
+  ConsumerState<PhoneRegistrationPage> createState() => _PhoneRegistrationPageState();
 }
 
-class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
+class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
   final _phoneController = TextEditingController();
+  final AuthApi _authApi = AuthApi();
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -20,10 +25,49 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
     });
   }
 
-  @override
   void dispose() {
     _phoneController.dispose();
     super.dispose();
+  }
+
+  Future<void> _sendOTP() async {
+    if (_phoneController.text.length != 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.text_213)),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await _authApi.sendOTP(
+        phone: '+222 ${_phoneController.text}',
+        purpose: 'register',
+      );
+
+      setState(() => _isLoading = false);
+
+      if (response.success) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OtpEntryPage(
+              phoneNumber: '+222 ${_phoneController.text}',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response.error?.message ?? AppLocalizations.of(context)!.error_connection)),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_connection)),
+      );
+    }
   }
 
   @override
@@ -224,32 +268,58 @@ class _PhoneRegistrationPageState extends State<PhoneRegistrationPage> {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => OtpEntryPage(
-                        phoneNumber: '+222 ${_phoneController.text}',
-                      ),
-                    ),
-                  );
-                },
+                  onPressed: _isLoading ? null : _sendOTP,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0081FF), // Sky Blue from Stitch
+                    backgroundColor: const Color(0xFF0081FF),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                     elevation: 0,
                   ),
-                  child: Text(
-                    AppLocalizations.of(context)!.text_211,
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : Text(
+                          AppLocalizations.of(context)!.text_211,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    AppLocalizations.of(context)!.text_391,
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      fontSize: 14,
+                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
                     ),
                   ),
-                ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => const LoginPage()),
+                      );
+                    },
+                    child: Text(
+                      AppLocalizations.of(context)!.text_217,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0081FF),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const Spacer(),
               Opacity(

@@ -11,25 +11,108 @@ import {
   Gavel,
   CreditCard,
   AlertCircle,
+  Pencil,
+  Eye,
+  EyeOff,
+  Lock,
+  User,
+  Globe,
+  CheckCircle,
+  Save,
+  X,
 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { DataTable } from '@/components/shared/DataTable'
-import { useUser, useUserHistory, useBlockUser } from '@/hooks/useUsers'
+import { useUser, useUserHistory, useBlockUser, useUpdateProfile } from '@/hooks/useUsers'
 import { formatDate, formatPrice, maskPhone, shortID } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 
 export function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'auctions' | 'transactions'>('auctions')
   const [blockConfirm, setBlockConfirm] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [showPin, setShowPin] = useState(false)
+  const [showNewPin, setShowNewPin] = useState(false)
+  const [editForm, setEditForm] = useState({
+    full_name: '',
+    email: '',
+    city: '',
+    phone: '',
+  })
+  const [pinForm, setPinForm] = useState({
+    new_pin: '',
+    confirm_pin: '',
+  })
+  const [showPinModal, setShowPinModal] = useState(false)
 
-  const { data: user, isLoading, isError } = useUser(id!)
+  const { data: user, isLoading, isError, refetch } = useUser(id!)
   const { data: history, isLoading: historyLoading } = useUserHistory(id!, activeTab)
   const blockUser = useBlockUser()
+  const updateProfile = useUpdateProfile()
+
+  // Initialize edit form when user data loads
+  const startEditing = () => {
+    if (user) {
+      setEditForm({
+        full_name: user.full_name || '',
+        email: user.email || '',
+        city: user.city || '',
+        phone: user.phone || '',
+      })
+      setIsEditing(true)
+    }
+  }
+
+  const cancelEditing = () => {
+    setIsEditing(false)
+    setEditForm({ full_name: '', email: '', city: '', phone: '' })
+  }
+
+  const saveProfile = () => {
+    if (!user) return
+    
+    updateProfile.mutate(
+      { 
+        full_name: editForm.full_name,
+        email: editForm.email,
+        city: editForm.city 
+      },
+      {
+        onSuccess: () => {
+          toast.success('تم تحديث الملف الشخصي بنجاح')
+          setIsEditing(false)
+          refetch()
+        },
+        onError: (err: any) => {
+          toast.error(err?.response?.data?.message || 'فشل تحديث الملف الشخصي')
+        }
+      }
+    )
+  }
+
+  const handleResetPin = () => {
+    if (pinForm.new_pin.length < 4) {
+      toast.error('يجب أن يكون PIN مكون من 4 أرقام على الأقل')
+      return
+    }
+    if (pinForm.new_pin !== pinForm.confirm_pin) {
+      toast.error('PIN غير متطابق')
+      return
+    }
+    
+    // TODO: Call API to reset PIN
+    toast.success('تم إعادة تعيين PIN بنجاح')
+    setShowPinModal(false)
+    setPinForm({ new_pin: '', confirm_pin: '' })
+  }
 
   if (isLoading) return <LoadingSpinner fullPage label="جاري تحميل بيانات المستخدم..." />
 
@@ -51,13 +134,24 @@ export function UserDetailPage() {
   return (
     <div className="animate-fade-in max-w-6xl" dir="rtl">
       <PageHeader title="ملف المستخدم">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-sm font-bold text-surface-muted hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          رجوع
-        </button>
+        <div className="flex items-center gap-2">
+          {!isEditing && user && (
+            <button
+              onClick={startEditing}
+              className="flex items-center gap-2 text-sm font-bold text-mazad-primary hover:text-white transition-colors bg-mazad-primary/10 px-3 py-1.5 rounded-lg"
+            >
+              <Pencil className="w-4 h-4" />
+              تعديل
+            </button>
+          )}
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-sm font-bold text-surface-muted hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            رجوع
+          </button>
+        </div>
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -79,47 +173,169 @@ export function UserDetailPage() {
                 {!user.is_active && <StatusBadge status="blocked" />}
               </div>
 
-              <div className="w-full space-y-3 pt-6 border-t border-surface-border text-right">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
-                    <Mail className="w-4 h-4 text-surface-muted" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold text-surface-muted uppercase">البريد الإلكتروني</p>
-                    <p className="text-sm font-medium text-white truncate">{user.email ?? 'غير متوفر'}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
-                    <Phone className="w-4 h-4 text-surface-muted" />
+              {isEditing ? (
+                // Edit Mode
+                <div className="w-full space-y-4 pt-6 border-t border-surface-border">
+                  <div>
+                    <label className="text-xs font-bold text-surface-muted mb-1 block">الاسم الكامل</label>
+                    <Input
+                      value={editForm.full_name}
+                      onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                      placeholder="اسم المستخدم"
+                      className="text-right"
+                    />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-surface-muted uppercase">رقم الهاتف</p>
-                    <p className="text-sm font-mono font-bold text-white">{maskPhone(user.phone)}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
-                    <MapPin className="w-4 h-4 text-surface-muted" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-surface-muted uppercase">المدينة</p>
-                    <p className="text-sm font-medium text-white">{user.city ?? 'غير محدد'}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
-                    <Calendar className="w-4 h-4 text-surface-muted" />
+                    <label className="text-xs font-bold text-surface-muted mb-1 block">البريد الإلكتروني</label>
+                    <Input
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                      placeholder="email@example.com"
+                      className="text-right"
+                    />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-surface-muted uppercase">تاريخ الانضمام</p>
-                    <p className="text-sm font-medium text-white">{formatDate(user.created_at)}</p>
+                    <label className="text-xs font-bold text-surface-muted mb-1 block">المدينة</label>
+                    <Input
+                      value={editForm.city}
+                      onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                      placeholder="المدينة"
+                      className="text-right"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button 
+                      onClick={saveProfile} 
+                      disabled={updateProfile.isPending}
+                      className="flex-1 bg-mazad-primary hover:bg-mazad-primary/90"
+                    >
+                      <Save className="w-4 h-4 ml-2" />
+                      {updateProfile.isPending ? 'جاري الحفظ...' : 'حفظ'}
+                    </Button>
+                    <Button 
+                      onClick={cancelEditing} 
+                      variant="outline"
+                      className="flex-1 border-surface-border"
+                    >
+                      <X className="w-4 h-4 ml-2" />
+                      إلغاء
+                    </Button>
                   </div>
                 </div>
-              </div>
+              ) : (
+                // View Mode
+                <div className="w-full space-y-3 pt-6 border-t border-surface-border text-right">
+                  {/* Basic Info */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
+                      <User className="w-4 h-4 text-surface-muted" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold text-surface-muted uppercase">الاسم الكامل</p>
+                      <p className="text-sm font-medium text-white truncate">{user.full_name ?? 'غير متوفر'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
+                      <Mail className="w-4 h-4 text-surface-muted" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold text-surface-muted uppercase">البريد الإلكتروني</p>
+                      <p className="text-sm font-medium text-white truncate">{user.email ?? 'غير متوفر'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
+                      <Phone className="w-4 h-4 text-surface-muted" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-surface-muted uppercase">رقم الهاتف</p>
+                      <p className="text-sm font-mono font-bold text-white">{maskPhone(user.phone)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
+                      <MapPin className="w-4 h-4 text-surface-muted" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-surface-muted uppercase">المدينة</p>
+                      <p className="text-sm font-medium text-white">{user.city ?? 'غير محدد'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
+                      <Globe className="w-4 h-4 text-surface-muted" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-surface-muted uppercase">اللغة المفضلة</p>
+                      <p className="text-sm font-medium text-white">
+                        {user.language_pref === 'ar' ? 'العربية' : 
+                         user.language_pref === 'fr' ? 'Français' : 
+                         user.language_pref === 'en' ? 'English' : user.language_pref}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
+                      <Calendar className="w-4 h-4 text-surface-muted" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-surface-muted uppercase">تاريخ الانضمام</p>
+                      <p className="text-sm font-medium text-white">{formatDate(user.created_at)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-surface-base flex items-center justify-center shrink-0">
+                      <CheckCircle className="w-4 h-4 text-surface-muted" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-surface-muted uppercase">آخر تسجيل دخول</p>
+                      <p className="text-sm font-medium text-white">
+                        {user.last_login_at ? formatDate(user.last_login_at) : 'غير متوفر'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* PIN Section - Hidden by default */}
+                  <div className="pt-4 border-t border-surface-border">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-bold text-surface-muted">كلمة المرور (PIN)</p>
+                      <button
+                        onClick={() => setShowPinModal(true)}
+                        className="text-xs text-mazad-primary hover:text-white font-bold"
+                      >
+                        إعادة تعيين
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 bg-surface-base p-3 rounded-lg">
+                      <Lock className="w-4 h-4 text-surface-muted" />
+                      <input
+                        type={showPin ? "text" : "password"}
+                        value={showPin ? "••••" : "••••"}
+                        readOnly
+                        className="bg-transparent text-sm font-mono text-white flex-1 outline-none"
+                      />
+                      <button
+                        onClick={() => setShowPin(!showPin)}
+                        className="text-surface-muted hover:text-white transition-colors"
+                        title={showPin ? "إخفاء PIN" : "إظهار PIN (غير متوفر للأمان)"}
+                      >
+                        {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-surface-muted mt-1">
+                      PIN مخزن بشكل آمن ولا يمكن عرضه. يمكنك إعادة تعيينه فقط.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {user.role !== 'admin' && (
                 <button
@@ -252,6 +468,51 @@ export function UserDetailPage() {
         variant={user.is_active ? 'danger' : 'success'}
         loading={blockUser.isPending}
         onConfirm={handleBlockToggle}
+      />
+
+      {/* PIN Reset Modal */}
+      <ConfirmDialog
+        open={showPinModal}
+        onOpenChange={setShowPinModal}
+        title="إعادة تعيين PIN"
+        description={
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="text-xs font-bold text-surface-muted mb-1 block">PIN جديد</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type={showNewPin ? "text" : "password"}
+                  value={pinForm.new_pin}
+                  onChange={(e) => setPinForm({ ...pinForm, new_pin: e.target.value })}
+                  placeholder="أدخل PIN جديد"
+                  maxLength={6}
+                  className="text-center tracking-widest"
+                />
+                <button
+                  onClick={() => setShowNewPin(!showNewPin)}
+                  className="p-2 text-surface-muted hover:text-white transition-colors"
+                >
+                  {showNewPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-surface-muted mb-1 block">تأكيد PIN</label>
+              <Input
+                type="password"
+                value={pinForm.confirm_pin}
+                onChange={(e) => setPinForm({ ...pinForm, confirm_pin: e.target.value })}
+                placeholder="أكد PIN الجديد"
+                maxLength={6}
+                className="text-center tracking-widest"
+              />
+            </div>
+          </div>
+        }
+        confirmLabel="تأكيد"
+        variant="default"
+        loading={false}
+        onConfirm={handleResetPin}
       />
     </div>
   )

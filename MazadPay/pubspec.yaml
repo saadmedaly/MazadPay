@@ -44,6 +44,18 @@ dependencies:
   flutter_riverpod: ^2.6.1
   riverpod_annotation: ^2.6.1
   video_player: ^2.11.1
+  
+  # API & HTTP
+  dio: ^5.4.0
+  
+  # Secure Storage
+  flutter_secure_storage: ^9.0.0
+  
+  # Local Storage
+  shared_preferences: ^2.2.2
+  
+  # Environment Variables
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -77,6 +89,7 @@ flutter:
   assets:
     - assets/
     - assets/auctions/
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

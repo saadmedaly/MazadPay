@@ -33,9 +33,14 @@ func (h *UserHandler) GetMe(c *fiber.Ctx) error {
 
 func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
 	type Request struct {
-		FullName string `json:"full_name"`
-		Email    string `json:"email"`
-		City     string `json:"city"`
+		FullName    string  `json:"full_name"`
+		Email       string  `json:"email"`
+		City        string  `json:"city"`
+		CountryCode string  `json:"country_code"`
+		Address     string  `json:"address"`
+		PostalCode  string  `json:"postal_code"`
+		DateOfBirth string  `json:"date_of_birth"`
+		Gender      string  `json:"gender"`
 	}
 	var req Request
 	if err := c.BodyParser(&req); err != nil {
@@ -46,8 +51,9 @@ func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
 	if err != nil {
 		return Unauthorized(c)
 	}
-	if err := h.service.UpdateProfile(c.Context(), userID, req.FullName, req.Email, req.City); err != nil {
-		return InternalError(c, "Failed to update profile")
+	if err := h.service.UpdateProfileExtended(c.Context(), userID, req.FullName, req.Email, req.City, req.CountryCode, req.Address, req.PostalCode, req.DateOfBirth, req.Gender); err != nil {
+		h.logger.Error("Failed to update profile", zap.Error(err), zap.String("user_id", userID.String()))
+		return InternalError(c, "Failed to update profile: "+err.Error())
 	}
 	return OK(c, fiber.Map{"message": "Profile updated"})
 }
@@ -230,4 +236,121 @@ func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
 		return MapError(c, h.logger, err)
 	}
 	return OK(c, fiber.Map{"message": "User deleted successfully"})
+}
+
+// New endpoints for extended user functionality
+
+func (h *UserHandler) GetUserSettings(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	settings, err := h.service.GetUserSettings(c.Context(), userID)
+	if err != nil {
+		return InternalError(c, "Failed to get user settings")
+	}
+	return OK(c, settings)
+}
+
+func (h *UserHandler) UpdateUserSettings(c *fiber.Ctx) error {
+	type Request struct {
+		Currency              string `json:"currency"`
+		Theme                 string `json:"theme"`
+		Language              string `json:"language"`
+		NotificationsEmail    bool   `json:"notifications_email"`
+		NotificationsPush     bool   `json:"notifications_push"`
+		NotificationsSMS      bool   `json:"notifications_sms"`
+		TwoFactorEnabled      bool   `json:"two_factor_enabled"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	if err := h.service.UpdateUserSettings(c.Context(), userID, req); err != nil {
+		return InternalError(c, "Failed to update user settings")
+	}
+	return OK(c, fiber.Map{"message": "Settings updated"})
+}
+
+func (h *UserHandler) UpdateKYCStatus(c *fiber.Ctx) error {
+	type Request struct {
+		UserID uuid.UUID `json:"user_id"`
+		Status string    `json:"status"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+
+	if err := h.service.UpdateKYCStatus(c.Context(), req.UserID, req.Status); err != nil {
+		return InternalError(c, "Failed to update KYC status")
+	}
+	return OK(c, fiber.Map{"message": "KYC status updated"})
+}
+
+// Consolidation endpoints for /my/*
+
+func (h *UserHandler) MyAuctionsActive(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	auctions, err := h.service.ListMyAuctionsByStatus(c.Context(), userID, "active")
+	if err != nil {
+		return InternalError(c, "Failed to get active auctions")
+	}
+	return OK(c, auctions)
+}
+
+func (h *UserHandler) MyAuctionsEnded(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	auctions, err := h.service.ListMyAuctionsByStatus(c.Context(), userID, "ended")
+	if err != nil {
+		return InternalError(c, "Failed to get ended auctions")
+	}
+	return OK(c, auctions)
+}
+
+func (h *UserHandler) MyAuctionsPending(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	auctions, err := h.service.ListMyAuctionsByStatus(c.Context(), userID, "pending")
+	if err != nil {
+		return InternalError(c, "Failed to get pending auctions")
+	}
+	return OK(c, auctions)
+}
+
+func (h *UserHandler) MyBidsActive(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	bids, err := h.service.ListMyBidsByStatus(c.Context(), userID, "active")
+	if err != nil {
+		return InternalError(c, "Failed to get active bids")
+	}
+	return OK(c, bids)
+}
+
+func (h *UserHandler) MyBidsLost(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+	bids, err := h.service.ListMyBidsByStatus(c.Context(), userID, "lost")
+	if err != nil {
+		return InternalError(c, "Failed to get lost bids")
+	}
+	return OK(c, bids)
 }

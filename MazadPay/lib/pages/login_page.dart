@@ -144,6 +144,35 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   letterSpacing: 24, // High spacing for digits as in screenshot
                 ),
 
+                // Affichage des erreurs
+                Consumer(
+                  builder: (context, ref, child) {
+                    final error = ref.watch(loginControllerProvider).error;
+                    if (error == null) return const SizedBox.shrink();
+                    return Container(
+                      margin: const EdgeInsets.only(top: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              error,
+                              style: const TextStyle(color: Colors.red, fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+
                 Align(
                   alignment: AlignmentDirectional.centerEnd,
                   child: TextButton(
@@ -194,16 +223,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => OtpEntryPage(
-                            phoneNumber: _phoneController.text,
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: ref.watch(loginControllerProvider).isLoading
+                      ? null
+                      : () async {
+                          final success = await ref.read(loginControllerProvider.notifier).login(
+                            _phoneController.text,
+                            _passwordController.text,
+                          );
+                          
+                          if (success && mounted) {
+                            // Redirection vers HomePage après login réussi
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (context) => const HomePage()),
+                              (route) => false, // Supprime toutes les routes précédentes
+                            );
+                          }
+                        },
                     child: ref.watch(loginControllerProvider).isLoading
                       ? const SizedBox(
                           height: 20,

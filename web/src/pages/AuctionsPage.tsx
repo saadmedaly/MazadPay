@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner'
 import { 
   Tag, ImageIcon, MinusCircle, Plus, Search,
   Calendar, Eye, Check, X, Loader2, AlertCircle, Save, Pencil, Trash2,
@@ -34,7 +34,7 @@ const EMPTY_FORM = {
   title_ar: '', title_fr: '', title_en: '',
   description_ar: '', description_fr: '', description_en: '',
   start_price: 0, buy_now_price: 0, min_increment: 0, insurance_amount: 0,
-  category_id: 1, location_id: 1,
+  category_id: 0, location_id: 0,  // Will be set dynamically from available data
   start_time: '', 
   end_time: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
   phone_contact: '',
@@ -77,28 +77,30 @@ export function AuctionsPage() {
     return () => window.clearInterval(timer)
   }, [])
 
-  // Set default location to Nouakchott
+  // Set default location to Nouakchott and first category when opening create form
   React.useEffect(() => {
-    if (mode === 'create' && locations && locations.length > 0) {
-      const nktt = locations.find(l => 
-        l.city_name_ar.includes('نواكشوط') || 
-        l.city_name_fr.toLowerCase().includes('nouakchott')
-      )
-      if (nktt) {
-        setForm(f => ({ ...f, location_id: nktt.id }))
-      } else if (!form.location_id) {
-        setForm(f => ({ ...f, location_id: locations[0].id }))
-      }
+    if (mode === 'create') {
+      setForm(prev => {
+        let updates = { ...prev }
+        // Set default category if not set
+        if (categories && categories.length > 0 && !prev.category_id) {
+          const firstParent = categories.find(c => !c.parent_id) || categories[0]
+          updates.category_id = firstParent.id
+        }
+        // Set default location if not set
+        if (locations && locations.length > 0 && !prev.location_id) {
+          const nktt = locations.find(l => 
+            l.city_name_ar.includes('نواكشوط') || 
+            l.city_name_fr.toLowerCase().includes('nouakchott')
+          )
+          updates.location_id = nktt ? nktt.id : locations[0].id
+        }
+        return updates
+      })
     }
-  }, [mode, locations])
+  }, [mode, categories, locations])
 
   /* ─── helpers ─── */
-  const parseISO = (s: string) => {
-    const d = new Date(s)
-    if (isNaN(d.getTime())) throw new Error()
-    return d.toISOString()
-  }
-
   const formatRemainingTime = (endTime: string) => {
     const diff = new Date(endTime).getTime() - now
     if (isNaN(diff)) return 'غير متوفر'
@@ -118,37 +120,121 @@ export function AuctionsPage() {
   }
 
   const buildPayload = (): AuctionPayload | null => {
-    if (!form.title_ar.trim()) { toast.error('العنوان بالعربية مطلوب'); return null }
-    if (!form.start_price)     { toast.error('السعر الافتتاحي مطلوب'); return null }
-    if (!form.end_time)        { toast.error('تاريخ الإغلاق مطلوب'); return null }
+    // Title validation
+    if (!form.title_ar?.trim()) { 
+      toast.error('العنوان بالعربية مطلوب - يرجى إدخال عنوان المزاد')
+      return null 
+    }
+    if (form.title_ar.trim().length < 3) {
+      toast.error('العنوان قصير جداً - يجب أن يكون العنوان 3 أحرف على الأقل')
+      return null
+    }
+
+    // Price validation
+    if (!form.start_price || form.start_price <= 0) { 
+      toast.error('السعر الافتتاحي مطلوب - يرجى إدخال سعر افتتاحي صحيح') 
+      return null 
+    }
+    if (form.start_price < 1) {
+      toast.error('السعر الافتتاحي غير صالح - يجب أن يكون السعر 1 UM أو أكثر')
+      return null
+    }
+
+    // End time validation
+    if (!form.end_time) { 
+      toast.error('تاريخ الإغلاق مطلوب - يرجى تحديد تاريخ نهاية المزاد') 
+      return null 
+    }
 
     let end_time: string
     try { 
       const d = new Date(form.end_time)
+      if (isNaN(d.getTime())) {
+        toast.error('تاريخ الإغلاق غير صالح - تنسيق التاريخ غير صحيح')
+        return null
+      }
       if (d <= new Date()) {
-        toast.error('تاريخ الإغلاق يجب أن يكون في المستقبل')
+        toast.error('تاريخ الإغلاق يجب أن يكون في المستقبل - يرجى اختيار تاريخ لاحق')
         return null
       }
       end_time = d.toISOString() 
     }
-    catch { toast.error('تاريخ الإغلاق غير صالح'); return null }
+    catch { 
+      toast.error('تاريخ الإغلاق غير صالح - حدث خطأ في تحليل التاريخ') 
+      return null 
+    }
 
+    // Start time validation (optional)
     let start_time: string | undefined
     if (form.start_time) {
-      try { start_time = parseISO(form.start_time) }
-      catch { toast.error('تاريخ البدء غير صالح'); return null }
+      try { 
+        const st = new Date(form.start_time)
+        if (isNaN(st.getTime())) {
+          toast.error('تاريخ البدء غير صالح')
+          return null
+        }
+        // Check if start time is after end time
+        if (end_time && st > new Date(end_time)) {
+          toast.error('تاريخ البدء يجب أن يكون قبل تاريخ الإغلاق')
+          return null
+        }
+        start_time = st.toISOString() 
+      }
+      catch { 
+        toast.error('تاريخ البدء غير صالح') 
+        return null 
+      }
     }
 
-    if (form.buy_now_price > 0 && form.buy_now_price <= form.start_price) {
-      toast.error('سعر البيع المباشر يجب أن يكون أكبر من السعر الافتتاحي')
+    // Category validation
+    if (!form.category_id || form.category_id === 0) {
+      toast.error('الفئة مطلوبة - يرجى اختيار فئة للمزاد')
       return null
     }
 
+    // Check if category exists in fetched categories
+    const categoryExists = categories?.find(c => c.id === form.category_id)
+    if (!categoryExists) {
+      toast.error('الفئة غير موجودة - يرجى اختيار فئة صحيحة')
+      return null
+    }
+
+    // Location validation (optional but recommended)
+    if (form.location_id && form.location_id > 0) {
+      const locationExists = locations?.find(l => l.id === form.location_id)
+      if (!locationExists) {
+        toast.error('الموقع غير موجود - يرجى اختيار موقع صحيح')
+        return null
+      }
+    }
+
+    // Buy now price validation
+    if (form.buy_now_price > 0 && form.buy_now_price <= form.start_price) {
+      toast.error('سعر البيع المباشر غير صالح - يجب أن يكون أكبر من السعر الافتتاحي')
+      return null
+    }
+
+    // Phone validation
     const phone = form.phone_contact?.trim()
     if (phone && !/^[234]\d{7}$/.test(phone)) {
-      toast.error('رقم الهاتف غير صحيح (يجب أن يكون 8 أرقام تبدأ بـ 2 أو 3 أو 4)')
+      toast.error('رقم الهاتف غير صحيح - يجب أن يكون 8 أرقام تبدأ بـ 2 أو 3 أو 4')
       return null
     }
+
+    // Images validation
+    const validImages = form.images.filter(img => img && img.trim())
+    if (validImages.length === 0) {
+      toast('لا توجد صور - ينصح بإضافة صورة واحدة على الأقل', { icon: '⚠️' })
+    }
+
+    // Build item_details from form
+    const itemDetails: Record<string, unknown> = {}
+    if (form.item_details?.brand) itemDetails.brand = form.item_details.brand
+    if (form.item_details?.condition) itemDetails.condition = form.item_details.condition
+    if (form.item_details?.year) itemDetails.year = form.item_details.year
+    if (form.item_details?.model) itemDetails.model = form.item_details.model
+    if (form.item_details?.mileage) itemDetails.mileage = form.item_details.mileage
+    if (phone) itemDetails.phone = phone
 
     return {
       category_id:      form.category_id,
@@ -167,14 +253,33 @@ export function AuctionsPage() {
       start_time,
       end_time,
       images: form.images.filter(img => img && img.trim()),
+      item_details:     Object.keys(itemDetails).length > 0 ? itemDetails : undefined,
     }
   }
 
   const handleCreate = () => {
+    console.log('[AuctionsPage] Creating auction...')
     const payload = buildPayload()
-    if (!payload) return
+    if (!payload) {
+      console.log('[AuctionsPage] Validation failed, payload is null')
+      return
+    }
+    
+    console.log('[AuctionsPage] Payload ready:', payload)
+    
     createMut.mutate(payload, {
-      onSuccess: () => { setMode(null); setForm(EMPTY_FORM); refetch(); }
+      onSuccess: (data) => { 
+        console.log('[AuctionsPage] Auction created successfully:', data)
+        toast.success(`تم إنشاء المزاد بنجاح! 🎉 - المزاد "${payload.title_ar}" تم حفظه`)
+        setMode(null) 
+        setForm(EMPTY_FORM) 
+        refetch() 
+      },
+      onError: (err: any) => {
+        console.error('[AuctionsPage] Failed to create auction:', err)
+        const errorMessage = err?.response?.data?.message || err?.message || 'حدث خطأ غير معروف'
+        toast.error(`فشل إنشاء المزاد ❌ - ${errorMessage}`, { duration: 5000 })
+      }
     })
   }
 
@@ -182,8 +287,19 @@ export function AuctionsPage() {
     if (!editingId) return
     const payload = buildPayload()
     if (!payload) return
+    
     updateMut.mutate({ id: editingId!, payload }, {
-      onSuccess: () => { setMode(null); setEditingId(null); setForm(EMPTY_FORM); refetch(); }
+      onSuccess: () => { 
+        toast.success('تم تعديل المزاد بنجاح! ✨')
+        setMode(null) 
+        setEditingId(null) 
+        setForm(EMPTY_FORM) 
+        refetch() 
+      },
+      onError: (err: any) => {
+        const errorMessage = err?.response?.data?.message || err?.message || 'حدث خطأ غير معروف'
+        toast.error(`فشل تعديل المزاد ❌ - ${errorMessage}`)
+      }
     })
   }
 
@@ -212,11 +328,11 @@ export function AuctionsPage() {
         buy_now_price:  parseFloat(String(full?.buy_now_price ?? 0)) || 0,
         min_increment:  parseFloat(String(full.min_increment)) || 0,
         insurance_amount: parseFloat(String(full.insurance_amount)) || 0,
-        category_id:    full.category_id  || 1,
-        location_id:    full.location_id  || 1,
+        category_id:    full.category_id  || 0,
+        location_id:    full.location_id  || 0,
         start_time:     toDatetimeLocal(full.start_time as unknown as string),
         end_time:       toDatetimeLocal(full.end_time   as unknown as string),
-        phone_contact:  '',
+        phone_contact:  (full.item_details?.phone as string) || '',
         images:         imgs.length > 0 ? imgs : [''],
         item_details:   full.item_details ?? {},
       })
@@ -271,6 +387,7 @@ export function AuctionsPage() {
     },
     {
       header: 'الوقت المتبقي',
+      id: 'remaining-time',
       accessorKey: 'end_time',
       cell: ({ getValue }) => {
         const value = getValue<string>()
@@ -308,8 +425,35 @@ export function AuctionsPage() {
     },
     {
       header: 'تاريخ الانتهاء',
+      id: 'end-date',
       accessorKey: 'end_time',
       cell: ({ getValue }) => <span className="text-xs text-surface-muted">{formatDate(getValue<string>())}</span>
+    },
+    {
+      header: 'السعر الافتتاحي',
+      accessorKey: 'start_price',
+      cell: ({ getValue }) => <span className="font-mono text-xs text-surface-muted">{formatPrice(parseFloat(getValue<string>()))}</span>
+    },
+    {
+      header: 'الحد الأدنى',
+      accessorKey: 'min_increment',
+      cell: ({ getValue }) => <span className="font-mono text-xs text-surface-muted">{formatPrice(parseFloat(getValue<string>()))}</span>
+    },
+    {
+      header: 'التأمين',
+      accessorKey: 'insurance_amount',
+      cell: ({ getValue }) => {
+        const val = parseFloat(getValue<string>() || '0')
+        return <span className="font-mono text-xs text-surface-muted">{val > 0 ? formatPrice(val) : '-'}</span>
+      }
+    },
+    {
+      header: 'الشراء المباشر',
+      accessorKey: 'buy_now_price',
+      cell: ({ getValue }) => {
+        const val = getValue<string | null>()
+        return <span className="font-mono text-xs text-emerald-400">{val ? formatPrice(parseFloat(val)) : '-'}</span>
+      }
     },
     {
       header: 'المزايدات',
@@ -317,9 +461,83 @@ export function AuctionsPage() {
       cell: ({ getValue }) => <span className="font-bold text-surface-muted">{getValue<number>()}</span>
     },
     {
+      header: 'المشاهدات',
+      accessorKey: 'views',
+      cell: ({ getValue }) => <span className="text-xs text-blue-400">{getValue<number>()}</span>
+    },
+    {
       header: 'الحالة',
       accessorKey: 'status',
       cell: ({ getValue }) => <StatusBadge status={getValue<string>()} />
+    },
+    {
+      header: 'الماركة',
+      id: 'brand-cell',
+      accessorKey: 'item_details',
+      cell: ({ getValue }) => {
+        const details = getValue<Record<string, any>>() || {}
+        return <span className="text-xs text-surface-muted">{details?.brand || '-'}</span>
+      }
+    },
+    {
+      header: 'الحالة',
+      id: 'condition-cell',
+      accessorKey: 'item_details',
+      cell: ({ getValue }) => {
+        const details = getValue<Record<string, any>>() || {}
+        const condition = details?.condition
+        const conditionLabels: Record<string, string> = {
+          new: 'جديد',
+          used: 'مستعمل',
+          refurbished: 'مجدد',
+          damaged: 'تالف',
+        }
+        return <span className="text-xs text-surface-muted">{conditionLabels[condition] || condition || '-'}</span>
+      }
+    },
+    {
+      header: 'الفائز',
+      accessorKey: 'winner_id',
+      cell: ({ row }) => {
+        const winnerId = row.original.winner_id
+        if (!winnerId) return <span className="text-xs text-surface-muted">-</span>
+        return (
+          <button
+            onClick={() => navigate(`/users/${winnerId}`)}
+            className="text-xs text-emerald-400 hover:underline"
+          >
+            {shortID(winnerId)}
+          </button>
+        )
+      }
+    },
+    {
+      header: 'تاريخ الإنشاء',
+      accessorKey: 'created_at',
+      cell: ({ getValue }) => <span className="text-xs text-surface-muted">{formatDate(getValue<string>())}</span>
+    },
+    {
+      header: 'موثق',
+      accessorKey: 'is_verified',
+      cell: ({ getValue }) => (
+        <span className={`text-xs font-bold px-2 py-1 rounded ${getValue<boolean>() ? 'bg-green-500/20 text-green-400' : 'bg-surface-border/40 text-surface-muted'}`}>
+          {getValue<boolean>() ? 'نعم' : 'لا'}
+        </span>
+      )
+    },
+    {
+      header: 'Boost',
+      accessorKey: 'boosted_until',
+      cell: ({ getValue }) => {
+        const boostedUntil = getValue<string | null>()
+        if (!boostedUntil) return <span className="text-xs text-surface-muted">-</span>
+        const isBoosted = new Date(boostedUntil) > new Date()
+        return (
+          <span className={`text-xs font-bold ${isBoosted ? 'text-yellow-400' : 'text-surface-muted'}`}>
+            {isBoosted ? 'نشط' : 'منتهي'}
+          </span>
+        )
+      }
     },
     {
       header: 'الإجراءات',
@@ -419,12 +637,24 @@ export function AuctionsPage() {
                 className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white focus:border-mazad-primary/60 outline-none appearance-none"
               >
                 <option value="">اختر الفئة...</option>
-                {categories?.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {activeLang === 'ar' ? c.name_ar : activeLang === 'fr' ? c.name_fr : (c.name_en || c.name_fr)}
-                  </option>
-                ))}
+                {/* Parent categories with their children */}
+                {categories?.filter(c => !c.parent_id).sort((a, b) => a.display_order - b.display_order).map(parent => {
+                  const children = categories.filter(c => c.parent_id === parent.id)
+                  return (
+                    <React.Fragment key={parent.id}>
+                      <option value={parent.id} className="font-bold bg-surface-card">
+                        📁 {activeLang === 'ar' ? parent.name_ar : activeLang === 'fr' ? parent.name_fr : (parent.name_en || parent.name_fr)}
+                      </option>
+                      {children.map(child => (
+                        <option key={child.id} value={child.id} className="pl-4">
+                          └─ {activeLang === 'ar' ? child.name_ar : activeLang === 'fr' ? child.name_fr : (child.name_en || child.name_fr)}
+                        </option>
+                      ))}
+                    </React.Fragment>
+                  )
+                })}
               </select>
+              <p className="text-[10px] text-surface-muted">اختر فئة رئيسية (📁) أو فرعية</p>
             </div>
             <div className="space-y-2">
               <label className="text-xs text-surface-muted font-bold flex items-center gap-2">
@@ -554,6 +784,76 @@ export function AuctionsPage() {
             </div>
           </div>
 
+          {/* Contact & Item Details */}
+          <div className="pt-4 border-t border-surface-border">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-orange-500/20 text-orange-400 rounded-lg"><Tag className="w-5 h-5" /></div>
+              <h4 className="font-bold text-white">معلومات إضافية</h4>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs text-surface-muted font-bold block">رقم الهاتف للتواصل</label>
+                <Input 
+                  dir="ltr" 
+                  value={form.phone_contact} 
+                  onChange={e => setForm(f => ({...f, phone_contact: e.target.value}))} 
+                  placeholder="34123456"
+                />
+                <p className="text-[10px] text-surface-muted">8 أرقام تبدأ بـ 2 أو 3 أو 4</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-surface-muted font-bold block">الماركة</label>
+                <Input 
+                  value={form.item_details?.brand || ''} 
+                  onChange={e => setForm(f => ({...f, item_details: {...f.item_details, brand: e.target.value}}))} 
+                  placeholder="مثال: Toyota"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-surface-muted font-bold block">حالة السلعة</label>
+                <select
+                  value={form.item_details?.condition || ''}
+                  onChange={e => setForm(f => ({...f, item_details: {...f.item_details, condition: e.target.value}}))}
+                  className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white focus:border-mazad-primary/60 outline-none"
+                >
+                  <option value="">اختر الحالة...</option>
+                  <option value="new">جديد</option>
+                  <option value="used">مستعمل</option>
+                  <option value="refurbished">مجدد</option>
+                  <option value="damaged">تالف</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-surface-muted font-bold block">سنة الصنع</label>
+                <Input 
+                  type="number"
+                  value={form.item_details?.year || ''} 
+                  onChange={e => setForm(f => ({...f, item_details: {...f.item_details, year: parseInt(e.target.value) || ''}}))} 
+                  placeholder="2024"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              <div className="space-y-2">
+                <label className="text-xs text-surface-muted font-bold block">الموديل</label>
+                <Input 
+                  value={form.item_details?.model || ''} 
+                  onChange={e => setForm(f => ({...f, item_details: {...f.item_details, model: e.target.value}}))} 
+                  placeholder="مثال: Corolla"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-surface-muted font-bold block">المسافة المقطوعة (كم)</label>
+                <Input 
+                  type="number"
+                  value={form.item_details?.mileage || ''} 
+                  onChange={e => setForm(f => ({...f, item_details: {...f.item_details, mileage: parseInt(e.target.value) || ''}}))} 
+                  placeholder="50000"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Actions */}
           <div className="pt-6 border-t border-surface-border flex justify-end gap-3">
             <button onClick={() => { setMode(null); setForm(EMPTY_FORM) }} className="px-6 py-3 rounded-xl text-sm font-bold text-surface-muted border border-surface-border hover:bg-surface-border/50 transition-all">إلغاء</button>
@@ -641,7 +941,11 @@ export function AuctionsPage() {
         variant="danger"
         loading={deleteMut.isPending}
         onConfirm={() => {
-          if (deleteId) deleteMut.mutate(deleteId, { onSuccess: () => setDeleteId(null) })
+          if (deleteId) deleteMut.mutate(deleteId, { onSuccess: () => {
+                    toast.success('تم حذف المزاد بنجاح')
+                    setDeleteId(null)
+                    refetch()
+          } })
         }}
       />
 

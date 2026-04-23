@@ -10,6 +10,7 @@ import '../widgets/auction_winner_dialog.dart';
 import '../pages/auction_history_page.dart';
 import '../providers/favorites_provider.dart';
 import '../pages/all_auctions_page.dart';
+import '../services/auction_api.dart';
 
 class AuctionDetailsPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -24,16 +25,44 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   Duration _timeLeft = Duration.zero;
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  final AuctionApi _auctionApi = AuctionApi();
+  bool _isLoading = true;
+  Map<String, dynamic>? _auctionData;
 
   @override
   void initState() {
     super.initState();
-    _startTimer();
+    _loadAuctionDetails();
+  }
+
+  Future<void> _loadAuctionDetails() async {
+    try {
+      final response = await _auctionApi.getAuctionDetails(widget.auctionId);
+      
+      setState(() {
+        _isLoading = false;
+        if (response.success && response.data != null) {
+          _auctionData = response.data!['auction'];
+          _startTimer();
+        }
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auction_details)),
+        );
+      }
+    }
   }
 
   void _startTimer() {
-    final auction = ref.read(auctionNotifierProvider(widget.auctionId));
-    _timeLeft = auction.endTime.difference(DateTime.now());
+    if (_auctionData == null) return;
+    
+    final endTime = DateTime.tryParse(_auctionData!['ends_at'] ?? '');
+    if (endTime == null) return;
+    
+    _timeLeft = endTime.difference(DateTime.now());
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_timeLeft.inSeconds > 0) {
         setState(() {
@@ -47,14 +76,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   }
 
   void _checkWinner() {
-    final auction = ref.read(auctionNotifierProvider(widget.auctionId));
-    if (auction.isUserHighestBidder) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AuctionWinnerDialog(auctionId: widget.auctionId),
-      );
-    }
+    // TODO: Implement winner check using API
   }
 
   @override
@@ -73,8 +95,21 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final auction = ref.watch(auctionNotifierProvider(widget.auctionId));
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_auctionData == null) {
+      return Scaffold(
+        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
+        body: Center(child: Text('Erreur lors du chargement de l\'enchère')),
+      );
+    }
 
     return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
@@ -83,15 +118,15 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             Expanded(
               child: CustomScrollView(
                 slivers: [
-                  _buildSliverAppBar(context, auction, isDarkMode),
+                  _buildSliverAppBar(context, _auctionData!, isDarkMode),
                   SliverToBoxAdapter(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildPriceSection(context, auction, isDarkMode),
-                        _buildMainInfoSection(context, auction, isDarkMode),
-                        _buildExternalLinks(context, auction, isDarkMode),
-                        _buildCarDetailsSection(context, auction, isDarkMode),
+                        _buildPriceSection(context, _auctionData!, isDarkMode),
+                        _buildMainInfoSection(context, _auctionData!, isDarkMode),
+                        _buildExternalLinks(context, _auctionData!, isDarkMode),
+                        _buildCarDetailsSection(context, _auctionData!, isDarkMode),
 
                         // Active Auctions Section (NEW)
                         _buildActiveAuctionsSection(context, isDarkMode),
@@ -103,15 +138,15 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ],
               ),
             ),
-            _buildBottomAction(context, auction, isDarkMode),
+            _buildBottomAction(context, _auctionData!, isDarkMode),
           ],
         ),
       );
   }
 
-  Widget _buildSliverAppBar(BuildContext context, Auction auction, bool isDarkMode) {
-    final favorites = ref.watch(favoritesProvider);
-    final isFavorite = favorites.contains(widget.auctionId);
+  Widget _buildSliverAppBar(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
+    final favoritesAsync = ref.watch(favoritesProvider);
+    final isFavorite = favoritesAsync.value?.contains(widget.auctionId) ?? false;
 
     return SliverAppBar(
       expandedHeight: 350,
@@ -153,8 +188,24 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             PageView.builder(
               controller: _pageController,
               onPageChanged: (index) => setState(() => _currentPage = index),
-              itemCount: auction.imageUrls.length,
-              itemBuilder: (context, index) => Image.asset(auction.imageUrls[index], fit: BoxFit.cover),
+              itemCount: (auction['images'] as List?)?.length ?? 1,
+              itemBuilder: (context, index) {
+                final images = auction['images'] as List?;
+                if (images != null && images.isNotEmpty) {
+                  return Image.asset(
+                    images[index].toString(),
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => Container(
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                    ),
+                  );
+                }
+                return Container(
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.image, color: Colors.grey),
+                );
+              },
             ),
             Positioned(
               bottom: 24,
@@ -166,7 +217,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${_currentPage + 1}/${auction.imageUrls.length} 🗂️',
+                  '${_currentPage + 1}/${(auction['images'] as List?)?.length ?? 1} 🗂️',
                   style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -196,7 +247,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildPriceSection(BuildContext context, Auction auction, bool isDarkMode) {
+  Widget _buildPriceSection(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
     return Row(
       children: [
         Expanded(
@@ -210,7 +261,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               children: [
                 Text(AppLocalizations.of(context)!.text_57, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 4),
-                Text('${auction.currentPrice.toStringAsFixed(0)} MRU', 
+                Text('${auction['current_bid'] ?? auction['current_price'] ?? 0} MRU', 
                     style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
@@ -228,7 +279,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               children: [
                 Text(AppLocalizations.of(context)!.text_58, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 14)),
                 const SizedBox(height: 4),
-                Text('${auction.minIncrement.toStringAsFixed(0)} MRU', 
+                Text('${auction['min_increment'] ?? auction['minIncrement'] ?? 0} MRU', 
                     style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
@@ -238,7 +289,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildMainInfoSection(BuildContext context, Auction auction, bool isDarkMode) {
+  Widget _buildMainInfoSection(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
@@ -257,7 +308,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             children: [
               Expanded(
                 child: Text(
-                  auction.title,
+                  auction['title']?.toString() ?? 'Sans titre',
                   style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 22, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -266,7 +317,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('${auction.views}', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey)),
+                  Text('${auction['views'] ?? 0}', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey)),
                   const SizedBox(width: 4),
                   const Icon(Icons.visibility_outlined, size: 18, color: Colors.grey),
                 ],
@@ -301,7 +352,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               Expanded(
                 child: GestureDetector(
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction.id)),
+                    MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction['id']?.toString() ?? widget.auctionId)),
                   ),
                   child: Row(
                     children: [
@@ -309,7 +360,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '${AppLocalizations.of(context)!.text_78} ${auction.bidderCount}', 
+                          '${AppLocalizations.of(context)!.text_78} ${auction['bidder_count'] ?? auction['bidderCount'] ?? 0}', 
                           style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -326,7 +377,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ),
                 child: Row(
                   children: [
-                    Text(auction.phoneNumber, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text(auction['phone_number']?.toString() ?? auction['phoneNumber']?.toString() ?? '', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 8),
                     const Icon(Icons.phone, color: Colors.white, size: 18),
                   ],
@@ -335,7 +386,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('Lot #${auction.lotNumber}', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontWeight: FontWeight.bold)),
+          Text('Lot #${auction['lot_number'] ?? auction['lotNumber'] ?? ''}', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -350,7 +401,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildExternalLinks(BuildContext context, Auction auction, bool isDarkMode) {
+  Widget _buildExternalLinks(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -361,7 +412,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           const SizedBox(height: 12),
           GestureDetector(
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction.id)),
+              MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction['id'])),
             ),
             child: Container(
               width: double.infinity,
@@ -386,10 +437,10 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildCarDetailsSection(BuildContext context, Auction auction, bool isDarkMode) {
-    if (auction.manufacturer == null && auction.fuelType == null &&
-        auction.transmission == null && auction.year == null &&
-        auction.mileage == null && auction.model == null) {
+  Widget _buildCarDetailsSection(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
+    if (auction['manufacturer'] == null && auction['fuel_type'] == null &&
+        auction['transmission'] == null && auction['year'] == null &&
+        auction['mileage'] == null && auction['model'] == null) {
       return const SizedBox.shrink();
     }
     return Container(
@@ -410,18 +461,18 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             spacing: 24,
             runSpacing: 16,
             children: [
-              if (auction.manufacturer != null)
-                _buildCarDetailItem(Icons.home_work_outlined, AppLocalizations.of(context)!.text_65, auction.manufacturer!, isDarkMode),
-              if (auction.transmission != null)
-                _buildCarDetailItem(Icons.vertical_split_outlined, AppLocalizations.of(context)!.text_66, auction.transmission!, isDarkMode),
-              if (auction.fuelType != null)
-                _buildCarDetailItem(Icons.local_gas_station_outlined, AppLocalizations.of(context)!.text_67, auction.fuelType!, isDarkMode),
-              if (auction.year != null)
-                _buildCarDetailItem(Icons.calendar_month_outlined, AppLocalizations.of(context)!.text_68, auction.year!, isDarkMode),
-              if (auction.mileage != null)
-                _buildCarDetailItem(Icons.speed_rounded, AppLocalizations.of(context)!.text_69, auction.mileage!, isDarkMode),
-              if (auction.model != null)
-                _buildCarDetailItem(Icons.directions_car_filled, AppLocalizations.of(context)!.text_70, auction.model!, isDarkMode),
+              if (auction['manufacturer'] != null)
+                _buildCarDetailItem(Icons.home_work_outlined, AppLocalizations.of(context)!.text_65, auction['manufacturer']?.toString() ?? '', isDarkMode),
+              if (auction['transmission'] != null)
+                _buildCarDetailItem(Icons.vertical_split_outlined, AppLocalizations.of(context)!.text_66, auction['transmission']?.toString() ?? '', isDarkMode),
+              if (auction['fuel_type'] != null)
+                _buildCarDetailItem(Icons.local_gas_station_outlined, AppLocalizations.of(context)!.text_67, auction['fuel_type']?.toString() ?? '', isDarkMode),
+              if (auction['year'] != null)
+                _buildCarDetailItem(Icons.calendar_month_outlined, AppLocalizations.of(context)!.text_68, auction['year']?.toString() ?? '', isDarkMode),
+              if (auction['mileage'] != null)
+                _buildCarDetailItem(Icons.speed_rounded, AppLocalizations.of(context)!.text_69, auction['mileage']?.toString() ?? '', isDarkMode),
+              if (auction['model'] != null)
+                _buildCarDetailItem(Icons.directions_car_filled, AppLocalizations.of(context)!.text_70, auction['model']?.toString() ?? '', isDarkMode),
             ],
           ),
         ],
@@ -467,7 +518,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildBottomAction(BuildContext context, Auction auction, bool isDarkMode) {
+  Widget _buildBottomAction(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -482,23 +533,23 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           width: double.infinity,
           height: 60,
           child: ElevatedButton(
-            onPressed: auction.isUserHighestBidder ? null : () {
+            onPressed: auction['is_user_highest_bidder'] == true ? null : () {
               showModalBottomSheet(
                 context: context,
                 backgroundColor: Colors.transparent,
                 isScrollControlled: true,
-                builder: (context) => BidActionSheet(auctionId: auction.id),
+                builder: (context) => BidActionSheet(auctionId: auction['id']?.toString() ?? widget.auctionId),
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: auction.isUserHighestBidder ? const Color(0xFF00C58D) : const Color(0xFF0081FF),
+              backgroundColor: auction['is_user_highest_bidder'] == true ? const Color(0xFF00C58D) : const Color(0xFF0081FF),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               disabledBackgroundColor: const Color(0xFF00C58D),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (auction.isUserHighestBidder) ...[
+                if (auction['is_user_highest_bidder'] == true) ...[
                    const Icon(Icons.back_hand_outlined, color: Colors.white),
                    const SizedBox(width: 8),
                    Flexible(
@@ -589,8 +640,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   }
 
   Widget _buildRelatedAuctionCard(String title, String price, String time, String imagePath, String id, bool isDarkMode) {
-    final favorites = ref.watch(favoritesProvider);
-    final isFavorite = favorites.contains(id);
+    final favoritesAsync = ref.watch(favoritesProvider);
+    final isFavorite = favoritesAsync.value?.contains(id) ?? false;
 
     return GestureDetector(
       onTap: () {

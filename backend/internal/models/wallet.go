@@ -16,20 +16,26 @@ type Wallet struct {
 }
 
 type Transaction struct {
-	ID           uuid.UUID        `db:"id"            json:"id"`
-	UserID       uuid.UUID        `db:"user_id"       json:"user_id"`
-	AuctionID    *uuid.UUID       `db:"auction_id"    json:"auction_id"`
-	Type         string           `db:"type"          json:"type"`
-	Amount       decimal.Decimal  `db:"amount"        json:"amount"`
-	Gateway      *string          `db:"gateway"       json:"gateway"`
-	Status       string           `db:"status"        json:"status"`
-	Reference    *string          `db:"reference"     json:"reference"`
-	ReceiptURL   *string          `db:"receipt_url"   json:"receipt_url"`
-	AdminNotes   *string          `db:"admin_notes"   json:"admin_notes"`
-	ReviewedBy   *uuid.UUID       `db:"reviewed_by"   json:"reviewed_by"`
-	ReviewedAt   *time.Time       `db:"reviewed_at"   json:"reviewed_at"`
-	WalletHoldID *uuid.UUID       `db:"wallet_hold_id" json:"wallet_hold_id"`
-	CreatedAt    time.Time        `db:"created_at"    json:"created_at"`
+	ID               uuid.UUID        `db:"id"                 json:"id"`
+	UserID           uuid.UUID        `db:"user_id"            json:"user_id"`
+	AuctionID        *uuid.UUID       `db:"auction_id"         json:"auction_id"`
+	Type             string           `db:"type"               json:"type"`
+	Amount           decimal.Decimal  `db:"amount"             json:"amount"`
+	Gateway          *string          `db:"gateway"            json:"gateway"`
+	Status           string           `db:"status"             json:"status"`
+	Reference        *string          `db:"reference"          json:"reference"`
+	ReceiptURL       *string          `db:"receipt_url"        json:"receipt_url"`
+	AdminNotes       *string          `db:"admin_notes"        json:"admin_notes"`
+	ReviewedBy       *uuid.UUID       `db:"reviewed_by"        json:"reviewed_by"`
+	ReviewedAt       *time.Time       `db:"reviewed_at"        json:"reviewed_at"`
+	WalletHoldID     *uuid.UUID       `db:"wallet_hold_id"     json:"wallet_hold_id"`
+	ReceiptImageTemp *string          `db:"receipt_image_temp" json:"receipt_image_temp"`
+	PaymentMethod    *string          `db:"payment_method"     json:"payment_method"`
+	FeeAmount        *decimal.Decimal `db:"fee_amount"         json:"fee_amount"`
+	NetAmount        *decimal.Decimal `db:"net_amount"         json:"net_amount"`
+	Description      *string          `db:"description"        json:"description"`
+	FailureReason    *string          `db:"failure_reason"     json:"failure_reason"`
+	CreatedAt        time.Time        `db:"created_at"         json:"created_at"`
 }
 
 type WalletHold struct {

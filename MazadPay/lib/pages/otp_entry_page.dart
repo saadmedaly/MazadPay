@@ -1,22 +1,26 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'set_password_page.dart';
+import '../services/auth_api.dart';
 
-class OtpEntryPage extends StatefulWidget {
+class OtpEntryPage extends ConsumerStatefulWidget {
   final String phoneNumber;
 
   const OtpEntryPage({super.key, required this.phoneNumber});
 
   @override
-  State<OtpEntryPage> createState() => _OtpEntryPageState();
+  ConsumerState<OtpEntryPage> createState() => _OtpEntryPageState();
 }
 
-class _OtpEntryPageState extends State<OtpEntryPage> {
+class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
   final List<TextEditingController> _controllers = List.generate(
     6,
     (_) => TextEditingController(),
   );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  final AuthApi _authApi = AuthApi();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -35,6 +39,50 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
     }
     if (value.isEmpty && index > 0) {
       _focusNodes[index - 1].requestFocus();
+    }
+  }
+
+  Future<void> _verifyOTP() async {
+    final otp = _controllers.map((c) => c.text).join();
+    
+    if (otp.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_otp_required)),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await _authApi.verifyOTP(
+        phone: widget.phoneNumber,
+        code: otp,
+        purpose: 'register',
+      );
+
+      setState(() => _isLoading = false);
+
+      if (response.success) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SetPasswordPage(
+              phone: widget.phoneNumber,
+              otpCode: otp,
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response.error?.message ?? AppLocalizations.of(context)!.error_otp_invalid)),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_connection)),
+      );
     }
   }
 
@@ -224,29 +272,28 @@ class _OtpEntryPageState extends State<OtpEntryPage> {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SetPasswordPage(),
-                      ),
-                    );
-                  },
+                  onPressed: _isLoading ? null : _verifyOTP,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0081FF), // Sky Blue from Stitch
+                    backgroundColor: const Color(0xFF0081FF),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                     elevation: 0,
                   ),
-                  child: Text(
-                    AppLocalizations.of(context)!.text_263,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : Text(
+                          AppLocalizations.of(context)!.text_263,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
               const Spacer(),

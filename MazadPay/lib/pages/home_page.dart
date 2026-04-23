@@ -12,6 +12,7 @@ import 'package:mezadpay/pages/auction_details_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
 import 'package:mezadpay/pages/all_auctions_page.dart';
+import '../services/auction_api.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -25,6 +26,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   bool _showLocationModal = true;
   int _selectedCityIndex = 0;
   late List<String> _cities;
+  final AuctionApi _auctionApi = AuctionApi();
+  List<Map<String, dynamic>> _auctions = [];
+  bool _isLoading = true;
 
   @override
   void didChangeDependencies() {
@@ -41,6 +45,32 @@ class _HomePageState extends ConsumerState<HomePage> {
         _showLocationPermissionDialog();
       }
     });
+    // Load auctions from API
+    _loadAuctions();
+  }
+
+  Future<void> _loadAuctions() async {
+    try {
+      final response = await _auctionApi.getAuctions(
+        page: 1,
+        limit: 10,
+        status: 'active',
+      );
+
+      setState(() {
+        _isLoading = false;
+        if (response.success && response.data != null) {
+          _auctions = List.from(response.data!['auctions'] ?? []);
+        }
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auctions)),
+        );
+      }
+    }
   }
 
   void _showLocationPermissionDialog() {
@@ -294,15 +324,26 @@ class _HomePageState extends ConsumerState<HomePage> {
               // Horizontal list of auctions
               SizedBox(
                 height: 240,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    _buildAuctionCard('Toyota Corolla...', '300,000 MRU', '13:50:23', ['assets/corolla.png'], '1', isDarkMode),
-                    _buildAuctionCard('Range Rover 2022', '1,200,000 MRU', '02:15:10', ['assets/corolla.png'], '2', isDarkMode),
-                    _buildAuctionCard('iPhone 15 Pro', '45,000 MRU', '05:45:00', ['assets/corolla.png'], '3', isDarkMode),
-                  ],
-                ),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _auctions.isEmpty
+                        ? const Center(child: Text('Aucune enchère disponible'))
+                        : ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _auctions.length,
+                            itemBuilder: (context, index) {
+                              final auction = _auctions[index];
+                              return _buildAuctionCard(
+                                auction['title'] ?? 'Sans titre',
+                                '${auction['current_bid'] ?? 0} MRU',
+                                auction['ends_at'] ?? '',
+                                auction['images']?.cast<String>() ?? ['assets/corolla.png'],
+                                auction['id']?.toString() ?? '',
+                                isDarkMode,
+                              );
+                            },
+                          ),
               ),
               const SizedBox(height: 16),
               
@@ -496,8 +537,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildAuctionCard(String title, String price, String time, List<String> imageUrls, String id, bool isDarkMode) {
-    final favorites = ref.watch(favoritesProvider);
-    final isFavorite = favorites.contains(id);
+    final favoritesAsync = ref.watch(favoritesProvider);
+    final isFavorite = favoritesAsync.value?.contains(id) ?? false;
 
     return GestureDetector(
       onTap: () {

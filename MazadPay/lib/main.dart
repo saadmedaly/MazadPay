@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:mezadpay/core/theme.dart';
 import 'package:mezadpay/pages/splash_page.dart';
 
@@ -7,8 +8,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:mezadpay/providers/locale_provider.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Charger les variables d'environnement
+  await dotenv.load(fileName: ".env");
   
   runApp(
     const ProviderScope(
@@ -45,4 +49,4 @@ class MazadApp extends ConsumerWidget {
       home: const SplashPage(),
     );
   }
-}
+}

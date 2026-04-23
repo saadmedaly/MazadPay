@@ -4,9 +4,9 @@ import client from '@/api/client'
 import type { AdminUser, PaginatedResponse } from '@/types/api'
 
 export const userKeys = {
-  all:     ['users'] as const,
-  list:    (q: string, p: number) => [...userKeys.all, 'list', { q, p }] as const,
-  byId:    (id: string) => [...userKeys.all, id] as const,
+  all: ['users'] as const,
+  list: (q: string, p: number) => [...userKeys.all, 'list', { q, p }] as const,
+  byId: (id: string) => [...userKeys.all, id] as const,
   history: (id: string, type: 'auctions' | 'transactions') => [...userKeys.byId(id), 'history', type] as const,
 }
 
@@ -46,7 +46,16 @@ export function useMe() {
 export function useUpdateProfile() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (updates: { full_name: string; email: string; city: string }) =>
+    mutationFn: (updates: {
+      full_name: string;
+      email: string;
+      city: string;
+      country_code?: string;
+      address?: string;
+      postal_code?: string;
+      date_of_birth?: string;
+      gender?: string;
+    }) =>
       client.put('/v1/api/users/me', updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users', 'me'] })

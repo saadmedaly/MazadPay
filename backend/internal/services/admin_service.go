@@ -68,10 +68,40 @@ type AdminService interface {
 	// Settings
 	ListSettings(ctx context.Context) ([]models.SystemSettings, error)
 	UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID) error
+
+	// Payment Methods (from migration 000031)
+	ListPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error)
+	CreatePaymentMethod(ctx context.Context, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int) error
+	UpdatePaymentMethod(ctx context.Context, id int, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int) error
+	DeletePaymentMethod(ctx context.Context, id int) error
+
+	// Auction Car Details (from migration 000031)
+	GetAuctionCarDetails(ctx context.Context, auctionID uuid.UUID) (*models.AuctionCarDetails, error)
+	UpdateAuctionCarDetails(ctx context.Context, auctionID uuid.UUID, manufacturer, model *string, year, mileage *int, fuelType, transmission, color, engineSize, VIN *string) error
+
+	// Auction Boost (from migration 000031)
+	ListAuctionBoosts(ctx context.Context) ([]models.AuctionBoost, error)
+	CreateAuctionBoost(ctx context.Context, auctionID uuid.UUID, boostType string, startAt, endAt time.Time, amount *decimal.Decimal) error
+	DeleteAuctionBoost(ctx context.Context, id uuid.UUID) error
+
+	// Delivery Drivers (from migration 000031)
+	ListDeliveryDrivers(ctx context.Context) ([]models.DeliveryDriver, error)
+	CreateDeliveryDriver(ctx context.Context, userID *uuid.UUID, vehicleType, vehiclePlate, vehicleColor, licenseNumber *string, isAvailable *bool) error
+	UpdateDeliveryDriver(ctx context.Context, id uuid.UUID, vehicleType, vehiclePlate, vehicleColor, licenseNumber *string, isAvailable *bool) error
+	DeleteDeliveryDriver(ctx context.Context, id uuid.UUID) error
+
+	// User Settings (from migration 000031)
+	GetUserSettings(ctx context.Context, userID uuid.UUID) (*models.UserSettings, error)
+	UpdateUserSettings(ctx context.Context, userID uuid.UUID, currency, theme, language *string, notificationsEmail, notificationsPush, notificationsSMS, twoFactorEnabled *bool) error
+
+	// Bid Auto Bid (from migration 000031)
+	ListAutoBids(ctx context.Context) ([]models.BidAutoBid, error)
+	UpdateAutoBid(ctx context.Context, id uuid.UUID, isActive *bool) error
 }
 
 type UpdateAuctionInput struct {
 	CategoryID      int
+	SubCategoryID   *int
 	LocationID      *int
 	TitleAr         string
 	TitleFr         string
@@ -86,8 +116,12 @@ type UpdateAuctionInput struct {
 	EndTime         time.Time
 	PhoneContact    string
 	BuyNowPrice     *decimal.Decimal
-	ItemDetails     models.JSONB
 	Images          []string
+	ItemDetails     models.JSONB
+	Condition       *string
+	Brand           *string
+	VideoURL        *string
+	Quantity        int
 }
 
 type adminService struct {
@@ -564,6 +598,188 @@ func (s *adminService) UpdateSetting(ctx context.Context, key, value, settingTyp
 		VALUES ($1, $2, $3, $4, now())
 		ON CONFLICT (key) DO UPDATE SET value = $2, type = $3, updated_by = $4, updated_at = now()
 	`, key, value, settingType, userID)
+	return err
+}
+
+// Payment Methods implementations
+func (s *adminService) ListPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, code, name_ar, name_fr, name_en, logo_url, is_active, country_id, created_at FROM payment_methods`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var methods []models.PaymentMethod
+	for rows.Next() {
+		var m models.PaymentMethod
+		if err := rows.Scan(&m.ID, &m.Code, &m.NameAr, &m.NameFr, &m.NameEn, &m.LogoURL, &m.IsActive, &m.CountryID, &m.CreatedAt); err != nil {
+			continue
+		}
+		methods = append(methods, m)
+	}
+	return methods, nil
+}
+
+func (s *adminService) CreatePaymentMethod(ctx context.Context, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO payment_methods (code, name_ar, name_fr, name_en, logo_url, is_active, country_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, code, nameAr, nameFr, nameEn, logoURL, isActive, countryID)
+	return err
+}
+
+func (s *adminService) UpdatePaymentMethod(ctx context.Context, id int, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE payment_methods SET code = $1, name_ar = $2, name_fr = $3, name_en = $4, logo_url = $5, is_active = $6, country_id = $7
+		WHERE id = $8
+	`, code, nameAr, nameFr, nameEn, logoURL, isActive, countryID, id)
+	return err
+}
+
+func (s *adminService) DeletePaymentMethod(ctx context.Context, id int) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM payment_methods WHERE id = $1`, id)
+	return err
+}
+
+// Auction Car Details implementations
+func (s *adminService) GetAuctionCarDetails(ctx context.Context, auctionID uuid.UUID) (*models.AuctionCarDetails, error) {
+	var details models.AuctionCarDetails
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, auction_id, manufacturer, model, year, mileage, fuel_type, transmission, color, engine_size, vin, created_at
+		FROM auction_car_details WHERE auction_id = $1
+	`, auctionID).Scan(&details.ID, &details.AuctionID, &details.Manufacturer, &details.Model, &details.Year, &details.Mileage,
+		&details.FuelType, &details.Transmission, &details.Color, &details.EngineSize, &details.VIN, &details.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &details, nil
+}
+
+func (s *adminService) UpdateAuctionCarDetails(ctx context.Context, auctionID uuid.UUID, manufacturer, model *string, year, mileage *int, fuelType, transmission, color, engineSize, VIN *string) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO auction_car_details (auction_id, manufacturer, model, year, mileage, fuel_type, transmission, color, engine_size, vin)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (auction_id) DO UPDATE SET manufacturer = $2, model = $3, year = $4, mileage = $5, fuel_type = $6, transmission = $7, color = $8, engine_size = $9, vin = $10
+	`, auctionID, manufacturer, model, year, mileage, fuelType, transmission, color, engineSize, VIN)
+	return err
+}
+
+// Auction Boost implementations
+func (s *adminService) ListAuctionBoosts(ctx context.Context) ([]models.AuctionBoost, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, auction_id, boost_type, start_at, end_at, amount, status, created_at FROM auction_boosts`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var boosts []models.AuctionBoost
+	for rows.Next() {
+		var b models.AuctionBoost
+		if err := rows.Scan(&b.ID, &b.AuctionID, &b.BoostType, &b.StartAt, &b.EndAt, &b.Amount, &b.Status, &b.CreatedAt); err != nil {
+			continue
+		}
+		boosts = append(boosts, b)
+	}
+	return boosts, nil
+}
+
+func (s *adminService) CreateAuctionBoost(ctx context.Context, auctionID uuid.UUID, boostType string, startAt, endAt time.Time, amount *decimal.Decimal) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO auction_boosts (auction_id, boost_type, start_at, end_at, amount, status)
+		VALUES ($1, $2, $3, $4, $5, 'active')
+	`, auctionID, boostType, startAt, endAt, amount)
+	return err
+}
+
+func (s *adminService) DeleteAuctionBoost(ctx context.Context, id uuid.UUID) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM auction_boosts WHERE id = $1`, id)
+	return err
+}
+
+// Delivery Drivers implementations
+func (s *adminService) ListDeliveryDrivers(ctx context.Context) ([]models.DeliveryDriver, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, user_id, vehicle_type, vehicle_plate, vehicle_color, license_number, rating, total_deliveries, is_available, current_location_lat, current_location_lng, created_at FROM delivery_drivers`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var drivers []models.DeliveryDriver
+	for rows.Next() {
+		var d models.DeliveryDriver
+		if err := rows.Scan(&d.ID, &d.UserID, &d.VehicleType, &d.VehiclePlate, &d.VehicleColor, &d.LicenseNumber, &d.Rating, &d.TotalDeliveries, &d.IsAvailable, &d.CurrentLocationLat, &d.CurrentLocationLng, &d.CreatedAt); err != nil {
+			continue
+		}
+		drivers = append(drivers, d)
+	}
+	return drivers, nil
+}
+
+func (s *adminService) CreateDeliveryDriver(ctx context.Context, userID *uuid.UUID, vehicleType, vehiclePlate, vehicleColor, licenseNumber *string, isAvailable *bool) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO delivery_drivers (user_id, vehicle_type, vehicle_plate, vehicle_color, license_number, is_available)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, userID, vehicleType, vehiclePlate, vehicleColor, licenseNumber, isAvailable)
+	return err
+}
+
+func (s *adminService) UpdateDeliveryDriver(ctx context.Context, id uuid.UUID, vehicleType, vehiclePlate, vehicleColor, licenseNumber *string, isAvailable *bool) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE delivery_drivers SET vehicle_type = $1, vehicle_plate = $2, vehicle_color = $3, license_number = $4, is_available = $5
+		WHERE id = $6
+	`, vehicleType, vehiclePlate, vehicleColor, licenseNumber, isAvailable, id)
+	return err
+}
+
+func (s *adminService) DeleteDeliveryDriver(ctx context.Context, id uuid.UUID) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM delivery_drivers WHERE id = $1`, id)
+	return err
+}
+
+// User Settings implementations
+func (s *adminService) GetUserSettings(ctx context.Context, userID uuid.UUID) (*models.UserSettings, error) {
+	var settings models.UserSettings
+	err := s.db.QueryRowContext(ctx, `
+		SELECT user_id, currency, theme, language, notifications_email, notifications_push, notifications_sms, two_factor_enabled, created_at, updated_at
+		FROM user_settings WHERE user_id = $1
+	`, userID).Scan(&settings.UserID, &settings.Currency, &settings.Theme, &settings.Language, &settings.NotificationsEmail,
+		&settings.NotificationsPush, &settings.NotificationsSMS, &settings.TwoFactorEnabled, &settings.CreatedAt, &settings.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &settings, nil
+}
+
+func (s *adminService) UpdateUserSettings(ctx context.Context, userID uuid.UUID, currency, theme, language *string, notificationsEmail, notificationsPush, notificationsSMS, twoFactorEnabled *bool) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO user_settings (user_id, currency, theme, language, notifications_email, notifications_push, notifications_sms, two_factor_enabled)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (user_id) DO UPDATE SET currency = $2, theme = $3, language = $4, notifications_email = $5, notifications_push = $6, notifications_sms = $7, two_factor_enabled = $8, updated_at = now()
+	`, userID, currency, theme, language, notificationsEmail, notificationsPush, notificationsSMS, twoFactorEnabled)
+	return err
+}
+
+// Bid Auto Bid implementations
+func (s *adminService) ListAutoBids(ctx context.Context) ([]models.BidAutoBid, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, user_id, auction_id, max_amount, current_bid_amount, is_active, created_at FROM bid_auto_bids`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var bids []models.BidAutoBid
+	for rows.Next() {
+		var b models.BidAutoBid
+		if err := rows.Scan(&b.ID, &b.UserID, &b.AuctionID, &b.MaxAmount, &b.CurrentBidAmount, &b.IsActive, &b.CreatedAt); err != nil {
+			continue
+		}
+		bids = append(bids, b)
+	}
+	return bids, nil
+}
+
+func (s *adminService) UpdateAutoBid(ctx context.Context, id uuid.UUID, isActive *bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE bid_auto_bids SET is_active = $1 WHERE id = $2`, isActive, id)
 	return err
 }
 

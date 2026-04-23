@@ -1180,4 +1180,64 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get text_390 => 'About Mazad Pay';
+
+  @override
+  String get error_connection => 'Connection error';
+
+  @override
+  String get error_login_failed => 'Login failed';
+
+  @override
+  String get error_invalid_credentials => 'Invalid credentials';
+
+  @override
+  String get error_phone_required => 'Phone number required';
+
+  @override
+  String get error_otp_required => 'OTP code required';
+
+  @override
+  String get error_otp_invalid => 'Invalid OTP code';
+
+  @override
+  String get error_loading_auctions => 'Error loading auctions';
+
+  @override
+  String get error_loading_auction_details => 'Error loading auction details';
+
+  @override
+  String get error_loading_favorites => 'Error loading favorites';
+
+  @override
+  String get error_loading_balance => 'Error loading balance';
+
+  @override
+  String get error_deposit_failed => 'Deposit failed';
+
+  @override
+  String get error_withdraw_failed => 'Withdrawal failed';
+
+  @override
+  String get error_insufficient_balance => 'Insufficient balance';
+
+  @override
+  String get error_loading_notifications => 'Error loading notifications';
+
+  @override
+  String get error_create_auction => 'Error creating auction';
+
+  @override
+  String get error_fill_required_fields => 'Please fill all required fields';
+
+  @override
+  String get error_add_image => 'Please add at least one image';
+
+  @override
+  String get error_invalid_amount => 'Please enter a valid amount';
+
+  @override
+  String get error_no_data => 'No data available';
+
+  @override
+  String get text_391 => 'Already have an account?';
 }

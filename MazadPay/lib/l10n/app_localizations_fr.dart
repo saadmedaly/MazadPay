@@ -1198,4 +1198,67 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get text_390 => 'À propos de Mazad Pay';
+
+  @override
+  String get error_connection => 'Erreur de connexion';
+
+  @override
+  String get error_login_failed => 'Échec de la connexion';
+
+  @override
+  String get error_invalid_credentials => 'Identifiants invalides';
+
+  @override
+  String get error_phone_required => 'Numéro de téléphone requis';
+
+  @override
+  String get error_otp_required => 'Code OTP requis';
+
+  @override
+  String get error_otp_invalid => 'Code OTP invalide';
+
+  @override
+  String get error_loading_auctions => 'Erreur lors du chargement des enchères';
+
+  @override
+  String get error_loading_auction_details =>
+      'Erreur lors du chargement des détails de l\'enchère';
+
+  @override
+  String get error_loading_favorites => 'Erreur lors du chargement des favoris';
+
+  @override
+  String get error_loading_balance => 'Erreur lors du chargement du solde';
+
+  @override
+  String get error_deposit_failed => 'Erreur lors du dépôt';
+
+  @override
+  String get error_withdraw_failed => 'Erreur lors du retrait';
+
+  @override
+  String get error_insufficient_balance => 'Solde insuffisant';
+
+  @override
+  String get error_loading_notifications =>
+      'Erreur lors du chargement des notifications';
+
+  @override
+  String get error_create_auction => 'Erreur lors de la création de l\'annonce';
+
+  @override
+  String get error_fill_required_fields =>
+      'Veuillez remplir tous les champs obligatoires';
+
+  @override
+  String get error_add_image => 'Veuillez ajouter au moins une image';
+
+  @override
+  String get error_invalid_amount => 'Veuillez entrer un montant valide';
+
+  @override
+  String get error_no_data => 'Aucune donnée disponible';
+
+  @override
+  String get text_391 => 'Déjà un compte ?';
 }

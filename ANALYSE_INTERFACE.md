@@ -9,8 +9,7 @@
 | useRevenueChart | GET | /v1/api/admin/dashboard/revenue-chart | ✅ |
 | useActivityFeed | GET | /v1/api/admin/dashboard/activity | ✅ |
 
-**⚠️ PROBLÈME:** Widgets dashboard désactivés (API inexistante)
-
+ 
 ---
 
 ### 2. AuctionsPage.tsx
@@ -24,7 +23,6 @@
 | useCategories | GET | /v1/api/categories | ✅ |
 | useLocations | GET | /v1/api/locations | ✅ |
 
-**⚠️ REMARQUE:** Manque GET /v1/api/admin/auctions/:id (détail) - implémenté dans AuctionDetailPage
 
 ---
 
@@ -212,14 +210,9 @@
 ---
 
 ## 🔴 Problèmes Identifiés
+ ction:** Commenté dans le code avec note "API not implemented"
 
-### 1. **Dashboard Widgets API** - CRITIQUE
-- **Fichier:** DashboardPage.tsx
-- **Problème:** API `/v1/api/admin/dashboard/widgets` inexistante
-- **Impact:** Fonctionnalité de widgets personnalisables désactivée
-- **Action:** Commenté dans le code avec note "API not implemented"
-
-### 2. **WebSocket Admin Notifications** - MOYEN
+### 1. **WebSocket Admin Notifications** - MOYEN
 - **Fichier:** useWebSocket.ts
 - **Endpoint:** ws://localhost:8082/ws/admin
 - **Statut:** ✅ Backend implémenté, frontend fonctionnel

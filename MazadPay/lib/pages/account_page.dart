@@ -11,6 +11,7 @@ import 'my_winnings_page.dart';
 import 'withdraw_page.dart';
 import 'notifications_page.dart';
 import 'create_ad_start_page.dart';
+import '../services/wallet_api.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -22,6 +23,35 @@ class AccountPage extends StatefulWidget {
 class _AccountPageState extends State<AccountPage> {
   int _currentIndex = 3;
   bool _showBalance = false;
+  final WalletApi _walletApi = WalletApi();
+  double _balance = 0.0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBalance();
+  }
+
+  Future<void> _loadBalance() async {
+    try {
+      final response = await _walletApi.getBalance();
+
+      setState(() {
+        _isLoading = false;
+        if (response.success && response.data != null) {
+          _balance = (response.data!['balance'] ?? 0).toDouble();
+        }
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_balance)),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +155,7 @@ class _AccountPageState extends State<AccountPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                _showBalance ?  'MRU 500.00' : '••••••' ,
+                                _showBalance ?  'MRU ${_balance.toStringAsFixed(2)}' : '••••••' ,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 24,
