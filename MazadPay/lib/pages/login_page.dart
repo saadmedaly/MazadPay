@@ -10,6 +10,7 @@ import 'new_password_page.dart';
 import 'home_page.dart';
 import 'otp_entry_page.dart';
 import '../widgets/success_dialog.dart';
+import 'phone_password_page.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   final bool showSuccessDialog;
@@ -196,7 +197,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const PhoneRegistrationPage(),
+                        builder: (context) => const PhonePasswordPage(),
                       ),
                     );
                   },

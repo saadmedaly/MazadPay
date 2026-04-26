@@ -42,8 +42,9 @@ class FavoritesPage extends ConsumerWidget {
               await service.migrateLocalFavorites();
               ref.read(favoritesProvider.notifier).refresh();
               if (context.mounted) {
+                final l10n = AppLocalizations.of(context)!;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Favoris synchronisés')),
+                  SnackBar(content: Text(l10n.favorites_synced)),
                 );
               }
             },
@@ -59,14 +60,14 @@ class FavoritesPage extends ConsumerWidget {
               Icon(Icons.error_outline, size: 60, color: Colors.red.withOpacity(0.5)),
               const SizedBox(height: 16),
               Text(
-                'Erreur: $error',
+                '${AppLocalizations.of(context)!.error_loading_favorites}: $error',
                 style: const TextStyle(color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () => ref.read(favoritesProvider.notifier).refresh(),
-                child: const Text('Réessayer'),
+                child: Text(AppLocalizations.of(context)!.retry),
               ),
             ],
           ),
@@ -98,7 +99,7 @@ class FavoritesPage extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Les favoris sont sauvegardés localement',
+            AppLocalizations.of(context)!.favorites_local_storage,
             style: TextStyle(
               fontFamily: 'Plus Jakarta Sans',
               fontSize: 12,
@@ -171,8 +172,8 @@ class FavoritesPage extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: const Icon(Icons.favorite, color: Colors.red),
-        title: Text('Enchère #$auctionId'),
-        subtitle: const Text('Données non disponibles hors ligne'),
+        title: Text('${AppLocalizations.of(context)!.auction} #$auctionId'),
+        subtitle: Text(AppLocalizations.of(context)!.data_not_available_offline),
         trailing: IconButton(
           icon: const Icon(Icons.delete_outline, color: Colors.red),
           onPressed: () => ref.read(favoritesProvider.notifier).removeFavorite(auctionId),
@@ -245,19 +246,54 @@ class FavoritesPage extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  auction['title']?.toString() ?? 'Sans titre',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'Plus Jakarta Sans',
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Builder(builder: (context) {
+                  // Récupérer le titre avec fallback intelligent
+                  final locale = Localizations.localeOf(context).languageCode;
+                  String title = '';
+                  
+                  // 1. Essayer d'abord la langue actuelle de l'app
+                  switch (locale) {
+                    case 'ar':
+                      title = auction['title_ar']?.toString() ?? '';
+                      break;
+                    case 'fr':
+                      title = auction['title_fr']?.toString() ?? '';
+                      break;
+                    case 'en':
+                      title = auction['title_en']?.toString() ?? '';
+                      break;
+                  }
+                  
+                  // 2. Si vide, essayer l'arabe (langue par défaut)
+                  if (title.isEmpty) {
+                    title = auction['title_ar']?.toString() ?? '';
+                  }
+                  
+                  // 3. Si toujours vide, essayer les autres langues
+                  if (title.isEmpty) {
+                    title = auction['title_fr']?.toString() ??
+                            auction['title_en']?.toString() ??
+                            auction['title']?.toString() ??
+                            '';
+                  }
+                  
+                  // 4. Si toujours vide, afficher "Sans titre"
+                  if (title.isEmpty) title = AppLocalizations.of(context)!.no_title;
+                  
+                  return Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Plus Jakarta Sans',
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  );
+                }),
                 const SizedBox(height: 8),
                 Text(
-                  '${auction['current_bid'] ?? auction['price'] ?? 0} MRU',
+                  '${auction['current_price'] ?? auction['current_bid'] ?? auction['price'] ?? 0} MRU',
                   style: const TextStyle(
                     fontFamily: 'Plus Jakarta Sans',
                     fontSize: 16,

@@ -321,7 +321,7 @@ DELETE /api/v1/admin/blocked-phones/:id         ✅ Existe
 
 ### 2.10 CONTENT MANAGEMENT (CMS)
 ```http
-# FAQ / Tutoriels / Pages statiques
+# FAQ / Tutoriels 
 GET    /api/v1/admin/faq                        ❌ MANQUANT
 POST   /api/v1/admin/faq                        ❌ MANQUANT
 PUT    /api/v1/admin/faq/:id                    ❌ MANQUANT
@@ -332,11 +332,6 @@ POST   /api/v1/admin/tutorials                  ❌ MANQUANT
 PUT    /api/v1/admin/tutorials/:id              ❌ MANQUANT
 DELETE /api/v1/admin/tutorials/:id              ❌ MANQUANT
 
-# Terms & Privacy
-GET    /api/v1/admin/content/terms             ❌ MANQUANT
-PUT    /api/v1/admin/content/terms              ❌ MANQUANT
-GET    /api/v1/admin/content/privacy           ❌ MANQUANT
-PUT    /api/v1/admin/content/privacy           ❌ MANQUANT
 ```
 
 ### 2.11 SYSTEM SETTINGS
@@ -365,11 +360,9 @@ GET    /api/v1/admin/audit-logs/user/:id        ❌ MANQUANT
 # Gestion des admins
 GET    /api/v1/admin/invitations                ✅ Existe
 POST   /api/v1/admin/invitations                ✅ Existe
-PUT    /api/v1/admin/invitations/:id/revoke      ❌ MANQUANT
 GET    /api/v1/admin/admins                     ✅ Existe - Liste admins
 PUT    /api/v1/admin/admins/:id/role             ❌ MANQUANT - Changer rôle
-DELETE /api/v1/admin/admins/:id                 ❌ MANQUANT - Retirer admin
-```
+ ```
 
 ---
 

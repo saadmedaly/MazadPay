@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,8 +81,17 @@ type Auction struct {
 	Quantity        int              `db:"quantity"         json:"quantity"` // Nombre d'items disponibles
 
 	// Joined Fields (Metadata)
-	CategoryNameAr *string `db:"category_name_ar" json:"category"`
-	CityNameAr     *string `db:"city_name_ar"     json:"city"`
+	CategoryNameAr *string  `db:"category_name_ar" json:"category"`
+	CityNameAr     *string  `db:"city_name_ar"     json:"city"`
+	ImageURLs      *string  `db:"image_urls"       json:"image_urls"` // Comma-separated image URLs
+}
+
+// GetImagesArray returns image URLs as a slice of strings
+func (a *Auction) GetImagesArray() []string {
+	if a.ImageURLs == nil || *a.ImageURLs == "" {
+		return []string{}
+	}
+	return strings.Split(*a.ImageURLs, ",")
 }
 
 type AuctionImage struct {

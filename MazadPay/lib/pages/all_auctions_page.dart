@@ -8,7 +8,10 @@ import 'package:mezadpay/pages/create_ad_start_page.dart';
 import 'package:mezadpay/pages/account_page.dart';
 import 'package:mezadpay/pages/services_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
+import 'package:mezadpay/pages/auction_details_page.dart';
 import '../services/auction_api.dart';
+import '../providers/category_provider.dart';
+import '../services/category_api.dart';
 
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
@@ -23,16 +26,100 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
 
   List<Map<String, dynamic>> _allAuctions = [];
   List<Map<String, dynamic>> _filteredAuctions = [];
+  List<Map<String, dynamic>> _categories = [];
+  List<Map<String, dynamic>> _subCategories = [];
+  Map<String, List<Map<String, dynamic>>> _subCategoriesMap = {};
   int _activeTabIndex = 0;
   int _selectedCategoryIndex = 0;
-  int _selectedSubCategoryIndex = 0;
+  int _selectedSubCategoryIndex = -1;
   bool _isLoading = true;
+  bool _isLoadingCategories = true;
+  String? _selectedCategoryId;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    _loadCategories();
     _loadAuctions();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categoryApi = CategoryApi();
+      final response = await categoryApi.getCategories();
+
+      print('=== DEBUG CATEGORIES ===');
+      print('Response success: ${response.success}');
+      print('Response data type: ${response.data.runtimeType}');
+
+      List<Map<String, dynamic>> parentCategories = [];
+      Map<String, List<Map<String, dynamic>>> subCategoriesMap = {};
+
+      if (response.success && response.data != null) {
+        final categoriesList = response.data!;
+        print('CategoriesList length: ${categoriesList.length}');
+
+        // Separate parent categories and subcategories
+        for (var item in categoriesList) {
+          final cat = item as Map<String, dynamic>;
+          final parentId = cat['parent_id'];
+          print('Category: ${cat['name_ar']}, parent_id: $parentId');
+          
+          if (parentId == null) {
+            // This is a parent category
+            parentCategories.add({
+              'id': cat['id']?.toString() ?? '',
+              'name_ar': cat['name_ar'] ?? cat['name'] ?? '',
+              'name_fr': cat['name_fr'] ?? cat['name'] ?? '',
+              'name_en': cat['name_en'] ?? cat['name'] ?? '',
+              'image': cat['image_url'] ?? cat['image'] ?? 'assets/auctions/other.png',
+              'key': cat['key'] ?? cat['slug'] ?? cat['id']?.toString() ?? '',
+              'count': cat['auction_count'] ?? cat['count'] ?? 0,
+              'has_subcategories': cat['has_subcategories'] ?? false,
+            });
+          } else {
+            // This is a subcategory, store it under its parent
+            final parentKey = parentId.toString();
+            if (!subCategoriesMap.containsKey(parentKey)) {
+              subCategoriesMap[parentKey] = [];
+            }
+            subCategoriesMap[parentKey]!.add({
+              'id': cat['id']?.toString() ?? '',
+              'name_ar': cat['name_ar'] ?? cat['name'] ?? '',
+              'name_fr': cat['name_fr'] ?? cat['name'] ?? '',
+              'name_en': cat['name_en'] ?? cat['name'] ?? '',
+              'image': cat['image_url'] ?? cat['image'] ?? 'assets/auctions/other.png',
+              'key': cat['key'] ?? cat['slug'] ?? cat['id']?.toString() ?? '',
+              'parent_id': parentKey,
+            });
+          }
+        }
+      }
+
+      print('Parent categories count: ${parentCategories.length}');
+      print('SubCategoriesMap keys: ${subCategoriesMap.keys}');
+
+      setState(() {
+        _categories = [
+          {'id': 'all', 'name_ar': 'الكل', 'name_fr': 'Tout', 'name_en': 'All', 'image': 'assets/auctions/other.png', 'key': 'all'},
+          ...parentCategories,
+        ];
+        // Store subcategories map for quick access
+        _subCategoriesMap = subCategoriesMap;
+        _isLoadingCategories = false;
+      });
+      print('Final _categories length: ${_categories.length}');
+    } catch (e) {
+      print('Error loading categories: $e');
+      setState(() {
+        _isLoadingCategories = false;
+        // En cas d'erreur, on garde la catégorie "All" par défaut
+        _categories = [
+          {'id': 'all', 'name_ar': 'الكل', 'name_fr': 'Tout', 'name_en': 'All', 'image': 'assets/auctions/other.png', 'key': 'all'},
+        ];
+      });
+    }
   }
 
   @override
@@ -62,7 +149,15 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       setState(() {
         _isLoading = false;
         if (response.success && response.data != null) {
-          _allAuctions = List.from(response.data!['auctions'] ?? []);
+          final dynamic responseData = response.data!;
+          List<dynamic> auctionList = [];
+          // La réponse peut être directement une liste ou un objet avec 'data' ou 'auctions'
+          if (responseData is List) {
+            auctionList = responseData;
+          } else if (responseData is Map<String, dynamic>) {
+            auctionList = (responseData['auctions'] ?? responseData['data'] ?? []) as List<dynamic>;
+          }
+          _allAuctions = auctionList.map((item) => item as Map<String, dynamic>).toList();
           _filteredAuctions = List.from(_allAuctions);
         }
       });
@@ -79,20 +174,25 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   void _filterAuctions() {
     setState(() {
       _filteredAuctions = _allAuctions.where((auction) {
-        final matchesSearch = auction['title']!.toLowerCase().contains(_searchController.text.toLowerCase());
+        final title = auction['title_ar'] ?? auction['title'] ?? '';
+        final matchesSearch = title.toLowerCase().contains(_searchController.text.toLowerCase());
         final matchesStatus = _activeTabIndex == 0 ? auction['status'] == 'active' : auction['status'] == 'finished';
 
         bool matchesCategory = true;
-        if (_selectedCategoryIndex != 0) {
-          final categoryKey = _categories[_selectedCategoryIndex]['key'];
-          matchesCategory = auction['category'] == categoryKey;
+        if (_selectedCategoryIndex != 0 && _categories.isNotEmpty) {
+          final categoryId = _categories[_selectedCategoryIndex]['id']?.toString();
+          final auctionCategoryId = auction['category_id']?.toString() ?? auction['category']?.toString();
+          if (categoryId != null && categoryId != 'all') {
+            matchesCategory = auctionCategoryId == categoryId;
+          }
         }
 
         bool matchesSubCategory = true;
-        if (_selectedCategoryIndex == 1 && _selectedSubCategoryIndex != -1) {
-          final subKey = _carSubCategories[_selectedSubCategoryIndex]['key'];
-          if (auction.containsKey('subCategory')) {
-            matchesSubCategory = auction['subCategory'] == subKey;
+        if (_selectedSubCategoryIndex != -1 && _subCategories.isNotEmpty) {
+          final subCategoryId = _subCategories[_selectedSubCategoryIndex]['id']?.toString();
+          final auctionSubCategoryId = auction['sub_category_id']?.toString() ?? auction['subCategory']?.toString();
+          if (subCategoryId != null) {
+            matchesSubCategory = auctionSubCategoryId == subCategoryId;
           }
         }
 
@@ -100,162 +200,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       }).toList();
     });
   }
-
-  final List<Map<String, dynamic>> _categories = [
-    {'title_key': 'text_74',  'image': 'assets/auctions/other.png',            'key': 'all',             'count': 76},
-    {'title_key': 'text_86',  'image': 'assets/auctions/cars.png',             'key': 'cars',            'count': 4},
-    {'title_key': 'text_130', 'image': 'assets/auctions/phones.png',           'key': 'phones',          'count': 6},
-    {'title_key': 'text_119', 'image': 'assets/auctions/houses.png',           'key': 'real_estate',     'count': 5},
-    {'title_key': 'text_127', 'image': 'assets/auctions/phone_numbers.png',    'key': 'phone_numbers',   'count': 0},
-    {'title_key': 'text_120', 'image': 'assets/auctions/home_appliances.png',  'key': 'home_appliances', 'count': 8},
-    {'title_key': 'text_124', 'image': 'assets/auctions/animals.png',          'key': 'animals',         'count': 8},
-    {'title_key': 'text_123', 'image': 'assets/auctions/womens_accessories.png','key': 'womens',         'count': 8},
-    {'title_key': 'text_122', 'image': 'assets/auctions/mens_accessories.png', 'key': 'mens',            'count': 10},
-    {'title_key': 'text_125', 'image': 'assets/auctions/heavy_equipment.png',  'key': 'trucks',          'count': 8},
-    {'title_key': 'text_131', 'image': 'assets/auctions/phones.png',                    'key': 'electronics',    'count': 8},
-    {'title_key': 'text_129', 'image': 'assets/auctions/selling_projects.png',          'key': 'projects',       'count': 3},
-    {'title_key': 'text_133', 'image': 'assets/auctions/Vélos.png',                     'key': 'bikes',          'count': 12},
-    {'title_key': 'text_139', 'image': 'assets/auctions/Matériaux lourds.jpg',          'key': 'heavy_materials', 'count': 10},
-    {'title_key': 'text_134', 'image': 'assets/auctions/Pièces de sol.jpg',             'key': 'land_plots',     'count': 4},
-    {'title_key': 'text_137', 'image': 'assets/auctions/Meubles.jpg',                   'key': 'furniture',      'count': 8},
-  ];
-
-  final List<Map<String, dynamic>> _carSubCategories = [
-    {'title_key': 'text_115', 'image': 'assets/car1.jpg', 'key': 'standard'},
-    {'title_key': 'text_114', 'image': 'assets/car0.png', 'key': '4x4'},
-    {'title_key': 'text_116', 'image': 'assets/car2.jpg', 'key': 'taxi'},
-    {'title_key': 'text_117', 'image': 'assets/car4.jpg', 'key': 'damaged'},
-    {'title_key': 'text_118', 'image': 'assets/car5.png', 'key': 'electric'},
-  ];
-
-  // خريطة تربط كل فئة بقائمة عناصرها المرئية في شريط التمرير
-  late final Map<String, List<Map<String, dynamic>>> _categoryItems = {
-    'cars': _carSubCategories,
-    'phones': [
-      {'label': 'iPhone 15 Pro Max', 'image': 'assets/phone1.jpg'},
-      {'label': 'Samsung S24 Ultra', 'image': 'assets/phone2.jpg'},
-      {'label': 'Huawei P60 Pro',    'image': 'assets/phone3.jpg'},
-      {'label': 'Xiaomi 14 Ultra',   'image': 'assets/phone4.jpg'},
-      {'label': 'Google Pixel 8',    'image': 'assets/phone5.jpg'},
-      {'label': 'OnePlus 12',        'image': 'assets/phone6.jpg'},
-    ],
-    'electronics': [
-      {'label': 'لابتوب',     'image': 'assets/Électronique1.jpg'},
-      {'label': 'آيباد',      'image': 'assets/Électronique2.jpg'},
-      {'label': 'كاميرا',     'image': 'assets/Électronique3.jpg'},
-      {'label': 'بلاي ستيشن','image': 'assets/Électronique4.jpg'},
-      {'label': 'سماعات',     'image': 'assets/Électronique5.jpg'},
-      {'label': 'شاشة',       'image': 'assets/Électronique6.jpg'},
-      {'label': 'طابعة',      'image': 'assets/Électronique7.jpg'},
-      {'label': 'راوتر',      'image': 'assets/Électronique8.jpg'},
-    ],
-    'real_estate': [
-      {'label': 'فيلا',         'image': 'assets/maison1.jpg'},
-      {'label': 'شقة',          'image': 'assets/maison2.jpg'},
-      {'label': 'منزل',         'image': 'assets/maison3.jpg'},
-      {'label': 'شقة مفروشة',   'image': 'assets/maison4.jpg'},
-      {'label': 'مبنى تجاري',   'image': 'assets/maison5.jpg'},
-    ],
-    'home_appliances': [
-      {'label': 'غسالة',   'image': 'assets/Appareils de maison1.jpg'},
-      {'label': 'ثلاجة',   'image': 'assets/Appareils de maison2.jpg'},
-      {'label': 'مكيف',    'image': 'assets/Appareils de maison3.jpg'},
-      {'label': 'بوتوغاز', 'image': 'assets/Appareils de maison4.jpg'},
-      {'label': 'تلفزيون', 'image': 'assets/Appareils de maison5.jpg'},
-      {'label': 'مجفف',    'image': 'assets/Appareils de maison6.jpg'},
-      {'label': 'طباخ',    'image': 'assets/Appareils de maison7.jpg'},
-      {'label': 'مكنسة',   'image': 'assets/Appareils de maison8.jpg'},
-    ],
-    'animals': [
-      {'label': 'حصان',  'image': 'assets/animal1.jpg'},
-      {'label': 'جمل',   'image': 'assets/animal2.jpg'},
-      {'label': 'ماعز',  'image': 'assets/animal3.jpg'},
-      {'label': 'خروف',  'image': 'assets/animal4.jpg'},
-      {'label': 'بقرة',  'image': 'assets/animal5.jpg'},
-      {'label': 'دجاج',  'image': 'assets/animal6.jpg'},
-      {'label': 'كبش',   'image': 'assets/animal7.jpg'},
-      {'label': 'إبل',   'image': 'assets/animal8.jpg'},
-    ],
-    'womens': [
-      {'label': 'حقيبة شانيل',   'image': 'assets/Fournitures pour femmes1.jpg'},
-      {'label': 'عطر',            'image': 'assets/Fournitures pour femmes2.jpg'},
-      {'label': 'ساعة نسائية',    'image': 'assets/Fournitures pour femmes3.jpg'},
-      {'label': 'مجوهرات',        'image': 'assets/Fournitures pour femmes4.jpg'},
-      {'label': 'فستان',          'image': 'assets/Fournitures pour femmes5.jpg'},
-      {'label': 'حذاء',           'image': 'assets/Fournitures pour femmes6.jpg'},
-      {'label': 'نظارة',          'image': 'assets/Fournitures pour femmes7.jpg'},
-      {'label': 'خاتم ألماس',     'image': 'assets/Fournitures pour femmes8.jpg'},
-    ],
-    'mens': [
-      {'label': 'ساعة رولكس',  'image': 'assets/Fournitures pour hommes1.jpg'},
-      {'label': 'حقيبة جلد',   'image': 'assets/Fournitures pour hommes2.jpg'},
-      {'label': 'بدلة',         'image': 'assets/Fournitures pour hommes3.jpg'},
-      {'label': 'حذاء جلد',    'image': 'assets/Fournitures pour hommes4.jpg'},
-      {'label': 'نظارة',        'image': 'assets/Fournitures pour hommes5.jpg'},
-      {'label': 'عطر',          'image': 'assets/Fournitures pour hommes6.jpg'},
-      {'label': 'حزام هيرمس',  'image': 'assets/Fournitures pour hommes7.jpg'},
-      {'label': 'قميص',         'image': 'assets/Fournitures pour hommes8.jpg'},
-      {'label': 'خاتم ذهب',    'image': 'assets/Fournitures pour hommes9.jpg'},
-      {'label': 'محفظة',        'image': 'assets/Fournitures pour hommes10.jpg'},
-    ],
-    'trucks': [
-      {'label': 'مرسيدس أكتروس', 'image': 'assets/Camions1.jpg'},
-      {'label': 'مان TGX',        'image': 'assets/Camions2.jpg'},
-      {'label': 'فولفو FH16',     'image': 'assets/Camions3.jpg'},
-      {'label': 'سكانيا R500',    'image': 'assets/Camions4.jpg'},
-      {'label': 'رينو T520',      'image': 'assets/Camions5.jpg'},
-      {'label': 'إيفيكو',         'image': 'assets/Camions6.jpg'},
-      {'label': 'دايملر',         'image': 'assets/Camions7.jpg'},
-      {'label': 'نيسان كوندور',   'image': 'assets/Camions8.jpg'},
-    ],
-    'bikes': [
-      {'label': 'ياماها R15',  'image': 'assets/Motos1.jpg'},
-      {'label': 'هوندا CB500', 'image': 'assets/Motos2.jpg'},
-      {'label': 'سوزوكي GSX',  'image': 'assets/Motos3.jpg'},
-      {'label': 'كاوازاكي',    'image': 'assets/Motos4.jpg'},
-      {'label': 'BMW G310R',   'image': 'assets/Motos5.jpg'},
-      {'label': 'هارلي',       'image': 'assets/Motos6.jpg'},
-      {'label': 'دوكاتي',      'image': 'assets/Motos7.jpg'},
-      {'label': 'ترياومف',     'image': 'assets/Motos8.jpg'},
-      {'label': 'أبريليا',     'image': 'assets/Motos9.jpg'},
-      {'label': 'KTM Duke',    'image': 'assets/Motos10.jpg'},
-      {'label': 'هيوسانج',     'image': 'assets/Motos11.jpg'},
-      {'label': 'موتو غوتسي',  'image': 'assets/Motos12.jpg'},
-    ],
-    'heavy_materials': [
-      {'label': 'حفارة',     'image': 'assets/Matériel lourd1.jpg'},
-      {'label': 'جرافة',     'image': 'assets/Matériel lourd2.jpg'},
-      {'label': 'رافعة شوكية','image': 'assets/Matériel lourd3.jpg'},
-      {'label': 'خلاطة',     'image': 'assets/Matériel lourd4.jpg'},
-      {'label': 'ضاغط هواء', 'image': 'assets/Matériel lourd5.jpg'},
-      {'label': 'شاحنة قلاب','image': 'assets/Matériel lourd6.jpg'},
-      {'label': 'مضخة مياه', 'image': 'assets/Matériel lourd7.jpg'},
-      {'label': 'مولد كهرباء','image': 'assets/Matériel lourd8.jpg'},
-      {'label': 'آلة تسوية', 'image': 'assets/Matériel lourd9.jpg'},
-      {'label': 'كرين 20 طن','image': 'assets/Matériel lourd10.jpg'},
-    ],
-    'land_plots': [
-      {'label': 'حي تفاريغ',  'image': 'assets/Terrains1.jpg'},
-      {'label': 'أرض سكنية',  'image': 'assets/Terrains2.jpg'},
-      {'label': 'قطعة تجارية','image': 'assets/Terrains3.jpg'},
-      {'label': 'أرض زراعية', 'image': 'assets/Terrains4.jpg'},
-    ],
-    'furniture': [
-      {'label': 'طقم صالون',  'image': 'assets/Meubles1.jpg'},
-      {'label': 'غرفة نوم',   'image': 'assets/Meubles2.jpg'},
-      {'label': 'طاولة سفرة', 'image': 'assets/Meubles3.jpg'},
-      {'label': 'مكتبة',      'image': 'assets/Meubles4.jpg'},
-      {'label': 'كنبة جلد',   'image': 'assets/Meubles5.jpg'},
-      {'label': 'طاولة قهوة', 'image': 'assets/Meubles6.jpg'},
-      {'label': 'خزانة ملابس','image': 'assets/Meubles7.jpg'},
-      {'label': 'سرير',       'image': 'assets/Meubles8.jpg'},
-    ],
-    'projects': [
-      {'label': 'مشروع 1', 'image': 'assets/auctions/selling_projects.png'},
-      {'label': 'مشروع 2', 'image': 'assets/auctions/selling_projects.png'},
-      {'label': 'مشروع 3', 'image': 'assets/auctions/selling_projects.png'},
-    ],
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +216,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         toolbarHeight: 60,
         centerTitle: true,
         title: Text(
-          "انواع المزادات",
+          _getAuctionTypesTitle(context),
           style: GoogleFonts.plusJakartaSans(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -308,15 +252,25 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                     itemBuilder: (context, index) {
                       final cat = _categories[index];
                       bool isSelected = _selectedCategoryIndex == index;
-                      String title = _getLocalizedTitle(cat['title_key'], l10n);
+                      String title = _getCategoryName(cat);
 
                       return GestureDetector(
                         onTap: () {
                           setState(() {
                             _selectedCategoryIndex = index;
                             _selectedSubCategoryIndex = -1;
-                            _filterAuctions();
+                            _selectedCategoryId = cat['id']?.toString();
                           });
+                          // Load subcategories from the map if this is a parent category
+                          if (cat['id']?.toString() != 'all') {
+                            final categoryId = cat['id']?.toString() ?? '';
+                            setState(() {
+                              _subCategories = _subCategoriesMap[categoryId] ?? [];
+                            });
+                          } else {
+                            setState(() => _subCategories = []);
+                          }
+                          _filterAuctions();
                         },
                         child: Container(
                           width: 100,
@@ -341,15 +295,10 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                               // Full image background
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(14),
-                                child: Image.asset(
-                                  cat['image'],
+                                child: SizedBox(
                                   width: 100,
                                   height: 110,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (c, e, s) => Container(
-                                    color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFEEEEEE),
-                                    child: Center(child: Icon(Icons.category, color: isSelected ? primaryBlue : Colors.grey, size: 36)),
-                                  ),
+                                  child: _buildAuctionImage(cat['image']?.toString()),
                                 ),
                               ),
                               // Dark gradient overlay at bottom
@@ -427,7 +376,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                       controller: _searchController,
                       textAlign: TextAlign.center,
                       decoration: InputDecoration(
-                        hintText: "البحث",
+                        hintText: _getSearchHint(context),
                         hintStyle: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 15),
                         prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 22),
                         border: InputBorder.none,
@@ -439,10 +388,8 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
 
                 // شريط العناصر العام — يظهر لكل فئة لها محتوى
                 Builder(builder: (context) {
-                  final catKey = _selectedCategoryIndex == 0
-                      ? null
-                      : _categories[_selectedCategoryIndex]['key'] as String;
-                  final items = catKey != null ? (_categoryItems[catKey] ?? []) : [];
+                  // Utiliser les sous-catégories de l'API
+                  final items = _subCategories;
                   if (items.isEmpty) return const SizedBox.shrink();
 
                   return Column(
@@ -453,7 +400,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                         child: Align(
                           alignment: Alignment.centerRight,
                           child: Text(
-                            _getLocalizedTitle(_categories[_selectedCategoryIndex]['title_key'], l10n),
+                            _getCategoryName(_categories[_selectedCategoryIndex]),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
@@ -470,22 +417,14 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           itemCount: items.length,
                           itemBuilder: (context, index) {
                             final item = items[index];
-                            final bool isCars = catKey == 'cars';
-                            final bool isSelected = isCars
-                                ? _selectedSubCategoryIndex == index
-                                : false;
-                            final String imagePath = item['image'] as String;
-                            final String label = isCars
-                                ? _getLocalizedTitle(item['title_key'] as String, l10n)
-                                : item['label'] as String;
+                            final bool isSelected = _selectedSubCategoryIndex == index;
+                            final String label = _getCategoryName(item);
 
                             return GestureDetector(
-                              onTap: isCars
-                                  ? () => setState(() {
-                                        _selectedSubCategoryIndex = index;
-                                        _filterAuctions();
-                                      })
-                                  : null,
+                              onTap: () => setState(() {
+                                _selectedSubCategoryIndex = index;
+                                _filterAuctions();
+                              }),
                               child: Container(
                                 width: 110,
                                 margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -505,12 +444,10 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                                   children: [
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(10),
-                                      child: Image.asset(
-                                        imagePath,
+                                      child: SizedBox(
                                         height: 52,
                                         width: 90,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (c, e, s) => Icon(Icons.image_not_supported, color: Colors.grey, size: 30),
+                                        child: _buildAuctionImage(item['image']?.toString()),
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -556,11 +493,30 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                       }
                       return true;
                     }).length;
+                    // Labels dynamiques selon la langue
+                    final locale = Localizations.localeOf(context).languageCode;
+                    String activeLabel, finishedLabel;
+                    switch (locale) {
+                      case 'ar':
+                        activeLabel = 'مزايدات نشطة';
+                        finishedLabel = 'مزايدات منتهية';
+                        break;
+                      case 'fr':
+                        activeLabel = 'Enchères actives';
+                        finishedLabel = 'Enchères terminées';
+                        break;
+                      case 'en':
+                      default:
+                        activeLabel = 'Active Auctions';
+                        finishedLabel = 'Finished Auctions';
+                        break;
+                    }
+                    
                     return Row(
                       children: [
-                        _buildStitchTab(1, "مزايدات منتهية", finishedCount.toString().padLeft(2, '0'), const Color(0xFFFFEDED), const Color(0xFFFF3B30)),
+                        _buildStitchTab(1, finishedLabel, finishedCount.toString().padLeft(2, '0'), const Color(0xFFFFEDED), const Color(0xFFFF3B30)),
                         const SizedBox(width: 12),
-                        _buildStitchTab(0, "مزايدات نشطة", activeCount.toString().padLeft(2, '0'), const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
+                        _buildStitchTab(0, activeLabel, activeCount.toString().padLeft(2, '0'), const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
                       ],
                     );
                   }),
@@ -653,15 +609,19 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  label,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                    color: isSelected ? textColor : Colors.grey,
+                Flexible(
+                  child: Text(
+                    label,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      color: isSelected ? textColor : Colors.grey,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
@@ -686,67 +646,114 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     const Color softRed = Color(0xFFFF3B30);
     const Color lightGreyBg = Color(0xFFF2F2F7);
     const Color darkGreyBg = Color(0xFF2C2C2E);
-    
+
     final id = auction['id']?.toString() ?? '';
     final favoritesAsync = ref.watch(favoritesProvider);
     final isFavorite = favoritesAsync.value?.contains(id) ?? false;
 
     final bool isFinished = auction['status'] == 'finished';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-            spreadRadius: -5,
+    // Récupérer le titre selon la langue actuelle avec fallback intelligent
+    final locale = Localizations.localeOf(context).languageCode;
+    String title = '';
+
+    // 1. Essayer d'abord la langue actuelle de l'app
+    switch (locale) {
+      case 'ar':
+        title = auction['title_ar']?.toString() ?? '';
+        break;
+      case 'fr':
+        title = auction['title_fr']?.toString() ?? '';
+        break;
+      case 'en':
+        title = auction['title_en']?.toString() ?? '';
+        break;
+    }
+
+    // 2. Si vide, essayer l'arabe (langue par défaut de l'app)
+    if (title.isEmpty) {
+      title = auction['title_ar']?.toString() ?? '';
+    }
+
+    // 3. Si toujours vide, essayer les autres langues dans l'ordre
+    if (title.isEmpty) {
+      title = auction['title_fr']?.toString() ??
+              auction['title_en']?.toString() ??
+              auction['title']?.toString() ??
+              '';
+    }
+
+    // 4. Si toujours vide, afficher "Sans titre"
+    if (title.isEmpty) title = _getNoTitleText(context);
+
+    // Obtenir l'URL de l'image
+    String? imageUrl;
+    if (auction['images'] is List && (auction['images'] as List).isNotEmpty) {
+      final firstImage = (auction['images'] as List)[0];
+      if (firstImage is Map<String, dynamic>) {
+        imageUrl = firstImage['url']?.toString() ?? firstImage['image_url']?.toString();
+      } else {
+        imageUrl = firstImage.toString();
+      }
+    } else if (auction['image'] != null) {
+      imageUrl = auction['image'].toString();
+    } else if (auction['image_url'] != null) {
+      imageUrl = auction['image_url'].toString();
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => AuctionDetailsPage(auctionId: id),
           ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Right: Image
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              ),
-              child: SizedBox(
-                width: 125,
-                height: 110,
-                child: Image.asset(
-                  auction['images'] is List && (auction['images'] as List).isNotEmpty 
-                      ? auction['images'][0] 
-                      : auction['image']?.toString() ?? 'assets/car0.png',
-                  fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) => Container(
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                  ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+              spreadRadius: -5,
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Right: Image
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+                child: SizedBox(
+                  width: 125,
+                  height: 110,
+                  child: _buildAuctionImage(imageUrl),
                 ),
               ),
-            ),
-            // Left: Content
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), // Reduced from 10
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Title
-                    Text(
-                      auction['title']?.toString() ?? 'Sans titre',
+              // Left: Content
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Title
+                      Text(
+                        title,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
@@ -759,7 +766,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                     const SizedBox(height: 1),
                     // Price
                     Text(
-                      "${auction['current_bid'] ?? auction['price'] ?? 0} MRU",
+                      "${auction['current_price'] ?? auction['current_bid'] ?? auction['price'] ?? 0} MRU",
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -777,7 +784,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              auction['bids']?.toString() ?? '0',
+                              (auction['bidder_count'] ?? auction['bids'] ?? 0).toString(),
                               style: GoogleFonts.plusJakartaSans(
                                 color: softRed,
                                 fontWeight: FontWeight.w900,
@@ -807,15 +814,36 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Flexible(
-                                child: Text(
-                                  isFinished ? 'انتهى المزاد' : (auction['ends_at']?.toString() ?? auction['time']?.toString() ?? ''),
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: softRed,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                child: Builder(builder: (context) {
+                                  // Formater la date si disponible
+                                  String timeText = '0';
+                                  final rawTime = auction['end_time'] ?? auction['ends_at'] ?? auction['time'];
+                                  if (rawTime != null) {
+                                    try {
+                                      final dateTime = DateTime.parse(rawTime.toString());
+                                      // Format: DD/MM/YYYY HH:MM
+                                      final day = dateTime.day.toString().padLeft(2, '0');
+                                      final month = dateTime.month.toString().padLeft(2, '0');
+                                      final year = dateTime.year.toString();
+                                      final hour = dateTime.hour.toString().padLeft(2, '0');
+                                      final minute = dateTime.minute.toString().padLeft(2, '0');
+                                      timeText = '$day/$month/$year\t$hour:$minute';
+                                    } catch (e) {
+                                      // Si parsing échoue, afficher la valeur brute
+                                      timeText = rawTime.toString();
+                                    }
+                                  }
+                                  
+                                  return Text(
+                                    isFinished ? 'انتهى المزاد' : timeText,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: softRed,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  );
+                                }),
                               ),
                               const SizedBox(width: 3),
                               const Icon(Icons.access_time_rounded, color: softRed, size: 14),
@@ -828,16 +856,49 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                     // Posted time + location
                     Directionality(
                       textDirection: TextDirection.rtl,
-                      child: Text(
-                        "${auction['postedTime']} . ${auction['location']}",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10, // Reduced from 11
-                          color: const Color(0xFF9AA5B4),
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Builder(builder: (context) {
+                        // Récupérer la ville avec fallback intelligent
+                        final locale = Localizations.localeOf(context).languageCode;
+                        String cityName = '';
+                        
+                        // 1. Essayer d'abord la langue actuelle de l'app
+                        switch (locale) {
+                          case 'ar':
+                            cityName = auction['city_name_ar']?.toString() ?? auction['city_ar']?.toString() ?? '';
+                            break;
+                          case 'fr':
+                            cityName = auction['city_name_fr']?.toString() ?? auction['city_fr']?.toString() ?? '';
+                            break;
+                          case 'en':
+                            cityName = auction['city_name_en']?.toString() ?? auction['city_en']?.toString() ?? '';
+                            break;
+                        }
+                        
+                        // 2. Si vide, essayer l'arabe (langue par défaut)
+                        if (cityName.isEmpty) {
+                          cityName = auction['city_name_ar']?.toString() ?? auction['city_ar']?.toString() ?? '';
+                        }
+                        
+                        // 3. Si toujours vide, essayer les autres langues
+                        if (cityName.isEmpty) {
+                          cityName = auction['city_name_fr']?.toString() ??
+                                     auction['city_name_en']?.toString() ??
+                                     auction['city']?.toString() ??
+                                     auction['location']?.toString() ??
+                                     '';
+                        }
+                        
+                        return Text(
+                          "$cityName . ${(auction['category'] ?? '').toString().split(' ').first}",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10, // Reduced from 11
+                            color: const Color(0xFF9AA5B4),
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      }),
                     ),
                   ],
                 ),
@@ -845,6 +906,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -872,7 +934,134 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     );
   }
 
+  Widget _buildAuctionImage(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Container(
+        color: Colors.grey[200],
+        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+      );
+    }
+
+    // Si c'est une URL réseau
+    if (imageUrl.startsWith('http')) {
+      return Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (c, e, s) => Container(
+          color: Colors.grey[200],
+          child: const Icon(Icons.image_not_supported, color: Colors.grey),
+        ),
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            color: Colors.grey[200],
+            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        },
+      );
+    }
+
+    // Sinon c'est un asset local
+    return Image.asset(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (c, e, s) => Container(
+        color: Colors.grey[200],
+        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+      ),
+    );
+  }
+
+  String _getNoTitleText(BuildContext context) {
+    final locale = Localizations.localeOf(context).languageCode;
+    switch (locale) {
+      case 'ar':
+        return 'بدون عنوان';
+      case 'fr':
+        return 'Sans titre';
+      case 'en':
+      default:
+        return 'No title';
+    }
+  }
+
+  String _getFinishedText(BuildContext context) {
+    final locale = Localizations.localeOf(context).languageCode;
+    switch (locale) {
+      case 'ar':
+        return 'انتهى المزاد';
+      case 'fr':
+        return 'Enchère terminée';
+      case 'en':
+      default:
+        return 'Auction ended';
+    }
+  }
+
+  String _getAuctionTypesTitle(BuildContext context) {
+    final locale = Localizations.localeOf(context).languageCode;
+    switch (locale) {
+      case 'ar':
+        return 'أنواع المزادات';
+      case 'fr':
+        return 'Types d\'enchères';
+      case 'en':
+      default:
+        return 'Auction Types';
+    }
+  }
+
+  String _getSearchHint(BuildContext context) {
+    final locale = Localizations.localeOf(context).languageCode;
+    switch (locale) {
+      case 'ar':
+        return 'البحث';
+      case 'fr':
+        return 'Rechercher';
+      case 'en':
+      default:
+        return 'Search';
+    }
+  }
+
+  String _getCategoryName(Map<String, dynamic> category) {
+    final locale = Localizations.localeOf(context).languageCode;
+    String name = '';
+
+    // 1. Essayer d'abord la langue actuelle de l'app
+    switch (locale) {
+      case 'ar':
+        name = category['name_ar']?.toString() ?? '';
+        break;
+      case 'fr':
+        name = category['name_fr']?.toString() ?? '';
+        break;
+      case 'en':
+        name = category['name_en']?.toString() ?? '';
+        break;
+    }
+
+    // 2. Si vide, essayer l'arabe (langue par défaut)
+    if (name.isEmpty) {
+      name = category['name_ar']?.toString() ?? '';
+    }
+
+    // 3. Si toujours vide, essayer les autres langues
+    if (name.isEmpty) {
+      name = category['name_fr']?.toString() ??
+             category['name_en']?.toString() ??
+             category['name']?.toString() ??
+             '';
+    }
+
+    return name;
+  }
+
   String _getLocalizedTitle(String key, AppLocalizations l10n) {
+    // Si c'est une catégorie de l'API (commence par name_)
+    if (key.startsWith('name_')) {
+      return key;
+    }
     switch (key) {
       case 'text_74': return l10n.text_74;
       case 'text_86': return l10n.text_86;

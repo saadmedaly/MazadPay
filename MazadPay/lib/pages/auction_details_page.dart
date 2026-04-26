@@ -5,12 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auction_provider.dart';
 import '../models/auction.dart';
+import '../models/bid.dart';
 import '../widgets/bid_action_sheet.dart';
 import '../widgets/auction_winner_dialog.dart';
 import '../pages/auction_history_page.dart';
 import '../providers/favorites_provider.dart';
 import '../pages/all_auctions_page.dart';
 import '../services/auction_api.dart';
+import '../services/bid_api.dart';
+import '../services/cache_service.dart';
 
 class AuctionDetailsPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -21,37 +24,168 @@ class AuctionDetailsPage extends ConsumerStatefulWidget {
 }
 
 class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
-  late Timer _timer;
+  Timer? _timer;
   Duration _timeLeft = Duration.zero;
   final PageController _pageController = PageController();
   int _currentPage = 0;
   final AuctionApi _auctionApi = AuctionApi();
+  final BidApi _bidApi = BidApi();
   bool _isLoading = true;
   Map<String, dynamic>? _auctionData;
+  List<Bid>? _bidHistory;
+  late Future<dynamic> _relatedAuctionsFuture; // Cache pour éviter appels multiples
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
     _loadAuctionDetails();
+    _loadBidHistory();
+    _relatedAuctionsFuture = _auctionApi.getAuctions(); // Cache le Future
   }
 
   Future<void> _loadAuctionDetails() async {
     try {
-      final response = await _auctionApi.getAuctionDetails(widget.auctionId);
+      debugPrint('=== LOADING AUCTION DETAILS ===');
+      debugPrint('Auction ID: ${widget.auctionId}');
       
-      setState(() {
-        _isLoading = false;
-        if (response.success && response.data != null) {
-          _auctionData = response.data!['auction'];
-          _startTimer();
+      // === OPTIMISTIC UI: Charger depuis le cache d'abord (instantané) ===
+      final cachedDetail = await CacheService.instance.getCachedAuctionDetail(widget.auctionId);
+      final isCacheValid = await CacheService.instance.isAuctionDetailCacheValid(widget.auctionId);
+
+      debugPrint('Cache valid: $isCacheValid');
+      debugPrint('Cached detail: ${cachedDetail != null}');
+
+      if (cachedDetail != null && isCacheValid) {
+        // Afficher les données du cache immédiatement (0ms)
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _auctionData = cachedDetail;
+          debugPrint('Loaded from cache: ${_auctionData != null}');
+          if (_auctionData != null) {
+            _startTimer();
+          }
+        });
+      }
+
+      // === CHARGER DEPUIS L'API EN ARRIÈRE-PLAN ===
+      debugPrint('Fetching from API...');
+      final response = await _auctionApi.getAuctionDetails(widget.auctionId);
+
+      debugPrint('API Response success: ${response.success}');
+      debugPrint('API Response data: ${response.data != null}');
+
+      if (response.success && response.data != null) {
+        final data = response.data!;
+        debugPrint('Data type: ${data.runtimeType}');
+        debugPrint('Data keys: ${data is Map ? (data as Map).keys.toList() : "Not a map"}');
+        
+        Map<String, dynamic>? auctionData;
+        
+        // Extraction robuste avec multiples fallbacks pour différentes structures API
+        if (data is Map<String, dynamic>) {
+          auctionData = data['auction'] ?? data['data'] ?? data;
+          debugPrint('Extracted auctionData: ${auctionData != null}');
+          debugPrint('AuctionData keys: ${auctionData?.keys.toList()}');
+          // API retourne les images dans une clé séparée - les fusionner
+          if (data['images'] != null && auctionData != null) {
+            auctionData['images'] = data['images'];
+          }
+          // Cache les détails de l'enchère
+          if (auctionData != null) {
+            await CacheService.instance.cacheAuctionDetail(widget.auctionId, auctionData);
+          }
+        } else if (data is List && data.isNotEmpty) {
+          auctionData = data[0];
+          debugPrint('Extracted from list: ${auctionData != null}');
+          if (auctionData != null) {
+            await CacheService.instance.cacheAuctionDetail(widget.auctionId, auctionData);
+          }
         }
-      });
+
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _auctionData = auctionData;
+          debugPrint('Final auctionData: ${_auctionData != null}');
+          if (_auctionData != null) {
+            _startTimer();
+          }
+        });
+      } else {
+        debugPrint('API response failed or no data');
+        // Si le cache existe mais l'API échoue, garder le cache
+        if (cachedDetail == null && mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
     } catch (e) {
+      debugPrint('Error loading auction details: $e');
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auction_details)),
-        );
+        final errorStr = e.toString();
+        // Check if auction not found
+        if (errorStr.contains('not found') || errorStr.contains('404')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Cette enchère n\'existe plus ou a été supprimée'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          // Navigate back after showing error
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) Navigator.of(context).pop();
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auction_details)),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _loadBidHistory() async {
+    try {
+      debugPrint('=== LOADING BID HISTORY ===');
+      debugPrint('Auction ID: ${widget.auctionId}');
+      final response = await _bidApi.getBidHistory(widget.auctionId);
+      
+      debugPrint('Bid history response success: ${response.success}');
+      
+      if (response.success && response.data != null) {
+        final data = response.data!;
+        List<Bid> bids = [];
+        
+        if (data is Map<String, dynamic>) {
+          final bidsList = data['bids'] as List<dynamic>? ?? [];
+          bids = bidsList.map((e) => Bid.fromJson(e as Map<String, dynamic>)).toList();
+        } else if (data is List) {
+          bids = (data as List<dynamic>).map((e) => Bid.fromJson(e as Map<String, dynamic>)).toList();
+        }
+        
+        debugPrint('Loaded ${bids.length} bids');
+        
+        if (mounted) {
+          setState(() {
+            _bidHistory = bids;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _bidHistory = [];
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading bid history: $e');
+      if (mounted) {
+        setState(() {
+          _bidHistory = [];
+        });
       }
     }
   }
@@ -59,17 +193,28 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   void _startTimer() {
     if (_auctionData == null) return;
     
-    final endTime = DateTime.tryParse(_auctionData!['ends_at'] ?? '');
+    final endTimeStr = _auctionData!['end_time'] ?? _auctionData!['ends_at'] ?? '';
+    final endTime = DateTime.tryParse(endTimeStr);
     if (endTime == null) return;
     
     _timeLeft = endTime.difference(DateTime.now());
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_isDisposed || !mounted) {
+        timer.cancel();
+        return;
+      }
       if (_timeLeft.inSeconds > 0) {
-        setState(() {
-          _timeLeft = Duration(seconds: _timeLeft.inSeconds - 1);
-        });
+        try {
+          if (mounted && !_isDisposed) {
+            setState(() {
+              _timeLeft = Duration(seconds: _timeLeft.inSeconds - 1);
+            });
+          }
+        } catch (e) {
+          timer.cancel();
+        }
       } else {
-        _timer.cancel();
+        _timer?.cancel();
         _checkWinner();
       }
     });
@@ -81,16 +226,23 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
 
   @override
   void dispose() {
-    _timer.cancel();
+    _timer?.cancel();
+    _timer = null;
+    _isDisposed = true;
     super.dispose();
   }
 
   String _formatDuration(Duration d) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
-    String hours = twoDigits(d.inHours);
-    String minutes = twoDigits(d.inMinutes.remainder(60));
-    String seconds = twoDigits(d.inSeconds.remainder(60));
-    return "$hours : $minutes : $seconds";
+    final days = d.inDays;
+    final hours = d.inHours.remainder(24);
+    final minutes = d.inMinutes.remainder(60);
+    final seconds = d.inSeconds.remainder(60);
+    
+    if (days > 0) {
+      return "${twoDigits(days)}j ${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}";
+    }
+    return "${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}";
   }
 
   @override
@@ -107,7 +259,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     if (_auctionData == null) {
       return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
-        body: Center(child: Text('Erreur lors du chargement de l\'enchère')),
+        body: Center(child: Text(AppLocalizations.of(context)!.error_loading_auction)),
       );
     }
 
@@ -127,6 +279,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                         _buildMainInfoSection(context, _auctionData!, isDarkMode),
                         _buildExternalLinks(context, _auctionData!, isDarkMode),
                         _buildCarDetailsSection(context, _auctionData!, isDarkMode),
+                        _buildBidHistorySection(context, isDarkMode),
 
                         // Active Auctions Section (NEW)
                         _buildActiveAuctionsSection(context, isDarkMode),
@@ -192,14 +345,48 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               itemBuilder: (context, index) {
                 final images = auction['images'] as List?;
                 if (images != null && images.isNotEmpty) {
-                  return Image.asset(
-                    images[index].toString(),
-                    fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) => Container(
+                  // Gérer format objet (detail API) ou string (list API)
+                  final imageItem = images[index];
+                  String imageUrl;
+                  if (imageItem is Map<String, dynamic>) {
+                    imageUrl = imageItem['url']?.toString() ?? '';
+                  } else {
+                    imageUrl = imageItem.toString();
+                  }
+                  final isNetworkImage = imageUrl.startsWith('http');
+                  if (isNetworkImage) {
+                    return Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, e, s) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                      ),
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          color: Colors.grey[200],
+                          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        );
+                      },
+                    );
+                  } else if (imageUrl.isNotEmpty && !imageUrl.startsWith('{')) {
+                    // Asset local valide
+                    return Image.asset(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, e, s) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                      ),
+                    );
+                  } else {
+                    // URL invalide ou vide - afficher placeholder
+                    return Container(
                       color: Colors.grey[300],
-                      child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                    ),
-                  );
+                      child: const Icon(Icons.image, color: Colors.grey),
+                    );
+                  }
                 }
                 return Container(
                   color: Colors.grey[300],
@@ -300,7 +487,41 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10)),
         ],
       ),
-      child: Column(
+      child: Builder(builder: (context) {
+        // Récupérer le titre avec fallback intelligent
+        final locale = Localizations.localeOf(context).languageCode;
+        String title = '';
+        
+        // 1. Essayer d'abord la langue actuelle de l'app
+        switch (locale) {
+          case 'ar':
+            title = auction['title_ar']?.toString() ?? '';
+            break;
+          case 'fr':
+            title = auction['title_fr']?.toString() ?? '';
+            break;
+          case 'en':
+            title = auction['title_en']?.toString() ?? '';
+            break;
+        }
+        
+        // 2. Si vide, essayer l'arabe (langue par défaut)
+        if (title.isEmpty) {
+          title = auction['title_ar']?.toString() ?? '';
+        }
+        
+        // 3. Si toujours vide, essayer les autres langues
+        if (title.isEmpty) {
+          title = auction['title_fr']?.toString() ??
+                  auction['title_en']?.toString() ??
+                  auction['title']?.toString() ??
+                  '';
+        }
+        
+        // 4. Si toujours vide, afficher "Sans titre"
+        if (title.isEmpty) title = AppLocalizations.of(context)!.no_title;
+
+        return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -308,7 +529,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             children: [
               Expanded(
                 child: Text(
-                  auction['title']?.toString() ?? 'Sans titre',
+                  title,
                   style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 22, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -337,9 +558,9 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildTimerUnit(AppLocalizations.of(context)!.text_59, _formatDuration(_timeLeft).split(' : ')[2]),
-                _buildTimerUnit(AppLocalizations.of(context)!.text_60, _formatDuration(_timeLeft).split(' : ')[1]),
-                _buildTimerUnit(AppLocalizations.of(context)!.text_61, _formatDuration(_timeLeft).split(' : ')[0]),
+                _buildTimerUnit(AppLocalizations.of(context)!.text_59, _formatDuration(_timeLeft).split(':')[2].split(' ')[0]),
+                _buildTimerUnit(AppLocalizations.of(context)!.text_60, _formatDuration(_timeLeft).split(':')[1]),
+                _buildTimerUnit(AppLocalizations.of(context)!.text_61, _formatDuration(_timeLeft).split(':')[0].split(' ').last),
               ],
             ),
           ),
@@ -352,7 +573,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               Expanded(
                 child: GestureDetector(
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction['id']?.toString() ?? widget.auctionId)),
+                    MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction['id']?.toString() ?? widget.auctionId, auctionData: _mapAuctionData(auction))),
                   ),
                   child: Row(
                     children: [
@@ -388,7 +609,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           const SizedBox(height: 12),
           Text('Lot #${auction['lot_number'] ?? auction['lotNumber'] ?? ''}', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontWeight: FontWeight.bold)),
         ],
-      ),
+      );
+      }),
     );
   }
 
@@ -412,7 +634,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           const SizedBox(height: 12),
           GestureDetector(
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction['id'])),
+              MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction['id']?.toString() ?? widget.auctionId, auctionData: _mapAuctionData(auction))),
             ),
             child: Container(
               width: double.infinity,
@@ -518,7 +740,184 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
+  Widget _buildBidHistorySection(BuildContext context, bool isDarkMode) {
+    final bidderCount = _auctionData?['bidder_count'] ?? 0;
+    final bidList = _bidHistory ?? [];
+    
+    if (bidList.isEmpty && bidderCount == 0) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDarkMode ? const Color(0xFF333333) : const Color(0xFFE4E7EC),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                AppLocalizations.of(context)!.text_64,
+                style: TextStyle(
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '${bidList.isNotEmpty ? bidList.length : bidderCount} ${AppLocalizations.of(context)!.text_78}',
+                style: TextStyle(
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (bidList.isNotEmpty)
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: bidList.length > 5 ? 5 : bidList.length,
+              separatorBuilder: (context, index) => Divider(
+                color: Colors.grey.withOpacity(0.1),
+                height: 1,
+              ),
+              itemBuilder: (context, index) {
+                final bid = bidList[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: isDarkMode ? const Color(0xFF333333) : const Color(0xFFF5F5F5),
+                        child: Text(
+                          bid.bidderName?.substring(0, 1).toUpperCase() ?? '?',
+                          style: TextStyle(
+                            fontFamily: 'Plus Jakarta Sans',
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isDarkMode ? Colors.white : Colors.black,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              bid.displayBidderName,
+                              style: TextStyle(
+                                fontFamily: 'Plus Jakarta Sans',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isDarkMode ? Colors.white : Colors.black,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              bid.getTimeAgo(),
+                              style: TextStyle(
+                                fontFamily: 'Plus Jakarta Sans',
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${bid.amount} UM',
+                        style: TextStyle(
+                          fontFamily: 'Plus Jakarta Sans',
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDarkMode ? Colors.white : Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            )
+          else if (bidderCount > 0)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  '$bidderCount ${bidderCount == 1 ? 'enchérisseur a participé' : 'enchérisseurs ont participé'}',
+                  style: TextStyle(
+                    fontFamily: 'Plus Jakarta Sans',
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            ),
+          if (bidList.length > 5)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AuctionHistoryPage(auctionId: widget.auctionId),
+                    ),
+                  );
+                },
+                child: Center(
+                  child: Text(
+                    AppLocalizations.of(context)!.text_65,
+                    style: TextStyle(
+                      fontFamily: 'Plus Jakarta Sans',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomAction(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
+    // Extract auction ID with fallbacks - use widget.auctionId as primary source
+    final auctionId = auction['id']?.toString() ?? widget.auctionId;
+    
+    // Extract auction data with fallbacks
+    final currentPrice = double.tryParse(
+      auction['current_bid']?.toString() ?? 
+      auction['current_price']?.toString() ?? 
+      auction['starting_price']?.toString() ?? 
+      auction['start_price']?.toString() ?? '0'
+    ) ?? 0;
+    
+    final minIncrement = double.tryParse(
+      auction['min_increment']?.toString() ?? 
+      auction['minIncrement']?.toString() ?? 
+      '500'
+    ) ?? 500;
+    
+    final bidCount = auction['bidder_count'] ?? auction['bid_count'] ?? auction['bids_count'] ?? 0;
+    
+    final timeLeftStr = _formatDuration(_timeLeft);
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -538,7 +937,13 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 context: context,
                 backgroundColor: Colors.transparent,
                 isScrollControlled: true,
-                builder: (context) => BidActionSheet(auctionId: auction['id']?.toString() ?? widget.auctionId),
+                builder: (context) => BidActionSheet(
+                  auctionId: auctionId,
+                  currentPrice: currentPrice,
+                  minIncrement: minIncrement,
+                  bidCount: bidCount,
+                  timeLeft: timeLeftStr,
+                ),
               );
             },
             style: ElevatedButton.styleFrom(
@@ -591,7 +996,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             children: [
               Text(
                 AppLocalizations.of(context)!.text_73,
-                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
+                style: const TextStyle(
+                  fontFamily: 'Plus Jakarta Sans',
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
@@ -611,7 +1017,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   ),
                   child: Text(
                     AppLocalizations.of(context)!.text_74,
-                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
+                    style: const TextStyle(
+                      fontFamily: 'Plus Jakarta Sans',
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -625,21 +1032,72 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
         const SizedBox(height: 16),
         SizedBox(
           height: 240,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              _buildRelatedAuctionCard('Toyota Corolla...', '300,000 MRU', '13:50:23', 'assets/corolla.png', '1', isDarkMode),
-              _buildRelatedAuctionCard('Range Rover 2022', '1,200,000 MRU', '02:15:10', 'assets/corolla.png', '2', isDarkMode),
-              _buildRelatedAuctionCard('iPhone 15 Pro', '45,000 MRU', '05:45:00', 'assets/corolla.png', '3', isDarkMode),
-            ],
+          child: FutureBuilder(
+            future: _relatedAuctionsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              List<Map<String, dynamic>> relatedAuctions = [];
+              if (snapshot.hasData && snapshot.data!.success && snapshot.data!.data != null) {
+                final dynamic responseData = snapshot.data!.data!;
+                List<dynamic> auctionList = [];
+                // La réponse peut être directement une liste ou un objet avec 'data' ou 'auctions'
+                if (responseData is List) {
+                  auctionList = responseData;
+                } else if (responseData is Map<String, dynamic>) {
+                  auctionList = (responseData['auctions'] ?? responseData['data'] ?? []) as List<dynamic>;
+                }
+                relatedAuctions = auctionList.map((item) => item as Map<String, dynamic>).toList();
+              }
+
+              if (relatedAuctions.isEmpty) {
+                return Center(
+                  child: Text(
+                    AppLocalizations.of(context)!.no_related_auctions,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                );
+              }
+
+              return ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: relatedAuctions.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final auction = entry.value;
+                  final id = auction['id']?.toString() ?? '';
+                  final displayNumber = index + 1; // Auto-incrément
+                  final title = (auction['title_ar'] ?? auction['title'])?.toString() ?? AppLocalizations.of(context)!.no_title;
+                  final price = '${auction['current_price'] ?? auction['current_bid'] ?? 0} MRU';
+                  final timeRaw = auction['end_time'] ?? auction['ends_at'] ?? '';
+                  final time = _formatDateTime(timeRaw);
+
+                  // Gestion des images - format objet (detail API) ou string (list API)
+                  String imagePath = 'assets/corolla.png';
+                  if (auction['images'] != null && auction['images'] is List && (auction['images'] as List).isNotEmpty) {
+                    final firstImage = (auction['images'] as List)[0];
+                    if (firstImage is Map<String, dynamic>) {
+                      imagePath = firstImage['url']?.toString() ?? 'assets/corolla.png';
+                    } else {
+                      imagePath = firstImage.toString();
+                    }
+                  } else if (auction['image'] != null) {
+                    imagePath = auction['image'].toString();
+                  }
+
+                  return _buildRelatedAuctionCard(title, price, time, imagePath, id, isDarkMode, auction, displayNumber);
+                }).toList(),
+              );
+            },
           ),
         ),
       ],
     );
   }
 
-  Widget _buildRelatedAuctionCard(String title, String price, String time, String imagePath, String id, bool isDarkMode) {
+  Widget _buildRelatedAuctionCard(String title, String price, String time, String imagePath, String id, bool isDarkMode, Map<String, dynamic> auction, int displayNumber) {
     final favoritesAsync = ref.watch(favoritesProvider);
     final isFavorite = favoritesAsync.value?.contains(id) ?? false;
 
@@ -677,7 +1135,29 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: Image.asset(imagePath, height: 120, width: double.infinity, fit: BoxFit.cover),
+                  child: imagePath.startsWith('http')
+                    ? Image.network(
+                        imagePath,
+                        height: 120,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Image.asset('assets/corolla.png', height: 120, width: double.infinity, fit: BoxFit.cover),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            height: 120,
+                            color: Colors.grey[200],
+                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                          );
+                        },
+                      )
+                    : imagePath.isNotEmpty && !imagePath.startsWith('{')
+                      ? Image.asset(imagePath, height: 120, width: double.infinity, fit: BoxFit.cover)
+                      : Container(
+                          height: 120,
+                          color: Colors.grey[300],
+                          child: const Center(child: Icon(Icons.image, color: Colors.grey)),
+                        ),
                 ),
                 Positioned(
                   top: 4, right: 4,
@@ -708,7 +1188,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                       color: const Color(0xFF0084FF),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text(id, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: Text('#$displayNumber', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -735,6 +1215,65 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           ],
         ),
       ),
+    );
+  }
+
+  String _formatDateTime(String dateTimeStr) {
+    if (dateTimeStr.isEmpty) return '';
+    try {
+      final dateTime = DateTime.parse(dateTimeStr);
+      final day = dateTime.day.toString().padLeft(2, '0');
+      final month = dateTime.month.toString().padLeft(2, '0');
+      final year = dateTime.year;
+      final hour = dateTime.hour.toString().padLeft(2, '0');
+      final minute = dateTime.minute.toString().padLeft(2, '0');
+      return '$day/$month/$year\t $hour:$minute';
+    } catch (e) {
+      return dateTimeStr;
+    }
+  }
+
+  Auction _mapAuctionData(Map<String, dynamic> auction) {
+    List<String> imageUrls = ['assets/corolla.png'];
+    if (auction['images'] != null && auction['images'] is List) {
+      imageUrls = (auction['images'] as List).map((img) {
+        if (img is Map<String, dynamic>) {
+          return img['url']?.toString() ?? 'assets/corolla.png';
+        } else {
+          return img.toString();
+        }
+      }).toList();
+    } else if (auction['image_urls'] != null && auction['image_urls'] is List) {
+      imageUrls = (auction['image_urls'] as List).map((img) {
+        if (img is Map<String, dynamic>) {
+          return img['url']?.toString() ?? 'assets/corolla.png';
+        } else {
+          return img.toString();
+        }
+      }).toList();
+    }
+
+    return Auction(
+      id: auction['id']?.toString() ?? '',
+      title: auction['title_ar'] ?? auction['title'] ?? 'Unknown',
+      description: auction['description_ar'] ?? auction['description'] ?? '',
+      imageUrls: imageUrls.isNotEmpty ? imageUrls : ['assets/corolla.png'],
+      startPrice: double.tryParse(auction['start_price']?.toString() ?? '') ?? double.tryParse(auction['starting_price']?.toString() ?? '') ?? 0,
+      currentPrice: double.tryParse(auction['current_price']?.toString() ?? '') ?? double.tryParse(auction['current_bid']?.toString() ?? '') ?? 0,
+      minIncrement: double.tryParse(auction['min_increment']?.toString() ?? '') ?? 500,
+      endTime: auction['end_time'] != null
+          ? DateTime.parse(auction['end_time'])
+          : DateTime.now().add(const Duration(hours: 13)),
+      bidderCount: auction['bidder_count'] ?? auction['bid_count'] ?? 0,
+      views: auction['views'] ?? 0,
+      lotNumber: auction['lot_number'] ?? 'N/A',
+      phoneNumber: auction['seller_phone'] ?? 'N/A',
+      manufacturer: auction['manufacturer'] ?? '',
+      fuelType: auction['fuel_type'] ?? '',
+      transmission: auction['transmission'] ?? '',
+      year: auction['year']?.toString() ?? '',
+      mileage: auction['mileage']?.toString() ?? '',
+      model: auction['model'] ?? '',
     );
   }
 }

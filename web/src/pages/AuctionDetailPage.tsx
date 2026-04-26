@@ -25,6 +25,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ImagePreview } from '@/components/shared/ImagePreview'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { useAuction, useValidateAuction } from '@/hooks/useAuctions'
+import { useBidHistory } from '@/hooks/useBids'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 
@@ -54,6 +55,7 @@ export function AuctionDetailPage() {
   const [bidHistory, setBidHistory] = useState<any[]>([])
 
   const { data: auction, isLoading, isError } = useAuction(id!)
+  const { data: bidHistoryData = [] } = useBidHistory(id!)
   const validate = useValidateAuction()
   const [selectedImg, setSelectedImg] = useState<string | null>(null)
   const thumbScrollRef = useRef<HTMLDivElement>(null)
@@ -605,14 +607,41 @@ export function AuctionDetailPage() {
           <div className="admin-card p-6">
             <h3 className="text-xs font-bold text-surface-muted uppercase tracking-widest mb-4 flex items-center gap-2">
                <Gavel className="w-3.5 h-3.5 text-mazad-primary" />
-               آخر المزايدات
+               آخر المزايدات (أعلى 5)
             </h3>
             <div className="space-y-4">
-               {/* Simplified list check */}
-               <div className="text-center py-8 opacity-20">
-                  <Clock className="w-8 h-8 mx-auto mb-2" />
-                  <p className="text-xs font-bold">لا توجد مزايدات بعد</p>
-               </div>
+               {bidHistoryData.length > 0 ? (
+                 bidHistoryData.slice(0, 5).map((bid, index) => (
+                   <div key={bid.id} className="flex items-center justify-between p-3 bg-surface-base/50 rounded-xl border border-surface-border/50">
+                     <div className="flex items-center gap-3">
+                       <div className="w-8 h-8 rounded-full bg-mazad-primary/20 flex items-center justify-center text-mazad-primary font-bold text-sm">
+                         {index + 1}
+                       </div>
+                       <div>
+                         <p className="text-sm font-bold text-white">
+                           {bid.bidder_name || 'مستخدم مجهول'}
+                         </p>
+                         <p className="text-[10px] text-surface-muted">
+                           {new Date(bid.created_at).toLocaleDateString('ar-SA')}
+                         </p>
+                       </div>
+                     </div>
+                     <div className="text-right">
+                       <p className="text-sm font-bold text-mazad-accent">
+                         {formatPrice(bid.amount)}
+                       </p>
+                       {bid.is_winning && (
+                         <span className="text-[10px] text-emerald-400">الأعلى</span>
+                       )}
+                     </div>
+                   </div>
+                 ))
+               ) : (
+                 <div className="text-center py-8 opacity-20">
+                    <Clock className="w-8 h-8 mx-auto mb-2" />
+                    <p className="text-xs font-bold">لا توجد مزايدات بعد</p>
+                 </div>
+               )}
             </div>
           </div>
         </div>

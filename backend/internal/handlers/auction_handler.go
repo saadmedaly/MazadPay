@@ -43,7 +43,53 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, auctions)
+	// Transform auctions to include images array instead of comma-separated string
+	var response []fiber.Map
+	for _, auction := range auctions {
+		response = append(response, fiber.Map{
+			"id":              auction.ID,
+			"seller_id":       auction.SellerID,
+			"category_id":     auction.CategoryID,
+			"sub_category_id": auction.SubCategoryID,
+			"location_id":     auction.LocationID,
+			"title_ar":        auction.TitleAr,
+			"title_fr":        auction.TitleFr,
+			"title_en":        auction.TitleEn,
+			"description_ar":  auction.DescriptionAr,
+			"description_fr":  auction.DescriptionFr,
+			"description_en":  auction.DescriptionEn,
+			"start_price":     auction.StartPrice,
+			"current_price":   auction.CurrentPrice,
+			"min_increment":   auction.MinIncrement,
+			"insurance_amount": auction.InsuranceAmount,
+			"reserve_price":   auction.ReservePrice,
+			"start_time":      auction.StartTime,
+			"end_time":        auction.EndTime,
+			"status":          auction.Status,
+			"lot_number":      auction.LotNumber,
+			"views":           auction.Views,
+			"bidder_count":    auction.BidderCount,
+			"winner_id":       auction.WinnerID,
+			"winning_bid_id":  auction.WinningBidID,
+			"payment_deadline": auction.PaymentDeadline,
+			"is_featured":     auction.IsFeatured,
+			"featured_until":  auction.FeaturedUntil,
+			"rejection_reason": auction.RejectionReason,
+			"item_details":    auction.ItemDetails,
+			"buy_now_price":   auction.BuyNowPrice,
+			"condition":       auction.Condition,
+			"brand":           auction.Brand,
+			"is_verified":     auction.IsVerified,
+			"video_url":       auction.VideoURL,
+			"quantity":        auction.Quantity,
+			"category":        auction.CategoryNameAr,
+			"city":            auction.CityNameAr,
+			"images":          auction.GetImagesArray(),
+			"created_at":      auction.CreatedAt,
+		})
+	}
+
+	return OK(c, response)
 }
 
 func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {

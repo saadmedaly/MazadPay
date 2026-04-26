@@ -2,12 +2,13 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	"github.com/mazadpay/backend/internal/database"
 	apperr "github.com/mazadpay/backend/internal/errors"
+	"github.com/mazadpay/backend/internal/database"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	ws "github.com/mazadpay/backend/internal/websocket"
@@ -16,7 +17,7 @@ import (
 
 type BidService interface {
 	PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, amount decimal.Decimal) (*models.Bid, error)
-	GetHistory(ctx context.Context, auctionID uuid.UUID) ([]models.Bid, error)
+	GetHistory(ctx context.Context, auctionID uuid.UUID) ([]models.BidHistoryEntry, error)
 }
 
 type bidService struct {
@@ -43,9 +44,10 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 	var createdBid *models.Bid
 
 	err := database.WithTransaction(s.db, func(tx *sqlx.Tx) error {
-		// 1. Charger l'enchère (sans FOR UPDATE car on utilise version)
-		auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+		// 1. Charger l'enchère avec la transaction pour garantir la cohérence
+		auction, err := s.auctionRepo.FindByIDTx(ctx, tx, auctionID)
 		if err != nil {
+			fmt.Printf("FindByIDTx error for auction %s: %v\n", auctionID, err)
 			return apperr.ErrNotFound
 		}
 
@@ -65,29 +67,9 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 			return apperr.ErrBidTooLow
 		}
 
-		// 3. Vérifier et geler le solde (SELECT FOR UPDATE sur wallet)
-		wallet, err := s.walletRepo.FindForUpdate(ctx, tx, userID)
-		if err != nil {
-			return apperr.ErrNotFound
-		}
-
-		// Vérifier si l'utilisateur a déjà un hold pour cette enchère
-		existingHold, _ := s.walletRepo.FindActiveHold(ctx, tx, userID, auctionID)
-
-		if existingHold == nil {
-			// Première mise : vérifier que le solde couvre la caution
-			if wallet.Balance.LessThan(auction.InsuranceAmount) {
-				return apperr.ErrInsufficientBalance
-			}
-			// Geler la caution
-			if err := s.walletRepo.CreateHold(ctx, tx, userID, auctionID, auction.InsuranceAmount); err != nil {
-				return err
-			}
-			if err := s.walletRepo.DebitFreezeBalance(ctx, tx, userID, auction.InsuranceAmount, wallet.Version); err != nil {
-				return err
-			}
-		}
-		// Si mise précédente existante → le hold est déjà actif, pas de nouveau débit
+		// 3. [SUPPRIMÉ] Pas de vérification wallet/caution lors du bid
+		// Les utilisateurs peuvent enchérir librement sans bloquer de fonds
+		// Le paiement se fera après la fin de l'enchère uniquement pour le gagnant
 
 		// 4. Marquer les anciens bids comme non-gagnants
 		if err := s.bidRepo.SetAllNotWinning(ctx, tx, auctionID); err != nil {
@@ -129,8 +111,7 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 				userPhone = "####" + userPhone[len(userPhone)-4:]
 			}
 
-			// Préparer le payload WebSocket
-			payload := ws.WSEvent{
+ 			payload := ws.WSEvent{
 				Type: "bid_placed",
 				Payload: ws.BidPlacedPayload{
 					AuctionID:    auctionID.String(),
@@ -153,8 +134,7 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 		return nil, err
 	}
 
-	// 7. Broadcast WebSocket APRÈS le commit (critique : jamais avant)
-	auction, _ := s.auctionRepo.FindByID(ctx, auctionID)
+ 	auction, _ := s.auctionRepo.FindByID(ctx, auctionID)
 	secsLeft := int64(0)
 	if auction != nil {
 		secsLeft = int64(time.Until(auction.EndTime).Seconds())
@@ -173,8 +153,8 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 	return createdBid, nil
 }
 
-func (s *bidService) GetHistory(ctx context.Context, auctionID uuid.UUID) ([]models.Bid, error) {
-	bids, err := s.bidRepo.FindByAuction(ctx, auctionID)
+func (s *bidService) GetHistory(ctx context.Context, auctionID uuid.UUID) ([]models.BidHistoryEntry, error) {
+	bids, err := s.bidRepo.FindHistoryByAuction(ctx, auctionID)
 	if err != nil {
 		return nil, err
 	}

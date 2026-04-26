@@ -82,6 +82,19 @@ export interface Transaction {
   created_at: string
 }
 
+export interface Bid {
+  id: string
+  auction_id: string
+  user_id: string
+  amount: string
+  previous_price: string | null
+  is_winning: boolean
+  created_at: string
+  bidder_name: string | null
+  bidder_phone: string | null
+  is_anonymous: boolean
+}
+
 export interface DashboardStats {
   active_auctions: number
   pending_auctions: number
@@ -138,6 +151,9 @@ export interface Category {
   parent_id: number | null
   icon_name: string | null
   display_order: number
+  is_active: boolean
+  image_url: string | null
+  has_subcategories: boolean
   children?: Category[]
 }
 

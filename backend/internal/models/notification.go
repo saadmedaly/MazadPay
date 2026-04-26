@@ -16,6 +16,9 @@ type Notification struct {
 	ReferenceID   *uuid.UUID `db:"reference_id"   json:"reference_id"`
 	ReferenceType *string    `db:"reference_type" json:"reference_type"`
 	Data          JSONB      `db:"data"           json:"data"`
+	Priority      *string    `db:"priority"       json:"priority"`
+	ActionURL     *string    `db:"action_url"     json:"action_url"`
+	ActionLabel   *string    `db:"action_label"   json:"action_label"`
 	CreatedAt     time.Time  `db:"created_at"     json:"created_at"`
 }
 

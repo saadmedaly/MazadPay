@@ -9,8 +9,12 @@ export async function getCategories(): Promise<Category[]> {
 export async function createCategory(payload: {
   name_ar: string
   name_fr: string
+  name_en?: string
   parent_id?: number
+  icon_name?: string
   display_order?: number
+  image_url?: string
+  is_active?: boolean
 }): Promise<Category> {
   const { data } = await client.post<APIResponse<Category>>('/v1/api/admin/categories', payload)
   return data.data
@@ -19,8 +23,12 @@ export async function createCategory(payload: {
 export async function updateCategory(id: number, payload: {
   name_ar: string
   name_fr: string
+  name_en?: string
   parent_id?: number
+  icon_name?: string
   display_order?: number
+  image_url?: string
+  is_active?: boolean
 }): Promise<Category> {
   const { data } = await client.put<APIResponse<Category>>(`/v1/api/admin/categories/${id}`, payload)
   return data.data

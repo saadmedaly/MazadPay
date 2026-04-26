@@ -1,7 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'set_password_page.dart';
+import 'login_page.dart';
 import '../services/auth_api.dart';
 
 class OtpEntryPage extends ConsumerStatefulWidget {
@@ -64,13 +64,11 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
       setState(() => _isLoading = false);
 
       if (response.success) {
-        Navigator.push(
+        // OTP verified - go to login
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => SetPasswordPage(
-              phone: widget.phoneNumber,
-              otpCode: otp,
-            ),
+            builder: (context) => const LoginPage(),
           ),
         );
       } else {

@@ -11,9 +11,58 @@ import 'package:mezadpay/pages/favorites_page.dart';
 import 'package:mezadpay/pages/all_auctions_page.dart';
 import 'package:mezadpay/pages/privacy_policy_page.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
+import 'package:mezadpay/services/user_api.dart';
 
-class SideMenuDrawer extends StatelessWidget {
+class SideMenuDrawer extends StatefulWidget {
   const SideMenuDrawer({super.key});
+
+  @override
+  State<SideMenuDrawer> createState() => _SideMenuDrawerState();
+}
+
+class _SideMenuDrawerState extends State<SideMenuDrawer> {
+  final UserApi _userApi = UserApi();
+  Map<String, dynamic>? _userData;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final response = await _userApi.getProfile();
+      if (response.success && response.data != null) {
+        setState(() {
+          _userData = response.data!['user'] ?? response.data!;
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  String get _userFullName {
+    if (_userData == null) return '';
+    return _userData!['full_name']?.toString() ??
+           _userData!['fullname']?.toString() ??
+           _userData!['name']?.toString() ??
+           '';
+  }
+
+  String? get _userAvatarUrl {
+    if (_userData == null) return null;
+    final avatar = _userData!['avatar_url']?.toString() ??
+                   _userData!['avatar']?.toString() ??
+                   _userData!['image_url']?.toString() ??
+                   _userData!['image']?.toString();
+    return avatar?.isNotEmpty == true ? avatar : null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,17 +84,45 @@ class SideMenuDrawer extends StatelessWidget {
                   ),
                   Row(
                     children: [
-                      Text(
-                        AppLocalizations.of(context)!.text_37,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                      if (_isLoading)
+                        const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else if (_userFullName.isNotEmpty)
+                        Container(
+                          constraints: const BoxConstraints(maxWidth: 150),
+                          child: Text(
+                            _userFullName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        )
+                      else
+                        Text(
+                          AppLocalizations.of(context)!.text_37,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
                       const SizedBox(width: 12),
-                      const CircleAvatar(
+                      CircleAvatar(
                         radius: 24,
-                        backgroundImage: AssetImage('assets/user.png'),
+                        backgroundImage: _userAvatarUrl != null
+                            ? NetworkImage(_userAvatarUrl!)
+                            : const AssetImage('assets/defualtprofile.png') as ImageProvider,
+                        onBackgroundImageError: _userAvatarUrl != null
+                            ? (_, __) => null
+                            : null,
+                        child: _userAvatarUrl == null && _isLoading
+                            ? const CircularProgressIndicator(strokeWidth: 2)
+                            : null,
                       ),
                     ],
                   ),

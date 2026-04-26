@@ -2524,6 +2524,12 @@ abstract class AppLocalizations {
   /// **'خطأ في تحميل الإشعارات'**
   String get error_loading_notifications;
 
+  /// No description provided for @error_loading_profile.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تحميل الملف الشخصي'**
+  String get error_loading_profile;
+
   /// No description provided for @error_create_auction.
   ///
   /// In ar, this message translates to:
@@ -2559,6 +2565,318 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'لديك حساب بالفعل؟'**
   String get text_391;
+
+  /// No description provided for @favorites_synced.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم مزامنة المفضلة'**
+  String get favorites_synced;
+
+  /// No description provided for @favorites_local_storage.
+  ///
+  /// In ar, this message translates to:
+  /// **'المفضلة محفوظة على الجهاز'**
+  String get favorites_local_storage;
+
+  /// No description provided for @favorites_sync_error.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في مزامنة المفضلة'**
+  String get favorites_sync_error;
+
+  /// No description provided for @retry.
+  ///
+  /// In ar, this message translates to:
+  /// **'إعادة المحاولة'**
+  String get retry;
+
+  /// No description provided for @sync.
+  ///
+  /// In ar, this message translates to:
+  /// **'مزامنة'**
+  String get sync;
+
+  /// No description provided for @profile_created.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم إنشاء الملف الشخصي بنجاح'**
+  String get profile_created;
+
+  /// No description provided for @error_password_mismatch.
+  ///
+  /// In ar, this message translates to:
+  /// **'كلمات المرور غير متطابقة'**
+  String get error_password_mismatch;
+
+  /// No description provided for @error_password_too_short.
+  ///
+  /// In ar, this message translates to:
+  /// **'يجب أن تكون كلمة المرور 4 أحرف على الأقل'**
+  String get error_password_too_short;
+
+  /// No description provided for @error_register.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ أثناء التسجيل'**
+  String get error_register;
+
+  /// No description provided for @auction_created.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم إنشاء المزاد بنجاح'**
+  String get auction_created;
+
+  /// No description provided for @bid_placed.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم تقديم المزايدة بنجاح'**
+  String get bid_placed;
+
+  /// No description provided for @bid_error.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تقديم المزايدة'**
+  String get bid_error;
+
+  /// No description provided for @deposit_success.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم الإيداع بنجاح'**
+  String get deposit_success;
+
+  /// No description provided for @withdraw_success.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم السحب بنجاح'**
+  String get withdraw_success;
+
+  /// No description provided for @no_auctions_available.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد مزادات متاحة حالياً'**
+  String get no_auctions_available;
+
+  /// No description provided for @no_notifications.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد إشعارات'**
+  String get no_notifications;
+
+  /// No description provided for @no_favorites.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد عناصر في المفضلة'**
+  String get no_favorites;
+
+  /// No description provided for @no_winnings.
+  ///
+  /// In ar, this message translates to:
+  /// **'لم تربح أي مزادات بعد'**
+  String get no_winnings;
+
+  /// No description provided for @no_my_auctions.
+  ///
+  /// In ar, this message translates to:
+  /// **'لم تقم بإنشاء أي مزادات'**
+  String get no_my_auctions;
+
+  /// No description provided for @no_banners.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد إعلانات متاحة'**
+  String get no_banners;
+
+  /// No description provided for @no_data.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد بيانات متاحة'**
+  String get no_data;
+
+  /// No description provided for @no_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'بدون عنوان'**
+  String get no_title;
+
+  /// No description provided for @auction.
+  ///
+  /// In ar, this message translates to:
+  /// **'مزاد'**
+  String get auction;
+
+  /// No description provided for @data_not_available_offline.
+  ///
+  /// In ar, this message translates to:
+  /// **'البيانات غير متوفرة في وضع عدم الاتصال'**
+  String get data_not_available_offline;
+
+  /// No description provided for @error_generic.
+  ///
+  /// In ar, this message translates to:
+  /// **'حدث خطأ: {error}'**
+  String error_generic(Object error);
+
+  /// No description provided for @error_loading_winnings.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تحميل المزادات المربوحة'**
+  String get error_loading_winnings;
+
+  /// No description provided for @error_loading_my_auctions.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تحميل مزاداتي'**
+  String get error_loading_my_auctions;
+
+  /// No description provided for @error_sync_favorites.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في مزامنة المفضلة'**
+  String get error_sync_favorites;
+
+  /// No description provided for @error_upload_image.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في رفع الصورة'**
+  String get error_upload_image;
+
+  /// No description provided for @error_network.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في الاتصال بالشبكة'**
+  String get error_network;
+
+  /// No description provided for @error_server.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في الخادم'**
+  String get error_server;
+
+  /// No description provided for @error_timeout.
+  ///
+  /// In ar, this message translates to:
+  /// **'انتهت مهلة الاتصال'**
+  String get error_timeout;
+
+  /// No description provided for @error_loading_auction.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ في تحميل المزاد'**
+  String get error_loading_auction;
+
+  /// No description provided for @no_related_auctions.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد مزادات مشابهة متاحة'**
+  String get no_related_auctions;
+
+  /// No description provided for @loading.
+  ///
+  /// In ar, this message translates to:
+  /// **'جاري التحميل...'**
+  String get loading;
+
+  /// No description provided for @pull_to_refresh.
+  ///
+  /// In ar, this message translates to:
+  /// **'اسحب للتحديث'**
+  String get pull_to_refresh;
+
+  /// No description provided for @view_more.
+  ///
+  /// In ar, this message translates to:
+  /// **'عرض المزيد'**
+  String get view_more;
+
+  /// No description provided for @show_less.
+  ///
+  /// In ar, this message translates to:
+  /// **'عرض أقل'**
+  String get show_less;
+
+  /// No description provided for @try_again.
+  ///
+  /// In ar, this message translates to:
+  /// **'حاول مرة أخرى'**
+  String get try_again;
+
+  /// No description provided for @cancel.
+  ///
+  /// In ar, this message translates to:
+  /// **'إلغاء'**
+  String get cancel;
+
+  /// No description provided for @confirm.
+  ///
+  /// In ar, this message translates to:
+  /// **'تأكيد'**
+  String get confirm;
+
+  /// No description provided for @save.
+  ///
+  /// In ar, this message translates to:
+  /// **'حفظ'**
+  String get save;
+
+  /// No description provided for @delete.
+  ///
+  /// In ar, this message translates to:
+  /// **'حذف'**
+  String get delete;
+
+  /// No description provided for @edit.
+  ///
+  /// In ar, this message translates to:
+  /// **'تعديل'**
+  String get edit;
+
+  /// No description provided for @close.
+  ///
+  /// In ar, this message translates to:
+  /// **'إغلاق'**
+  String get close;
+
+  /// No description provided for @success.
+  ///
+  /// In ar, this message translates to:
+  /// **'نجاح'**
+  String get success;
+
+  /// No description provided for @error.
+  ///
+  /// In ar, this message translates to:
+  /// **'خطأ'**
+  String get error;
+
+  /// No description provided for @warning.
+  ///
+  /// In ar, this message translates to:
+  /// **'تحذير'**
+  String get warning;
+
+  /// No description provided for @info.
+  ///
+  /// In ar, this message translates to:
+  /// **'معلومة'**
+  String get info;
+
+  /// No description provided for @page_not_available.
+  ///
+  /// In ar, this message translates to:
+  /// **'هذه الصفحة غير متوفرة حالياً'**
+  String get page_not_available;
+
+  /// No description provided for @return_to_first_city.
+  ///
+  /// In ar, this message translates to:
+  /// **'العودة إلى المدينة الأولى'**
+  String get return_to_first_city;
+
+  /// No description provided for @return_button.
+  ///
+  /// In ar, this message translates to:
+  /// **'عودة'**
+  String get return_button;
 }
 
 class _AppLocalizationsDelegate

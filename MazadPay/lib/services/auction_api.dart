@@ -6,7 +6,7 @@ class AuctionApi {
   final ApiService _apiService = ApiService();
   
   /// Lister toutes les enchères
-  Future<ApiResponse<Map<String, dynamic>>> getAuctions({
+  Future<ApiResponse<List<dynamic>>> getAuctions({
     int page = 1,
     int limit = 20,
     String? categoryId,
@@ -18,17 +18,18 @@ class AuctionApi {
         'page': page,
         'limit': limit,
       };
-      
+
       if (categoryId != null) queryParams['category_id'] = categoryId;
       if (locationId != null) queryParams['location_id'] = locationId;
       if (status != null) queryParams['status'] = status;
-      
+
       final response = await _apiService.get<Map<String, dynamic>>(
         '/auctions',
         queryParameters: queryParams,
       );
-      
-      return ApiResponse<Map<String, dynamic>>.fromJson(response);
+ 
+      final List<dynamic> auctionList = response?['data'] ?? [];
+      return ApiResponse.success(auctionList);
     } catch (e) {
       return ApiResponse.error(e.toString());
     }
@@ -50,6 +51,32 @@ class AuctionApi {
   /// Alias pour getAuctionById (utilisé par les pages)
   Future<ApiResponse<Map<String, dynamic>>> getAuctionDetails(String id) async {
     return getAuctionById(id);
+  }
+
+  /// Récupérer les enchères créées par l'utilisateur connecté
+  Future<ApiResponse<Map<String, dynamic>>> getMyAuctions() async {
+    try {
+      final response = await _apiService.get<Map<String, dynamic>>(
+        '/users/me/auctions',
+      );
+      
+      return ApiResponse<Map<String, dynamic>>.fromJson(response);
+    } catch (e) {
+      return ApiResponse.error(e.toString());
+    }
+  }
+
+  /// Récupérer les enchères gagnées par l'utilisateur
+  Future<ApiResponse<Map<String, dynamic>>> getMyWinnings() async {
+    try {
+      final response = await _apiService.get<Map<String, dynamic>>(
+        '/users/me/winnings',
+      );
+      
+      return ApiResponse<Map<String, dynamic>>.fromJson(response);
+    } catch (e) {
+      return ApiResponse.error(e.toString());
+    }
   }
 
   /// Créer une nouvelle enchère

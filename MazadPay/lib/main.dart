@@ -7,12 +7,17 @@ import 'package:mezadpay/pages/splash_page.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:mezadpay/providers/locale_provider.dart';
+import 'package:mezadpay/providers/location_provider.dart';
+import 'package:mezadpay/services/cache_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Charger les variables d'environnement
   await dotenv.load(fileName: ".env");
+  
+  // Initialiser le cache local (Hive)
+  await CacheService.instance.init();
   
   runApp(
     const ProviderScope(
@@ -21,11 +26,25 @@ void main() async {
   );
 }
 
-class MazadApp extends ConsumerWidget {
+class MazadApp extends ConsumerStatefulWidget {
   const MazadApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MazadApp> createState() => _MazadAppState();
+}
+
+class _MazadAppState extends ConsumerState<MazadApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Démarrer la détection de localisation en arrière-plan
+    Future.microtask(() {
+      ref.read(locationProvider.notifier).detectLocation();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final currentLocale = ref.watch(localeNotifierProvider);
 
     return MaterialApp(

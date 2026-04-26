@@ -7,12 +7,14 @@ class NotificationApi {
   
   /// Récupérer les notifications de l'utilisateur
   Future<ApiResponse<Map<String, dynamic>>> getNotifications({
+    int page = 1,
     int limit = 20,
   }) async {
     try {
       final response = await _apiService.get<Map<String, dynamic>>(
         '/notifications',
         queryParameters: {
+          'page': page,
           'limit': limit,
         },
       );
@@ -24,7 +26,7 @@ class NotificationApi {
   }
   
   /// Marquer une notification comme lue
-  Future<ApiResponse<Map<String, dynamic>>> markAsRead(String id) async {
+  Future<ApiResponse<Map<String, dynamic>>> markNotificationAsRead(String id) async {
     try {
       final response = await _apiService.put<Map<String, dynamic>>(
         '/notifications/$id/read',
@@ -37,7 +39,7 @@ class NotificationApi {
   }
   
   /// Marquer toutes les notifications comme lues
-  Future<ApiResponse<Map<String, dynamic>>> markAllAsRead() async {
+  Future<ApiResponse<Map<String, dynamic>>> markAllNotificationsAsRead() async {
     try {
       final response = await _apiService.put<Map<String, dynamic>>(
         '/notifications/read-all',
@@ -50,7 +52,7 @@ class NotificationApi {
   }
   
   /// Sauvegarder le token FCM pour les notifications push
-  Future<ApiResponse<Map<String, dynamic>>> saveFCMToken({
+  Future<ApiResponse<Map<String, dynamic>>> saveToken({
     required String fcmToken,
     String? deviceId,
     String? platform, // 'web', 'android', 'ios'

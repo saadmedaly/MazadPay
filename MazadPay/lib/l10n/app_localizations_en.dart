@@ -1224,6 +1224,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get error_loading_notifications => 'Error loading notifications';
 
   @override
+  String get error_loading_profile => 'Error loading profile';
+
+  @override
   String get error_create_auction => 'Error creating auction';
 
   @override
@@ -1240,4 +1243,163 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get text_391 => 'Already have an account?';
+
+  @override
+  String get favorites_synced => 'Favorites synchronized';
+
+  @override
+  String get favorites_local_storage => 'Favorites saved locally';
+
+  @override
+  String get favorites_sync_error => 'Error synchronizing favorites';
+
+  @override
+  String get retry => 'Retry';
+
+  @override
+  String get sync => 'Synchronize';
+
+  @override
+  String get profile_created => 'Profile created successfully';
+
+  @override
+  String get error_password_mismatch => 'Passwords do not match';
+
+  @override
+  String get error_password_too_short =>
+      'Password must be at least 4 characters';
+
+  @override
+  String get error_register => 'Error during registration';
+
+  @override
+  String get auction_created => 'Auction created successfully';
+
+  @override
+  String get bid_placed => 'Bid placed successfully';
+
+  @override
+  String get bid_error => 'Error placing bid';
+
+  @override
+  String get deposit_success => 'Deposit successful';
+
+  @override
+  String get withdraw_success => 'Withdrawal successful';
+
+  @override
+  String get no_auctions_available => 'No auctions available';
+
+  @override
+  String get no_notifications => 'No notifications';
+
+  @override
+  String get no_favorites => 'No favorites yet';
+
+  @override
+  String get no_winnings => 'You haven\'t won any auctions yet';
+
+  @override
+  String get no_my_auctions => 'You haven\'t created any auctions';
+
+  @override
+  String get no_banners => 'No banners available';
+
+  @override
+  String get no_data => 'No data available';
+
+  @override
+  String get no_title => 'No title';
+
+  @override
+  String get auction => 'Auction';
+
+  @override
+  String get data_not_available_offline => 'Data not available offline';
+
+  @override
+  String error_generic(Object error) {
+    return 'An error occurred: $error';
+  }
+
+  @override
+  String get error_loading_winnings => 'Error loading winnings';
+
+  @override
+  String get error_loading_my_auctions => 'Error loading my auctions';
+
+  @override
+  String get error_sync_favorites => 'Error syncing favorites';
+
+  @override
+  String get error_upload_image => 'Error uploading image';
+
+  @override
+  String get error_network => 'Network connection error';
+
+  @override
+  String get error_server => 'Server error';
+
+  @override
+  String get error_timeout => 'Connection timeout';
+
+  @override
+  String get error_loading_auction => 'Error loading auction';
+
+  @override
+  String get no_related_auctions => 'No related auctions available';
+
+  @override
+  String get loading => 'Loading...';
+
+  @override
+  String get pull_to_refresh => 'Pull to refresh';
+
+  @override
+  String get view_more => 'View more';
+
+  @override
+  String get show_less => 'Show less';
+
+  @override
+  String get try_again => 'Try again';
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get delete => 'Delete';
+
+  @override
+  String get edit => 'Edit';
+
+  @override
+  String get close => 'Close';
+
+  @override
+  String get success => 'Success';
+
+  @override
+  String get error => 'Error';
+
+  @override
+  String get warning => 'Warning';
+
+  @override
+  String get info => 'Information';
+
+  @override
+  String get page_not_available => 'This page is not available at the moment';
+
+  @override
+  String get return_to_first_city => 'Return to the first city';
+
+  @override
+  String get return_button => 'Return';
 }

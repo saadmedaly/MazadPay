@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:dio/dio.dart';
 import 'package:mezadpay/services/auth_service.dart';
@@ -51,12 +52,17 @@ class ApiService {
     Options? options,
   }) async {
     try {
-      final response = await _dio.get<T>(
+      final response = await _dio.get<String>(
         path,
         queryParameters: queryParameters,
         options: options,
       );
-      return response.data;
+      // Parse JSON manually to avoid web platform type issues
+      if (response.data != null) {
+        final decoded = jsonDecode(response.data!);
+        return decoded as T?;
+      }
+      return null;
     } on DioException catch (e) {
       throw _handleError(e);
     }

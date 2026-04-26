@@ -1262,6 +1262,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get error_loading_notifications => 'خطأ في تحميل الإشعارات';
 
   @override
+  String get error_loading_profile => 'خطأ في تحميل الملف الشخصي';
+
+  @override
   String get error_create_auction => 'خطأ في إنشاء الإعلان';
 
   @override
@@ -1278,4 +1281,164 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_391 => 'لديك حساب بالفعل؟';
+
+  @override
+  String get favorites_synced => 'تم مزامنة المفضلة';
+
+  @override
+  String get favorites_local_storage => 'المفضلة محفوظة على الجهاز';
+
+  @override
+  String get favorites_sync_error => 'خطأ في مزامنة المفضلة';
+
+  @override
+  String get retry => 'إعادة المحاولة';
+
+  @override
+  String get sync => 'مزامنة';
+
+  @override
+  String get profile_created => 'تم إنشاء الملف الشخصي بنجاح';
+
+  @override
+  String get error_password_mismatch => 'كلمات المرور غير متطابقة';
+
+  @override
+  String get error_password_too_short =>
+      'يجب أن تكون كلمة المرور 4 أحرف على الأقل';
+
+  @override
+  String get error_register => 'خطأ أثناء التسجيل';
+
+  @override
+  String get auction_created => 'تم إنشاء المزاد بنجاح';
+
+  @override
+  String get bid_placed => 'تم تقديم المزايدة بنجاح';
+
+  @override
+  String get bid_error => 'خطأ في تقديم المزايدة';
+
+  @override
+  String get deposit_success => 'تم الإيداع بنجاح';
+
+  @override
+  String get withdraw_success => 'تم السحب بنجاح';
+
+  @override
+  String get no_auctions_available => 'لا توجد مزادات متاحة حالياً';
+
+  @override
+  String get no_notifications => 'لا توجد إشعارات';
+
+  @override
+  String get no_favorites => 'لا توجد عناصر في المفضلة';
+
+  @override
+  String get no_winnings => 'لم تربح أي مزادات بعد';
+
+  @override
+  String get no_my_auctions => 'لم تقم بإنشاء أي مزادات';
+
+  @override
+  String get no_banners => 'لا توجد إعلانات متاحة';
+
+  @override
+  String get no_data => 'لا توجد بيانات متاحة';
+
+  @override
+  String get no_title => 'بدون عنوان';
+
+  @override
+  String get auction => 'مزاد';
+
+  @override
+  String get data_not_available_offline =>
+      'البيانات غير متوفرة في وضع عدم الاتصال';
+
+  @override
+  String error_generic(Object error) {
+    return 'حدث خطأ: $error';
+  }
+
+  @override
+  String get error_loading_winnings => 'خطأ في تحميل المزادات المربوحة';
+
+  @override
+  String get error_loading_my_auctions => 'خطأ في تحميل مزاداتي';
+
+  @override
+  String get error_sync_favorites => 'خطأ في مزامنة المفضلة';
+
+  @override
+  String get error_upload_image => 'خطأ في رفع الصورة';
+
+  @override
+  String get error_network => 'خطأ في الاتصال بالشبكة';
+
+  @override
+  String get error_server => 'خطأ في الخادم';
+
+  @override
+  String get error_timeout => 'انتهت مهلة الاتصال';
+
+  @override
+  String get error_loading_auction => 'خطأ في تحميل المزاد';
+
+  @override
+  String get no_related_auctions => 'لا توجد مزادات مشابهة متاحة';
+
+  @override
+  String get loading => 'جاري التحميل...';
+
+  @override
+  String get pull_to_refresh => 'اسحب للتحديث';
+
+  @override
+  String get view_more => 'عرض المزيد';
+
+  @override
+  String get show_less => 'عرض أقل';
+
+  @override
+  String get try_again => 'حاول مرة أخرى';
+
+  @override
+  String get cancel => 'إلغاء';
+
+  @override
+  String get confirm => 'تأكيد';
+
+  @override
+  String get save => 'حفظ';
+
+  @override
+  String get delete => 'حذف';
+
+  @override
+  String get edit => 'تعديل';
+
+  @override
+  String get close => 'إغلاق';
+
+  @override
+  String get success => 'نجاح';
+
+  @override
+  String get error => 'خطأ';
+
+  @override
+  String get warning => 'تحذير';
+
+  @override
+  String get info => 'معلومة';
+
+  @override
+  String get page_not_available => 'هذه الصفحة غير متوفرة حالياً';
+
+  @override
+  String get return_to_first_city => 'العودة إلى المدينة الأولى';
+
+  @override
+  String get return_button => 'عودة';
 }

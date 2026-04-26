@@ -21,11 +21,23 @@ class ApiResponse<T> {
         message: 'Réponse vide du serveur',
       );
     }
+    
+    // Handle web platform _JsonMap type safely
+    final success = json['success'] as bool? ?? false;
+    final data = json['data'];
+    final errorData = json['error'];
+    final message = json['message'] as String?;
+    
+    ApiError? error;
+    if (errorData != null && errorData is Map) {
+      error = ApiError.fromJson(errorData as Map<String, dynamic>);
+    }
+    
     return ApiResponse<T>(
-      success: json['success'] ?? false,
-      data: json['data'],
-      error: json['error'] != null ? ApiError.fromJson(json['error']) : null,
-      message: json['message'],
+      success: success,
+      data: data,
+      error: error,
+      message: message,
     );
   }
   

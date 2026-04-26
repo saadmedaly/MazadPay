@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react'
 import {
   Plus, Search, Pencil, Trash2,
-  AlertCircle, Loader2, ChevronRight, Folder
+  AlertCircle, Loader2, ChevronRight, Folder,
+  Image as ImageIcon, Link, X, Eye
 } from 'lucide-react'
 import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '@/hooks/useMetadata'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -25,8 +26,10 @@ export function CategoriesPage() {
     name_en: '',
     icon_name: '',
     display_order: 0,
-    parent_id: null as number | null
+    parent_id: null as number | null,
+    image_url: '' as string
   })
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
 
   // Build category hierarchy
   const categoryTree = useMemo(() => {
@@ -73,7 +76,7 @@ export function CategoriesPage() {
 
   const openAdd = () => {
     setEditingCategory(null)
-    setForm({ name_ar: '', name_fr: '', name_en: '', icon_name: '', display_order: 0, parent_id: null })
+    setForm({ name_ar: '', name_fr: '', name_en: '', icon_name: '', display_order: 0, parent_id: null, image_url: '' })
     setIsModalOpen(true)
   }
 
@@ -85,7 +88,8 @@ export function CategoriesPage() {
       name_en: cat.name_en || '',
       icon_name: cat.icon_name || '',
       display_order: cat.display_order,
-      parent_id: cat.parent_id
+      parent_id: cat.parent_id,
+      image_url: cat.image_url || ''
     })
     setIsModalOpen(true)
   }
@@ -98,6 +102,8 @@ export function CategoriesPage() {
       name_fr: form.name_fr.trim(),
       name_en: form.name_en.trim(),
       icon_name: form.icon_name.trim(),
+      image_url: form.image_url.trim() || null,
+      is_active: true,
     }
 
     if (!payload.name_ar || !payload.name_fr) {
@@ -179,6 +185,32 @@ export function CategoriesPage() {
           {row.original.level === 0 ? 'فئة رئيسية' : 'فئة فرعية'}
         </span>
       )
+    },
+    {
+      header: 'الصورة',
+      id: 'image',
+      cell: ({ row }) => {
+        const imgUrl = row.original.image_url
+        return imgUrl ? (
+          <button
+            onClick={() => setPreviewImage(imgUrl)}
+            className="relative group"
+          >
+            <img
+              src={imgUrl}
+              alt={row.original.name_ar}
+              className="w-10 h-10 rounded-lg object-cover border border-surface-border"
+            />
+            <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Eye className="w-4 h-4 text-white" />
+            </div>
+          </button>
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-surface-base border border-surface-border flex items-center justify-center">
+            <ImageIcon className="w-4 h-4 text-surface-muted" />
+          </div>
+        )
+      }
     },
     {
       header: 'الترتيب',
@@ -341,6 +373,65 @@ export function CategoriesPage() {
                 </div>
               </div>
 
+              {/* Image URL */}
+              <div className="space-y-2">
+                <label className="text-xs text-surface-muted font-bold flex items-center gap-1.5">
+                  <ImageIcon className="w-3 h-3" />
+                  رابط الصورة (اختياري)
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-muted" />
+                    <Input
+                      dir="ltr"
+                      value={form.image_url}
+                      onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))}
+                      placeholder="https://example.com/image.png"
+                      className="pl-10 text-left"
+                    />
+                  </div>
+                  {form.image_url && (
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, image_url: '' }))}
+                      className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-all"
+                      title="حذف الصورة"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {/* Image Preview */}
+                {form.image_url && (
+                  <div className="mt-2 relative group inline-block">
+                    <img
+                      src={form.image_url}
+                      alt="معاينة"
+                      className="w-24 h-24 rounded-xl object-cover border border-surface-border"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    />
+                    <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage(form.image_url)}
+                        className="p-1 rounded text-white hover:bg-white/20"
+                        title="عرض الصورة"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, image_url: '' }))}
+                        className="p-1 rounded text-white hover:bg-white/20"
+                        title="حذف الصورة"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="pt-6 border-t border-surface-border flex justify-end gap-3">
                 <button
                   type="button"
@@ -362,6 +453,26 @@ export function CategoriesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Image Preview Overlay */}
+      {previewImage && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={() => setPreviewImage(null)} />
+          <div className="relative max-w-2xl max-h-[80vh]">
+            <img
+              src={previewImage}
+              alt="معاينة الصورة"
+              className="max-w-full max-h-[80vh] rounded-2xl object-contain shadow-2xl"
+            />
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-3 -right-3 p-2 bg-surface-card border border-surface-border rounded-full text-white hover:bg-red-500/20 hover:text-red-400 transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}

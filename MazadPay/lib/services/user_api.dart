@@ -22,12 +22,14 @@ class UserApi {
     String? fullName,
     String? email,
     String? phone,
+    String? city,
   }) async {
     try {
       final data = <String, dynamic>{};
       if (fullName != null) data['full_name'] = fullName;
       if (email != null) data['email'] = email;
       if (phone != null) data['phone'] = phone;
+      if (city != null) data['city'] = city;
       
       final response = await _apiService.put<Map<String, dynamic>>(
         '/users/me',

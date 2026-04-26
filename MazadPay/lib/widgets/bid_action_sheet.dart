@@ -3,10 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auction_provider.dart';
+import '../services/bid_api.dart';
 
 class BidActionSheet extends ConsumerStatefulWidget {
   final String auctionId;
-  const BidActionSheet({super.key, required this.auctionId});
+  final double currentPrice;
+  final double minIncrement;
+  final int bidCount;
+  final String timeLeft;
+  const BidActionSheet({
+    super.key, 
+    required this.auctionId,
+    required this.currentPrice,
+    required this.minIncrement,
+    required this.bidCount,
+    required this.timeLeft,
+  });
 
   @override
   ConsumerState<BidActionSheet> createState() => _BidActionSheetState();
@@ -15,12 +27,13 @@ class BidActionSheet extends ConsumerStatefulWidget {
 class _BidActionSheetState extends ConsumerState<BidActionSheet> {
   int _step = 1; // 1: Increase amount, 2: Final confirm
   double _bidAmount = 0.0;
+  bool _isLoading = false;
+  final BidApi _bidApi = BidApi();
 
   @override
   void initState() {
     super.initState();
-    final auction = ref.read(auctionNotifierProvider(widget.auctionId));
-    _bidAmount = auction.currentPrice + auction.minIncrement;
+    _bidAmount = widget.currentPrice + widget.minIncrement;
   }
 
   @override
@@ -48,7 +61,6 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
   }
 
   Widget _buildStep1(bool isDarkMode) {
-    final auction = ref.read(auctionNotifierProvider(widget.auctionId));
     return Column(
       children: [
         Text(AppLocalizations.of(context)!.text_368, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold)),
@@ -65,11 +77,11 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-               _buildInfoColumn('11', AppLocalizations.of(context)!.text_369, Colors.red),
+               _buildInfoColumn('${widget.bidCount}', AppLocalizations.of(context)!.text_369, Colors.red),
                _buildVerticalDivider(),
-               _buildInfoColumn(auction.currentPrice.toStringAsFixed(0), AppLocalizations.of(context)!.text_370, Colors.black),
+               _buildInfoColumn(widget.currentPrice.toStringAsFixed(0), AppLocalizations.of(context)!.text_370, Colors.black),
                _buildVerticalDivider(),
-               _buildInfoColumn('09 : 00', AppLocalizations.of(context)!.text_371, Colors.red),
+               _buildInfoColumn(widget.timeLeft, AppLocalizations.of(context)!.text_371, Colors.red),
             ],
           ),
         ),
@@ -86,7 +98,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildIconButton(Icons.add, () => setState(() => _bidAmount += auction.minIncrement)),
+              _buildIconButton(Icons.add, () => setState(() => _bidAmount += widget.minIncrement)),
               Expanded(
                 child: Center(
                   child: Text(
@@ -96,8 +108,8 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
                 ),
               ),
               _buildIconButton(Icons.remove, () {
-                if (_bidAmount > auction.currentPrice + auction.minIncrement) {
-                  setState(() => _bidAmount -= auction.minIncrement);
+                if (_bidAmount > widget.currentPrice + widget.minIncrement) {
+                  setState(() => _bidAmount -= widget.minIncrement);
                 }
               }),
             ],
@@ -126,31 +138,101 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
       width: double.infinity,
       height: 60,
       child: ElevatedButton(
-        onPressed: () {
+        onPressed: _isLoading ? null : () async {
           if (_step == 1) {
             setState(() => _step = 2);
           } else {
-            // Confirm Bid
-            ref.read(auctionNotifierProvider(widget.auctionId).notifier).placeBid(_bidAmount);
-            Navigator.of(context).pop();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(AppLocalizations.of(context)!.text_373)),
-            );
+            // Confirm Bid using API
+            setState(() => _isLoading = true);
+            // Debug: log auction ID being used
+            debugPrint('Placing bid for auction ID: ${widget.auctionId}, amount: $_bidAmount');
+            try {
+              final response = await _bidApi.placeBid(
+                auctionId: widget.auctionId,
+                amount: _bidAmount,
+              );
+              
+              if (mounted) {
+                if (response.success) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(AppLocalizations.of(context)!.text_373),
+                      backgroundColor: const Color(0xFF00C58D),
+                    ),
+                  );
+                  // Refresh auction data
+                  ref.invalidate(auctionNotifierProvider(widget.auctionId));
+                } else {
+                  // Check if it's a 404 error - auction might have been deleted
+                  final errorMessage = response.message ?? 'Erreur lors de l\'enchère';
+                  if (errorMessage.contains('not found') || errorMessage.contains('404')) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Cette enchère n\'existe plus ou a été supprimée'),
+                        backgroundColor: Colors.red,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                    // Close the modal and navigate back
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pop();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(errorMessage),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              }
+            } catch (e) {
+              if (mounted) {
+                final errorStr = e.toString();
+                // Check if it's a NotFoundException
+                if (errorStr.contains('not found') || errorStr.contains('404')) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Cette enchère n\'existe plus ou a été supprimée'),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                  // Close the modal and navigate back
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Erreur: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            } finally {
+              if (mounted) {
+                setState(() => _isLoading = false);
+              }
+            }
           }
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF0081FF),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.gavel, color: Colors.white),
-            const SizedBox(width: 8),
-            Text(_step == 1 ? AppLocalizations.of(context)!.text_72 : AppLocalizations.of(context)!.text_374, 
-                style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold)),
-          ],
-        ),
+        child: _isLoading
+            ? const CircularProgressIndicator(color: Colors.white)
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.gavel, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(_step == 1 ? AppLocalizations.of(context)!.text_72 : AppLocalizations.of(context)!.text_374, 
+                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold)),
+                ],
+              ),
       ),
     );
   }

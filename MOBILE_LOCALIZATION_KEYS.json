@@ -1,0 +1,211 @@
+{
+  "_comment": "Clés de localisation à ajouter dans les fichiers ARB",
+  
+  "new_keys": {
+    "favorites_synced": {
+      "ar": "تم مزامنة المفضلة",
+      "en": "Favorites synchronized",
+      "fr": "Favoris synchronisés"
+    },
+    "favorites_sync_error": {
+      "ar": "خطأ في مزامنة المفضلة",
+      "en": "Error synchronizing favorites",
+      "fr": "Erreur de synchronisation des favoris"
+    },
+    "retry": {
+      "ar": "إعادة المحاولة",
+      "en": "Retry",
+      "fr": "Réessayer"
+    },
+    "sync": {
+      "ar": "مزامنة",
+      "en": "Synchronize",
+      "fr": "Synchroniser"
+    },
+    "auction_created": {
+      "ar": "تم إنشاء المزاد بنجاح",
+      "en": "Auction created successfully",
+      "fr": "Enchère créée avec succès"
+    },
+    "bid_placed": {
+      "ar": "تم تقديم المزايدة بنجاح",
+      "en": "Bid placed successfully",
+      "fr": "Enchère placée avec succès"
+    },
+    "bid_error": {
+      "ar": "خطأ في تقديم المزايدة",
+      "en": "Error placing bid",
+      "fr": "Erreur lors de l'enchère"
+    },
+    "deposit_success": {
+      "ar": "تم الإيداع بنجاح",
+      "en": "Deposit successful",
+      "fr": "Dépôt réussi"
+    },
+    "withdraw_success": {
+      "ar": "تم السحب بنجاح",
+      "en": "Withdrawal successful",
+      "fr": "Retrait réussi"
+    },
+    "no_auctions_available": {
+      "ar": "لا توجد مزادات متاحة حالياً",
+      "en": "No auctions available",
+      "fr": "Aucune enchère disponible"
+    },
+    "no_notifications": {
+      "ar": "لا توجد إشعارات",
+      "en": "No notifications",
+      "fr": "Aucune notification"
+    },
+    "no_favorites": {
+      "ar": "لا توجد عناصر في المفضلة",
+      "en": "No favorites yet",
+      "fr": "Aucun favori"
+    },
+    "no_winnings": {
+      "ar": "لم تربح أي مزادات بعد",
+      "en": "You haven't won any auctions yet",
+      "fr": "Vous n'avez pas encore remporté d'enchères"
+    },
+    "no_my_auctions": {
+      "ar": "لم تقم بإنشاء أي مزادات",
+      "en": "You haven't created any auctions",
+      "fr": "Vous n'avez pas créé d'enchères"
+    },
+    "no_banners": {
+      "ar": "لا توجد إعلات متاحة",
+      "en": "No banners available",
+      "fr": "Aucune bannière disponible"
+    },
+    "no_data": {
+      "ar": "لا توجد بيانات متاحة",
+      "en": "No data available",
+      "fr": "Aucune donnée disponible"
+    },
+    "error_generic": {
+      "ar": "حدث خطأ: {error}",
+      "en": "An error occurred: {error}",
+      "fr": "Une erreur s'est produite: {error}"
+    },
+    "error_loading_winnings": {
+      "ar": "خطأ في تحميل المزادات المربوحة",
+      "en": "Error loading winnings",
+      "fr": "Erreur lors du chargement des gains"
+    },
+    "error_loading_my_auctions": {
+      "ar": "خطأ في تحميل مزاداتي",
+      "en": "Error loading my auctions",
+      "fr": "Erreur lors du chargement de mes enchères"
+    },
+    "error_loading_favorites": {
+      "ar": "خطأ في تحميل المفضلة",
+      "en": "Error loading favorites",
+      "fr": "Erreur lors du chargement des favoris"
+    },
+    "error_sync_favorites": {
+      "ar": "خطأ في مزامنة المفضلة",
+      "en": "Error syncing favorites",
+      "fr": "Erreur de synchronisation des favoris"
+    },
+    "error_upload_image": {
+      "ar": "خطأ في رفع الصورة",
+      "en": "Error uploading image",
+      "fr": "Erreur lors du téléchargement de l'image"
+    },
+    "error_invalid_phone": {
+      "ar": "رقم الهاتف غير صالح",
+      "en": "Invalid phone number",
+      "fr": "Numéro de téléphone invalide"
+    },
+    "error_network": {
+      "ar": "خطأ في الاتصال بالشبكة",
+      "en": "Network connection error",
+      "fr": "Erreur de connexion réseau"
+    },
+    "error_server": {
+      "ar": "خطأ في الخادم",
+      "en": "Server error",
+      "fr": "Erreur serveur"
+    },
+    "error_timeout": {
+      "ar": "انتهت مهلة الاتصال",
+      "en": "Connection timeout",
+      "fr": "Délai de connexion dépassé"
+    },
+    "loading": {
+      "ar": "جاري التحميل...",
+      "en": "Loading...",
+      "fr": "Chargement..."
+    },
+    "pull_to_refresh": {
+      "ar": "اسحب للتحديث",
+      "en": "Pull to refresh",
+      "fr": "Tirez pour actualiser"
+    },
+    "view_more": {
+      "ar": "عرض المزيد",
+      "en": "View more",
+      "fr": "Voir plus"
+    },
+    "show_less": {
+      "ar": "عرض أقل",
+      "en": "Show less",
+      "fr": "Voir moins"
+    },
+    "try_again": {
+      "ar": "حاول مرة أخرى",
+      "en": "Try again",
+      "fr": "Réessayez"
+    },
+    "cancel": {
+      "ar": "إلغاء",
+      "en": "Cancel",
+      "fr": "Annuler"
+    },
+    "confirm": {
+      "ar": "تأكيد",
+      "en": "Confirm",
+      "fr": "Confirmer"
+    },
+    "save": {
+      "ar": "حفظ",
+      "en": "Save",
+      "fr": "Enregistrer"
+    },
+    "delete": {
+      "ar": "حذف",
+      "en": "Delete",
+      "fr": "Supprimer"
+    },
+    "edit": {
+      "ar": "تعديل",
+      "en": "Edit",
+      "fr": "Modifier"
+    },
+    "close": {
+      "ar": "إغلاق",
+      "en": "Close",
+      "fr": "Fermer"
+    },
+    "success": {
+      "ar": "نجاح",
+      "en": "Success",
+      "fr": "Succès"
+    },
+    "error": {
+      "ar": "خطأ",
+      "en": "Error",
+      "fr": "Erreur"
+    },
+    "warning": {
+      "ar": "تحذير",
+      "en": "Warning",
+      "fr": "Avertissement"
+    },
+    "info": {
+      "ar": "معلومة",
+      "en": "Information",
+      "fr": "Information"
+    }
+  }
+}

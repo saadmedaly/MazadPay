@@ -29,7 +29,15 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       setState(() {
         _isLoading = false;
         if (response.success && response.data != null) {
-          _notifications = List.from(response.data!['notifications'] ?? []);
+          final dynamic responseData = response.data!;
+          List<dynamic> notificationList = [];
+          // La réponse peut être directement une liste ou un objet avec 'data' ou 'notifications'
+          if (responseData is List) {
+            notificationList = responseData;
+          } else if (responseData is Map<String, dynamic>) {
+            notificationList = (responseData['notifications'] ?? responseData['data'] ?? []) as List<dynamic>;
+          }
+          _notifications = notificationList.map((item) => item as Map<String, dynamic>).toList();
         }
       });
     } catch (e) {
@@ -98,7 +106,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             : _notifications.isEmpty
                 ? Center(
                     child: Text(
-                      'Aucune notification',
+                      l10n.no_notifications,
                       style: TextStyle(color: Colors.grey, fontSize: 16),
                     ),
                   )

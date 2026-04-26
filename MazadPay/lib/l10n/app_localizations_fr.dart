@@ -1244,6 +1244,9 @@ class AppLocalizationsFr extends AppLocalizations {
       'Erreur lors du chargement des notifications';
 
   @override
+  String get error_loading_profile => 'Erreur lors du chargement du profil';
+
+  @override
   String get error_create_auction => 'Erreur lors de la création de l\'annonce';
 
   @override
@@ -1261,4 +1264,166 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get text_391 => 'Déjà un compte ?';
+
+  @override
+  String get favorites_synced => 'Favoris synchronisés';
+
+  @override
+  String get favorites_local_storage => 'Favoris enregistrés localement';
+
+  @override
+  String get favorites_sync_error => 'Erreur de synchronisation des favoris';
+
+  @override
+  String get retry => 'Réessayer';
+
+  @override
+  String get sync => 'Synchroniser';
+
+  @override
+  String get profile_created => 'Profil créé avec succès';
+
+  @override
+  String get error_password_mismatch =>
+      'Les mots de passe ne correspondent pas';
+
+  @override
+  String get error_password_too_short =>
+      'Le mot de passe doit contenir au moins 4 caractères';
+
+  @override
+  String get error_register => 'Erreur lors de l\'inscription';
+
+  @override
+  String get auction_created => 'Enchère créée avec succès';
+
+  @override
+  String get bid_placed => 'Enchère placée avec succès';
+
+  @override
+  String get bid_error => 'Erreur lors de l\'enchère';
+
+  @override
+  String get deposit_success => 'Dépôt réussi';
+
+  @override
+  String get withdraw_success => 'Retrait réussi';
+
+  @override
+  String get no_auctions_available => 'Aucune enchère disponible';
+
+  @override
+  String get no_notifications => 'Aucune notification';
+
+  @override
+  String get no_favorites => 'Aucun favori';
+
+  @override
+  String get no_winnings => 'Vous n\'avez pas encore remporté d\'enchères';
+
+  @override
+  String get no_my_auctions => 'Vous n\'avez pas créé d\'enchères';
+
+  @override
+  String get no_banners => 'Aucune bannière disponible';
+
+  @override
+  String get no_data => 'Aucune donnée disponible';
+
+  @override
+  String get no_title => 'Sans titre';
+
+  @override
+  String get auction => 'Enchère';
+
+  @override
+  String get data_not_available_offline => 'Données non disponibles hors ligne';
+
+  @override
+  String error_generic(Object error) {
+    return 'Une erreur s\'est produite: $error';
+  }
+
+  @override
+  String get error_loading_winnings => 'Erreur lors du chargement des gains';
+
+  @override
+  String get error_loading_my_auctions =>
+      'Erreur lors du chargement de mes enchères';
+
+  @override
+  String get error_sync_favorites => 'Erreur de synchronisation des favoris';
+
+  @override
+  String get error_upload_image => 'Erreur lors du téléchargement de l\'image';
+
+  @override
+  String get error_network => 'Erreur de connexion réseau';
+
+  @override
+  String get error_server => 'Erreur serveur';
+
+  @override
+  String get error_timeout => 'Délai de connexion dépassé';
+
+  @override
+  String get error_loading_auction => 'Erreur lors du chargement de l\'enchère';
+
+  @override
+  String get no_related_auctions => 'Aucune enchère similaire disponible';
+
+  @override
+  String get loading => 'Chargement...';
+
+  @override
+  String get pull_to_refresh => 'Tirez pour actualiser';
+
+  @override
+  String get view_more => 'Voir plus';
+
+  @override
+  String get show_less => 'Voir moins';
+
+  @override
+  String get try_again => 'Réessayez';
+
+  @override
+  String get cancel => 'Annuler';
+
+  @override
+  String get confirm => 'Confirmer';
+
+  @override
+  String get save => 'Enregistrer';
+
+  @override
+  String get delete => 'Supprimer';
+
+  @override
+  String get edit => 'Modifier';
+
+  @override
+  String get close => 'Fermer';
+
+  @override
+  String get success => 'Succès';
+
+  @override
+  String get error => 'Erreur';
+
+  @override
+  String get warning => 'Avertissement';
+
+  @override
+  String get info => 'Information';
+
+  @override
+  String get page_not_available =>
+      'Cette page n\'est pas accessible pour le moment';
+
+  @override
+  String get return_to_first_city => 'Retournez à la première ville';
+
+  @override
+  String get return_button => 'Retour';
 }

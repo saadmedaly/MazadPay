@@ -2,15 +2,179 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
+import '../services/user_api.dart';
+import '../models/api_response.dart';
 import 'account_page.dart';
 
-class AccountProfilePage extends StatelessWidget {
+class AccountProfilePage extends StatefulWidget {
   const AccountProfilePage({super.key});
+
+  @override
+  State<AccountProfilePage> createState() => _AccountProfilePageState();
+}
+
+class _AccountProfilePageState extends State<AccountProfilePage> {
+  final UserApi _userApi = UserApi();
+  bool _isLoading = true;
+  bool _isSaving = false;
+  String _errorMessage = '';
+  String _successMessage = '';
+  Map<String, dynamic> _userData = {};
+  
+  // Controllers pour les champs éditables
+  final _fullNameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _cityController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+  
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _cityController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final ApiResponse<Map<String, dynamic>> response = await _userApi.getProfile();
+      
+      if (response.success && mounted) {
+        setState(() {
+          // Extraction robuste des données
+          final data = response.data;
+          if (data != null && data is Map<String, dynamic>) {
+            // La réponse peut être directement l'objet user ou contenir un champ 'user'
+            _userData = data['user'] ?? data;
+          }
+          // Initialiser les controllers avec les données
+          _fullNameController.text = _userData['full_name']?.toString() ?? '';
+          _phoneController.text = _userData['phone']?.toString() ?? '';
+          _emailController.text = _userData['email']?.toString() ?? '';
+          _cityController.text = _userData['city']?.toString() ?? '';
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = response.message ?? AppLocalizations.of(context)!.error_loading_profile;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = AppLocalizations.of(context)!.error_connection;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveUserProfile() async {
+    setState(() {
+      _isSaving = true;
+      _errorMessage = '';
+      _successMessage = '';
+    });
+    
+    try {
+      final ApiResponse<Map<String, dynamic>> response = await _userApi.updateProfile(
+        fullName: _fullNameController.text,
+        phone: _phoneController.text,
+        email: _emailController.text,
+      );
+      
+      if (response.success && mounted) {
+        setState(() {
+          _successMessage = 'تم تحديث الملف الشخصي بنجاح';
+          _isSaving = false;
+        });
+        // Rafraîchir les données
+        _loadUserProfile();
+      } else {
+        setState(() {
+          _errorMessage = response.message ?? 'فشل تحديث الملف الشخصي';
+          _isSaving = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'خطأ في الاتصال';
+          _isSaving = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     const Color primaryBlue = Color(0xFF0084FF);
+
+    // Extraction des données utilisateur avec fallbacks
+    final fullName = _fullNameController.text.isNotEmpty 
+        ? _fullNameController.text 
+        : _userData['full_name']?.toString() ?? AppLocalizations.of(context)!.text_37;
+    final phone = _phoneController.text.isNotEmpty 
+        ? _phoneController.text 
+        : _userData['phone']?.toString() ?? '+222 20 00 00 00';
+    final email = _emailController.text.isNotEmpty 
+        ? _emailController.text 
+        : _userData['email']?.toString() ?? 'badal@example.com';
+    final city = _cityController.text.isNotEmpty 
+        ? _cityController.text 
+        : _userData['city']?.toString() ?? _userData['location'] ?? AppLocalizations.of(context)!.text_43;
+    final avatarUrl = _userData['avatar'] ?? _userData['avatar_url'] ?? _userData['profile_pic_url'];
+
+    // Générer les initiales pour l'avatar fallback
+    String initials = 'U';
+    if (fullName.isNotEmpty && fullName != AppLocalizations.of(context)!.text_37) {
+      final parts = fullName.split(' ');
+      if (parts.length > 1) {
+        initials = '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+      } else {
+        initials = fullName[0].toUpperCase();
+      }
+    }
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
+        body: const Center(
+          child: CircularProgressIndicator(color: primaryBlue),
+        ),
+      );
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return Scaffold(
+        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+              const SizedBox(height: 16),
+              Text(_errorMessage, style: TextStyle(color: isDarkMode ? Colors.white : Colors.black)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadUserProfile,
+                style: ElevatedButton.styleFrom(backgroundColor: primaryBlue),
+                child: Text(AppLocalizations.of(context)!.retry),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
@@ -61,21 +225,33 @@ class AccountProfilePage extends StatelessWidget {
                             boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
                           ),
                           child: ClipOval(
-                            child: Image.asset(
-                              'assets/user.png',
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Container(
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: LinearGradient(
-                                    colors: [Color(0xFF0055FF), Color(0xFF0084FF)],
-                                    begin: AlignmentDirectional.topStart,
-                                    end: AlignmentDirectional.bottomEnd,
+                            child: avatarUrl != null && avatarUrl.toString().isNotEmpty
+                              ? Image.network(
+                                  avatarUrl.toString(),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (c, e, s) => Container(
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: [Color(0xFF0055FF), Color(0xFF0084FF)],
+                                        begin: AlignmentDirectional.topStart,
+                                        end: AlignmentDirectional.bottomEnd,
+                                      ),
+                                    ),
+                                    child: Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold))),
                                   ),
+                                )
+                              : Container(
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      colors: [Color(0xFF0055FF), Color(0xFF0084FF)],
+                                      begin: AlignmentDirectional.topStart,
+                                      end: AlignmentDirectional.bottomEnd,
+                                    ),
+                                  ),
+                                  child: Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold))),
                                 ),
-                                child: Center(child: Text(AppLocalizations.of(context)!.text_36, style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold))),
-                              ),
-                            ),
                           ),
                         ),
                         Positioned(
@@ -91,9 +267,9 @@ class AccountProfilePage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Text(AppLocalizations.of(context)!.text_37, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                    Text(fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                     const SizedBox(height: 4),
-                    Text('+222 20 00 00 00', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                    Text(phone, style: TextStyle(color: Colors.grey[500], fontSize: 14)),
                   ],
                 ),
               ),
@@ -104,12 +280,52 @@ class AccountProfilePage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(AppLocalizations.of(context)!.text_38, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(AppLocalizations.of(context)!.text_38, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        if (_isSaving)
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else if (_successMessage.isNotEmpty)
+                          Icon(Icons.check_circle, color: Colors.green, size: 20)
+                        else
+                          TextButton.icon(
+                            onPressed: _saveUserProfile,
+                            icon: const Icon(Icons.save, size: 18),
+                            label: const Text('حفظ'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: primaryBlue,
+                              padding: EdgeInsets.zero,
+                            ),
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 16),
-                    _buildInfoField(context, AppLocalizations.of(context)!.text_39, AppLocalizations.of(context)!.text_37, Icons.person_outline, isDarkMode),
-                    _buildInfoField(context, AppLocalizations.of(context)!.text_40, '+222 20 00 00 00', Icons.phone_outlined, isDarkMode),
-                    _buildInfoField(context, AppLocalizations.of(context)!.text_41, 'badal@example.com', Icons.email_outlined, isDarkMode),
-                    _buildInfoField(context, AppLocalizations.of(context)!.text_42, AppLocalizations.of(context)!.text_43, Icons.location_city_outlined, isDarkMode),
+                    _buildEditableField(context, AppLocalizations.of(context)!.text_39, _fullNameController, Icons.person_outline, isDarkMode),
+                    _buildEditableField(context, AppLocalizations.of(context)!.text_40, _phoneController, Icons.phone_outlined, isDarkMode),
+                    _buildEditableField(context, AppLocalizations.of(context)!.text_41, _emailController, Icons.email_outlined, isDarkMode),
+                    _buildEditableField(context, AppLocalizations.of(context)!.text_42, _cityController, Icons.location_city_outlined, isDarkMode),
+
+                    if (_successMessage.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          _successMessage,
+                          style: TextStyle(color: Colors.green, fontSize: 12),
+                        ),
+                      ),
+                    if (_errorMessage.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          _errorMessage,
+                          style: TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ),
 
                     const SizedBox(height: 32),
                     Text(AppLocalizations.of(context)!.text_44, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -178,6 +394,38 @@ class AccountProfilePage extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
               ],
+            ),
+          ),
+          Icon(Icons.edit_outlined, color: Colors.grey[400], size: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditableField(BuildContext context, String label, TextEditingController controller, IconData icon, bool isDarkMode) {
+    return Container(
+      margin: const EdgeInsetsDirectional.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.withOpacity(0.15)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFF0084FF), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              decoration: InputDecoration(
+                labelText: label,
+                labelStyle: TextStyle(color: Colors.grey[500], fontSize: 11),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
             ),
           ),
           Icon(Icons.edit_outlined, color: Colors.grey[400], size: 16),

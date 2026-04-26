@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -23,6 +24,7 @@ type AuctionFilters struct {
 
 type AuctionRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*models.Auction, error)
+	FindByIDTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (*models.Auction, error)
 	FindAll(ctx context.Context, f AuctionFilters) ([]models.Auction, error)
 
 	Create(ctx context.Context, tx *sqlx.Tx, a *models.Auction) error
@@ -74,18 +76,30 @@ func NewAuctionRepository(db *sqlx.DB) AuctionRepository {
 }
 
 func (r *auctionRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.Auction, error) {
+	return r.findByIDInternal(ctx, r.db, id)
+}
+
+func (r *auctionRepo) FindByIDTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (*models.Auction, error) {
+	return r.findByIDInternal(ctx, tx, id)
+}
+
+// findByIDInternal is a helper that works with both DB and Tx
+func (r *auctionRepo) findByIDInternal(ctx context.Context, db sqlx.ExtContext, id uuid.UUID) (*models.Auction, error) {
 	var a models.Auction
-	err := r.db.GetContext(ctx, &a, `
-        SELECT a.*, 
+	err := db.QueryRowxContext(ctx, `
+        SELECT a.*,
                c.name_ar as category_name_ar,
                l.city_name_ar as city_name_ar
         FROM auctions a
         LEFT JOIN categories c ON a.category_id = c.id
         LEFT JOIN locations l ON a.location_id = l.id
         WHERE a.id = $1
-    `, id)
+    `, id).StructScan(&a)
 	if err != nil {
-		return nil, apperr.ErrNotFound
+		if err == sql.ErrNoRows {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, err
 	}
 	return &a, nil
 }
@@ -113,13 +127,19 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 
 	rows, err := r.db.QueryxContext(ctx,
 		fmt.Sprintf(`
-            SELECT a.*, 
+            SELECT a.*,
                    c.name_ar as category_name_ar,
-                   l.city_name_ar as city_name_ar
+                   l.city_name_ar as city_name_ar,
+                   COALESCE(
+                       (SELECT string_agg(url, ',' ORDER BY display_order ASC)
+                        FROM auction_images
+                        WHERE auction_id = a.id),
+                       ''
+                   ) as image_urls
             FROM auctions a
             LEFT JOIN categories c ON a.category_id = c.id
             LEFT JOIN locations l ON a.location_id = l.id
-            %s 
+            %s
             ORDER BY a.is_featured DESC, a.created_at DESC`, where),
 		args...)
 	if err != nil {
@@ -130,9 +150,10 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 	var auctions []models.Auction
 	for rows.Next() {
 		var a models.Auction
-		if err := rows.StructScan(&a); err == nil {
-			auctions = append(auctions, a)
+		if err := rows.StructScan(&a); err != nil {
+			return nil, fmt.Errorf("failed to scan auction: %w", err)
 		}
+		auctions = append(auctions, a)
 	}
 	return auctions, nil
 }
@@ -238,15 +259,15 @@ func (r *auctionRepo) GetCategories(ctx context.Context) ([]models.Category, err
 }
 
 func (r *auctionRepo) CreateCategory(ctx context.Context, c *models.Category) error {
-	query := `INSERT INTO categories (name_ar, name_fr, name_en, parent_id, icon_name, display_order)
-              VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
-	return r.db.QueryRowContext(ctx, query, c.NameAr, c.NameFr, c.NameEn, c.ParentID, c.IconName, c.DisplayOrder).Scan(&c.ID)
+	query := `INSERT INTO categories (name_ar, name_fr, name_en, parent_id, icon_name, display_order, image_url, is_active)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`
+	return r.db.QueryRowContext(ctx, query, c.NameAr, c.NameFr, c.NameEn, c.ParentID, c.IconName, c.DisplayOrder, c.ImageURL, c.IsActive).Scan(&c.ID)
 }
 
 func (r *auctionRepo) UpdateCategory(ctx context.Context, c *models.Category) error {
-	query := `UPDATE categories SET name_ar = $1, name_fr = $2, name_en = $3, parent_id = $4, icon_name = $5, display_order = $6
-              WHERE id = $7`
-	_, err := r.db.ExecContext(ctx, query, c.NameAr, c.NameFr, c.NameEn, c.ParentID, c.IconName, c.DisplayOrder, c.ID)
+	query := `UPDATE categories SET name_ar = $1, name_fr = $2, name_en = $3, parent_id = $4, icon_name = $5, display_order = $6, image_url = $7, is_active = $8
+              WHERE id = $9`
+	_, err := r.db.ExecContext(ctx, query, c.NameAr, c.NameFr, c.NameEn, c.ParentID, c.IconName, c.DisplayOrder, c.ImageURL, c.IsActive, c.ID)
 	return err
 }
 
