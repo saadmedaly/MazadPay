@@ -472,7 +472,7 @@ CONSTRAINT chk_bid_amount CHECK (amount > 0)
 ```bash
 # Cloner le projet
 git clone <repo-url>
-cd MazadPay
+cd mobile
 
 # Installer les dépendances
 flutter pub get

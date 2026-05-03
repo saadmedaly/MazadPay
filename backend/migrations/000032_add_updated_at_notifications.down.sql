@@ -1,0 +1,4 @@
+-- ============================================================-- Supprimer updated_at de la table notifications-- ============================================================
+DROP TRIGGER IF EXISTS update_notifications_updated_at ON notifications;
+DROP FUNCTION IF EXISTS update_updated_at_column();
+ALTER TABLE notifications DROP COLUMN IF EXISTS updated_at;

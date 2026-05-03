@@ -5,33 +5,9 @@ import (
     "sync"
 
     "github.com/google/uuid"
+    "github.com/mazadpay/backend/internal/models"
     "go.uber.org/zap"
 )
-
-// WSEvent — tous les événements WebSocket envoyés aux clients
-type WSEvent struct {
-    Type    string      `json:"type"`    // bid_placed | timer_tick | auction_ended | auction_won
-    Payload interface{} `json:"payload"`
-}
-
-type BidPlacedPayload struct {
-    AuctionID    string  `json:"auction_id"`
-    NewPrice     float64 `json:"new_price"`
-    BidderMasked string  `json:"bidder_phone"` // "####4709"
-    BidCount     int     `json:"bid_count"`
-    SecondsLeft  int64   `json:"seconds_left"`
-}
-
-type TimerTickPayload struct {
-    AuctionID   string `json:"auction_id"`
-    SecondsLeft int64  `json:"seconds_left"`
-}
-
-type AuctionEndedPayload struct {
-    AuctionID   string  `json:"auction_id"`
-    FinalPrice  float64 `json:"final_price"`
-    WinnerPhone string  `json:"winner_phone"` // masqué
-}
 
 // Hub gère les rooms WebSocket (une room par enchère)
 type Hub struct {
@@ -70,7 +46,7 @@ func (h *Hub) Unregister(auctionID uuid.UUID, client *Client) {
 }
 
 // Broadcast envoie un événement à tous les clients d'une room
-func (h *Hub) Broadcast(auctionID uuid.UUID, event WSEvent) {
+func (h *Hub) Broadcast(auctionID uuid.UUID, event models.WSEvent) {
     h.mu.RLock()
     defer h.mu.RUnlock()
 
@@ -96,7 +72,7 @@ func (h *Hub) Broadcast(auctionID uuid.UUID, event WSEvent) {
 }
 
 // BroadcastToUser envoie un événement uniquement à un utilisateur spécifique (ex: auction_won)
-func (h *Hub) BroadcastToUser(auctionID uuid.UUID, userID string, event WSEvent) {
+func (h *Hub) BroadcastToUser(auctionID uuid.UUID, userID string, event models.WSEvent) {
     h.mu.RLock()
     defer h.mu.RUnlock()
 

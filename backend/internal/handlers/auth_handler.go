@@ -1,33 +1,41 @@
 package handlers
 
 import (
+	"fmt"
+	"strings"
+	"time"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/services"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
 type AuthHandler struct {
 	service  services.AuthService
+	rdb      *redis.Client
 	logger   *zap.Logger
 	validate *validator.Validate
 }
 
-func NewAuthHandler(service services.AuthService, logger *zap.Logger) *AuthHandler {
+func NewAuthHandler(service services.AuthService, logger *zap.Logger, rdb *redis.Client) *AuthHandler {
 	return &AuthHandler{
 		service:  service,
+		rdb:      rdb,
 		logger:   logger,
 		validate: validator.New(),
 	}
 }
 
 type RegisterRequest struct {
-	Phone    string `json:"phone"     validate:"required,min=8,max=20,numeric"`
-	Pin      string `json:"pin"       validate:"required,len=4,numeric"`
-	FullName string `json:"full_name" validate:"required,min=2,max=100"`
-	Email    string `json:"email"     validate:"required,email"`
-	City     string `json:"city"      validate:"omitempty,max=100"`
+	Phone       string `json:"phone"       validate:"required,min=8,max=20,numeric"`
+	Pin         string `json:"pin"         validate:"required,len=4,numeric"`
+	FullName    string `json:"full_name"   validate:"required,min=2,max=100"`
+	Email       string `json:"email"       validate:"required,email"`
+	City        string `json:"city"        validate:"omitempty,max=100"`
+	CountryCode string `json:"country_code" validate:"omitempty,oneof=+222 +221 +212 +216"`
 }
 
 type LoginRequest struct {
@@ -72,7 +80,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	}
 
 	ip := c.IP()
-	if err := h.service.Register(c.Context(), req.Phone, req.Pin, req.FullName, req.Email, req.City); err != nil {
+	if err := h.service.Register(c.Context(), req.Phone, req.Pin, req.FullName, req.Email, req.City, req.CountryCode); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
@@ -98,10 +106,10 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{
 		"token": token,
 		"user": fiber.Map{
-			"id":            user.ID,
-			"phone":         user.MaskPhone(),
-			"role":          user.Role,
-			"language":      user.LanguagePref,
+			"id":             user.ID,
+			"phone":          user.MaskPhone(),
+			"role":           user.Role,
+			"language":       user.LanguagePref,
 			"is_super_admin": user.IsSuperAdmin,
 		},
 	})
@@ -197,7 +205,24 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
-	// Avec JWT stateless, le logout côté serveur peut être fait via blacklist dans Redis.
-	// Pour cette étape, on renvoie juste un succès, le client supprime son token.
+	// Récupérer le token de l'entête Authorization
+	authHeader := c.Get("Authorization")
+	if authHeader == "" {
+		return OK(c, fiber.Map{"message": "Logged out successfully (no token)"})
+	}
+
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenStr == "" {
+		return OK(c, fiber.Map{"message": "Logged out successfully (empty token)"})
+	}
+
+	// Ajouter le token à la blacklist Redis (expirer après 24h par sécurité)
+	if h.rdb != nil {
+		err := h.rdb.Set(c.Context(), fmt.Sprintf("blacklist:%s", tokenStr), "1", 24*time.Hour).Err()
+		if err != nil {
+			h.logger.Error("Failed to blacklist token", zap.Error(err))
+		}
+	}
+
 	return OK(c, fiber.Map{"message": "Logged out successfully"})
 }

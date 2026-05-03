@@ -61,8 +61,8 @@ type AdminService interface {
 
 	// Countries
 	GetCountries(ctx context.Context) ([]models.Country, error)
-	CreateCountry(ctx context.Context, code, nameAr, nameFr, nameEn, flagEmoji string) error
-	UpdateCountry(ctx context.Context, id int, code, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool) error
+	CreateCountry(ctx context.Context, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string) error
+	UpdateCountry(ctx context.Context, id int, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool) error
 	DeleteCountry(ctx context.Context, id int) error
 
 	// Settings
@@ -125,16 +125,17 @@ type UpdateAuctionInput struct {
 }
 
 type adminService struct {
-	db          *sqlx.DB
-	userRepo    repository.UserRepository
-	auctionRepo repository.AuctionRepository
-	bidRepo     repository.BidRepository
-	txRepo      repository.TransactionRepository
-	reportRepo  repository.ReportRepository
-	kycRepo     repository.KYCRepository
-	contentRepo repository.ContentRepository
-	invRepo     repository.AdminInvitationRepository
-	reqRepo     repository.RequestRepository
+	db           *sqlx.DB
+	userRepo     repository.UserRepository
+	auctionRepo  repository.AuctionRepository
+	bidRepo      repository.BidRepository
+	txRepo       repository.TransactionRepository
+	reportRepo   repository.ReportRepository
+	kycRepo      repository.KYCRepository
+	contentRepo  repository.ContentRepository
+	invRepo      repository.AdminInvitationRepository
+	reqRepo      repository.RequestRepository
+	settingsRepo repository.SettingsRepository
 }
 
 func NewAdminService(
@@ -148,18 +149,20 @@ func NewAdminService(
 	contentRepo repository.ContentRepository,
 	invRepo repository.AdminInvitationRepository,
 	reqRepo repository.RequestRepository,
+	settingsRepo repository.SettingsRepository,
 ) AdminService {
 	return &adminService{
-		db:          db,
-		userRepo:    userRepo,
-		auctionRepo: auctionRepo,
-		bidRepo:     bidRepo,
-		txRepo:      txRepo,
-		reportRepo:  reportRepo,
-		kycRepo:     kycRepo,
-		contentRepo: contentRepo,
-		invRepo:     invRepo,
-		reqRepo:     reqRepo,
+		db:           db,
+		userRepo:     userRepo,
+		auctionRepo:  auctionRepo,
+		bidRepo:      bidRepo,
+		txRepo:       txRepo,
+		reportRepo:   reportRepo,
+		kycRepo:      kycRepo,
+		contentRepo:  contentRepo,
+		invRepo:      invRepo,
+		reqRepo:      reqRepo,
+		settingsRepo: settingsRepo,
 	}
 }
 
@@ -195,19 +198,19 @@ func (s *adminService) GetDashboardStats(ctx context.Context) (map[string]interf
 	pendingBannerRequests, _ := s.reqRepo.CountPendingBannerRequests(ctx)
 
 	return map[string]interface{}{
-		"total_users":               totalUsers,
-		"total_auctions":            totalAuctions,
-		"total_bids":                totalBids,
-		"total_revenue":             totalRevenue,
-		"today_revenue":             todayRevenue,
-		"active_auctions":           activeAuctions,
-		"pending_auctions":          pendingAuctions,
-		"pending_reports":           pendingReports,
-		"pending_kycs":              len(pendingKYCs),
-		"pending_transactions":      pendingTransactions,
-		"week_deposits":             weekDeposits,
-		"pending_auction_requests":  pendingAuctionRequests,
-		"pending_banner_requests":   pendingBannerRequests,
+		"total_users":              totalUsers,
+		"total_auctions":           totalAuctions,
+		"total_bids":               totalBids,
+		"total_revenue":            totalRevenue,
+		"today_revenue":            todayRevenue,
+		"active_auctions":          activeAuctions,
+		"pending_auctions":         pendingAuctions,
+		"pending_reports":          pendingReports,
+		"pending_kycs":             len(pendingKYCs),
+		"pending_transactions":     pendingTransactions,
+		"week_deposits":            weekDeposits,
+		"pending_auction_requests": pendingAuctionRequests,
+		"pending_banner_requests":  pendingBannerRequests,
 	}, nil
 }
 
@@ -562,7 +565,7 @@ func (s *adminService) UnblockPhone(ctx context.Context, phone string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
@@ -570,35 +573,16 @@ func (s *adminService) UnblockPhone(ctx context.Context, phone string) error {
 	if rowsAffected == 0 {
 		return fmt.Errorf("no blocked phone found with number: %s", phone)
 	}
-	
+
 	return nil
 }
 
 func (s *adminService) ListSettings(ctx context.Context) ([]models.SystemSettings, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, key, value, type FROM system_settings`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var settings []models.SystemSettings
-	for rows.Next() {
-		var s models.SystemSettings
-		if err := rows.Scan(&s.ID, &s.Key, &s.Value, &s.Type); err != nil {
-			continue
-		}
-		settings = append(settings, s)
-	}
-	return settings, nil
+	return s.settingsRepo.List(ctx)
 }
 
 func (s *adminService) UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO system_settings (key, value, type, updated_by, updated_at)
-		VALUES ($1, $2, $3, $4, now())
-		ON CONFLICT (key) DO UPDATE SET value = $2, type = $3, updated_by = $4, updated_at = now()
-	`, key, value, settingType, userID)
-	return err
+	return s.settingsRepo.Set(ctx, key, value, settingType)
 }
 
 // Payment Methods implementations
@@ -787,33 +771,42 @@ func (s *adminService) GetCountries(ctx context.Context) ([]models.Country, erro
 	return s.auctionRepo.GetCountries(ctx)
 }
 
-func (s *adminService) CreateCountry(ctx context.Context, code, nameAr, nameFr, nameEn, flagEmoji string) error {
+func (s *adminService) CreateCountry(ctx context.Context, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string) error {
 	country := &models.Country{
-		Code:      code,
-		NameAr:    nameAr,
-		NameFr:    nameFr,
-		NameEn:    nameEn,
-		FlagEmoji: flagEmoji,
-		IsActive:  true,
+		Code:        code,
+		CountryCode: nil, // NULL by default
+		NameAr:      nameAr,
+		NameFr:      nameFr,
+		NameEn:      nameEn,
+		FlagEmoji:   flagEmoji,
+		IsActive:    true,
+	}
+	// Set CountryCode only if not empty
+	if countryCode != "" {
+		country.CountryCode = &countryCode
 	}
 	return s.auctionRepo.CreateCountry(ctx, country)
 }
 
-func (s *adminService) UpdateCountry(ctx context.Context, id int, code, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool) error {
+func (s *adminService) UpdateCountry(ctx context.Context, id int, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool) error {
 	country := &models.Country{
-		ID:        id,
-		Code:      code,
-		NameAr:    nameAr,
-		NameFr:    nameFr,
-		NameEn:    nameEn,
-		FlagEmoji: flagEmoji,
-		IsActive:  true,
+		ID:          id,
+		Code:        code,
+		CountryCode: nil, // NULL by default
+		NameAr:      nameAr,
+		NameFr:      nameFr,
+		NameEn:      nameEn,
+		FlagEmoji:   flagEmoji,
+		IsActive:    true,
 	}
-	
+	// Set CountryCode only if not empty
+	if countryCode != "" {
+		country.CountryCode = &countryCode
+	}
 	if isActive != nil {
 		country.IsActive = *isActive
 	}
-	
+
 	return s.auctionRepo.UpdateCountry(ctx, country)
 }
 

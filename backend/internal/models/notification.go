@@ -19,7 +19,10 @@ type Notification struct {
 	Priority      *string    `db:"priority"       json:"priority"`
 	ActionURL     *string    `db:"action_url"     json:"action_url"`
 	ActionLabel   *string    `db:"action_label"   json:"action_label"`
+	ImageURL      *string    `db:"image_url"      json:"image_url,omitempty"`
 	CreatedAt     time.Time  `db:"created_at"     json:"created_at"`
+	UpdatedAt     *time.Time `db:"updated_at"     json:"updated_at,omitempty"`
+	ExpiresAt     *time.Time `db:"expires_at"     json:"expires_at,omitempty"`
 }
 
 type PushToken struct {

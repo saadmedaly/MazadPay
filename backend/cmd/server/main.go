@@ -104,13 +104,16 @@ func main() {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"success": false, "message": "MazadPay API root"})
 	})
 
-	auctionSvc, notifSvc := routes.Setup(app, db, rdb, cfg, logger)
+	auctionSvc, notifSvc, auctionScheduler := routes.Setup(app, db, rdb, cfg, logger)
+
+	// --- Start Auction Scheduler ---
+	go auctionScheduler.Start()
 
 	// --- Seed Default Super Admin ---
 	if cfg.App.DefaultSuperAdminPhone != "" && cfg.App.DefaultSuperAdminPin != "" {
 		userRepo := repository.NewUserRepository(db)
-		if err := userRepo.SeedDefaultSuperAdmin(context.Background(), 
-			cfg.App.DefaultSuperAdminPhone, 
+		if err := userRepo.SeedDefaultSuperAdmin(context.Background(),
+			cfg.App.DefaultSuperAdminPhone,
 			cfg.App.DefaultSuperAdminPin,
 			"mazadpay superadmin",
 			"admin@mazadpay.com",

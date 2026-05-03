@@ -13,7 +13,7 @@
 │                           ARCHITECTURE CLAIRE                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  📱 FLUTTER MOBILE (@MazadPay)       🌐 REACT WEB ADMIN (@web)              │
+│  📱 FLUTTER MOBILE (@mobile)       🌐 REACT WEB ADMIN (@web)              │
 │  ═════════════════════════════       ═══════════════════════════            │
 │                                                                             │
 │  Users (Bidders/Sellers)             Super Admin / Moderators                 │
@@ -499,7 +499,7 @@ moderatorMiddleware := middleware.ModeratorOrAbove() // Role >= Moderator
 
 ## 6. RÉSUMÉ PAR INTERFACE
 
-### 📱 Flutter Mobile (@MazadPay)
+### 📱 Flutter Mobile (@mobile)
 **Besoins:**
 - Endpoints simples et rapides
 - Support offline avec cache

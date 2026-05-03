@@ -36,6 +36,7 @@ export function LocationsPage() {
   })
   const [countryForm, setCountryForm] = useState({
     code: '',
+    country_code: '',
     name_ar: '',
     name_fr: '',
     name_en: '',
@@ -64,7 +65,7 @@ export function LocationsPage() {
   // Country handlers
   const openAddCountry = () => {
     setEditingCountry(null)
-    setCountryForm({ code: '', name_ar: '', name_fr: '', name_en: '', flag_emoji: '' })
+    setCountryForm({ code: '', country_code: '', name_ar: '', name_fr: '', name_en: '', flag_emoji: '' })
     setIsModalOpen(true)
   }
 
@@ -72,6 +73,7 @@ export function LocationsPage() {
     setEditingCountry(country)
     setCountryForm({
       code: country.code,
+      country_code: country.country_code || '',
       name_ar: country.name_ar,
       name_fr: country.name_fr,
       name_en: country.name_en,
@@ -84,6 +86,7 @@ export function LocationsPage() {
     e.preventDefault()
     const payload = {
       code: countryForm.code.trim(),
+      country_code: countryForm.country_code.trim() || null,
       name_ar: countryForm.name_ar.trim(),
       name_fr: countryForm.name_fr.trim(),
       name_en: countryForm.name_en.trim(),
@@ -230,12 +233,19 @@ export function LocationsPage() {
       cell: ({ getValue }) => <span className="font-mono text-xs text-surface-muted">#{getValue<number>()}</span>
     },
     {
-      header: 'Code / Flag',
+      header: 'Code / Indicatif',
       accessorKey: 'code',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{row.original.flag_emoji}</span>
-          <span className="font-mono font-bold text-white">{row.original.code}</span>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{row.original.flag_emoji}</span>
+            <span className="font-mono font-bold text-white">{row.original.code}</span>
+          </div>
+          {row.original.country_code && (
+            <span className="font-mono text-xs text-mazad-primary bg-mazad-primary/10 px-2 py-0.5 rounded self-start">
+              {row.original.country_code}
+            </span>
+          )}
         </div>
       )
     },
@@ -500,6 +510,18 @@ export function LocationsPage() {
                         placeholder="MR"
                         className="font-mono uppercase"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-mazad-primary font-bold block">الإنديكاتيف (رمز الهاتف)</label>
+                      <Input
+                        maxLength={5}
+                        value={countryForm.country_code}
+                        onChange={e => setCountryForm(f => ({ ...f, country_code: e.target.value }))}
+                        placeholder="+222"
+                        className="font-mono ltr"
+                        dir="ltr"
+                      />
+                      <p className="text-[10px] text-surface-muted">مثال: +222 لموريتانيا، +221 للسنغال</p>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs text-mazad-primary font-bold block">اسم الدولة (عربي)</label>

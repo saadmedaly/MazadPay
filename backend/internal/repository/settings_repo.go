@@ -23,7 +23,11 @@ func NewSettingsRepository(db *sqlx.DB) SettingsRepository {
 
 func (r *settingsRepo) Get(ctx context.Context, key string) (*models.SystemSettings, error) {
 	var s models.SystemSettings
-	err := r.db.GetContext(ctx, &s, "SELECT * FROM system_settings WHERE key = $1", key)
+	err := r.db.GetContext(ctx, &s, `
+		SELECT id, key, value, type, updated_by, updated_at 
+		FROM system_settings 
+		WHERE key = $1
+	`, key)
 	return &s, err
 }
 
@@ -38,6 +42,10 @@ func (r *settingsRepo) Set(ctx context.Context, key, value, settingType string) 
 
 func (r *settingsRepo) List(ctx context.Context) ([]models.SystemSettings, error) {
 	var settings []models.SystemSettings
-	err := r.db.SelectContext(ctx, &settings, "SELECT * FROM system_settings ORDER BY key")
+	err := r.db.SelectContext(ctx, &settings, `
+		SELECT id, key, value, type, updated_by, updated_at 
+		FROM system_settings 
+		ORDER BY key
+	`)
 	return settings, err
 }

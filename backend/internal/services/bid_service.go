@@ -7,12 +7,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/database"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
-	ws "github.com/mazadpay/backend/internal/websocket"
-	"github.com/shopspring/decimal"
+ 	"github.com/shopspring/decimal"
 )
 
 type BidService interface {
@@ -25,7 +24,7 @@ type bidService struct {
 	auctionRepo repository.AuctionRepository
 	bidRepo     repository.BidRepository
 	walletRepo  repository.WalletRepository
-	hub         *ws.Hub
+	hub         AuctionHub
 }
 
 func NewBidService(
@@ -33,7 +32,7 @@ func NewBidService(
 	auctionRepo repository.AuctionRepository,
 	bidRepo repository.BidRepository,
 	walletRepo repository.WalletRepository,
-	hub *ws.Hub,
+	hub AuctionHub,
 ) BidService {
 	return &bidService{db: db, auctionRepo: auctionRepo, bidRepo: bidRepo, walletRepo: walletRepo, hub: hub}
 }
@@ -111,9 +110,9 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 				userPhone = "####" + userPhone[len(userPhone)-4:]
 			}
 
- 			payload := ws.WSEvent{
+ 			payload := models.WSEvent{
 				Type: "bid_placed",
-				Payload: ws.BidPlacedPayload{
+				Payload: models.BidPlacedPayload{
 					AuctionID:    auctionID.String(),
 					NewPrice:     amount.InexactFloat64(),
 					BidderMasked: userPhone,
@@ -140,9 +139,9 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 		secsLeft = int64(time.Until(auction.EndTime).Seconds())
 	}
 
-	s.hub.Broadcast(auctionID, ws.WSEvent{
+	s.hub.Broadcast(auctionID, models.WSEvent{
 		Type: "bid_placed",
-		Payload: ws.BidPlacedPayload{
+		Payload: models.BidPlacedPayload{
 			AuctionID:    auctionID.String(),
 			NewPrice:     amount.InexactFloat64(),
 			BidderMasked: "####" + userID.String()[len(userID.String())-4:],

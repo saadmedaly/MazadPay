@@ -63,7 +63,6 @@ type AuctionService interface {
 	GetLocationsByCountry(ctx context.Context, countryID int) ([]models.Location, error)
 }
 
-
 type auctionService struct {
 	auctionRepo repository.AuctionRepository
 	reportRepo  repository.ReportRepository
@@ -214,17 +213,26 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 		_ = s.auctionRepo.AddImage(ctx, img)
 	}
 
-	// Notifier les admins
+	// Notifier les admins via FCM avec support multi-langues
 	if s.notifSvc != nil {
 		go func() {
-			_ = s.notifSvc.NotifyAdmins(context.Background(),
-				"Nouvelle enchère en attente",
-				fmt.Sprintf("L'article '%s' a été soumis pour validation.", auction.TitleAr),
-				map[string]string{
-					"type": "new_auction",
-					"id":   auction.ID.String(),
-				},
-			)
+			// Récupérer le nom du vendeur
+			seller, err := s.userRepo.FindByID(context.Background(), sellerID)
+			userName := "Un utilisateur"
+			if err == nil && seller != nil && seller.FullName != nil {
+				userName = *seller.FullName
+			}
+
+			params := map[string]string{
+				"userName":     userName,
+				"auctionTitle": auction.TitleAr,
+			}
+			data := map[string]string{
+				"type":      "auction_pending",
+				"auctionId": auction.ID.String(),
+				"sellerId":  sellerID.String(),
+			}
+			_ = s.notifSvc.NotifyAdminsLocalized(context.Background(), "auction_pending", params, data)
 		}()
 	}
 
@@ -385,9 +393,9 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 		return apperr.ErrUnauthorized
 	}
 
-	// Ne permettre la modification que si l'enchère est en statut pending
-	if auction.Status != "pending" {
-		return fmt.Errorf("can only update pending auctions")
+	// Ne permettre la modification que si l'enchère est en statut pending ou active
+	if auction.Status != "pending" && auction.Status != "active" {
+		return fmt.Errorf("can only update pending or active auctions")
 	}
 
 	// Vérifier que la catégorie existe
@@ -666,7 +674,67 @@ func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 	}
 	for _, a := range auctions {
 		_ = s.auctionRepo.UpdateStatus(ctx, a.ID, "ended")
-		// TODO Étape 8 : notifier le gagnant via FCM + WebSocket
+
+		// Notifier le vendeur que l'enchère est terminée
+		seller, err := s.userRepo.FindByID(ctx, a.SellerID)
+		if err == nil && seller != nil {
+			language := "ar"
+			if seller.LanguagePref != "" {
+				language = seller.LanguagePref
+			}
+
+			params := map[string]string{
+				"auctionTitle": a.TitleAr,
+				"finalPrice":   a.CurrentPrice.String(),
+			}
+			data := map[string]string{
+				"type":       "auction_ended",
+				"auctionId":  a.ID.String(),
+				"finalPrice": a.CurrentPrice.String(),
+			}
+
+			// Notifier le vendeur
+			_ = s.notifSvc.SendLocalizedPush(ctx, a.SellerID, "auction_ended", language, params, data)
+
+			// Notifier le gagnant s'il y a des enchères
+			if a.CurrentPrice.GreaterThan(a.StartPrice) && a.BidderCount > 0 {
+				winnerID, err := s.auctionRepo.GetHighestBidder(ctx, a.ID)
+				if err == nil && winnerID != uuid.Nil {
+					winner, err := s.userRepo.FindByID(ctx, winnerID)
+					if err == nil && winner != nil {
+						winnerLang := "ar"
+						if winner.LanguagePref != "" {
+							winnerLang = winner.LanguagePref
+						}
+
+						winnerParams := map[string]string{
+							"auctionTitle": a.TitleAr,
+							"finalPrice":   a.CurrentPrice.String(),
+						}
+						winnerData := map[string]string{
+							"type":       "auction_won",
+							"auctionId":  a.ID.String(),
+							"finalPrice": a.CurrentPrice.String(),
+						}
+
+						// Envoyer notification au gagnant
+						_ = s.notifSvc.SendLocalizedPush(ctx, winnerID, "auction_won", winnerLang, winnerParams, winnerData)
+
+						// Diffuser via WebSocket aux admins
+						sellerName := "Vendeur"
+						if seller.FullName != nil {
+							sellerName = *seller.FullName
+						}
+						s.notifSvc.NotifyNewAuctionRequest(
+							a.ID.String(),
+							a.SellerID.String(),
+							sellerName,
+							a.TitleAr,
+						)
+					}
+				}
+			}
+		}
 	}
 	return nil
 }

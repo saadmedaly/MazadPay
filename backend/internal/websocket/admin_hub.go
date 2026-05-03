@@ -5,33 +5,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/mazadpay/backend/internal/models"
 	"go.uber.org/zap"
 )
-
-// AdminEvent — événements envoyés aux admins en temps réel
-type AdminEvent struct {
-	Type    string      `json:"type"` // new_request | request_updated | request_reviewed | new_bid | auction_ended
-	Payload interface{} `json:"payload"`
-}
-
-// NewRequestPayload — nouvelle demande reçue
-type NewRequestPayload struct {
-	RequestID   string `json:"request_id"`
-	RequestType string `json:"request_type"` // auction | banner
-	UserID      string `json:"user_id"`
-	UserName    string `json:"user_name"`
-	Title       string `json:"title"`
-	CreatedAt   string `json:"created_at"`
-}
-
-// RequestUpdatedPayload — demande mise à jour
-type RequestUpdatedPayload struct {
-	RequestID   string `json:"request_id"`
-	RequestType string `json:"request_type"`
-	Status      string `json:"status"`
-	UpdatedBy   string `json:"updated_by"`
-	UpdatedAt   string `json:"updated_at"`
-}
 
 // AdminHub gère les connexions WebSocket des admins
 type AdminHub struct {
@@ -69,7 +45,7 @@ func (h *AdminHub) Unregister(client *Client) {
 }
 
 // Broadcast envoie un événement à tous les admins connectés
-func (h *AdminHub) Broadcast(event AdminEvent) {
+func (h *AdminHub) Broadcast(event models.AdminEvent) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -91,16 +67,16 @@ func (h *AdminHub) Broadcast(event AdminEvent) {
 }
 
 // BroadcastNewRequest notifie tous les admins d'une nouvelle demande
-func (h *AdminHub) BroadcastNewRequest(requestType string, payload NewRequestPayload) {
-	h.Broadcast(AdminEvent{
+func (h *AdminHub) BroadcastNewRequest(requestType string, payload models.NewRequestPayload) {
+	h.Broadcast(models.AdminEvent{
 		Type:    "new_request",
 		Payload: payload,
 	})
 }
 
 // BroadcastRequestUpdated notifie tous les admins d'une mise à jour de demande
-func (h *AdminHub) BroadcastRequestUpdated(payload RequestUpdatedPayload) {
-	h.Broadcast(AdminEvent{
+func (h *AdminHub) BroadcastRequestUpdated(payload models.RequestUpdatedPayload) {
+	h.Broadcast(models.AdminEvent{
 		Type:    "request_updated",
 		Payload: payload,
 	})

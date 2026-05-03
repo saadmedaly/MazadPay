@@ -8,6 +8,7 @@ export async function getCountries(): Promise<Country[]> {
 
 export async function createCountry(payload: {
   code: string
+  country_code: string | null
   name_ar: string
   name_fr: string
   name_en: string
@@ -18,6 +19,7 @@ export async function createCountry(payload: {
 }
 
 export async function updateCountry(id: number, payload: Partial<{
+  country_code: string | null
   code: string
   name_ar: string
   name_fr: string

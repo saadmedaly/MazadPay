@@ -80,15 +80,36 @@ export const useAuctionRequests = (
   return useQuery({
     queryKey: ['auction-requests', filters, page, perPage],
     queryFn: async () => {
-      const response = await client.get<{ data: AuctionRequest[]; total: number; page: number; per_page: number }>('/v1/api/admin/requests/auctions', {
+      // Récupérer les enchères avec statut pending (en attente d'approbation)
+      const response = await client.get<{ data: any[]; total: number; page: number; per_page: number }>('/v1/api/auctions', {
         params: {
+          status: 'pending',
           ...filters,
           page,
           per_page: perPage
         }
       })
+
+      // Transformer les enchères en format AuctionRequest
+      const auctions = response.data.data || []
+      const requests: AuctionRequest[] = auctions.map(auction => ({
+        id: auction.id,
+        user_id: auction.user_id || auction.userId,
+        title: auction.title_ar || auction.titleAr || auction.title,
+        description: auction.description_ar || auction.descriptionAr || auction.description,
+        category: auction.category,
+        status: auction.status === 'active' ? 'approved' : auction.status === 'pending' ? 'pending' : 'rejected',
+        created_at: auction.created_at || auction.createdAt,
+        updated_at: auction.updated_at || auction.updatedAt,
+        // Champs additionnels
+        start_price: auction.start_price || auction.startPrice,
+        location: auction.location,
+        images: auction.images || [],
+        end_time: auction.end_time || auction.endTime
+      }))
+
       return {
-        data: response.data.data || [],
+        data: requests,
         total: response.data.total,
         page: response.data.page,
         perPage: response.data.per_page
@@ -99,8 +120,11 @@ export const useAuctionRequests = (
 
 export const useReviewAuctionRequest = () => {
   return useMutation({
-    mutationFn: ({ id, status, notes }: { id: string; status: 'approved' | 'rejected'; notes?: string }) =>
-      client.put(`/v1/api/admin/requests/auctions/${id}/review`, { status, notes }),
+    mutationFn: ({ id, status, notes }: { id: string; status: 'approved' | 'rejected'; notes?: string }) => {
+      // Convertir 'approved'/'rejected' en statut backend
+      const auctionStatus = status === 'approved' ? 'active' : 'rejected'
+      return client.put(`/v1/api/auctions/${id}/status`, { status: auctionStatus, notes })
+    },
     onSuccess: () => {
       toast.success('تمت مراجعة طلب المزاد بنجاح')
     },
@@ -113,7 +137,7 @@ export const useReviewAuctionRequest = () => {
 export const useDeleteAuctionRequest = () => {
   return useMutation({
     mutationFn: (id: string) =>
-      client.delete(`/v1/api/admin/requests/auctions/${id}`),
+      client.delete(`/v1/api/auctions/${id}`),
     onSuccess: () => {
       toast.success('تم حذف طلب المزاد بنجاح')
     },

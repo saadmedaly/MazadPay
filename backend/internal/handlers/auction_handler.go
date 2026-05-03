@@ -17,13 +17,15 @@ import (
 
 type AuctionHandler struct {
 	service  services.AuctionService
+	chatSvc  services.ChatService
 	logger   *zap.Logger
 	validate *validator.Validate
 }
 
-func NewAuctionHandler(svc services.AuctionService, logger *zap.Logger) *AuctionHandler {
+func NewAuctionHandler(svc services.AuctionService, chatSvc services.ChatService, logger *zap.Logger) *AuctionHandler {
 	return &AuctionHandler{
 		service:  svc,
+		chatSvc:  chatSvc,
 		logger:   logger,
 		validate: validator.New(),
 	}
@@ -809,16 +811,31 @@ func (h *AuctionHandler) ContactSeller(c *fiber.Ctx) error {
 		return BadRequest(c, "Cannot contact yourself")
 	}
 
-	// TODO: Implement notification to seller
-	// For now, just return success
-	h.logger.Info("[Contact Seller]",
+	// 1. Get or create direct conversation
+	conv, err := h.chatSvc.GetOrCreateDirectConversation(c.Context(), userID, auction.SellerID)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	// 2. Send the message
+	msgReq := &models.SendMessageRequest{
+		Type:    "text",
+		Content: &req.Message,
+	}
+	_, err = h.chatSvc.SendMessage(c.Context(), conv.ID, userID, msgReq)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	h.logger.Info("[Contact Seller] Success",
 		zap.String("auction_id", id.String()),
+		zap.String("conversation_id", conv.ID.String()),
 		zap.String("from_user", userID.String()),
 		zap.String("to_seller", auction.SellerID.String()),
-		zap.String("message", req.Message),
 	)
 
 	return OK(c, fiber.Map{
-		"message": "Message sent to seller",
+		"message":         "Message sent to seller",
+		"conversation_id": conv.ID,
 	})
 }

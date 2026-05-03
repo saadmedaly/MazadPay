@@ -185,112 +185,25 @@ export function DeliveryDriversPage() {
   ]
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 flex flex-col items-center justify-center min-h-[60vh] text-center" dir="rtl">
+      <div className="w-24 h-24 rounded-full bg-mazad-primary/10 flex items-center justify-center mb-6">
+        <Truck className="w-12 h-12 text-mazad-primary opacity-50" />
+      </div>
       <PageHeader
-        title="سائقي التوصيل"
-        subtitle="إدارة سائقي التوصيل"
+        title="خدمة التوصيل"
+        subtitle="إدارة سائقي التوصيل وعمليات النقل"
         icon={Truck}
       />
-
-      <div className="flex gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-muted" />
-          <Input
-            placeholder="بحث..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
+      <div className="mt-8 p-10 bg-surface-card border border-surface-border rounded-3xl shadow-xl max-w-lg">
+        <h2 className="text-2xl font-bold text-white mb-4">الخدمة غير متوفرة حالياً</h2>
+        <p className="text-surface-muted leading-relaxed mb-8">
+          نحن نعمل على إطلاق خدمة التوصيل MazadDelivery في الإصدارات القادمة. 
+          ترقبوا التحديثات الجديدة قريباً!
+        </p>
+        <div className="py-2 px-6 bg-mazad-primary/20 text-mazad-primary rounded-full inline-block font-bold">
+          قريباً في V2.5
         </div>
-        <Button onClick={openAdd}>
-          <Plus className="w-4 h-4 mr-2" />
-          إضافة
-        </Button>
-        </div>
-
-      <DataTable
-        columns={columns}
-        data={filtered}
-        isLoading={isLoading}
-      />
-
-      <Modal isOpen={isModalOpen} onOpenChange={setIsModalOpen} title={editingDriver ? 'تعديل السائق' : 'سائق جديد'}>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="user_id">معرف المستخدم *</Label>
-            <Input
-              id="user_id"
-              value={form.user_id}
-              onChange={(e) => setForm({ ...form, user_id: e.target.value })}
-              placeholder="معرف المستخدم"
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="vehicle_type">نوع المركبة *</Label>
-            <Input
-              id="vehicle_type"
-              value={form.vehicle_type}
-              onChange={(e) => setForm({ ...form, vehicle_type: e.target.value })}
-              placeholder="مثال: Van, Motorcycle, Car"
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="vehicle_plate">رقم اللوحة *</Label>
-            <Input
-              id="vehicle_plate"
-              value={form.vehicle_plate}
-              onChange={(e) => setForm({ ...form, vehicle_plate: e.target.value })}
-              placeholder="مثال: MRU-1234"
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="vehicle_color">اللون</Label>
-            <Input
-              id="vehicle_color"
-              value={form.vehicle_color}
-              onChange={(e) => setForm({ ...form, vehicle_color: e.target.value })}
-              placeholder="مثال: White, Black, Red"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="license_number">رقم الرخصة *</Label>
-            <Input
-              id="license_number"
-              value={form.license_number}
-              onChange={(e) => setForm({ ...form, license_number: e.target.value })}
-              placeholder="مثال: LIC-001"
-              required
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is_available"
-              checked={form.is_available}
-              onChange={(e) => setForm({ ...form, is_available: e.target.checked })}
-              className="w-4 h-4"
-            />
-            <Label htmlFor="is_available">متاح</Label>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={registerMutation.isPending || updateMutation.isPending}>
-              إلغاء
-            </Button>
-            <Button type="submit" disabled={registerMutation.isPending || updateMutation.isPending}>
-              {(registerMutation.isPending || updateMutation.isPending) ? 'جاري التحميل...' : (editingDriver ? 'تعديل' : 'إنشاء')}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      </div>
     </div>
   )
 }

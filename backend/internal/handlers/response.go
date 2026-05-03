@@ -9,25 +9,25 @@ import (
 )
 
 type ResponseUser struct {
-	ID                   string     `json:"id"`
-	Phone                string     `json:"phone"`
-	FullName             *string    `json:"full_name"`
-	Email                *string    `json:"email"`
-	ProfilePicURL        *string    `json:"profile_pic_url"`
-	City                 *string    `json:"city"`
-	CountryCode          *string    `json:"country_code"`
-	Address              *string    `json:"address"`
-	PostalCode           *string    `json:"postal_code"`
-	DateOfBirth          *string    `json:"date_of_birth"`
-	Gender               *string    `json:"gender"`
-	LanguagePref         string     `json:"language_pref"`
-	NotificationsEnabled bool       `json:"notifications_enabled"`
-	IsActive             bool       `json:"is_active"`
-	Role                 string     `json:"role"`
-	IsVerified           bool       `json:"is_verified"`
-	ProfileCompleted     bool       `json:"profile_completed"`
-	CreatedAt            string     `json:"created_at"`
-	LastLoginAt          *string    `json:"last_login_at"`
+	ID                   string  `json:"id"`
+	Phone                string  `json:"phone"`
+	FullName             *string `json:"full_name"`
+	Email                *string `json:"email"`
+	ProfilePicURL        *string `json:"profile_pic_url"`
+	City                 *string `json:"city"`
+	CountryCode          *string `json:"country_code"`
+	Address              *string `json:"address"`
+	PostalCode           *string `json:"postal_code"`
+	DateOfBirth          *string `json:"date_of_birth"`
+	Gender               *string `json:"gender"`
+	LanguagePref         string  `json:"language_pref"`
+	NotificationsEnabled bool    `json:"notifications_enabled"`
+	IsActive             bool    `json:"is_active"`
+	Role                 string  `json:"role"`
+	IsVerified           bool    `json:"is_verified"`
+	ProfileCompleted     bool    `json:"profile_completed"`
+	CreatedAt            string  `json:"created_at"`
+	LastLoginAt          *string `json:"last_login_at"`
 }
 
 // MaskUserPhone retourne un User avec le téléphone masqué
@@ -35,7 +35,7 @@ func MaskUserPhone(user *models.User) *ResponseUser {
 	if user == nil {
 		return nil
 	}
-	
+
 	// Format dates
 	var dobStr, lastLoginStr, createdAtStr *string
 	if user.DateOfBirth != nil {
@@ -50,7 +50,7 @@ func MaskUserPhone(user *models.User) *ResponseUser {
 		s := user.CreatedAt.Format("2006-01-02T15:04:05Z")
 		createdAtStr = &s
 	}
-	
+
 	return &ResponseUser{
 		ID:                   user.ID.String(),
 		Phone:                user.MaskPhone(),
@@ -245,4 +245,20 @@ func contains(s, substr string) bool {
 		}
 		return false
 	})()))
+}
+
+// ErrorResponse retourne une réponse d'erreur JSON
+func ErrorResponse(message string) fiber.Map {
+	return fiber.Map{
+		"success": false,
+		"error":   message,
+	}
+}
+
+// SuccessResponse retourne une réponse de succès JSON avec données
+func SuccessResponse(data interface{}) fiber.Map {
+	return fiber.Map{
+		"success": true,
+		"data":    data,
+	}
 }

@@ -9,7 +9,7 @@ var (
 	ErrForbidden    = errors.New("forbidden")
 	ErrConflict     = errors.New("conflict")
 	ErrBadRequest   = errors.New("bad_request")
-
+	
 	// Auth
 	ErrOTPExpired               = errors.New("otp_expired")
 	ErrOTPInvalid               = errors.New("otp_invalid")
@@ -33,4 +33,16 @@ var (
 	ErrInsufficientBalance = errors.New("insufficient_balance")
 	ErrWalletLocked        = errors.New("wallet_locked")
 	ErrReceiptRequired     = errors.New("receipt_required")
+
+	// Chat / Messagerie
+	ErrConversationNotFound     = errors.New("conversation_not_found")
+	ErrNotConversationMember    = errors.New("not_conversation_member")
+	ErrAlreadyInConversation    = errors.New("already_in_conversation")
+	ErrCannotEditMessage      = errors.New("cannot_edit_message")
+	ErrCannotDeleteMessage    = errors.New("cannot_delete_message")
+	ErrInvalidMessageType     = errors.New("invalid_message_type")
+	ErrMessageTooLarge        = errors.New("message_too_large")
+	ErrFileTooLarge           = errors.New("file_too_large") // > 10MB
+	ErrDirectConversationExists = errors.New("direct_conversation_already_exists")
+	ErrorResponse = errors.New("error_response")
 )

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import * as api from '@/api/dashboard'
+import { useConversations } from './useMessages'
 
 export function useDashboardStats() {
   return useQuery({
@@ -27,13 +28,19 @@ export function useActivityFeed() {
 
 // Hook used by Layout for sidebar badges
 export function useAdminBadges() {
-  const { data } = useDashboardStats()
+  const { data: stats } = useDashboardStats()
+  const { data: convsData } = useConversations()
+  const convs = convsData ?? []
+
+  const unreadMessages = convs.reduce((acc, c) => acc + (c.unread_count || 0), 0)
+
   return {
     badges: {
-      pendingAuctions: data?.pending_auctions ?? 0,
-      pendingTxns:     data?.pending_transactions ?? 0,
-      pendingReports:  data?.pending_reports ?? 0,
-      pendingKYCs:     data?.pending_kycs ?? 0,
-    }
+      pendingAuctions: stats?.pending_auctions ?? 0,
+      pendingTxns:     stats?.pending_transactions ?? 0,
+      pendingReports:  stats?.pending_reports ?? 0,
+      pendingKYCs:     stats?.pending_kycs ?? 0,
+      unreadMessages:  unreadMessages,
+    } as Record<string, number>
   }
 }

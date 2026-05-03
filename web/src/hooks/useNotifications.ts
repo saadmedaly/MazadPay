@@ -24,13 +24,19 @@ export const useNotifications = () => {
         setPermission('granted');
 
         try {
+          // Augmenter le timeout pour ce endpoint spécifique (30s)
           await api.post('/v1/api/notifications/push-tokens', {
             fcm_token: token,
             device_id: navigator.userAgent,
             platform: 'web'
-          });
-        } catch (err) {
-          console.error('Failed to sync FCM token:', err);
+          }, { timeout: 30000 });
+        } catch (err: any) {
+          // Ignorer silencieusement les timeouts - le token sera resynchronisé plus tard
+          if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+            console.warn('Push token sync timeout - will retry later');
+          } else {
+            console.error('Failed to sync FCM token:', err);
+          }
         }
       }
     };

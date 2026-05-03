@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -35,6 +36,11 @@ type AuctionRepository interface {
 	IncrementBidderCount(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error
 	FindExpiredActive(ctx context.Context) ([]models.Auction, error)
 	GetUserHighestBid(ctx context.Context, auctionID, userID uuid.UUID) (*models.Bid, error)
+
+	// Scheduler methods
+	FindEndingBetween(ctx context.Context, start, end time.Time) ([]models.Auction, error)
+	FindEndedSince(ctx context.Context, since time.Time) ([]models.Auction, error)
+	GetHighestBidder(ctx context.Context, auctionID uuid.UUID) (uuid.UUID, error)
 
 	// Admin
 	ListPaginated(ctx context.Context, page, perPage int, f AuctionFilters) ([]models.Auction, int, error)
@@ -318,7 +324,7 @@ func (r *auctionRepo) DeleteLocation(ctx context.Context, id int) error {
 func (r *auctionRepo) GetCountries(ctx context.Context) ([]models.Country, error) {
 	var countries []models.Country
 	err := r.db.SelectContext(ctx, &countries, `
-        SELECT id, code, name_ar, name_fr, name_en, flag_emoji, is_active 
+        SELECT id, code, country_code, name_ar, name_fr, name_en, flag_emoji, is_active, created_at 
         FROM countries 
         WHERE is_active = TRUE 
         ORDER BY created_at ASC
@@ -329,7 +335,7 @@ func (r *auctionRepo) GetCountries(ctx context.Context) ([]models.Country, error
 func (r *auctionRepo) GetCountryByCode(ctx context.Context, code string) (*models.Country, error) {
 	var country models.Country
 	err := r.db.GetContext(ctx, &country, `
-        SELECT id, code, name_ar, name_fr, name_en, flag_emoji, is_active 
+        SELECT id, code, country_code, name_ar, name_fr, name_en, flag_emoji, is_active, created_at 
         FROM countries 
         WHERE code = $1 AND is_active = TRUE
     `, code)
@@ -341,20 +347,20 @@ func (r *auctionRepo) GetCountryByCode(ctx context.Context, code string) (*model
 
 func (r *auctionRepo) CreateCountry(ctx context.Context, c *models.Country) error {
 	query := `
-        INSERT INTO countries (code, name_ar, name_fr, name_en, flag_emoji, is_active) 
-        VALUES ($1, $2, $3, $4, $5, $6) 
+        INSERT INTO countries (code, country_code, name_ar, name_fr, name_en, flag_emoji, is_active) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7) 
         RETURNING id
     `
-	return r.db.QueryRowContext(ctx, query, c.Code, c.NameAr, c.NameFr, c.NameEn, c.FlagEmoji, c.IsActive).Scan(&c.ID)
+	return r.db.QueryRowContext(ctx, query, c.Code, c.CountryCode, c.NameAr, c.NameFr, c.NameEn, c.FlagEmoji, c.IsActive).Scan(&c.ID)
 }
 
 func (r *auctionRepo) UpdateCountry(ctx context.Context, c *models.Country) error {
 	query := `
         UPDATE countries 
-        SET code = $1, name_ar = $2, name_fr = $3, name_en = $4, flag_emoji = $5, is_active = $6, updated_at = CURRENT_TIMESTAMP 
-        WHERE id = $7
+        SET code = $1, country_code = $2, name_ar = $3, name_fr = $4, name_en = $5, flag_emoji = $6, is_active = $7, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = $8
     `
-	_, err := r.db.ExecContext(ctx, query, c.Code, c.NameAr, c.NameFr, c.NameEn, c.FlagEmoji, c.IsActive, c.ID)
+	_, err := r.db.ExecContext(ctx, query, c.Code, c.CountryCode, c.NameAr, c.NameFr, c.NameEn, c.FlagEmoji, c.IsActive, c.ID)
 	return err
 }
 
@@ -365,7 +371,7 @@ func (r *auctionRepo) DeleteCountry(ctx context.Context, id int) error {
 }
 
 func (r *auctionRepo) GetCountriesWithLocations(ctx context.Context) (map[int]models.Country, error) {
- 
+
 	rows, err := r.db.QueryxContext(ctx, `
         SELECT 
             c.id, c.code, c.name_ar, c.name_fr, c.name_en, c.flag_emoji, c.is_active,
@@ -501,4 +507,45 @@ func (r *auctionRepo) Update(ctx context.Context, a *models.Auction) error {
 func (r *auctionRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM auctions WHERE id = $1`, id)
 	return err
+}
+
+// FindEndingBetween finds auctions ending between the given times
+func (r *auctionRepo) FindEndingBetween(ctx context.Context, start, end time.Time) ([]models.Auction, error) {
+	var auctions []models.Auction
+	err := r.db.SelectContext(ctx, &auctions, `
+		SELECT * FROM auctions 
+		WHERE status = 'active' 
+		AND end_time > $1 
+		AND end_time <= $2
+		ORDER BY end_time ASC
+	`, start, end)
+	return auctions, err
+}
+
+// FindEndedSince finds auctions that have ended since the given time
+func (r *auctionRepo) FindEndedSince(ctx context.Context, since time.Time) ([]models.Auction, error) {
+	var auctions []models.Auction
+	err := r.db.SelectContext(ctx, &auctions, `
+		SELECT * FROM auctions 
+		WHERE status = 'active' 
+		AND end_time > $1 
+		AND end_time <= $2
+		ORDER BY end_time DESC
+	`, since, time.Now())
+	return auctions, err
+}
+
+// GetHighestBidder returns the user ID of the highest bidder for an auction
+func (r *auctionRepo) GetHighestBidder(ctx context.Context, auctionID uuid.UUID) (uuid.UUID, error) {
+	var userID uuid.UUID
+	err := r.db.GetContext(ctx, &userID, `
+		SELECT user_id FROM bids 
+		WHERE auction_id = $1 
+		ORDER BY amount DESC 
+		LIMIT 1
+	`, auctionID)
+	if err == sql.ErrNoRows {
+		return uuid.Nil, nil
+	}
+	return userID, err
 }

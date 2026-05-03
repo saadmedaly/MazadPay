@@ -1,28 +1,48 @@
 package middleware
 
 import (
-	"errors"
+ 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/services"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
-func JWT(jwtSecret string, logger *zap.Logger) fiber.Handler {
+func JWT(jwtSecret string, logger *zap.Logger, rdb *redis.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			logger.Warn("Auth failed: Missing or malformed token", zap.String("path", c.Path()))
+		tokenStr := ""
+
+		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+			tokenStr = strings.TrimPrefix(authHeader, "Bearer ")
+		} else {
+ 			tokenStr = c.Query("token")
+		}
+
+		if tokenStr == "" {
+			logger.Warn("Auth failed: Missing token", zap.String("path", c.Path()))
 			return c.Status(401).JSON(fiber.Map{
 				"success": false,
 				"error":   fiber.Map{"code": "unauthorized", "message": "Missing token"},
 			})
 		}
 
-		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		// Vérifier si le token est dans la blacklist Redis
+		if rdb != nil {
+			blacklisted, err := rdb.Exists(c.Context(), fmt.Sprintf("blacklist:%s", tokenStr)).Result()
+			if err == nil && blacklisted > 0 {
+				logger.Warn("Auth failed: Token blacklisted", zap.String("path", c.Path()))
+				return c.Status(401).JSON(fiber.Map{
+					"success": false,
+					"error":   fiber.Map{"code": "unauthorized", "message": "Token has been invalidated (logged out)"},
+				})
+			}
+		}
 
 		token, err := jwt.ParseWithClaims(tokenStr, &services.JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {

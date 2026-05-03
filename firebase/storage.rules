@@ -1,0 +1,35 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+     function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Fonction pour vérifier la taille du fichier (max 10MB)
+    function isValidFileSize() {
+      return request.resource.size <= 10 * 1024 * 1024;
+    }
+
+    // Fonction pour vérifier le type de fichier
+    function isValidContentType() {
+      return request.resource.contentType.matches('image/.*|video/.*|audio/.*|application/.*');
+    }
+
+    // Règles pour les fichiers de chat
+    match /chat-files/{type}/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      
+      allow write: if isAuthenticated()
+                    && request.auth.uid == userId
+                    && isValidFileSize()
+                    && isValidContentType();
+      
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Règles par défaut - accès restreint
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -28,7 +28,7 @@ export interface AdminUser {
   gender: string | null
   language_pref: string
   is_active: boolean
-  role: 'user' | 'admin' | 'driver'
+  role: 'user' | 'admin' | 'super_admin' | 'driver'
   is_verified: boolean
   is_super_admin?: boolean
   last_login_at: string | null
@@ -262,13 +262,13 @@ export interface BlockedPhone {
 export interface Country {
   id: number
   code: string
+  country_code?: string | null
   name_ar: string
   name_fr: string
   name_en: string
   flag_emoji: string
   is_active: boolean
   created_at: string
-  updated_at: string
 }
 
 export interface ReportReason {

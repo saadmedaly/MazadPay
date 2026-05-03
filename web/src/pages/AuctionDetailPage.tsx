@@ -28,6 +28,7 @@ import { useAuction, useValidateAuction } from '@/hooks/useAuctions'
 import { useBidHistory } from '@/hooks/useBids'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/authStore'
 
 function DetailItem({ label, value, icon: Icon, color = "text-white" }: { label: string, value: string | number, icon?: any, color?: string }) {
   return (
@@ -61,12 +62,15 @@ export function AuctionDetailPage() {
   const thumbScrollRef = useRef<HTMLDivElement>(null)
   const [activeLang, setActiveLang] = useState<'ar' | 'fr' | 'en'>('ar')
 
+  const { token } = useAuthStore()
+
   // WebSocket connection for real-time bidding
   useEffect(() => {
     if (!auction) return
 
-    const wsUrl = `ws://localhost:8082/ws/auction/${id}?user_id=anonymous`
+    const wsUrl = `ws://localhost:8082/ws/auction/${id}?token=${token || ''}`
     const ws = new WebSocket(wsUrl)
+
 
     ws.onopen = () => {
       console.log('WebSocket connected')
@@ -524,14 +528,14 @@ export function AuctionDetailPage() {
                        
                        <button
                          onClick={() => {
-                           // Send bid via WebSocket
-                           const ws = new WebSocket(`ws://localhost:8082/ws/auction/${id}?user_id=current_user`)
-                           ws.onopen = () => {
-                             ws.send(JSON.stringify({
-                               type: 'place_bid',
-                               amount: parseFloat(bidAmount)
-                             }))
-                           }
+                            // Send bid via WebSocket
+                            const ws = new WebSocket(`ws://localhost:8082/ws/auction/${id}?token=${token || ''}`)
+                            ws.onopen = () => {
+                              ws.send(JSON.stringify({
+                                type: 'place_bid',
+                                amount: parseFloat(bidAmount)
+                              }))
+                            }
                          }}
                          disabled={!bidAmount || parseFloat(bidAmount) <= currentPrice}
                          className="w-full py-4 bg-mazad-primary hover:bg-mazad-primary/90 text-white font-bold rounded-xl shadow-lg shadow-mazad-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"

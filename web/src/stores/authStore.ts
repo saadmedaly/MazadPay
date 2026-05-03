@@ -19,7 +19,7 @@ export const useAuthStore = create<AuthStore>()(
       logout: () => set({ token: null, user: null }),
       isAuthenticated: () => {
         const { token, user } = get()
-        return !!token && user?.role === 'admin'
+        return !!token && (user?.role === 'admin' || user?.role === 'super_admin')
       },
     }),
     {

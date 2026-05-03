@@ -706,14 +706,14 @@ func (h *AdminHandler) UnblockPhone(c *fiber.Ctx) error {
 		h.logger.Error("Failed to decode phone parameter", zap.String("phone", phone), zap.Error(err))
 		return BadRequest(c, "Invalid phone parameter")
 	}
-	
+
 	h.logger.Info("Attempting to unblock phone", zap.String("phone", phone), zap.String("decodedPhone", decodedPhone))
-	
+
 	if err := h.svc.UnblockPhone(c.Context(), decodedPhone); err != nil {
 		h.logger.Error("Failed to unblock phone", zap.String("phone", phone), zap.String("decodedPhone", decodedPhone), zap.Error(err))
 		return InternalError(c, "Failed to unblock phone")
 	}
-	
+
 	h.logger.Info("Successfully unblocked phone", zap.String("phone", phone), zap.String("decodedPhone", decodedPhone))
 	return OK(c, fiber.Map{"message": "Phone unblocked successfully"})
 }
@@ -759,11 +759,12 @@ func (h *AdminHandler) ListCountries(c *fiber.Ctx) error {
 
 func (h *AdminHandler) CreateCountry(c *fiber.Ctx) error {
 	type Request struct {
-		Code      string `json:"code"      validate:"required,len=2"`
-		NameAr    string `json:"name_ar"   validate:"required"`
-		NameFr    string `json:"name_fr"   validate:"required"`
-		NameEn    string `json:"name_en"   validate:"required"`
-		FlagEmoji string `json:"flag_emoji" validate:"required"`
+		Code        string `json:"code"        validate:"required,len=2"`
+		CountryCode string `json:"country_code"` // e.g., +222, +221
+		NameAr      string `json:"name_ar"     validate:"required"`
+		NameFr      string `json:"name_fr"     validate:"required"`
+		NameEn      string `json:"name_en"     validate:"required"`
+		FlagEmoji   string `json:"flag_emoji"  validate:"required"`
 	}
 
 	var req Request
@@ -771,7 +772,7 @@ func (h *AdminHandler) CreateCountry(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	if err := h.svc.CreateCountry(c.Context(), req.Code, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji); err != nil {
+	if err := h.svc.CreateCountry(c.Context(), req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji); err != nil {
 		return InternalError(c, "Failed to create country")
 	}
 
@@ -785,12 +786,13 @@ func (h *AdminHandler) UpdateCountry(c *fiber.Ctx) error {
 	}
 
 	type Request struct {
-		Code      string `json:"code"      validate:"required,len=2"`
-		NameAr    string `json:"name_ar"   validate:"required"`
-		NameFr    string `json:"name_fr"   validate:"required"`
-		NameEn    string `json:"name_en"   validate:"required"`
-		FlagEmoji string `json:"flag_emoji" validate:"required"`
-		IsActive  *bool  `json:"is_active"`
+		Code        string `json:"code"        validate:"required,len=2"`
+		CountryCode string `json:"country_code"` // e.g., +222, +221
+		NameAr      string `json:"name_ar"     validate:"required"`
+		NameFr      string `json:"name_fr"     validate:"required"`
+		NameEn      string `json:"name_en"     validate:"required"`
+		FlagEmoji   string `json:"flag_emoji"  validate:"required"`
+		IsActive    *bool  `json:"is_active"`
 	}
 
 	var req Request
@@ -798,7 +800,7 @@ func (h *AdminHandler) UpdateCountry(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	if err := h.svc.UpdateCountry(c.Context(), id, req.Code, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji, req.IsActive); err != nil {
+	if err := h.svc.UpdateCountry(c.Context(), id, req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji, req.IsActive); err != nil {
 		return InternalError(c, "Failed to update country")
 	}
 
@@ -829,13 +831,13 @@ func (h *AdminHandler) ListPaymentMethods(c *fiber.Ctx) error {
 
 func (h *AdminHandler) CreatePaymentMethod(c *fiber.Ctx) error {
 	type Request struct {
-		Code       string  `json:"code"       validate:"required"`
-		NameAr     string  `json:"name_ar"    validate:"required"`
-		NameFr     string  `json:"name_fr"    validate:"required"`
-		NameEn     *string `json:"name_en"`
-		LogoURL    *string `json:"logo_url"`
-		IsActive   *bool   `json:"is_active"`
-		CountryID  *int    `json:"country_id"`
+		Code      string  `json:"code"       validate:"required"`
+		NameAr    string  `json:"name_ar"    validate:"required"`
+		NameFr    string  `json:"name_fr"    validate:"required"`
+		NameEn    *string `json:"name_en"`
+		LogoURL   *string `json:"logo_url"`
+		IsActive  *bool   `json:"is_active"`
+		CountryID *int    `json:"country_id"`
 	}
 
 	var req Request
@@ -857,13 +859,13 @@ func (h *AdminHandler) UpdatePaymentMethod(c *fiber.Ctx) error {
 	}
 
 	type Request struct {
-		Code       string  `json:"code"       validate:"required"`
-		NameAr     string  `json:"name_ar"    validate:"required"`
-		NameFr     string  `json:"name_fr"    validate:"required"`
-		NameEn     *string `json:"name_en"`
-		LogoURL    *string `json:"logo_url"`
-		IsActive   *bool   `json:"is_active"`
-		CountryID  *int    `json:"country_id"`
+		Code      string  `json:"code"       validate:"required"`
+		NameAr    string  `json:"name_ar"    validate:"required"`
+		NameFr    string  `json:"name_fr"    validate:"required"`
+		NameEn    *string `json:"name_en"`
+		LogoURL   *string `json:"logo_url"`
+		IsActive  *bool   `json:"is_active"`
+		CountryID *int    `json:"country_id"`
 	}
 
 	var req Request
@@ -947,11 +949,11 @@ func (h *AdminHandler) ListAuctionBoosts(c *fiber.Ctx) error {
 
 func (h *AdminHandler) CreateAuctionBoost(c *fiber.Ctx) error {
 	type Request struct {
-		AuctionID uuid.UUID       `json:"auction_id" validate:"required"`
-		BoostType string          `json:"boost_type" validate:"required,oneof=featured urgent top"`
-		StartAt   string          `json:"start_at"   validate:"required"`
-		EndAt     string          `json:"end_at"     validate:"required"`
-		Amount    *float64        `json:"amount"`
+		AuctionID uuid.UUID `json:"auction_id" validate:"required"`
+		BoostType string    `json:"boost_type" validate:"required,oneof=featured urgent top"`
+		StartAt   string    `json:"start_at"   validate:"required"`
+		EndAt     string    `json:"end_at"     validate:"required"`
+		Amount    *float64  `json:"amount"`
 	}
 
 	var req Request
@@ -1006,12 +1008,12 @@ func (h *AdminHandler) ListDeliveryDrivers(c *fiber.Ctx) error {
 
 func (h *AdminHandler) CreateDeliveryDriver(c *fiber.Ctx) error {
 	type Request struct {
-		UserID              *uuid.UUID `json:"user_id"`
-		VehicleType         *string    `json:"vehicle_type"`
-		VehiclePlate        *string    `json:"vehicle_plate"`
-		VehicleColor        *string    `json:"vehicle_color"`
-		LicenseNumber       *string    `json:"license_number"`
-		IsAvailable         *bool      `json:"is_available"`
+		UserID        *uuid.UUID `json:"user_id"`
+		VehicleType   *string    `json:"vehicle_type"`
+		VehiclePlate  *string    `json:"vehicle_plate"`
+		VehicleColor  *string    `json:"vehicle_color"`
+		LicenseNumber *string    `json:"license_number"`
+		IsAvailable   *bool      `json:"is_available"`
 	}
 
 	var req Request
@@ -1033,11 +1035,11 @@ func (h *AdminHandler) UpdateDeliveryDriver(c *fiber.Ctx) error {
 	}
 
 	type Request struct {
-		VehicleType         *string  `json:"vehicle_type"`
-		VehiclePlate        *string  `json:"vehicle_plate"`
-		VehicleColor        *string  `json:"vehicle_color"`
-		LicenseNumber       *string  `json:"license_number"`
-		IsAvailable         *bool    `json:"is_available"`
+		VehicleType   *string `json:"vehicle_type"`
+		VehiclePlate  *string `json:"vehicle_plate"`
+		VehicleColor  *string `json:"vehicle_color"`
+		LicenseNumber *string `json:"license_number"`
+		IsAvailable   *bool   `json:"is_available"`
 	}
 
 	var req Request
@@ -1087,13 +1089,13 @@ func (h *AdminHandler) UpdateUserSettings(c *fiber.Ctx) error {
 	}
 
 	type Request struct {
-		Currency              *string `json:"currency"`
-		Theme                 *string `json:"theme"`
-		Language              *string `json:"language"`
-		NotificationsEmail    *bool   `json:"notifications_email"`
-		NotificationsPush     *bool   `json:"notifications_push"`
-		NotificationsSMS      *bool   `json:"notifications_sms"`
-		TwoFactorEnabled      *bool   `json:"two_factor_enabled"`
+		Currency           *string `json:"currency"`
+		Theme              *string `json:"theme"`
+		Language           *string `json:"language"`
+		NotificationsEmail *bool   `json:"notifications_email"`
+		NotificationsPush  *bool   `json:"notifications_push"`
+		NotificationsSMS   *bool   `json:"notifications_sms"`
+		TwoFactorEnabled   *bool   `json:"two_factor_enabled"`
 	}
 
 	var req Request

@@ -79,8 +79,8 @@ Write-Host ""
 Write-Host "Création de la table de suivi des migrations..." -ForegroundColor Yellow
 $createTableSQL = @"
 CREATE TABLE IF NOT EXISTS schema_migrations (
-    version VARCHAR(255) PRIMARY KEY,
-    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    version bigint PRIMARY KEY,
+    dirty boolean NOT NULL DEFAULT false
 );
 "@
 docker exec $CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -c "$createTableSQL" | Out-Null
@@ -93,28 +93,24 @@ $skippedCount = 0
 $errorCount = 0
 
 foreach ($migration in $migrations) {
-    # Vérifier que l'objet migration n'est pas null
-    if ($null -eq $migration) {
-        Write-Host "  Erreur: Migration null trouvée" -ForegroundColor Red
+    if ($null -eq $migration) { continue }
+    
+    # Extraire le numéro de version
+    if ($migration.Name -match "^(\d+)") {
+        $version = [int64]$matches[1]
+    } else {
         continue
     }
-    
-    # Vérifier que FullName existe
-    if (-not $migration.FullName) {
-        Write-Host "  Erreur: Impossible de lire le fichier pour $($migration.Name)" -ForegroundColor Red
-        continue
-    }
-    
-    $version = $migration.Name -replace '\.up\.sql$', ''
+
     Write-Host "----------------------------------------" -ForegroundColor Gray
     Write-Host "Migration: $($migration.Name)" -ForegroundColor Cyan
     
     # Vérifier si la migration a déjà été appliquée
     try {
-        $checkSQL = "SELECT version FROM schema_migrations WHERE version = '$version';"
+        $checkSQL = "SELECT version FROM schema_migrations WHERE version = $version;"
         $alreadyApplied = docker exec $CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -t -c "$checkSQL"
         
-        if ($alreadyApplied.Trim() -eq $version) {
+        if ($alreadyApplied -and $alreadyApplied.Trim() -eq "$version") {
             Write-Host "  Déjà appliquée, ignorée." -ForegroundColor Yellow
             $skippedCount++
             continue
@@ -123,23 +119,14 @@ foreach ($migration in $migrations) {
         Write-Host "  Avertissement: Impossible de vérifier si déjà appliquée, continuation..." -ForegroundColor Yellow
     }
     
-    # Lire le contenu de la migration
-    $migrationContent = Get-Content $migration.FullName -Raw -Encoding UTF8
-    
     # Exécuter la migration
     try {
-        # Copier le fichier de migration dans le conteneur
         $tempPath = "/tmp/$($migration.Name)"
         docker cp "$($migration.FullName)" "${CONTAINER_NAME}:${tempPath}" | Out-Null
-        
-        # Exécuter la migration depuis le conteneur
         docker exec $CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -f $tempPath | Out-Null
-        
-        # Nettoyer le fichier temporaire
         docker exec $CONTAINER_NAME rm -f $tempPath | Out-Null
         
-        # Marquer la migration comme appliquée
-        $insertSQL = "INSERT INTO schema_migrations (version) VALUES ('$version');"
+        $insertSQL = "INSERT INTO schema_migrations (version, dirty) VALUES ($version, false);"
         docker exec $CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -c "$insertSQL" | Out-Null
         
         Write-Host "  Appliquée avec succès!" -ForegroundColor Green

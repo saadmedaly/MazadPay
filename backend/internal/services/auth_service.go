@@ -14,13 +14,14 @@ import (
 )
 
 type AuthService interface {
-	Register(ctx context.Context, phone, pin, fullName, email, city string) error
+	Register(ctx context.Context, phone, pin, fullName, email, city, countryCode string) error
 	Login(ctx context.Context, phone, pin string) (string, *models.User, error) // token, user, err
 	SendOTP(ctx context.Context, phone, purpose, ip string) error
 	VerifyOTP(ctx context.Context, phone, code, purpose string) error
 	ResetPassword(ctx context.Context, phone, newPin string) error
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPin, newPin string) error
 	GenerateJWT(userID uuid.UUID, role string, isSuperAdmin bool) (string, error)
+	ValidateJWT(tokenString string) (*JWTClaims, error)
 	TrackPasswordReset(ctx context.Context, phone, ip string) error
 }
 
@@ -60,7 +61,23 @@ func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExp
 	}
 }
 
-func (s *authService) Register(ctx context.Context, phone, pin, fullName, email, city string) error {
+// ValidCountryCodes liste les codes pays supportés
+var ValidCountryCodes = map[string]string{
+	"+222": "MR", // Mauritanie
+	"+221": "SN", // Sénégal
+	"+212": "MA", // Maroc
+	"+216": "TN", // Tunisie
+}
+
+func (s *authService) Register(ctx context.Context, phone, pin, fullName, email, city, countryCode string) error {
+	// Vérifier si le code pays est valide
+	if countryCode == "" {
+		countryCode = "+222" // Default: Mauritanie
+	}
+	if _, valid := ValidCountryCodes[countryCode]; !valid {
+		return fmt.Errorf("code pays non supporté: %s (supportés: +222, +221, +212, +216)", countryCode)
+	}
+
 	// Vérifier si le numéro existe déjà
 	existing, _ := s.userRepo.FindByPhone(ctx, phone)
 	if existing != nil {
@@ -79,6 +96,7 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 		FullName:     &fullName,
 		Email:        &email,
 		City:         &city,
+		CountryCode:  &countryCode,
 		LanguagePref: "ar",
 		Role:         "user",
 		IsVerified:   false,
@@ -244,6 +262,25 @@ func (s *authService) GenerateJWT(userID uuid.UUID, role string, isSuperAdmin bo
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
+}
+
+func (s *authService) ValidateJWT(tokenString string) (*JWTClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(s.jwtSecret), nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, fmt.Errorf("invalid token")
 }
 
 // TrackPasswordReset enregistre une tentative de réinitialisation de mot de passe

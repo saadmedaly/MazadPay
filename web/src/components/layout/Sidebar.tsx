@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Gavel, CreditCard, Users,
   Flag, Image, LogOut, Hammer, ShieldCheck, HelpCircle, Video, Bell, User, Settings, PhoneOff,
-  Wallet, Truck
+  Wallet, Truck, MessageSquare
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
@@ -25,6 +25,7 @@ const NAV_SECTIONS = [
       { label: 'لوحة التحكم',    icon: LayoutDashboard, to: '/',             badgeKey: null },
       { label: 'الملف الشخصي',  icon: User,           to: '/profile',      badgeKey: null },
       { label: 'الإشعارات',     icon: Bell,            to: '/notifications', badgeKey: null },
+      { label: 'الرسائل',       icon: MessageSquare,   to: '/messages',      badgeKey: 'unreadMessages' },
     ]
   },
   {
@@ -35,12 +36,10 @@ const NAV_SECTIONS = [
       { label: 'المستخدمين',    icon: Users,           to: '/users',        badgeKey: null },
      
       { label: 'البلاغات',     icon: Flag,            to: '/reports',      badgeKey: 'pendingReports' },
-      { label: 'إدارة الطلبات', icon: ShieldCheck,     to: '/kyc',          badgeKey: null },
       { label: 'الفئات',      icon: LayoutDashboard, to: '/categories',   badgeKey: null },
       { label: 'المواقع(المدن/المناطق)',      icon: Flag,            to: '/locations',    badgeKey: null },
       { label: 'أرقام محظورة', icon: PhoneOff,        to: '/blocked-phones', badgeKey: null },
       { label: 'طرق الدفع',   icon: Wallet,          to: '/payment-methods', badgeKey: null },
-      { label: 'سائقين التوصيل', icon: Truck,         to: '/delivery-drivers', badgeKey: null },
       { label: 'الإعدادات',    icon: Settings,        to: '/settings',     badgeKey: null },
 
     ]

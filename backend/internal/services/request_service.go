@@ -15,7 +15,7 @@ import (
 var ErrInvalidStatus = errors.New("invalid status")
 
 type RequestService interface {
- 	CreateAuctionRequest(ctx context.Context, req *models.AuctionRequest) error
+	CreateAuctionRequest(ctx context.Context, req *models.AuctionRequest) error
 	GetAuctionRequests(ctx context.Context, status string, userID *uuid.UUID, dateFrom, dateTo *time.Time, categoryID, locationID *int, minPrice, maxPrice *float64, sortBy, sortOrder string, page, perPage int) ([]models.AuctionRequest, int, error)
 	GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (*models.AuctionRequest, error)
 	GetUserAuctionRequests(ctx context.Context, userID uuid.UUID, status string, page, perPage int) ([]models.AuctionRequest, int, error)
@@ -36,10 +36,10 @@ type RequestService interface {
 }
 
 type requestService struct {
-	repo             repository.RequestRepository
-	auctionRepo      repository.AuctionRepository
-	contentRepo      repository.ContentRepository
-	auditRepo        repository.AuditRepository
+	repo                repository.RequestRepository
+	auctionRepo         repository.AuctionRepository
+	contentRepo         repository.ContentRepository
+	auditRepo           repository.AuditRepository
 	notificationService NotificationService
 }
 
@@ -157,26 +157,36 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 			return err
 		}
 
-		// Send FCM notification to user
+		// Send localized FCM notification to user
 		if req.User != nil {
-			title := "تم قبول طلب المزاد"
-			body := fmt.Sprintf("تم قبول طلبك لإضافة المزاد %s", req.TitleAr)
-			s.notificationService.SendPush(ctx, req.UserID, title, body, "auction_approved", map[string]string{
+			language := "ar"
+			if req.User.LanguagePref != "" {
+				language = req.User.LanguagePref
+			}
+			params := map[string]string{
+				"auctionTitle": req.TitleAr,
+			}
+			data := map[string]string{
 				"request_id": req.ID.String(),
 				"auction_id": auction.ID.String(),
-			})
+			}
+			s.notificationService.SendLocalizedPush(ctx, req.UserID, "auction_approved", language, params, data)
 		}
 	} else {
-		// Send rejection notification
+		// Send localized rejection notification
 		if req.User != nil {
-			title := "تم رفض طلب المزاد"
-			body := fmt.Sprintf("تم رفض طلبك لإضافة المزاد %s", req.TitleAr)
-			if notes != "" {
-				body += fmt.Sprintf("\nالسبب: %s", notes)
+			language := "ar"
+			if req.User.LanguagePref != "" {
+				language = req.User.LanguagePref
 			}
-			s.notificationService.SendPush(ctx, req.UserID, title, body, "auction_rejected", map[string]string{
+			params := map[string]string{
+				"auctionTitle": req.TitleAr,
+				"reason":       notes,
+			}
+			data := map[string]string{
 				"request_id": req.ID.String(),
-			})
+			}
+			s.notificationService.SendLocalizedPush(ctx, req.UserID, "auction_rejected", language, params, data)
 		}
 	}
 
@@ -368,23 +378,33 @@ func (s *requestService) ReviewBannerRequest(ctx context.Context, id uuid.UUID, 
 	}
 	s.auditRepo.Create(ctx, auditLog)
 
-	// Send notification (outside transaction)
+	// Send localized notification (outside transaction)
 	if status == "approved" {
-		title := "تم قبول طلب الإعلان"
-		body := fmt.Sprintf("تم قبول طلبك لإضافة الإعلان %s", req.TitleAr)
-		s.notificationService.SendPush(ctx, req.UserID, title, body, "banner_approved", map[string]string{
+		language := "ar"
+		if req.User != nil && req.User.LanguagePref != "" {
+			language = req.User.LanguagePref
+		}
+		params := map[string]string{
+			"bannerTitle": req.TitleAr,
+		}
+		data := map[string]string{
 			"request_id": req.ID.String(),
 			"banner_id":  fmt.Sprintf("%d", bannerID),
-		})
-	} else {
-		title := "تم رفض طلب الإعلان"
-		body := fmt.Sprintf("تم رفض طلبك لإضافة الإعلان %s", req.TitleAr)
-		if notes != "" {
-			body += fmt.Sprintf("\nالسبب: %s", notes)
 		}
-		s.notificationService.SendPush(ctx, req.UserID, title, body, "banner_rejected", map[string]string{
+		s.notificationService.SendLocalizedPush(ctx, req.UserID, "banner_approved", language, params, data)
+	} else {
+		language := "ar"
+		if req.User != nil && req.User.LanguagePref != "" {
+			language = req.User.LanguagePref
+		}
+		params := map[string]string{
+			"bannerTitle": req.TitleAr,
+			"reason":      notes,
+		}
+		data := map[string]string{
 			"request_id": req.ID.String(),
-		})
+		}
+		s.notificationService.SendLocalizedPush(ctx, req.UserID, "banner_rejected", language, params, data)
 	}
 
 	return nil

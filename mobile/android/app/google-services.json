@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "389117490995",
+    "project_id": "test-mazadpay",
+    "storage_bucket": "test-mazadpay.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:389117490995:android:064dd3ca18ebf09f23f046",
+        "android_client_info": {
+          "package_name": "com.mezadpay.app.mezad_pay"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBN2U8xTywKgL6zBjEmLg-yo8o9WoTr7_M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

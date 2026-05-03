@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
-	ws "github.com/mazadpay/backend/internal/websocket"
 	"go.uber.org/zap"
 	"google.golang.org/api/option"
 )
@@ -17,7 +16,9 @@ import (
 type NotificationService interface {
 	SavePushToken(ctx context.Context, userID uuid.UUID, fcmToken, deviceID, platform string) error
 	SendPush(ctx context.Context, userID uuid.UUID, title, body string, notifType string, data map[string]string) error
+	SendLocalizedPush(ctx context.Context, userID uuid.UUID, notificationType, language string, params map[string]string, data map[string]string) error
 	NotifyAdmins(ctx context.Context, title, body string, data map[string]string) error
+	NotifyAdminsLocalized(ctx context.Context, notificationType string, params map[string]string, data map[string]string) error
 	SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) error
 	ListNotifications(ctx context.Context, userID uuid.UUID, limit int) ([]models.Notification, error)
 	MarkAllAsRead(ctx context.Context, userID uuid.UUID) error
@@ -32,17 +33,20 @@ type NotificationService interface {
 	NotifyNewAuctionRequest(requestID, userID, userName, title string)
 	NotifyNewBannerRequest(requestID, userID, userName, title string)
 	NotifyRequestReviewed(requestID, requestType, status, updatedBy string)
+
+	// Auction ending soon notification
+	NotifyAuctionEndingSoon(ctx context.Context, auctionID uuid.UUID, sellerID uuid.UUID, auctionTitle string, language string) error
 }
 
 type notificationService struct {
 	repo      repository.NotificationRepository
 	userRepo  repository.UserRepository
 	fcm       *messaging.Client
-	adminHub  *ws.AdminHub
+	adminHub  AdminHub
 	logger    *zap.Logger
 }
 
-func NewNotificationService(repo repository.NotificationRepository, userRepo repository.UserRepository, serviceAccountPath string, logger *zap.Logger, adminHub *ws.AdminHub) NotificationService {
+func NewNotificationService(repo repository.NotificationRepository, userRepo repository.UserRepository, serviceAccountPath string, logger *zap.Logger, adminHub AdminHub) NotificationService {
 	var fcmClient *messaging.Client
 
 	if serviceAccountPath != "" {
@@ -199,7 +203,7 @@ func (s *notificationService) DeleteNotification(ctx context.Context, id uuid.UU
 
 // WebSocket Real-time Notifications
 
-func (s *notificationService) BroadcastNewRequest(requestType string, payload ws.NewRequestPayload) {
+func (s *notificationService) BroadcastNewRequest(requestType string, payload models.NewRequestPayload) {
 	if s.adminHub == nil {
 		s.logger.Warn("AdminHub not initialized, skipping real-time notification",
 			zap.String("request_type", requestType),
@@ -209,7 +213,7 @@ func (s *notificationService) BroadcastNewRequest(requestType string, payload ws
 	s.adminHub.BroadcastNewRequest(requestType, payload)
 }
 
-func (s *notificationService) BroadcastRequestUpdated(payload ws.RequestUpdatedPayload) {
+func (s *notificationService) BroadcastRequestUpdated(payload models.RequestUpdatedPayload) {
 	if s.adminHub == nil {
 		s.logger.Warn("AdminHub not initialized, skipping real-time notification",
 			zap.String("request_type", payload.RequestType),
@@ -221,7 +225,7 @@ func (s *notificationService) BroadcastRequestUpdated(payload ws.RequestUpdatedP
 }
 
 func (s *notificationService) NotifyNewAuctionRequest(requestID, userID, userName, title string) {
-	s.BroadcastNewRequest("auction", ws.NewRequestPayload{
+	s.BroadcastNewRequest("auction", models.NewRequestPayload{
 		RequestID:   requestID,
 		RequestType: "auction",
 		UserID:      userID,
@@ -232,7 +236,7 @@ func (s *notificationService) NotifyNewAuctionRequest(requestID, userID, userNam
 }
 
 func (s *notificationService) NotifyNewBannerRequest(requestID, userID, userName, title string) {
-	s.BroadcastNewRequest("banner", ws.NewRequestPayload{
+	s.BroadcastNewRequest("banner", models.NewRequestPayload{
 		RequestID:   requestID,
 		RequestType: "banner",
 		UserID:      userID,
@@ -243,11 +247,53 @@ func (s *notificationService) NotifyNewBannerRequest(requestID, userID, userName
 }
 
 func (s *notificationService) NotifyRequestReviewed(requestID, requestType, status, updatedBy string) {
-	s.BroadcastRequestUpdated(ws.RequestUpdatedPayload{
+	s.BroadcastRequestUpdated(models.RequestUpdatedPayload{
 		RequestID:   requestID,
 		RequestType: requestType,
 		Status:      status,
 		UpdatedBy:   updatedBy,
 		UpdatedAt:   time.Now().Format(time.RFC3339),
 	})
+}
+
+// SendLocalizedPush sends a notification with localized title and body
+func (s *notificationService) SendLocalizedPush(ctx context.Context, userID uuid.UUID, notificationType, language string, params map[string]string, data map[string]string) error {
+	title, body := GetLocalizedNotification(notificationType, language, params)
+	if title == "" || body == "" {
+		// Fallback to English if localization not found
+		title, body = GetLocalizedNotification(notificationType, "en", params)
+	}
+	return s.SendPush(ctx, userID, title, body, notificationType, data)
+}
+
+// NotifyAdminsLocalized sends a localized notification to all admins
+func (s *notificationService) NotifyAdminsLocalized(ctx context.Context, notificationType string, params map[string]string, data map[string]string) error {
+	// Get admins
+	admins, err := s.userRepo.FindAllAdmins(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Send to each admin in their preferred language
+	for _, admin := range admins {
+		language := "ar" // Default to Arabic
+		if admin.LanguagePref != "" {
+			language = admin.LanguagePref
+		}
+		_ = s.SendLocalizedPush(ctx, admin.ID, notificationType, language, params, data)
+	}
+	return nil
+}
+
+// NotifyAuctionEndingSoon sends a notification when an auction is ending soon
+func (s *notificationService) NotifyAuctionEndingSoon(ctx context.Context, auctionID uuid.UUID, sellerID uuid.UUID, auctionTitle string, language string) error {
+	params := map[string]string{
+		"auctionTitle": auctionTitle,
+	}
+	data := map[string]string{
+		"type":      "auction_ending_soon",
+		"auctionId": auctionID.String(),
+	}
+
+	return s.SendLocalizedPush(ctx, sellerID, "auction_ending_soon", language, params, data)
 }

@@ -1,7 +1,7 @@
 .PHONY: mobile back web build run
 
 mobile:
-	cd MazadPay && flutter run -d chrome
+	cd mobile && flutter run -d chrome
 
 back:
 	cd backend && go run ./cmd/server/main.go

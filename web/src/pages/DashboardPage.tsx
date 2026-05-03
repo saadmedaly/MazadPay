@@ -235,8 +235,9 @@ export function DashboardPage() {
           <h2 className="font-display font-bold text-white text-base mb-6 px-1">
             الإيداعات المعتمدة — آخر 30 يوماً
           </h2>
-          <div className="h-[250px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[250px] w-full min-h-[250px]">
+            {revenue && revenue.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%" minHeight={0}>
               <AreaChart data={revenue} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
@@ -263,6 +264,11 @@ export function DashboardPage() {
                       fill="url(#revenueGrad)" animationDuration={1000} />
               </AreaChart>
             </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-surface-muted">
+                <p className="text-sm">لا توجد بيانات كافية</p>
+              </div>
+            )}
           </div>
         </div>
 

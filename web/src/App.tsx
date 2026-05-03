@@ -22,6 +22,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { BlockedPhonesPage } from './pages/BlockedPhonesPage'
 import { PaymentMethodsPage } from './pages/PaymentMethodsPage'
 import { DeliveryDriversPage } from './pages/DeliveryDriversPage'
+import { MessagesPage } from './pages/MessagesPage'
 import { useAuthStore } from './stores/authStore'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="payment-methods" element={<PaymentMethodsPage />} />
         <Route path="delivery-drivers" element={<DeliveryDriversPage />} />
+        <Route path="messages" element={<MessagesPage />} />
       </Route>
 
       <Route path="/admin/register-admin" element={<AdminInvitePage />} />
