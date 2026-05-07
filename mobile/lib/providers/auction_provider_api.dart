@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/auction.dart';
 import '../services/auction_api.dart';
+import '../services/cache_service.dart';
+import '../services/websocket_service.dart';
 
 part 'auction_provider_api.g.dart';
 
@@ -13,75 +15,145 @@ class AuctionNotifierApi extends _$AuctionNotifierApi {
   
   @override
   Future<Auction> build(String id) async {
+    // 1. Essayer de charger depuis le cache d'abord (Immédiat)
+    final cachedData = await CacheService.instance.getCachedAuctionDetail(id);
+    if (cachedData != null) {
+      // Si on a du cache, on retourne ça tout de suite
+      // On lance le refresh en arrière-plan
+      _refreshInBackground(id);
+      _listenToWebsocket(id);
+      return _mapToAuction(cachedData);
+    }
+
+    // 2. Sinon, charger depuis l'API normalement
+    _listenToWebsocket(id);
+    return _fetchFromApi(id);
+  }
+
+  Future<void> _refreshInBackground(String id) async {
     try {
-      final response = await _auctionApi.getAuctionById(id);
-      
-      if (response.success && response.data != null) {
-        // L'API retourne {"data": {"auction": {...}, "images": [...]}}
-        final responseData = response.data!;
-        if (responseData is Map<String, dynamic>) {
-          // Extraire l'enchère (peut être dans 'auction' ou directement dans 'data')
-          final dynamic auctionRaw = responseData['auction'] ?? responseData;
-          if (auctionRaw is Map<String, dynamic>) {
-            // Créer une copie pour éviter de modifier l'original
-            final auctionData = Map<String, dynamic>.from(auctionRaw);
-            // Fusionner les images si présentes séparément
-            if (responseData['images'] != null) {
-              auctionData['images'] = responseData['images'];
-            }
-            return _mapToAuction(auctionData);
-          }
-        }
-        // Fallback: essayer de mapper directement
-        if (responseData is Map<String, dynamic>) {
-          return _mapToAuction(responseData);
-        }
-      } else {
-        // En cas d'erreur, retourner une enchère vide par défaut
-        return _getDefaultAuction(id);
-      }
+      final auction = await _fetchFromApi(id);
+      state = AsyncValue.data(auction);
     } catch (e) {
-      // En cas d'erreur, retourner une enchère vide par défaut
-      return _getDefaultAuction(id);
+      // Silencieux car on a déjà les données du cache
+      debugPrint('Background refresh failed for auction $id: $e');
     }
   }
-  
+
+  Future<Auction> _fetchFromApi(String id) async {
+    final response = await _auctionApi.getAuctionById(id);
+    
+    if (response.success && response.data != null) {
+      final responseData = response.data!;
+      Map<String, dynamic> auctionData;
+      
+      if (responseData is Map<String, dynamic>) {
+        final dynamic auctionRaw = responseData['auction'] ?? responseData;
+        if (auctionRaw is Map<String, dynamic>) {
+          auctionData = Map<String, dynamic>.from(auctionRaw);
+          if (responseData['images'] != null) {
+            auctionData['images'] = responseData['images'];
+          }
+        } else {
+          auctionData = responseData;
+        }
+      } else {
+        return _getDefaultAuction(id);
+      }
+
+      // Mettre en cache pour la prochaine fois
+      await CacheService.instance.cacheAuctionDetail(id, auctionData);
+      
+      return _mapToAuction(auctionData);
+    } else {
+      throw Exception(response.message ?? 'Failed to load auction');
+    }
+  }
+
+  void _listenToWebsocket(String id) {
+    final wsService = WebsocketService();
+    wsService.connect(id);
+    
+    // Écouter les mises à jour
+    ref.onDispose(() {
+      // Pas besoin de fermer ici car WebsocketService est un singleton 
+      // mais on pourrait arrêter l'écoute spécifique si nécessaire
+    });
+
+    wsService.stream.listen((data) {
+      if (data['type'] == 'bid_placed' || data['type'] == 'auction_update') {
+        final update = data['data'];
+        if (update != null && update is Map<String, dynamic>) {
+          _handleWsUpdate(update);
+        }
+      }
+    });
+  }
+
+  void _handleWsUpdate(Map<String, dynamic> update) {
+    state.whenData((currentAuction) {
+      // Mettre à jour uniquement les champs qui ont changé
+      final updatedAuction = currentAuction.copyWith(
+        currentPrice: (update['current_price'] ?? currentAuction.currentPrice).toDouble(),
+        bidderCount: update['bid_count'] ?? update['bidder_count'] ?? currentAuction.bidderCount,
+      );
+      state = AsyncValue.data(updatedAuction);
+      
+      // Mettre à jour le cache aussi
+      CacheService.instance.getCachedAuctionDetail(currentAuction.id).then((cached) {
+        if (cached != null) {
+          cached['current_price'] = updatedAuction.currentPrice;
+          cached['bid_count'] = updatedAuction.bidderCount;
+          CacheService.instance.cacheAuctionDetail(currentAuction.id, cached);
+        }
+      });
+    });
+  }
+
+  Future<void> placeBidOptimistically(double amount) async {
+    final previousState = state;
+    
+    // 1. Mise à jour optimiste (Feedback immédiat)
+    state.whenData((currentAuction) {
+      final updatedAuction = currentAuction.copyWith(
+        currentPrice: amount,
+        bidderCount: currentAuction.bidderCount + 1,
+        isUserHighestBidder: true,
+      );
+      state = AsyncValue.data(updatedAuction);
+    });
+
+    try {
+      // 2. Appel API
+      final response = await _auctionApi.placeBid(
+        auctionId: id,
+        amount: amount,
+      );
+
+      if (!response.success) {
+        // 3. Revenir en arrière si erreur
+        state = previousState;
+        throw Exception(response.message ?? 'Failed to place bid');
+      }
+      
+      // 4. Mettre à jour le cache
+      state.whenData((updated) {
+        CacheService.instance.cacheAuctionDetail(id, {
+          ...updated.toJson(), // On suppose que Auction a un toJson()
+          'current_price': updated.currentPrice,
+          'bid_count': updated.bidderCount,
+        });
+      });
+    } catch (e) {
+      // 3. Revenir en arrière si exception
+      state = previousState;
+      rethrow;
+    }
+  }
+
   /// Convertir la réponse API en modèle Auction
   Auction _mapToAuction(Map<String, dynamic> data) {
-    // Gérer les images - format objet (detail API) ou string (list API)
-    List<String> imageUrls = ['assets/corolla.png'];
-    if (data['images'] != null && data['images'] is List) {
-      imageUrls = (data['images'] as List).map((img) {
-        if (img is Map<String, dynamic>) {
-          return img['url']?.toString() ?? 'assets/corolla.png';
-        } else {
-          return img.toString();
-        }
-      }).toList();
-    }
-    
-    return Auction(
-      id: data['id']?.toString() ?? '',
-      title: data['title_ar'] ?? data['title'] ?? 'Unknown',
-      description: data['description_ar'] ?? data['description'] ?? '',
-      imageUrls: imageUrls.isNotEmpty ? imageUrls : ['assets/corolla.png'],
-      startPrice: (data['starting_price'] ?? 0).toDouble(),
-      currentPrice: (data['current_price'] ?? data['starting_price'] ?? 0).toDouble(),
-      minIncrement: (data['min_increment'] ?? 500).toDouble(),
-      endTime: data['end_time'] != null 
-          ? DateTime.parse(data['end_time']) 
-          : DateTime.now().add(const Duration(hours: 13)),
-      bidderCount: data['bidder_count'] ?? data['bid_count'] ?? 0,
-      views: data['views'] ?? 0,
-      lotNumber: data['lot_number'] ?? 'N/A',
-      phoneNumber: data['seller_phone'] ?? 'N/A',
-      manufacturer: data['manufacturer'] ?? '',
-      fuelType: data['fuel_type'] ?? '',
-      transmission: data['transmission'] ?? '', 
-      year: data['year']?.toString() ?? '',
-      mileage: data['mileage']?.toString() ?? '',
-      model: data['model'] ?? '',
-    );
+    return Auction.fromJson(data);
   }
   
   /// Enchère par défaut en cas d'erreur
@@ -99,6 +171,7 @@ class AuctionNotifierApi extends _$AuctionNotifierApi {
       views: 0,
       lotNumber: 'N/A',
       phoneNumber: 'N/A',
+      sellerId: '',
       manufacturer: '',
       fuelType: '',
       transmission: '',

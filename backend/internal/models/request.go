@@ -44,10 +44,13 @@ type BannerRequest struct {
 	TitleAr    string     `db:"title_ar"   json:"title_ar" validate:"required"`
 	TitleFr    *string    `db:"title_fr"   json:"title_fr"`
 	TitleEn    *string    `db:"title_en"   json:"title_en"`
-	ImageURL   string     `db:"image_url"  json:"image_url" validate:"required,url"`
-	TargetURL  *string    `db:"target_url" json:"target_url" validate:"omitempty,url"`
-	StartsAt   time.Time  `db:"starts_at"  json:"starts_at" validate:"required"`
-	EndsAt     time.Time  `db:"ends_at"    json:"ends_at" validate:"required"`
+	ImageURL      string     `db:"image_url"      json:"image_url" validate:"required,url"`
+	TargetURL     *string    `db:"target_url"     json:"target_url" validate:"omitempty,url"`
+	DescriptionAr *string    `db:"description_ar" json:"description_ar"`
+	DescriptionFr *string    `db:"description_fr" json:"description_fr"`
+	DescriptionEn *string    `db:"description_en" json:"description_en"`
+	StartsAt      time.Time  `db:"starts_at"      json:"starts_at" validate:"required"`
+	EndsAt        time.Time  `db:"ends_at"        json:"ends_at" validate:"required"`
 	Status     string     `db:"status"     json:"status"`
 	AdminNotes *string    `db:"admin_notes" json:"admin_notes"`
 	ReviewedBy *uuid.UUID `db:"reviewed_by" json:"reviewed_by"`

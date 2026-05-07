@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
   Search, 
   Send, 
@@ -19,7 +20,7 @@ import {
 import { PageHeader } from '@/components/shared/PageHeader'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { cn } from '@/lib/utils'
-import { useConversations, useMessages, useSendMessage, useMarkAsRead, useCreateConversation } from '@/hooks/useMessages'
+import { useConversations, useMessages, useSendMessage, useMarkAsRead, useCreateConversation, useUploadChatMedia } from '@/hooks/useMessages'
 import type { Conversation } from '@/api/messages'
 import { useUsers } from '@/hooks/useUsers'
 import { formatRelative, formatDate } from '@/lib/formatters'
@@ -29,6 +30,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useChatWebSocket } from '@/hooks/useChatWebSocket'
 
 export function MessagesPage() {
+  const navigate = useNavigate()
   const { user: currentUser } = useAuthStore()
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
   const [messageText, setMessageText] = useState('')
@@ -61,6 +63,9 @@ export function MessagesPage() {
   const sendMessageMutation = useSendMessage()
   const markAsReadMutation = useMarkAsRead()
   const createConvMutation = useCreateConversation()
+  const uploadChatMediaMutation = useUploadChatMedia()
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: usersData } = useUsers(userSearchQuery, 1)
   const users = usersData?.data ?? []
@@ -103,6 +108,40 @@ export function MessagesPage() {
     })
   }
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedConvId) return
+
+    // Determine file type
+    const type = file.type.startsWith('image/') ? 'image' :
+                 file.type.startsWith('video/') ? 'video' :
+                 file.type.startsWith('audio/') ? 'audio' : 'file'
+
+    // Upload file first
+    uploadChatMediaMutation.mutate(
+      { conversationId: selectedConvId, file, type },
+      {
+        onSuccess: (data) => {
+          // Send message with file URL
+          sendMessageMutation.mutate({
+            conversationId: selectedConvId,
+            payload: {
+              type,
+              content: type === 'image' ? '📷 صورة' : type === 'video' ? '🎥 فيديو' : type === 'audio' ? '🎵 رسالة صوتية' : '📎 ملف',
+              file_url: data.url
+            }
+          })
+        }
+      }
+    )
+
+    // Reset input
+    e.target.value = ''
+  }
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click()
+  }
 
   const handleCreateChat = (userId: string) => {
     createConvMutation.mutate({
@@ -267,7 +306,16 @@ export function MessagesPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="p-2 text-surface-muted hover:text-white hover:bg-surface-border rounded-lg transition-colors">
+                  <button 
+                    onClick={() => {
+                      const otherParticipant = selectedConv?.participants?.find(p => p.user_id !== currentUser?.id)?.user;
+                      if (otherParticipant) {
+                        navigate(`/users/${otherParticipant.id}`);
+                      }
+                    }}
+                    className="p-2 text-surface-muted hover:text-white hover:bg-surface-border rounded-lg transition-colors"
+                    title="معلومات المستخدم"
+                  >
                     <Info className="w-4 h-4" />
                   </button>
                   <div className="w-px h-4 bg-surface-border mx-1" />
@@ -304,30 +352,59 @@ export function MessagesPage() {
                             </div>
                           )}
                           <div className={cn(
-                            "flex flex-col max-w-[70%]",
-                            isMe ? "mr-auto items-end" : "ml-auto items-start"
+                            "p-4 rounded-2xl text-sm leading-relaxed shadow-sm",
+                            isMe 
+                              ? "bg-mazad-primary text-white rounded-tl-none" 
+                              : "bg-surface-card border border-surface-border text-white rounded-tr-none"
                           )}>
-                            <div className={cn(
-                              "p-4 rounded-2xl text-sm leading-relaxed shadow-sm",
-                              isMe 
-                                ? "bg-mazad-primary text-white rounded-tl-none" 
-                                : "bg-surface-card border border-surface-border text-white rounded-tr-none"
-                            )}>
-                              {msg.content}
-                              {msg.type === 'image' && msg.file_url && (
-                                <img src={msg.file_url} className="rounded-lg mt-2 max-w-full" alt="Message" />
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-2 px-1">
-                              <span className="text-[10px] text-surface-muted font-medium">
-                                {format(new Date(msg.created_at), 'p', { locale: ar })}
-                              </span>
-                              {isMe && (
-                                msg.status?.some(s => s.status === 'read') 
-                                  ? <CheckCheck className="w-3 h-3 text-mazad-primary" /> 
-                                  : <Check className="w-3 h-3 text-surface-muted" />
-                              )}
-                            </div>
+                            {msg.content}
+                            {/* Image message */}
+                            {msg.type === 'image' && msg.file_url && (
+                              <img 
+                                src={msg.file_url} 
+                                className="rounded-lg mt-2 max-w-full max-h-60 object-cover cursor-pointer hover:opacity-90 transition-opacity" 
+                                alt="Message" 
+                                onClick={() => window.open(msg.file_url, '_blank')}
+                              />
+                            )}
+                            {/* Video message */}
+                            {msg.type === 'video' && msg.file_url && (
+                              <video 
+                                src={msg.file_url} 
+                                controls 
+                                className="rounded-lg mt-2 max-w-full max-h-60"
+                              />
+                            )}
+                            {/* Audio message */}
+                            {msg.type === 'audio' && msg.file_url && (
+                              <audio 
+                                src={msg.file_url} 
+                                controls 
+                                className="mt-2 w-full max-w-[250px]"
+                              />
+                            )}
+                            {/* File message */}
+                            {msg.type === 'file' && msg.file_url && (
+                              <a 
+                                href={msg.file_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 mt-2 p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+                              >
+                                <Paperclip className="w-4 h-4" />
+                                <span className="text-xs underline">{msg.file_name || 'تحميل الملف'}</span>
+                              </a>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-2 px-1">
+                            <span className="text-[10px] text-surface-muted font-medium">
+                              {format(new Date(msg.created_at), 'p', { locale: ar })}
+                            </span>
+                            {isMe && (
+                              msg.status?.some(s => s.status === 'read') 
+                                ? <CheckCheck className="w-3 h-3 text-mazad-primary" /> 
+                                : <Check className="w-3 h-3 text-surface-muted" />
+                            )}
                           </div>
                         </div>
                       )
@@ -343,9 +420,25 @@ export function MessagesPage() {
                   onSubmit={handleSend}
                   className="flex items-center gap-3"
                 >
-                  <button type="button" className="p-2 text-surface-muted hover:text-white hover:bg-surface-border rounded-lg transition-colors">
-                    <Paperclip className="w-5 h-5" />
+                  <button 
+                    type="button" 
+                    onClick={triggerFileInput}
+                    disabled={uploadChatMediaMutation.isPending}
+                    className="p-2 text-surface-muted hover:text-white hover:bg-surface-border rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {uploadChatMediaMutation.isPending ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Paperclip className="w-5 h-5" />
+                    )}
                   </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
                   <div className="flex-1 relative">
                     <input 
                       type="text" 

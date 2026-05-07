@@ -7,7 +7,7 @@ part of 'auction_provider_api.dart';
 // **************************************************************************
 
 String _$auctionNotifierApiHash() =>
-    r'3d80f9868e88617513102a648d1893a4a1113407';
+    r'5b6b04dd0b997d29c55cb83018cabc8449b16861';
 
 /// Copied from Dart SDK
 class _SystemHash {

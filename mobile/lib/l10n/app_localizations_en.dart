@@ -1444,4 +1444,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get text_402 => 'New Conversation';
+
+  @override
+  String get no_auctions_found => 'No auctions found in this city';
+
+  @override
+  String get text_403 => 'is typing...';
+
+  @override
+  String get text_404 => 'No messages';
+
+  @override
+  String get text_405 => 'Send your first message';
+
+  @override
+  String get error_too_many_requests =>
+      'Too many attempts. Please try again later.';
 }

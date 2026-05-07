@@ -16,12 +16,14 @@ type ContentRepository interface {
 
 	// Tutorials
 	ListTutorials(ctx context.Context) ([]models.Tutorial, error)
+	GetTutorialByID(ctx context.Context, id int) (*models.Tutorial, error)
 	CreateTutorial(ctx context.Context, tutorial *models.Tutorial) error
 	DeleteTutorial(ctx context.Context, id int) error
 	UpdateTutorial(ctx context.Context, tutorial *models.Tutorial) error
 
 	// Banners
 	ListBanners(ctx context.Context, onlyActive bool) ([]models.Banner, error)
+	GetBannerByID(ctx context.Context, id int) (*models.Banner, error)
 	CreateBanner(ctx context.Context, banner *models.Banner) error
 	CreateBannerTx(ctx context.Context, tx *sqlx.Tx, banner *models.Banner) error
 	UpdateBannerStatus(ctx context.Context, id int, isActive bool) error
@@ -75,6 +77,15 @@ func (r *contentRepo) ListTutorials(ctx context.Context) ([]models.Tutorial, err
 	return items, err
 }
 
+func (r *contentRepo) GetTutorialByID(ctx context.Context, id int) (*models.Tutorial, error) {
+	var tutorial models.Tutorial
+	err := r.db.GetContext(ctx, &tutorial, `SELECT * FROM tutorials WHERE id = $1`, id)
+	if err != nil {
+		return nil, err
+	}
+	return &tutorial, nil
+}
+
 func (r *contentRepo) CreateTutorial(ctx context.Context, tutorial *models.Tutorial) error {
 	_, err := r.db.NamedExecContext(ctx, `
 		INSERT INTO tutorials (title_ar, title_fr, video_url, thumbnail_url, category, display_order)
@@ -107,7 +118,7 @@ func (r *contentRepo) ListBanners(ctx context.Context, onlyActive bool) ([]model
 	var err error
 
 	query := "SELECT id, COALESCE(title_ar, '') as title_ar, COALESCE(title_fr, '') as title_fr, COALESCE(title_en, '') as title_en, image_url, target_url, is_active, starts_at, ends_at, display_order FROM banners"
-	
+
 	if onlyActive {
 		query += " WHERE is_active = true ORDER BY display_order ASC"
 	} else {
@@ -123,6 +134,16 @@ func (r *contentRepo) ListBanners(ctx context.Context, onlyActive bool) ([]model
 		banners = []models.Banner{}
 	}
 	return banners, nil
+}
+
+func (r *contentRepo) GetBannerByID(ctx context.Context, id int) (*models.Banner, error) {
+	var banner models.Banner
+	query := "SELECT id, COALESCE(title_ar, '') as title_ar, COALESCE(title_fr, '') as title_fr, COALESCE(title_en, '') as title_en, image_url, target_url, is_active, starts_at, ends_at, display_order FROM banners WHERE id = $1"
+	err := r.db.GetContext(ctx, &banner, query, id)
+	if err != nil {
+		return nil, err
+	}
+	return &banner, nil
 }
 
 func (r *contentRepo) CreateBanner(ctx context.Context, banner *models.Banner) error {

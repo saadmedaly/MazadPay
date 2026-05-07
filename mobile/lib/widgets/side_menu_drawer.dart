@@ -140,66 +140,76 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
             // Deposit Banner
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
-                    begin: AlignmentDirectional.centerStart,
-                    end: AlignmentDirectional.centerEnd,
+              child: InkWell(
+                onTap: () {
+                  Navigator.pop(context); // Close drawer
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AccountPage()),
+                  );
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
+                      begin: AlignmentDirectional.centerStart,
+                      end: AlignmentDirectional.centerEnd,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Icon(
-                      Icons.arrow_back_ios,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                    Flexible(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  AppLocalizations.of(context)!.text_379,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  AppLocalizations.of(context)!.text_24,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Icon(
-                            Icons.account_balance_wallet,
-                            color: Colors.white,
-                            size: 32,
-                          ),
-                        ],
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Icon(
+                        Icons.arrow_back_ios,
+                        color: Colors.white,
+                        size: 20,
                       ),
-                    ),
-                  ],
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    AppLocalizations.of(context)!.text_379,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    AppLocalizations.of(context)!.text_24,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Icon(
+                              Icons.account_balance_wallet,
+                              color: Colors.white,
+                              size: 32,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -406,7 +416,7 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
               ),
             ),
             const Text(
-              'Version 3.2.0',
+              'Version 1.0.0',
               style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
@@ -467,12 +477,17 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: isCompact ? 14 : 16,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                  color: isSelected ? primaryBlue : (isDarkMode ? Colors.white : Colors.black87),
+              Expanded(
+                child: Text(
+                  title,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: isCompact ? 14 : 16,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                    color: isSelected ? primaryBlue : (isDarkMode ? Colors.white : Colors.black87),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 16),

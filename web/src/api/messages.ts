@@ -62,10 +62,10 @@ export async function fetchConversations() {
   return res.data.data
 }
 
-export async function createConversation(payload: { 
-  type: 'direct' | 'group' | 'support', 
-  user_ids: string[], 
-  title?: string 
+export async function createConversation(payload: {
+  type: 'direct' | 'group' | 'support',
+  user_ids: string[],
+  title?: string
 }) {
   const res = await client.post<APIResponse<Conversation>>('/v1/api/conversations/', payload)
   return res.data.data
@@ -87,5 +87,23 @@ export async function sendMessage(conversationId: string, payload: {
 
 export async function markAsRead(conversationId: string) {
   const res = await client.post<APIResponse<void>>(`/v1/api/conversations/${conversationId}/read`)
+  return res.data.data
+}
+
+export async function uploadChatMedia(conversationId: string, file: File, type: 'image' | 'video' | 'audio' | 'file') {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('type', type)
+
+  const res = await client.post<APIResponse<{ url: string; type: string; size: number; name: string }>>(
+    `/v1/api/conversations/${conversationId}/upload`,
+    formData,
+    {
+      timeout: 60_000,
+      headers: {
+        'Content-Type': undefined, // Let browser set multipart/form-data with boundary
+      },
+    }
+  )
   return res.data.data
 }

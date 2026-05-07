@@ -1,4 +1,3 @@
-import 'package:uuid/uuid.dart';
 import 'user.dart';
 
 class Message {

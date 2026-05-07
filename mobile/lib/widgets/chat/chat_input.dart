@@ -5,6 +5,7 @@ class ChatInput extends StatelessWidget {
   final VoidCallback onSend;
   final VoidCallback onImagePick;
   final VoidCallback onVideoPick;
+  final VoidCallback? onAudioPick;
   final VoidCallback onTyping;
   final bool isSending;
 
@@ -14,6 +15,7 @@ class ChatInput extends StatelessWidget {
     required this.onSend,
     required this.onImagePick,
     required this.onVideoPick,
+    this.onAudioPick,
     required this.onTyping,
     required this.isSending,
   });
@@ -28,7 +30,7 @@ class ChatInput extends StatelessWidget {
         color: theme.colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -48,6 +50,8 @@ class ChatInput extends StatelessWidget {
                   onImagePick();
                 } else if (value == 'video') {
                   onVideoPick();
+                } else if (value == 'audio' && onAudioPick != null) {
+                  onAudioPick!();
                 }
               },
               itemBuilder: (context) => [
@@ -71,6 +75,17 @@ class ChatInput extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onAudioPick != null)
+                  const PopupMenuItem(
+                    value: 'audio',
+                    child: Row(
+                      children: [
+                        Icon(Icons.mic),
+                        SizedBox(width: 8),
+                        Text('Audio'),
+                      ],
+                    ),
+                  ),
               ],
             ),
             
@@ -101,7 +116,7 @@ class ChatInput extends StatelessWidget {
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide(
-                      color: theme.colorScheme.primary.withOpacity(0.5),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.5),
                     ),
                   ),
                 ),

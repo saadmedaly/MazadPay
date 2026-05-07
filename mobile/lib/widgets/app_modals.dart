@@ -5,6 +5,7 @@ import 'package:mezadpay/providers/locale_provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:mezadpay/services/auction_api.dart';
 import 'package:mezadpay/services/category_api.dart';
+import 'package:mezadpay/services/rating_api.dart';
 
 
 class AppModals {
@@ -131,6 +132,9 @@ class AppModals {
   static void showRatingModal(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     int rating = 0;
+    final commentController = TextEditingController();
+    final ratingApi = RatingApi();
+    bool isSubmitting = false;
 
     showModalBottomSheet(
       context: context,
@@ -141,7 +145,7 @@ class AppModals {
       ),
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (context, setModalState) {
             return SingleChildScrollView(
                 child: Padding(
                   padding: EdgeInsetsDirectional.only(
@@ -165,7 +169,7 @@ class AppModals {
                       const SizedBox(height: 24),
                       Text(
                         AppLocalizations.of(context)!.text_360,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
                         ),
@@ -174,14 +178,14 @@ class AppModals {
                       Text(
                         AppLocalizations.of(context)!.text_361,
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
+                        style: const TextStyle(color: Colors.grey),
                       ),
                       const SizedBox(height: 32),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(5, (index) {
                           return IconButton(
-                            onPressed: () => setState(() => rating = index + 1),
+                            onPressed: () => setModalState(() => rating = index + 1),
                             icon: Icon(
                               index < rating ? Icons.star : Icons.star_border,
                               color: Colors.amber,
@@ -192,8 +196,9 @@ class AppModals {
                       ),
                       const SizedBox(height: 32),
                       TextField(
+                        controller: commentController,
                         maxLines: 3,
-                        textAlign: TextAlign.right,
+                        textAlign: TextAlign.start,
                         decoration: InputDecoration(
                           hintText: AppLocalizations.of(context)!.text_362,
                           hintStyle: const TextStyle(fontSize: 14),
@@ -210,7 +215,29 @@ class AppModals {
                         width: double.infinity,
                         height: 54,
                         child: ElevatedButton(
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: (rating == 0 || isSubmitting) ? null : () async {
+                            setModalState(() => isSubmitting = true);
+                            
+                            final response = await ratingApi.createAppRating(
+                              rating: rating,
+                              comment: commentController.text.trim(),
+                            );
+                            
+                            if (context.mounted) {
+                              setModalState(() => isSubmitting = false);
+                              
+                              if (response.success) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(response.message ?? 'Merci pour votre évaluation !')),
+                                );
+                                Navigator.pop(context);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(response.message ?? 'Une erreur est survenue')),
+                                );
+                              }
+                            }
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0084FF),
                             foregroundColor: Colors.white,
@@ -218,10 +245,12 @@ class AppModals {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: Text(
-                            AppLocalizations.of(context)!.text_363,
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
+                          child: isSubmitting 
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : Text(
+                                AppLocalizations.of(context)!.text_363,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
                         ),
                       ),
                     ],
@@ -445,10 +474,9 @@ class AppModals {
                       return;
                     }
                     
-                    final response = await auctionApi.setupAutoBid(
-                      auctionId, 
-                      maxBid, 
-                      incrementStep: double.tryParse(incrementController.text)
+                    final response = await auctionApi.createAutoBid(
+                      auctionId: auctionId, 
+                      maxAmount: maxBid
                     );
                     
                     if (context.mounted) {
@@ -495,7 +523,7 @@ class AppModals {
               builder: (context, snapshot) {
                 List<dynamic> reasons = [];
                 if (snapshot.hasData && snapshot.data!.success && snapshot.data!.data != null) {
-                  reasons = (snapshot.data!.data!['reasons'] as List? ?? []);
+                  reasons = snapshot.data!.data!;
                 }
 
                 return Padding(
@@ -558,9 +586,9 @@ class AppModals {
                         child: ElevatedButton(
                           onPressed: selectedReasonId == null ? null : () async {
                             final response = await auctionApi.reportAuction(
-                              auctionId, 
-                              selectedReasonId!, 
-                              comment: commentController.text
+                              auctionId: auctionId, 
+                              reasonId: selectedReasonId!, 
+                              details: commentController.text.isNotEmpty ? commentController.text : null
                             );
                             
                             if (context.mounted) {

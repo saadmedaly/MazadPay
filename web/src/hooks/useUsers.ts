@@ -99,6 +99,36 @@ export function useGenerateInvitation() {
   })
 }
 
+export function useUploadAvatar() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append('avatar', file)
+
+      const { data } = await client.post<{ data: { message: string; url: string } }>(
+        '/v1/api/users/me/avatar/upload',
+        formData,
+        {
+          timeout: 30_000,
+          headers: {
+            'Content-Type': undefined, // Let browser set multipart/form-data with boundary
+          },
+        }
+      )
+      return data.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users', 'me'] })
+      toast.success('تم تحديث صورة الملف الشخصي بنجاح')
+    },
+    onError: (err: any) => {
+      const message = err.response?.data?.message || err.message || 'فشل رفع الصورة'
+      toast.error(message)
+    },
+  })
+}
+
 export function useUserHistory(id: string, type: 'auctions' | 'transactions') {
   return useQuery({
     queryKey: userKeys.history(id, type),

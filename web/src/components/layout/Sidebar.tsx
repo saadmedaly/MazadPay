@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Gavel, CreditCard, Users,
   Flag, Image, LogOut, Hammer, ShieldCheck, HelpCircle, Video, Bell, User, Settings, PhoneOff,
-  Wallet, Truck, MessageSquare
+  Wallet, Truck, MessageSquare, Handshake, Star, LifeBuoy
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
@@ -34,12 +34,15 @@ const NAV_SECTIONS = [
       { label: 'المزادات',     icon: Gavel,           to: '/auctions',     badgeKey: 'pendingAuctions' },
       { label: 'المعاملات',    icon: CreditCard,      to: '/transactions', badgeKey: 'pendingTxns' },
       { label: 'المستخدمين',    icon: Users,           to: '/users',        badgeKey: null },
-     
+           { label: 'طرق الدفع',   icon: Wallet,          to: '/payment-methods', badgeKey: null },
+
       { label: 'البلاغات',     icon: Flag,            to: '/reports',      badgeKey: 'pendingReports' },
+      { label: 'شكاوى التطبيق', icon: LifeBuoy,        to: '/complaints',   badgeKey: null },
+      { label: 'تقييمات التطبيق', icon: Star,           to: '/ratings',      badgeKey: null },
       { label: 'الفئات',      icon: LayoutDashboard, to: '/categories',   badgeKey: null },
       { label: 'المواقع(المدن/المناطق)',      icon: Flag,            to: '/locations',    badgeKey: null },
+      { label: 'الطلبات', icon: ShieldCheck, to: '/requests', badgeKey: 'pendingAuctions' },
       { label: 'أرقام محظورة', icon: PhoneOff,        to: '/blocked-phones', badgeKey: null },
-      { label: 'طرق الدفع',   icon: Wallet,          to: '/payment-methods', badgeKey: null },
       { label: 'الإعدادات',    icon: Settings,        to: '/settings',     badgeKey: null },
 
     ]
@@ -48,6 +51,7 @@ const NAV_SECTIONS = [
     label: 'المحتوى',
     items: [
       { label: 'الإعلانات ',     icon: Image,           to: '/banners',      badgeKey: null },
+      { label: 'الرعاة',        icon: Handshake,       to: '/sponsors',     badgeKey: null },
       { label: 'الأسئلة الشائعة', icon: HelpCircle,      to: '/faq',          badgeKey: null },
       { label: 'شروحات الفيديو', icon: Video,           to: '/tutorials',    badgeKey: null },
     ]

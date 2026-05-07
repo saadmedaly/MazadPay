@@ -50,7 +50,7 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
         setState(() {
           // Extraction robuste des données
           final data = response.data;
-          if (data != null && data is Map<String, dynamic>) {
+          if (data != null) {
             // La réponse peut être directement l'objet user ou contenir un champ 'user'
             _userData = data['user'] ?? data;
           }
@@ -126,12 +126,6 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
     final phone = _phoneController.text.isNotEmpty 
         ? _phoneController.text 
         : _userData['phone']?.toString() ?? '+222 20 00 00 00';
-    final email = _emailController.text.isNotEmpty 
-        ? _emailController.text 
-        : _userData['email']?.toString() ?? 'badal@example.com';
-    final city = _cityController.text.isNotEmpty 
-        ? _cityController.text 
-        : _userData['city']?.toString() ?? _userData['location'] ?? AppLocalizations.of(context)!.text_43;
     final avatarUrl = _userData['avatar'] ?? _userData['avatar_url'] ?? _userData['profile_pic_url'];
 
     // Générer les initiales pour l'avatar fallback
@@ -222,7 +216,7 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
                           height: 90,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
+                            boxShadow: [BoxShadow(color: primaryBlue.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4))],
                           ),
                           child: ClipOval(
                             child: avatarUrl != null && avatarUrl.toString().isNotEmpty
@@ -373,35 +367,6 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
       );
   }
 
-  Widget _buildInfoField(BuildContext context, String label, String value, IconData icon, bool isDarkMode) {
-    return Container(
-      margin: const EdgeInsetsDirectional.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.15)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFF0084FF), size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
-                const SizedBox(height: 2),
-                Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              ],
-            ),
-          ),
-          Icon(Icons.edit_outlined, color: Colors.grey[400], size: 16),
-        ],
-      ),
-    );
-  }
-
   Widget _buildEditableField(BuildContext context, String label, TextEditingController controller, IconData icon, bool isDarkMode) {
     return Container(
       margin: const EdgeInsetsDirectional.only(bottom: 12),
@@ -409,7 +374,7 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.15)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
@@ -440,14 +405,14 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.15)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
       ),
       child: ListTile(
         leading: Container(
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: const Color(0xFF0084FF).withOpacity(0.1),
+            color: const Color(0xFF0084FF).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: const Color(0xFF0084FF), size: 18),

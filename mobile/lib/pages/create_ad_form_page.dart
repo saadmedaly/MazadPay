@@ -1,10 +1,11 @@
+import 'dart:io';
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
-import 'ad_success_page.dart';
 import 'auction_pending_approval_page.dart';
-import '../widgets/media_picker_sheet.dart';
 import '../services/auction_api.dart';
+import '../services/r2_upload_service.dart';
 import '../services/category_api.dart';
 import '../services/cache_service.dart';
 import '../models/category.dart';
@@ -26,17 +27,18 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   String? _selectedSubCategory;
   String? _selectedCity;
   DateTime? _endTime;
-  final List<String> _selectedImages = [];
+  final List<File> _selectedImageFiles = []; // Fichiers locaux sélectionnés
   final AuctionApi _auctionApi = AuctionApi();
+  final R2UploadService _r2UploadService = R2UploadService();
   final CategoryApi _categoryApi = CategoryApi();
+  final ImagePicker _imagePicker = ImagePicker();
   bool _isLoading = false;
+  bool _isUploadingImages = false;
+  double _uploadProgress = 0.0;
   
   // Données depuis le cache/API
   List<Category> _categories = [];
   List<Location> _locations = [];
-  bool _isLoadingData = false;
-  String? _errorMessage;
-
   @override
   void initState() {
     super.initState();
@@ -136,9 +138,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   }
   
   // Helper pour obtenir le nom en arabe
-  String _getCategoryName(Category c) => c.nameAr;
-  String _getLocationName(Location l) => l.cityNameAr;
-
   Future<void> _submitAd() async {
     final name = _nameController.text.trim();
     final description = _descriptionController.text.trim();
@@ -152,7 +151,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       return;
     }
 
-    if (_selectedImages.isEmpty) {
+    if (_selectedImageFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppLocalizations.of(context)!.error_add_image)),
       );
@@ -162,17 +161,64 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await _auctionApi.createAuction(
+      // Étape 1: Créer l'enchère sans images
+      final createResponse = await _auctionApi.createAuction(
         title: name,
         description: description,
         startingPrice: price,
         category: _selectedMainCategory ?? '',
         subCategory: _selectedSubCategory ?? '',
         location: _selectedCity ?? '',
-        images: _selectedImages,
+        images: [], // Créer d'abord sans images
         phone: phone,
         endTime: _endTime,
       );
+
+      if (!createResponse.success || createResponse.data == null) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(createResponse.message ?? AppLocalizations.of(context)!.error_create_auction)),
+        );
+        return;
+      }
+
+      // Étape 2: Récupérer l'ID de l'enchère créée
+      final auctionId = createResponse.data!['id'] as String?;
+      if (auctionId == null) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_create_auction)),
+        );
+        return;
+      }
+
+      // Étape 3: Uploader les images vers R2
+      setState(() {
+        _isUploadingImages = true;
+        _uploadProgress = 0.0;
+      });
+
+      final uploadedUrls = await _r2UploadService.uploadAuctionImages(
+        auctionId: auctionId,
+        images: _selectedImageFiles,
+        onProgress: (progress) {
+          setState(() => _uploadProgress = progress);
+        },
+      );
+
+      setState(() {
+        _isUploadingImages = false;
+        _isLoading = false;
+      });
+
+      if (uploadedUrls.isEmpty) {
+        // L'enchère est créée mais sans images
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enchère créée mais les images n\'ont pas pu être uploadées')),
+        );
+      }
+
+      final response = createResponse;
 
       setState(() => _isLoading = false);
 
@@ -464,11 +510,11 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       height: 100,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: _selectedImages.length + 1,
+        itemCount: _selectedImageFiles.length + 1,
         itemBuilder: (context, index) {
-          if (index == _selectedImages.length) {
+          if (index == _selectedImageFiles.length) {
             return GestureDetector(
-              onTap: () => _showMediaPicker(context),
+              onTap: () => _pickImages(),
               child: Container(
                 width: 100,
                 margin: const EdgeInsetsDirectional.only(start: 12),
@@ -481,17 +527,76 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               ),
             );
           }
-          return Container(
-            width: 100,
-            margin: const EdgeInsetsDirectional.only(start: 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              image: DecorationImage(image: AssetImage(_selectedImages[index]), fit: BoxFit.cover),
-            ),
+          return Stack(
+            children: [
+              Container(
+                width: 100,
+                margin: const EdgeInsetsDirectional.only(start: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  image: DecorationImage(
+                    image: FileImage(_selectedImageFiles[index]),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 4,
+                right: 4,
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedImageFiles.removeAt(index);
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close, color: Colors.white, size: 16),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
     );
+  }
+
+  /// Pick images from gallery
+  Future<void> _pickImages() async {
+    try {
+      final List<XFile>? pickedFiles = await _imagePicker.pickMultiImage(
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (pickedFiles == null || pickedFiles.isEmpty) return;
+
+      // Limiter à 5 images maximum
+      final remainingSlots = 5 - _selectedImageFiles.length;
+      if (remainingSlots <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Maximum 5 images allowed')),
+        );
+        return;
+      }
+
+      final filesToAdd = pickedFiles.take(remainingSlots).map((xfile) => File(xfile.path)).toList();
+
+      setState(() {
+        _selectedImageFiles.addAll(filesToAdd);
+      });
+    } catch (e) {
+      debugPrint('Error picking images: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error selecting images: $e')),
+      );
+    }
   }
 
   void _showCitySheet(BuildContext context) {
@@ -547,23 +652,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
             }
           });
           Navigator.of(context).pop();
-        },
-      ),
-    );
-  }
-
-  void _showMediaPicker(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => MediaPickerSheet(
-        onMediaSelected: (asset) {
-          setState(() {
-            if (_selectedImages.length < 5 && !_selectedImages.contains(asset)) {
-              _selectedImages.add(asset);
-            }
-          });
         },
       ),
     );

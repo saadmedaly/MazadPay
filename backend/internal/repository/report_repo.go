@@ -10,10 +10,11 @@ import (
 )
 
 type ReportRepository interface {
-	ListPaginated(ctx context.Context, page, perPage int, status string) ([]models.Report, int, error)
+	ListPaginated(ctx context.Context, page, perPage int, status, reportType string) ([]models.Report, int, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
 	PendingCount(ctx context.Context) (int, error)
 	Create(ctx context.Context, report *models.Report) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type reportRepo struct {
@@ -24,12 +25,19 @@ func NewReportRepository(db *sqlx.DB) ReportRepository {
 	return &reportRepo{db: db}
 }
 
-func (r *reportRepo) ListPaginated(ctx context.Context, page, perPage int, status string) ([]models.Report, int, error) {
+func (r *reportRepo) ListPaginated(ctx context.Context, page, perPage int, status, reportType string) ([]models.Report, int, error) {
 	where := "WHERE 1=1"
 	args := []interface{}{}
+	argIdx := 1
 	if status != "" {
-		where += " AND status = $1"
+		where += fmt.Sprintf(" AND status = $%d", argIdx)
 		args = append(args, status)
+		argIdx++
+	}
+	if reportType != "" {
+		where += fmt.Sprintf(" AND type = $%d", argIdx)
+		args = append(args, reportType)
+		argIdx++
 	}
 
 	var total int
@@ -40,7 +48,7 @@ func (r *reportRepo) ListPaginated(ctx context.Context, page, perPage int, statu
 
 	offset := (page - 1) * perPage
 	query := fmt.Sprintf("SELECT * FROM reports %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", 
-		where, len(args)+1, len(args)+2)
+		where, argIdx, argIdx+1)
 	
 	listArgs := append(args, perPage, offset)
 	reports := []models.Report{}
@@ -65,8 +73,13 @@ func (r *reportRepo) PendingCount(ctx context.Context) (int, error) {
 
 func (r *reportRepo) Create(ctx context.Context, report *models.Report) error {
 	_, err := r.db.NamedExecContext(ctx, `
-		INSERT INTO reports (id, auction_id, reporter_id, reason, status)
-		VALUES (:id, :auction_id, :reporter_id, :reason, :status)
+		INSERT INTO reports (id, auction_id, reporter_id, type, reason, status)
+		VALUES (:id, :auction_id, :reporter_id, :type, :reason, :status)
 	`, report)
+	return err
+}
+
+func (r *reportRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM reports WHERE id = $1", id)
 	return err
 }

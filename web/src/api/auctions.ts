@@ -29,6 +29,12 @@ export interface AuctionPayload {
   item_details?: Record<string, unknown>
 }
 
+export interface UploadImagesResponse {
+  message: string
+  urls: string[]
+  count: number
+}
+
 export async function fetchAuctions(filters: AuctionFilters): Promise<{ data: Auction[]; total: number }> {
   const { data } = await client.get<PaginatedResponse<Auction>>(
     '/v1/api/admin/auctions', { params: filters }
@@ -66,4 +72,23 @@ export async function updateAuction(id: string, payload: AuctionPayload): Promis
 
 export async function deleteAuction(id: string): Promise<void> {
   await client.delete(`/v1/api/admin/auctions/${id}`)
+}
+
+export async function uploadAuctionImages(auctionId: string, images: File[]): Promise<UploadImagesResponse> {
+  const formData = new FormData()
+  images.forEach((image) => {
+    formData.append('images', image)
+  })
+
+  const { data } = await client.post<APIResponse<UploadImagesResponse>>(
+    `/v1/api/auctions/${auctionId}/images`,
+    formData,
+    {
+      timeout: 60_000,
+      headers: {
+        'Content-Type': undefined, // Let browser set multipart/form-data with boundary
+      },
+    }
+  )
+  return data.data
 }

@@ -258,6 +258,36 @@ export function RequestDetailModal({
           </p>
         </div>
       </div>
+      
+      {req.description_ar && (
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <FileText className="w-4 h-4 text-gray-500" />
+            <p className="text-sm text-gray-500">الوصف (عربي)</p>
+          </div>
+          <p className="text-gray-700 whitespace-pre-wrap">{req.description_ar}</p>
+        </div>
+      )}
+
+      {req.description_fr && (
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <FileText className="w-4 h-4 text-gray-500" />
+            <p className="text-sm text-gray-500">الوصف (فرنسي)</p>
+          </div>
+          <p className="text-gray-700 whitespace-pre-wrap">{req.description_fr}</p>
+        </div>
+      )}
+
+      {req.description_en && (
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <FileText className="w-4 h-4 text-gray-500" />
+            <p className="text-sm text-gray-500">الوصف (إنجليزي)</p>
+          </div>
+          <p className="text-gray-700 whitespace-pre-wrap">{req.description_en}</p>
+        </div>
+      )}
 
       <div className="bg-gray-50 p-4 rounded-lg">
         <div className="flex items-center gap-2 mb-2">

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
@@ -29,12 +30,14 @@ type ContentService interface {
 type contentService struct {
 	repo     repository.ContentRepository
 	notifSvc NotificationService
+	mediaSvc MediaService
 }
 
-func NewContentService(repo repository.ContentRepository, notifSvc NotificationService) ContentService {
+func NewContentService(repo repository.ContentRepository, notifSvc NotificationService, mediaSvc MediaService) ContentService {
 	return &contentService{
 		repo:     repo,
 		notifSvc: notifSvc,
+		mediaSvc: mediaSvc,
 	}
 }
 
@@ -71,7 +74,32 @@ func (s *contentService) UpdateTutorial(ctx context.Context, tutorial *models.Tu
 }
 
 func (s *contentService) DeleteTutorial(ctx context.Context, id int) error {
-	return s.repo.DeleteTutorial(ctx, id)
+	// Get tutorial before deletion (for R2 cleanup)
+	tutorial, err := s.repo.GetTutorialByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get tutorial: %w", err)
+	}
+
+	// Delete from DB
+	if err := s.repo.DeleteTutorial(ctx, id); err != nil {
+		return err
+	}
+
+	// After successful DB deletion, delete files from R2 (best effort)
+	if s.mediaSvc != nil {
+		if tutorial.VideoURL != "" {
+			if err := s.mediaSvc.DeleteFile(ctx, tutorial.VideoURL); err != nil {
+				fmt.Printf("[DeleteTutorial] Warning: failed to delete video from R2: %s, error: %v\n", tutorial.VideoURL, err)
+			}
+		}
+		if tutorial.ThumbnailURL != nil {
+			if err := s.mediaSvc.DeleteFile(ctx, *tutorial.ThumbnailURL); err != nil {
+				fmt.Printf("[DeleteTutorial] Warning: failed to delete thumbnail from R2: %s, error: %v\n", tutorial.ThumbnailURL, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *contentService) CreateBanner(ctx context.Context, banner *models.Banner) error {
@@ -110,5 +138,23 @@ func (s *contentService) UpdateBanner(ctx context.Context, banner *models.Banner
 }
 
 func (s *contentService) DeleteBanner(ctx context.Context, id int) error {
-	return s.repo.DeleteBanner(ctx, id)
+	// Get banner before deletion (for R2 cleanup)
+	banner, err := s.repo.GetBannerByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get banner: %w", err)
+	}
+
+	// Delete from DB
+	if err := s.repo.DeleteBanner(ctx, id); err != nil {
+		return err
+	}
+
+	// After successful DB deletion, delete image from R2 (best effort)
+	if s.mediaSvc != nil && banner.ImageURL != "" {
+		if err := s.mediaSvc.DeleteFile(ctx, banner.ImageURL); err != nil {
+			fmt.Printf("[DeleteBanner] Warning: failed to delete image from R2: %s, error: %v\n", banner.ImageURL, err)
+		}
+	}
+
+	return nil
 }

@@ -25,7 +25,6 @@ class _AccountPageState extends State<AccountPage> {
   bool _showBalance = false;
   final WalletApi _walletApi = WalletApi();
   double _balance = 0.0;
-  bool _isLoading = true;
 
   @override
   void initState() {
@@ -38,13 +37,11 @@ class _AccountPageState extends State<AccountPage> {
       final response = await _walletApi.getBalance();
 
       setState(() {
-        _isLoading = false;
         if (response.success && response.data != null) {
           _balance = (response.data!['balance'] ?? 0).toDouble();
         }
       });
     } catch (e) {
-      setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_balance)),
@@ -122,7 +119,7 @@ class _AccountPageState extends State<AccountPage> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: primaryBlue.withOpacity(0.3),
+                        color: primaryBlue.withValues(alpha: 0.3),
                         blurRadius: 10,
                         offset: const Offset(0, 5),
                       ),
@@ -469,11 +466,11 @@ class _AccountPageState extends State<AccountPage> {
         decoration: BoxDecoration(
           color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
           boxShadow: [
             if (!isDarkMode)
               BoxShadow(
-                color: Colors.black.withOpacity(0.02),
+                color: Colors.black.withValues(alpha: 0.02),
                 blurRadius: 5,
                 offset: const Offset(0, 2),
               ),

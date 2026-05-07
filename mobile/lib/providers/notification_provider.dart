@@ -231,13 +231,14 @@ class NotificationNotifier extends _$NotificationNotifier {
 
   /// Supprimer une notification localement
   void removeNotification(String notificationId) {
-    final wasUnread = state.notifications
-        .firstWhere((n) => n.id == notificationId, orElse: () => null as Notification)
-        .isRead == false;
+    // Trouver la notification pour vérifier son statut (lue ou non)
+    final index = state.notifications.indexWhere((n) => n.id == notificationId);
+    if (index == -1) return;
 
-    final updatedNotifications = state.notifications
-        .where((n) => n.id != notificationId)
-        .toList();
+    final wasUnread = !state.notifications[index].isRead;
+
+    final updatedNotifications = List<Notification>.from(state.notifications)
+      ..removeAt(index);
 
     state = state.copyWith(
       notifications: updatedNotifications,

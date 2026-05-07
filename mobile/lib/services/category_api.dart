@@ -106,22 +106,68 @@ class CategoryApi {
   }
 
   /// Lister tous les pays
-  Future<ApiResponse<Map<String, dynamic>>> getCountries() async {
+  Future<ApiResponse<List<dynamic>>> getCountries() async {
     try {
-      final response = await _apiService.get<Map<String, dynamic>>('/countries');
+      final response = await _apiService.get<dynamic>('/countries');
 
-      return ApiResponse<Map<String, dynamic>>.fromJson(response);
+      if (response == null) {
+        return ApiResponse.error('Null response from server');
+      }
+
+      if (response is Map) {
+        final success = (response['success'] as bool?) ?? false;
+        final data = response['data'];
+        final errorData = response['error'];
+        final message = response['message'] as String?;
+        
+        ApiError? error;
+        if (errorData != null && errorData is Map) {
+          error = ApiError.fromJson(errorData as Map<String, dynamic>);
+        }
+        
+        return ApiResponse<List<dynamic>>(
+          success: success,
+          data: data as List<dynamic>?,
+          error: error,
+          message: message,
+        );
+      } else {
+        return ApiResponse.error('Invalid response format: expected Map, got ${response.runtimeType}');
+      }
     } catch (e) {
       return ApiResponse.error(e.toString());
     }
   }
 
   /// Récupérer les raisons de signalement
-  Future<ApiResponse<Map<String, dynamic>>> getReportReasons() async {
+  Future<ApiResponse<List<dynamic>>> getReportReasons() async {
     try {
-      final response = await _apiService.get<Map<String, dynamic>>('/report-reasons');
+      final response = await _apiService.get<dynamic>('/report-reasons');
 
-      return ApiResponse<Map<String, dynamic>>.fromJson(response);
+      if (response == null) {
+        return ApiResponse.error('Null response from server');
+      }
+
+      if (response is Map) {
+        final success = (response['success'] as bool?) ?? false;
+        final data = response['data'];
+        final errorData = response['error'];
+        final message = response['message'] as String?;
+        
+        ApiError? error;
+        if (errorData != null && errorData is Map) {
+          error = ApiError.fromJson(errorData as Map<String, dynamic>);
+        }
+        
+        return ApiResponse<List<dynamic>>(
+          success: success,
+          data: data as List<dynamic>?,
+          error: error,
+          message: message,
+        );
+      } else {
+        return ApiResponse.error('Invalid response format');
+      }
     } catch (e) {
       return ApiResponse.error(e.toString());
     }

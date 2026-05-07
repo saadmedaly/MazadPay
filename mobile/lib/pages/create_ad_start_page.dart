@@ -133,7 +133,6 @@ class CreateAdStartPage extends StatelessWidget {
   }
 
   Widget _buildCentralHammer(BuildContext context) {
-    bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: 80,
       height: 80,
@@ -160,7 +159,6 @@ class CreateAdStartPage extends StatelessWidget {
   }
 
   Widget _buildCategoryIcon(BuildContext context, IconData icon, String label) {
-    bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: 48,
       height: 48,

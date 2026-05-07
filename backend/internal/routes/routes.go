@@ -31,6 +31,8 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	reqRepo := repository.NewRequestRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
 	settingsRepo := repository.NewSettingsRepository(db)
+	sponsorRepo := repository.NewSponsorRepository(db)
+	ratingRepo := repository.NewRatingRepository(db)
 
 	// Chat repositories
 	convRepo := repository.NewConversationRepository(db)
@@ -40,16 +42,19 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	hub := ws.NewHub(logger)
 	adminHub := ws.NewAdminHub(logger)
 
+	// Media service for R2 uploads (must be created before auctionSvc and adminSvc)
+	mediaSvc := services.NewMediaService(cfg, logger)
+
 	// Services
 	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath, logger, adminHub)
 	smsSvc := services.NewSMSService(cfg.Twilio.AccountSID, cfg.Twilio.AuthToken, cfg.Twilio.PhoneNumber, logger)
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4)
-	auctionSvc := services.NewAuctionService(auctionRepo, reportRepo, notifSvc, userRepo)
+	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
-	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo)
+	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc)
 	walletSvc := services.NewWalletService(walletRepo, txRepo)
-	contentSvc := services.NewContentService(contentRepo, notifSvc)
+	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc)
 	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, auditRepo, notifSvc)
 
 	// Chat Hub & Service
@@ -68,6 +73,8 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	auctionBoostSvc := services.NewAuctionBoostService(db)
 	deliveryDriverSvc := services.NewDeliveryDriverService(db)
 	bidAutoBidSvc := services.NewBidAutoBidService(db, bidSvc, walletSvc)
+	sponsorSvc := services.NewSponsorService(sponsorRepo)
+	ratingSvc := services.NewRatingService(db, ratingRepo)
 
 	api := app.Group("/v1/api")
 
@@ -88,6 +95,8 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	auctionBoostHandler := handlers.NewAuctionBoostHandler(auctionBoostSvc, logger)
 	deliveryDriverHandler := handlers.NewDeliveryDriverHandler(deliveryDriverSvc, logger)
 	bidAutoBidHandler := handlers.NewBidAutoBidHandler(bidAutoBidSvc, logger)
+	sponsorHandler := handlers.NewSponsorHandler(sponsorSvc, logger)
+	ratingHandler := handlers.NewRatingHandler(ratingSvc, logger)
 
 	// WebSocket registration
 	app.Use("/ws", wsHandler.UpgradeMiddleware())
@@ -99,21 +108,23 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 	// Routes registration
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
-	setupAuctionRoutes(api, auctionSvc, chatSvc, bidHandler, userHandler, cfg.JWT.Secret, logger, rdb)
-	setupUserRoutes(api, userHandler, walletHandler, cfg.JWT.Secret, logger, rdb)
+	setupAuctionRoutes(api, auctionSvc, chatSvc, bidHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
+	setupUserRoutes(api, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupAdminRoutes(api, adminHandler, userHandler, cfg.JWT.Secret, logger, rdb)
-	setupBannerRoutes(api, bannerHandler, cfg.JWT.Secret, logger, rdb)
-	setupContentRoutes(api, contentHandler, cfg.JWT.Secret, logger, rdb)
+	setupBannerRoutes(api, bannerHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
+	setupContentRoutes(api, contentHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupNotificationRoutes(api, notifHandler, cfg.JWT.Secret, logger, rdb)
-	setupRequestRoutes(api, reqHandler, cfg.JWT.Secret, logger, auditRepo, rdb, cfg)
+	setupRequestRoutes(api, reqHandler, cfg.JWT.Secret, logger, auditRepo, rdb, cfg, mediaSvc)
 	// New routes
 	setupPaymentMethodRoutes(api, paymentMethodHandler, cfg.JWT.Secret, logger, rdb)
 	setupAuctionBoostRoutes(api, auctionBoostHandler, cfg.JWT.Secret, logger, rdb)
 	setupDeliveryDriverRoutes(api, deliveryDriverHandler, cfg.JWT.Secret, logger, rdb)
 	setupBidAutoBidRoutes(api, bidAutoBidHandler, cfg.JWT.Secret, logger, rdb)
+	setupSponsorRoutes(api, sponsorHandler, cfg.JWT.Secret, logger, rdb)
+	setupRatingRoutes(api, ratingHandler, cfg.JWT.Secret, logger, rdb)
 
 	// Chat routes
-	setupChatRoutes(api, chatSvc, chatHub, cfg.JWT.Secret, logger, rdb)
+	setupChatRoutes(api, chatSvc, chatHub, mediaSvc, cfg.JWT.Secret, logger, rdb)
 
 	return auctionSvc, notifSvc, auctionScheduler
 }
@@ -139,7 +150,7 @@ func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, adminHandle
 	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
 }
 
-func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, chatSvc services.ChatService, bidHandler *handlers.BidHandler, userHandler *handlers.UserHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, chatSvc services.ChatService, bidHandler *handlers.BidHandler, userHandler *handlers.UserHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	h := handlers.NewAuctionHandler(auctionSvc, chatSvc, logger)
 
@@ -156,13 +167,16 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, ch
 	// Bids (Public history)
 	api.Get("/auctions/:id/bids", bidHandler.History)
 
-	// Protected routes
+	// Protected routes with media service injection
 	auctions := api.Group("/auctions", jwtMiddleware)
 	auctions.Post("/", h.Create)
 	auctions.Put("/:id", h.Update)         // Modifier son enchère
 	auctions.Delete("/:id", h.Delete)      // Supprimer son enchère
 	auctions.Post("/:id/report", h.Report) // CONCEPTION Signalements
-	auctions.Post("/:id/images", h.AddImages)
+	auctions.Post("/:id/images", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return h.AddImages(c)
+	})
 	auctions.Post("/:id/buy-now", h.BuyNow)
 	auctions.Post("/:id/cancel", h.Cancel)
 	auctions.Post("/:id/relist", h.Relist)
@@ -190,14 +204,20 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, ch
 	api.Get("/auctions/:id/seller-contact", jwtMiddleware, h.GetSellerContact)
 }
 
-func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, walletHandler *handlers.WalletHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, walletHandler *handlers.WalletHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	users := api.Group("/users", jwtMiddleware)
 
 	// Profile
+	users.Get("/search", userHandler.Search)
 	users.Get("/me", userHandler.GetMe)
 	users.Put("/me", userHandler.UpdateProfile)
 	users.Post("/me/avatar", userHandler.UpdateAvatar)
+	// Multipart avatar upload to R2
+	users.Post("/me/avatar/upload", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return userHandler.UploadAvatarMultipart(c)
+	})
 	users.Put("/me/language", userHandler.UpdateLanguage)
 	users.Put("/me/notification-prefs", userHandler.UpdateNotificationPrefs)
 
@@ -258,6 +278,7 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Put("/transactions/:id/validate", adminHandler.ValidateTransaction)
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)
+	admin.Delete("/reports/:id", adminHandler.DeleteReport)
 
 	// Category management
 	admin.Post("/categories", adminHandler.CreateCategory)
@@ -314,7 +335,7 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Put("/auto-bids/:id", adminHandler.UpdateAutoBid)
 }
 
-func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	adminMiddleware := middleware.AdminOnly(logger)
 
@@ -335,9 +356,14 @@ func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, jwtSecret st
 	admin.Put("/:id/toggle", h.Toggle)
 	admin.Put("/:id", h.Update)
 	admin.Delete("/:id", h.Delete)
+	// Banner image upload to R2 (banners/ folder)
+	admin.Post("/upload", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return h.UploadBannerImage(c)
+	})
 }
 
-func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	// Public routes
 	api.Get("/faq", h.FAQ)
 	api.Get("/tutorials", h.Tutorials)
@@ -355,12 +381,27 @@ func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, jwtSecret 
 	admin.Post("/faq", h.CreateFAQ)
 	admin.Put("/faq/:id", h.UpdateFAQ)
 	admin.Delete("/faq/:id", h.DeleteFAQ)
+	// FAQ image upload to R2 (faq-tutorials/ folder)
+	admin.Post("/faq/upload", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return h.UploadFAQImage(c)
+	})
 
 	// Tutorials CRUD
 	admin.Get("/tutorials", h.AdminListTutorials)
 	admin.Post("/tutorials", h.CreateTutorial)
 	admin.Put("/tutorials/:id", h.UpdateTutorial)
 	admin.Delete("/tutorials/:id", h.DeleteTutorial)
+	// Tutorial video upload to R2 (faq-tutorials/ folder)
+	admin.Post("/tutorials/upload-video", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return h.UploadTutorialVideo(c)
+	})
+	// Tutorial thumbnail upload to R2 (faq-tutorials/ folder)
+	admin.Post("/tutorials/upload-thumbnail", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return h.UploadTutorialThumbnail(c)
+	})
 }
 
 func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.NotificationHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
@@ -384,7 +425,7 @@ func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.Notificati
 	admin.Get("/templates", notifHandler.GetTemplates)
 }
 
-func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, jwtSecret string, logger *zap.Logger, auditRepo repository.AuditRepository, rdb *redis.Client, cfg *config.Config) {
+func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, jwtSecret string, logger *zap.Logger, auditRepo repository.AuditRepository, rdb *redis.Client, cfg *config.Config, mediaSvc services.MediaService) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	adminMiddleware := middleware.AdminOnly(logger)
 
@@ -395,6 +436,10 @@ func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, j
 	user := api.Group("/requests", jwtMiddleware)
 	user.Post("/auctions", rateLimitSubmit, reqHandler.CreateAuctionRequest)
 	user.Post("/banners", rateLimitSubmit, reqHandler.CreateBannerRequest)
+	user.Post("/banners/upload", rateLimitSubmit, func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return reqHandler.UploadBannerRequestImage(c)
+	})
 	user.Get("/auctions/my", reqHandler.GetUserAuctionRequests)
 	user.Get("/banners/my", reqHandler.GetUserBannerRequests)
 
@@ -486,4 +531,34 @@ func setupBidAutoBidRoutes(api fiber.Router, h *handlers.BidAutoBidHandler, jwtS
 	// Admin routes
 	admin := api.Group("/admin/auctions", jwtMiddleware, adminMiddleware)
 	admin.Get("/:id/auto-bids", h.GetAuctionAutoBids)
+}
+
+func setupSponsorRoutes(api fiber.Router, h *handlers.SponsorHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
+	adminMiddleware := middleware.AdminOnly(logger)
+
+	// Public routes
+	api.Get("/sponsors", h.ListActive)
+
+	// Admin routes
+	admin := api.Group("/admin/sponsors", jwtMiddleware, adminMiddleware)
+	admin.Get("/", h.ListAll)
+	admin.Post("/", h.Create)
+	admin.Put("/:id", h.Update)
+	admin.Delete("/:id", h.Delete)
+	admin.Patch("/:id/toggle", h.ToggleStatus)
+}
+
+func setupRatingRoutes(api fiber.Router, h *handlers.RatingHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
+	adminMiddleware := middleware.AdminOnly(logger)
+
+	// User routes
+	api.Post("/app/ratings", jwtMiddleware, h.CreateAppRating)
+
+	// Admin routes
+	admin := api.Group("/admin/app", jwtMiddleware, adminMiddleware)
+	admin.Get("/ratings/stats", h.GetAppStats)
+	admin.Get("/ratings", h.ListAppRatings)
+	admin.Delete("/ratings/:id", h.DeleteAppRating)
 }

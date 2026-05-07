@@ -10,10 +10,11 @@ import (
 	"go.uber.org/zap"
 )
 
- func setupChatRoutes(
+func setupChatRoutes(
 	api fiber.Router,
 	chatSvc services.ChatService,
 	chatHub *ws.ChatHub,
+	mediaSvc services.MediaService,
 	jwtSecret string,
 	logger *zap.Logger,
 	rdb *redis.Client,
@@ -49,6 +50,11 @@ import (
 	conversations.Get("/:conversation_id/messages", msgHandler.GetMessages)
 	conversations.Post("/:conversation_id/messages", msgHandler.SendMessage)
 	conversations.Post("/:conversation_id/read", msgHandler.MarkAsRead)
+	// Chat media upload to R2 (images, videos, audio, files)
+	conversations.Post("/:conversation_id/upload", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return msgHandler.UploadChatMedia(c)
+	})
 
 	// Routes pour les messages individuels
 	api.Put("/messages/:message_id", jwtMiddleware, msgHandler.EditMessage)

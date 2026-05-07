@@ -1,0 +1,36 @@
+app = "mazadpay-backend"
+primary_region = "cdg" # Paris (ou modifiez selon votre région la plus proche de Neon)
+kill_signal = "SIGINT"
+kill_timeout = 5
+process_group = "app"
+
+[env]
+  PORT = "8082"
+  # Optimisations mémoire/CPU très strictes pour Fly Free Tier (256MB RAM / 1 vCPU)
+  GOMAXPROCS = "1"
+  GOMEMLIMIT = "220MiB" # Laisse de la marge pour l'OS/overhead container
+  GOGC = "40"           # Nettoie la RAM beaucoup plus tôt pour éviter les OOM kills
+  FIBER_PREFORK = "false" # Surtout pas de prefork avec 1 seul CPU, cela gaspille des ressources
+
+[http_service]
+  internal_port = 8082
+  force_https = true
+  
+  # Auto-Stop / Auto-Start parfait pour le Free Tier
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0 # Économise un maximum d'heures
+
+  processes = ["app"]
+
+[http_service.concurrency]
+  type = "requests"
+  hard_limit = 250
+  soft_limit = 200
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  timeout = "2s"
+  path = "/health"

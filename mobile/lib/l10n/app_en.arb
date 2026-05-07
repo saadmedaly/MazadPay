@@ -1,4 +1,4 @@
-﻿{
+{
   "@@locale": "en",
   "text_1": "Home",
   "text_2": "All Auctions",
@@ -477,7 +477,9 @@
   "text_400": "Contact Seller",
   "text_401": "My Requests",
   "text_402": "New Conversation",
+  "no_auctions_found": "No auctions found in this city",
   "text_403": "is typing...",
   "text_404": "No messages",
-  "text_405": "Send your first message"
+  "text_405": "Send your first message",
+  "error_too_many_requests": "Too many attempts. Please try again later."
 }

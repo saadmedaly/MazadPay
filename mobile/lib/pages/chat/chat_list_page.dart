@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../models/conversation.dart';
 import '../../services/chat_service.dart';
-import '../../services/auth_service.dart';
 import 'chat_room_page.dart';
 import '../../widgets/chat/conversation_tile.dart';
+import '../../widgets/chat/user_search_dialog.dart';
 import '../../l10n/app_localizations.dart';
 
 class ChatListPage extends StatefulWidget {
@@ -22,6 +21,9 @@ class _ChatListPageState extends State<ChatListPage> {
   int _offset = 0;
   final int _limit = 20;
   bool _hasMore = true;
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  List<UserConversation> _filteredConversations = [];
 
   @override
   void initState() {
@@ -61,6 +63,7 @@ class _ChatListPageState extends State<ChatListPage> {
         } else {
           _conversations.addAll(conversations);
         }
+        _filteredConversations = _conversations;
         _hasMore = conversations.length == _limit;
         _offset += conversations.length;
         _isLoading = false;
@@ -78,6 +81,19 @@ class _ChatListPageState extends State<ChatListPage> {
     _loadConversations(refresh: true);
   }
 
+  void _onSearchTextChanged(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredConversations = _conversations;
+      } else {
+        _filteredConversations = _conversations.where((conv) {
+          final title = (conv.title ?? _getParticipantName(conv)).toLowerCase();
+          return title.contains(query.toLowerCase());
+        }).toList();
+      }
+    });
+  }
+
   void _navigateToChat(UserConversation conversation) {
     Navigator.push(
       context,
@@ -91,10 +107,24 @@ class _ChatListPageState extends State<ChatListPage> {
   }
 
   String _getParticipantName(UserConversation conversation) {
-    // Pour une conversation directe, retourner le nom de l'autre participant
-    // Simplifié - à adapter selon vos besoins
-    return conversation.title ?? 'Chat';
+    if (conversation.title != null && conversation.title!.isNotEmpty) {
+      return conversation.title!;
+    }
+
+    if (conversation.type == 'direct' && conversation.participantsList.isNotEmpty) {
+      try {
+        final other = conversation.participantsList.firstWhere(
+          (p) => p.userId != conversation.userId,
+        );
+        if (other.user?.fullName != null) {
+          return other.user!.fullName!;
+        }
+      } catch (_) {}
+    }
+
+    return 'Chat';
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -102,12 +132,30 @@ class _ChatListPageState extends State<ChatListPage> {
     
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations?.text_392 ?? 'Messages'),
+        title: _isSearching 
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: localizations?.text_392 ?? 'Rechercher...',
+                  border: InputBorder.none,
+                  hintStyle: const TextStyle(color: Colors.white70),
+                ),
+                style: const TextStyle(color: Colors.white),
+                onChanged: _onSearchTextChanged,
+              )
+            : Text(localizations?.text_392 ?? 'Messages'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
+            icon: Icon(_isSearching ? Icons.close : Icons.search),
             onPressed: () {
-              // TODO: Implémenter la recherche
+              setState(() {
+                _isSearching = !_isSearching;
+                if (!_isSearching) {
+                  _searchController.clear();
+                  _filteredConversations = _conversations;
+                }
+              });
             },
           ),
           PopupMenuButton<String>(
@@ -182,10 +230,10 @@ class _ChatListPageState extends State<ChatListPage> {
     }
 
     return ListView.builder(
-      itemCount: _conversations.length + (_hasMore ? 1 : 0),
+      itemCount: _filteredConversations.length + (_hasMore && !_isSearching ? 1 : 0),
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemBuilder: (context, index) {
-        if (index == _conversations.length) {
+        if (index == _filteredConversations.length) {
           // Loading more indicator
           return const Center(
             child: Padding(
@@ -195,7 +243,7 @@ class _ChatListPageState extends State<ChatListPage> {
           );
         }
 
-        final conversation = _conversations[index];
+        final conversation = _filteredConversations[index];
         return ConversationTile(
           conversation: conversation,
           onTap: () => _navigateToChat(conversation),
@@ -205,26 +253,10 @@ class _ChatListPageState extends State<ChatListPage> {
   }
 
   void _showNewChatDialog() {
-    // TODO: Implémenter le dialogue de nouvelle conversation
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nouvelle conversation'),
-        content: const Text('Recherchez un utilisateur pour démarrer une conversation'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: Naviguer vers la page de recherche d'utilisateurs
-            },
-            child: const Text('Rechercher'),
-          ),
-        ],
-      ),
-    );
+      builder: (context) => const UserSearchDialog(),
+    ).then((_) => _refreshConversations());
   }
 }
+

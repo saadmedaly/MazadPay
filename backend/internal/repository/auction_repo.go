@@ -51,8 +51,10 @@ type AuctionRepository interface {
 
 	// Images
 	AddImage(ctx context.Context, img *models.AuctionImage) error
+	AddImageTx(ctx context.Context, tx *sqlx.Tx, img *models.AuctionImage) error
 	GetImages(ctx context.Context, auctionID uuid.UUID) ([]models.AuctionImage, error)
 	DeleteImages(ctx context.Context, auctionID uuid.UUID) error
+	DeleteImagesTx(ctx context.Context, tx *sqlx.Tx, auctionID uuid.UUID) error
 
 	// Categories & Locations
 	GetCategories(ctx context.Context) ([]models.Category, error)
@@ -239,7 +241,15 @@ func (r *auctionRepo) GetUserHighestBid(ctx context.Context, auctionID, userID u
 }
 
 func (r *auctionRepo) AddImage(ctx context.Context, img *models.AuctionImage) error {
-	_, err := r.db.ExecContext(ctx,
+	return r.addImageInternal(ctx, r.db, img)
+}
+
+func (r *auctionRepo) AddImageTx(ctx context.Context, tx *sqlx.Tx, img *models.AuctionImage) error {
+	return r.addImageInternal(ctx, tx, img)
+}
+
+func (r *auctionRepo) addImageInternal(ctx context.Context, db sqlx.ExtContext, img *models.AuctionImage) error {
+	_, err := db.ExecContext(ctx,
 		`INSERT INTO auction_images (auction_id, url, media_type, display_order)
          VALUES ($1, $2, $3, $4)`,
 		img.AuctionID, img.URL, img.MediaType, img.DisplayOrder)
@@ -254,7 +264,15 @@ func (r *auctionRepo) GetImages(ctx context.Context, auctionID uuid.UUID) ([]mod
 }
 
 func (r *auctionRepo) DeleteImages(ctx context.Context, auctionID uuid.UUID) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM auction_images WHERE auction_id = $1`, auctionID)
+	return r.deleteImagesInternal(ctx, r.db, auctionID)
+}
+
+func (r *auctionRepo) DeleteImagesTx(ctx context.Context, tx *sqlx.Tx, auctionID uuid.UUID) error {
+	return r.deleteImagesInternal(ctx, tx, auctionID)
+}
+
+func (r *auctionRepo) deleteImagesInternal(ctx context.Context, db sqlx.ExtContext, auctionID uuid.UUID) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM auction_images WHERE auction_id = $1`, auctionID)
 	return err
 }
 

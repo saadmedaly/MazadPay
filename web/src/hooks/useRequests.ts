@@ -41,6 +41,9 @@ export interface BannerRequest {
   title_ar: string
   title_fr?: string
   title_en?: string
+  description_ar?: string
+  description_fr?: string
+  description_en?: string
   image_url: string
   target_url?: string
   starts_at: string
@@ -95,17 +98,29 @@ export const useAuctionRequests = (
       const requests: AuctionRequest[] = auctions.map(auction => ({
         id: auction.id,
         user_id: auction.user_id || auction.userId,
-        title: auction.title_ar || auction.titleAr || auction.title,
-        description: auction.description_ar || auction.descriptionAr || auction.description,
-        category: auction.category,
-        status: auction.status === 'active' ? 'approved' : auction.status === 'pending' ? 'pending' : 'rejected',
-        created_at: auction.created_at || auction.createdAt,
-        updated_at: auction.updated_at || auction.updatedAt,
-        // Champs additionnels
-        start_price: auction.start_price || auction.startPrice,
-        location: auction.location,
+        category_id: auction.category_id || auction.categoryId || 0,
+        location_id: auction.location_id || auction.locationId,
+        title_ar: auction.title_ar || auction.titleAr || auction.title || '',
+        title_fr: auction.title_fr || auction.titleFr,
+        title_en: auction.title_en || auction.titleEn,
+        description_ar: auction.description_ar || auction.descriptionAr || auction.description,
+        description_fr: auction.description_fr || auction.descriptionFr,
+        description_en: auction.description_en || auction.descriptionEn,
+        start_price: auction.start_price || auction.startPrice || '0',
+        min_increment: auction.min_increment || auction.minIncrement || '0',
+        insurance_amount: auction.insurance_amount || auction.insuranceAmount || '0',
+        reserve_price: auction.reserve_price || auction.reservePrice,
+        buy_now_price: auction.buy_now_price || auction.buyNowPrice,
+        start_date: auction.start_date || auction.startDate || new Date().toISOString(),
+        end_date: auction.end_date || auction.endDate || auction.end_time || auction.endTime || new Date().toISOString(),
         images: auction.images || [],
-        end_time: auction.end_time || auction.endTime
+        status: auction.status === 'active' ? 'approved' : auction.status === 'pending' ? 'pending' : 'rejected',
+        admin_notes: auction.admin_notes || auction.adminNotes,
+        reviewed_by: auction.reviewed_by || auction.reviewedBy,
+        reviewed_at: auction.reviewed_at || auction.reviewedAt,
+        created_at: auction.created_at || auction.createdAt || new Date().toISOString(),
+        updated_at: auction.updated_at || auction.updatedAt || new Date().toISOString(),
+        user: auction.user
       }))
 
       return {

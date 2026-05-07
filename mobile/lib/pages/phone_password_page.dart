@@ -62,7 +62,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
     if (password != confirmPassword) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppLocalizations.of(context)!.error_password_mismatch ?? 'كلمات المرور غير متطابقة'),
+          content: Text(AppLocalizations.of(context)!.error_password_mismatch),
           backgroundColor: Colors.red,
         ),
       );
@@ -72,7 +72,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
     if (password.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppLocalizations.of(context)!.error_password_too_short ?? 'كلمة المرور قصيرة'),
+          content: Text(AppLocalizations.of(context)!.error_password_too_short),
           backgroundColor: Colors.red,
         ),
       );
@@ -125,7 +125,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(response.message ?? AppLocalizations.of(context)!.error_register ?? 'خطأ في التسجيل'),
+              content: Text(response.message ?? AppLocalizations.of(context)!.error_register),
               backgroundColor: Colors.red,
             ),
           );
@@ -219,7 +219,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                   children: [
                     const SizedBox(height: 16),
                     Text(
-                      l10n.text_146 ?? 'أكمل بياناتك',
+                      l10n.text_146,
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -228,7 +228,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      l10n.text_147 ?? 'أدخل رقم الهاتف وكلمة المرور',
+                      l10n.text_147,
                       style: TextStyle(
                         fontSize: 14,
                         color: Color(0xFF9E9E9E),
@@ -260,7 +260,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                             fontSize: 15,
                           ),
                           decoration: InputDecoration(
-                            hintText: l10n.text_148 ?? 'الاسم الكامل',
+                            hintText: l10n.text_148,
                             hintStyle: TextStyle(
                               color: Color(0xFF9E9E9E),
                               fontSize: 14,
@@ -300,7 +300,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                           fontSize: 15,
                         ),
                         decoration: InputDecoration(
-                          hintText: '${l10n.text_40 ?? 'الهاتف'} (+222 xx xx xx xx)',
+                          hintText: '${l10n.text_40} (+222 xx xx xx xx)',
                           hintStyle: TextStyle(
                             color: Color(0xFF9E9E9E),
                             fontSize: 14,
@@ -341,7 +341,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                           fontSize: 15,
                         ),
                         decoration: InputDecoration(
-                          hintText: l10n.text_5 ?? 'كلمة المرور',
+                          hintText: l10n.text_5,
                           hintStyle: TextStyle(
                             color: Color(0xFF9E9E9E),
                             fontSize: 14,
@@ -389,7 +389,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                           fontSize: 15,
                         ),
                         decoration: InputDecoration(
-                          hintText: l10n.text_7 ?? 'تأكيد كلمة المرور',
+                          hintText: l10n.text_7,
                           hintStyle: TextStyle(
                             color: Color(0xFF9E9E9E),
                             fontSize: 14,
@@ -436,7 +436,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                               ),
                             )
                           : Text(
-                              l10n.text_217 ?? 'التسجيل',
+                              l10n.text_217,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -469,7 +469,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                             );
                           },
                           child: Text(
-                            l10n.text_11 ?? 'تسجيل الدخول',
+                            l10n.text_11,
                             style: const TextStyle(
                               color: Color(0xFF135BEC),
                               fontWeight: FontWeight.bold,

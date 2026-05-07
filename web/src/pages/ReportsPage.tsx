@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
-import { Flag, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
+import { Flag, CheckCircle2, XCircle, AlertCircle, Trash2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -8,6 +8,8 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { formatDate, shortID } from '@/lib/formatters'
 import client from '@/api/client'
+import { useState } from 'react'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
 interface Report {
   id: string
@@ -35,6 +37,8 @@ export function ReportsPage() {
   const status = searchParams.get('status') ?? 'pending'
   const qc = useQueryClient()
 
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+
   const { data: reports = [], isLoading, isError } = useReports(status)
 
   const reviewMutation = useMutation({
@@ -44,6 +48,16 @@ export function ReportsPage() {
       qc.invalidateQueries({ queryKey: ['reports'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       toast.success('تم تحديث حالة البلاغ بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => client.delete(`/v1/api/admin/reports/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reports'] })
+      toast.success('تم حذف البلاغ بنجاح')
+      setDeleteId(null)
     },
     onError: (err: Error) => toast.error(err.message),
   })
@@ -120,31 +134,50 @@ export function ReportsPage() {
                   )}
                 </div>
                 
-                {report.status === 'pending' && (
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <button
-                      onClick={() => reviewMutation.mutate({ id: report.id, action: 'reviewed' })}
-                      className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold
-                                 bg-mazad-primary text-white hover:bg-mazad-primary-dk transition-all shadow-lg shadow-mazad-primary/20"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      معالجة
-                    </button>
-                    <button
-                      onClick={() => reviewMutation.mutate({ id: report.id, action: 'dismissed' })}
-                      className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold border border-surface-border
-                                 text-surface-muted hover:text-white hover:bg-red-500/10 hover:border-red-500/20 transition-all font-bold"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      تجاهل
-                    </button>
-                  </div>
-                )}
+                <div className="flex flex-col gap-2 shrink-0">
+                  {report.status === 'pending' && (
+                    <>
+                      <button
+                        onClick={() => reviewMutation.mutate({ id: report.id, action: 'reviewed' })}
+                        className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold
+                                   bg-mazad-primary text-white hover:bg-mazad-primary-dk transition-all shadow-lg shadow-mazad-primary/20"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        معالجة
+                      </button>
+                      <button
+                        onClick={() => reviewMutation.mutate({ id: report.id, action: 'dismissed' })}
+                        className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold border border-surface-border
+                                   text-surface-muted hover:text-white hover:bg-red-500/10 hover:border-red-500/20 transition-all font-bold"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        تجاهل
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => setDeleteId(report.id)}
+                    className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all shadow-sm"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    حذف البلاغ
+                  </button>
+                </div>
               </div>
             </div>
           ))
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteId}
+        onOpenChange={(v) => !v && setDeleteId(null)}
+        title="حذف البلاغ؟"
+        description="هذا الإجراء سيؤدي لحذف البلاغ نهائياً من قاعدة البيانات."
+        confirmLabel="حذف"
+        variant="danger"
+        onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
+      />
     </div>
   )
 }

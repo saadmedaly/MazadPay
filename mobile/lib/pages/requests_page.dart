@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/l10n/app_localizations.dart';
+import 'package:mezadpay/pages/create_ad_form_page.dart';
+import 'package:mezadpay/pages/create_banner_request_page.dart';
 import 'package:mezadpay/services/request_api.dart';
 
 class RequestsPage extends StatefulWidget {
@@ -54,7 +56,18 @@ class _RequestsPageState extends State<RequestsPage> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
+    final lang = Localizations.localeOf(context).languageCode;
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    String bannerTabTitle = 'Bannières';
+    String createBannerLabel = 'Demander une bannière';
+    if (lang == 'ar') {
+      bannerTabTitle = 'الإعلانات';
+      createBannerLabel = 'طلب إعلان';
+    } else if (lang == 'en') {
+      bannerTabTitle = 'Banners';
+      createBannerLabel = 'Request a Banner';
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -63,7 +76,7 @@ class _RequestsPageState extends State<RequestsPage> with SingleTickerProviderSt
           controller: _tabController,
           tabs: [
             Tab(text: localizations.text_90), // "Create ad" (as proxy for auction request)
-            const Tab(text: 'Bannières'),
+            Tab(text: bannerTabTitle),
           ],
         ),
       ),
@@ -76,10 +89,34 @@ class _RequestsPageState extends State<RequestsPage> with SingleTickerProviderSt
               _buildRequestList(_bannerRequests, isDarkMode),
             ],
           ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          if (_tabController.index == 0) {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const CreateAdFormPage()),
+            ).then((_) => _loadRequests());
+          } else {
+             Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const CreateBannerRequestPage()),
+            ).then((_) => _loadRequests());
+          }
+        },
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: Text(
+          _tabController.index == 0 ? localizations.text_90 : createBannerLabel,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF0081FF),
+      ),
     );
-  }
+}
 
   Widget _buildRequestList(List<dynamic> requests, bool isDarkMode) {
+    final lang = Localizations.localeOf(context).languageCode;
+    String emptyMsg = 'Aucune demande trouvée';
+    if (lang == 'ar') emptyMsg = 'لم يتم العثور على طلبات';
+    if (lang == 'en') emptyMsg = 'No requests found';
+
     if (requests.isEmpty) {
       return Center(
         child: Column(
@@ -87,7 +124,7 @@ class _RequestsPageState extends State<RequestsPage> with SingleTickerProviderSt
           children: [
             Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
-            const Text('Aucune demande trouvée', style: TextStyle(color: Colors.grey)),
+            Text(emptyMsg, style: const TextStyle(color: Colors.grey)),
           ],
         ),
       );
@@ -106,11 +143,39 @@ class _RequestsPageState extends State<RequestsPage> with SingleTickerProviderSt
     );
   }
 
+  String _getLocalized(dynamic req, String field) {
+    final lang = Localizations.localeOf(context).languageCode;
+    String noTitle = 'Sans titre';
+    if (lang == 'ar') noTitle = 'بدون عنوان';
+    if (lang == 'en') noTitle = 'No title';
+
+    // Try field_lang, then fallback to field_ar, then field_en, then field
+    final val = req['${field}_$lang'] ?? 
+                req['${field}_ar'] ?? 
+                req['${field}_en'] ?? 
+                req[field];
+
+    if (val == null || val.toString().isEmpty) {
+      return field == 'title' ? noTitle : '';
+    }
+    return val.toString();
+  }
+
   Widget _buildRequestCard(dynamic req, bool isDarkMode) {
+    final lang = Localizations.localeOf(context).languageCode;
     final status = req['status']?.toString().toLowerCase() ?? 'pending';
     Color statusColor = Colors.orange;
-    if (status == 'approved') statusColor = Colors.green;
-    if (status == 'rejected') statusColor = Colors.red;
+    String statusText = status.toUpperCase();
+
+    if (status == 'approved' || status == 'active') {
+      statusColor = Colors.green;
+      statusText = lang == 'ar' ? 'مقبول' : (lang == 'fr' ? 'APPROUVÉ' : 'APPROVED');
+    } else if (status == 'rejected') {
+      statusColor = Colors.red;
+      statusText = lang == 'ar' ? 'مرفوض' : (lang == 'fr' ? 'REJETÉ' : 'REJECTED');
+    } else {
+      statusText = lang == 'ar' ? 'قيد الانتظار' : (lang == 'fr' ? 'EN ATTENTE' : 'PENDING');
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -125,7 +190,7 @@ class _RequestsPageState extends State<RequestsPage> with SingleTickerProviderSt
               children: [
                 Expanded(
                   child: Text(
-                    req['title']?.toString() ?? 'Sans titre',
+                    _getLocalized(req, 'title'),
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -138,7 +203,7 @@ class _RequestsPageState extends State<RequestsPage> with SingleTickerProviderSt
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    status.toUpperCase(),
+                    statusText,
                     style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -146,7 +211,7 @@ class _RequestsPageState extends State<RequestsPage> with SingleTickerProviderSt
             ),
             const SizedBox(height: 8),
             Text(
-              req['description']?.toString() ?? '',
+              _getLocalized(req, 'description'),
               style: TextStyle(color: Colors.grey[600], fontSize: 14),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

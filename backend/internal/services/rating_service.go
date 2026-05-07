@@ -13,9 +13,13 @@ import (
 
 type RatingService interface {
 	CreateRating(ctx context.Context, userID, auctionID uuid.UUID, rating int, comment string) error
+	CreateAppRating(ctx context.Context, userID uuid.UUID, title string, rating int, comment string) error
 	GetUserRatings(ctx context.Context, userID uuid.UUID) ([]models.AppRating, error)
 	GetAuctionRatings(ctx context.Context, auctionID uuid.UUID) ([]models.AppRating, error)
 	GetAverageRating(ctx context.Context, userID uuid.UUID) (float64, error)
+	GetAppStats(ctx context.Context) (float64, int, error)
+	ListAppRatings(ctx context.Context, page, perPage int) ([]models.AppRating, int, error)
+	DeleteAppRating(ctx context.Context, id uuid.UUID) error
 }
 
 type ratingService struct {
@@ -54,7 +58,7 @@ func (s *ratingService) CreateRating(ctx context.Context, userID, auctionID uuid
 	newRating := &models.AppRating{
 		ID:        uuid.New(),
 		UserID:    userID,
-		AuctionID: auctionID,
+		AuctionID: &auctionID,
 		Rating:    rating,
 		Comment:   &comment,
 		CreatedAt: time.Now(),
@@ -87,4 +91,34 @@ func (s *ratingService) GetAverageRating(ctx context.Context, userID uuid.UUID) 
 	}
 
 	return float64(total) / float64(len(ratings)), nil
+}
+
+func (s *ratingService) CreateAppRating(ctx context.Context, userID uuid.UUID, title string, rating int, comment string) error {
+	if rating < 1 || rating > 5 {
+		return apperr.ErrBadRequest
+	}
+
+	newRating := &models.AppRating{
+		ID:        uuid.New(),
+		UserID:    userID,
+		AuctionID: nil, // null for app ratings
+		Title:     &title,
+		Rating:    rating,
+		Comment:   &comment,
+		CreatedAt: time.Now(),
+	}
+
+	return s.ratingRepo.Create(ctx, newRating)
+}
+
+func (s *ratingService) GetAppStats(ctx context.Context) (float64, int, error) {
+	return s.ratingRepo.GetAppStats(ctx)
+}
+
+func (s *ratingService) ListAppRatings(ctx context.Context, page, perPage int) ([]models.AppRating, int, error) {
+	return s.ratingRepo.ListAllAppRatings(ctx, page, perPage)
+}
+
+func (s *ratingService) DeleteAppRating(ctx context.Context, id uuid.UUID) error {
+	return s.ratingRepo.Delete(ctx, id)
 }

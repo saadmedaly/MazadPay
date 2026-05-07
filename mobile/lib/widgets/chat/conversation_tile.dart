@@ -93,22 +93,48 @@ class ConversationTile extends StatelessWidget {
   }
 
   Widget _buildAvatar() {
-    // TODO: Afficher l'avatar du participant
+    final other = _getOtherParticipant();
+    final avatarUrl = other?.user?.profilePicUrl;
+
+    if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: 28,
+        backgroundImage: NetworkImage(avatarUrl),
+      );
+    }
+
     return CircleAvatar(
       radius: 28,
       backgroundColor: Colors.grey[300],
-      child: Icon(
-        conversation.type == 'direct' 
-            ? Icons.person 
-            : Icons.group,
-        color: Colors.grey[600],
+      child: Text(
+        _getTitle()[0].toUpperCase(),
+        style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold),
       ),
     );
   }
 
+  ConversationParticipant? _getOtherParticipant() {
+    if (conversation.participantsList.isEmpty) return null;
+    try {
+      return conversation.participantsList.firstWhere(
+        (p) => p.userId != conversation.userId,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+
   String _getTitle() {
     if (conversation.title != null && conversation.title!.isNotEmpty) {
       return conversation.title!;
+    }
+    
+    if (conversation.type == 'direct') {
+      final other = _getOtherParticipant();
+      if (other?.user?.fullName != null) {
+        return other!.user!.fullName!;
+      }
     }
     
     switch (conversation.type) {
@@ -122,6 +148,7 @@ class ConversationTile extends StatelessWidget {
         return 'Chat';
     }
   }
+
 
   String _formatTime(DateTime? time) {
     if (time == null) return '';

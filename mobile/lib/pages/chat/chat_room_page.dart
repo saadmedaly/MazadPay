@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../models/message.dart';
 import '../../services/chat_service.dart';
-import '../../services/chat_file_service.dart';
+import '../../services/r2_upload_service.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/chat_input.dart';
 import '../../l10n/app_localizations.dart';
@@ -25,7 +26,7 @@ class ChatRoomPage extends StatefulWidget {
 
 class _ChatRoomPageState extends State<ChatRoomPage> {
   final ChatService _chatService = ChatService();
-  final ChatFileService _fileService = ChatFileService();
+  final R2UploadService _fileService = R2UploadService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
@@ -61,6 +62,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           _messages.insert(0, message);
         });
         _scrollToBottom();
+        if (message.senderId != _currentUserId) {
+          _markMessagesAsRead();
+        }
       }
     });
 
@@ -105,6 +109,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         offset: _offset,
       );
 
+      if (!mounted) return;
       setState(() {
         if (refresh) {
           _messages = messages;
@@ -116,7 +121,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         _isLoading = false;
         _error = null;
       });
+      _markMessagesAsRead();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -166,13 +173,16 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       _messageController.clear();
       _chatService.sendTypingStop(widget.conversationId);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erreur d\'envoi: $e')),
       );
     } finally {
-      setState(() {
-        _isSending = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
     }
   }
 
@@ -191,8 +201,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
     try {
       final file = File(image.path);
-      final url = await _fileService.uploadImage(
-        userId: _currentUserId!,
+      // Upload vers Cloudflare R2 via backend API
+      final url = await _fileService.uploadChatImage(
+        conversationId: widget.conversationId,
         imageFile: file,
       );
 
@@ -205,15 +216,23 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         );
 
         await _chatService.sendMessage(widget.conversationId, request);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erreur lors de l\'upload de l\'image')),
+        );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erreur d\'upload: $e')),
       );
     } finally {
-      setState(() {
-        _isSending = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
     }
   }
 
@@ -230,8 +249,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
     try {
       final file = File(video.path);
-      final result = await _fileService.uploadVideo(
-        userId: _currentUserId!,
+      // Upload vers Cloudflare R2 via backend API
+      final result = await _fileService.uploadChatVideo(
+        conversationId: widget.conversationId,
         videoFile: file,
       );
 
@@ -241,37 +261,239 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           fileUrl: result['url'],
           fileName: video.name,
           fileSize: await file.length(),
-          fileDuration: result['duration'],
-          thumbnailUrl: result['thumbnail'],
         );
 
         await _chatService.sendMessage(widget.conversationId, request);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erreur lors de l\'upload de la vidéo')),
+        );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erreur d\'upload: $e')),
       );
     } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _sendAudio() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.audio,
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
       setState(() {
-        _isSending = false;
+        _isSending = true;
       });
+
+      final filePath = result.files.single.path;
+      if (filePath == null) return;
+      
+      final file = File(filePath);
+      
+      // Upload vers Cloudflare R2 via backend API
+      final uploadResult = await _fileService.uploadChatAudio(
+        conversationId: widget.conversationId,
+        audioFile: file,
+        duration: 0, // TODO: Récupérer la durée si possible
+      );
+
+      if (uploadResult != null) {
+        final request = SendMessageRequest(
+          type: 'audio',
+          fileUrl: uploadResult['url'],
+          fileName: result.files.single.name,
+          fileSize: await file.length(),
+          fileDuration: uploadResult['duration'],
+        );
+
+        await _chatService.sendMessage(widget.conversationId, request);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erreur lors de l\'upload de l\'audio')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur d\'upload: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
+    }
+  }
+
+
+  void _markMessagesAsRead() {
+    if (_messages.isEmpty) return;
+    
+    // Trouver le dernier message non lu du partenaire
+    for (final message in _messages) {
+      if (message.senderId != _currentUserId) {
+        // Vérifier si j'ai déjà lu ce message
+        final hasRead = message.status?.any((s) => s.userId == _currentUserId && s.status == 'read') ?? false;
+        if (!hasRead) {
+          _chatService.markAsRead(widget.conversationId, message.id);
+        }
+        // Une fois qu'on a trouvé le dernier message (ou qu'on s'arrête au premier non lu), on peut arrêter
+        // Car markAsRead côté serveur devrait marquer tous les messages précédents comme lus
+        break;
+      }
     }
   }
 
   void _updateMessageStatus(Map<String, dynamic> data) {
-    // Mettre à jour le statut des messages localement
     final messageId = data['message_id'] as String?;
     final status = data['status'] as String?;
+    final userId = data['user_id'] as String?;
     
-    if (messageId != null && status != null) {
+    if (messageId != null && status != null && userId != null) {
+      if (!mounted) return;
       setState(() {
         final index = _messages.indexWhere((m) => m.id == messageId);
         if (index != -1) {
-          // Mettre à jour le statut
+          final message = _messages[index];
+          final currentStatuses = List<MessageStatus>.from(message.status ?? []);
+          
+          final statusIndex = currentStatuses.indexWhere((s) => s.userId == userId);
+          if (statusIndex != -1) {
+            currentStatuses[statusIndex] = MessageStatus(
+              id: currentStatuses[statusIndex].id,
+              messageId: messageId,
+              userId: userId,
+              status: status,
+              updatedAt: DateTime.now(),
+            );
+          } else {
+            currentStatuses.add(MessageStatus(
+              id: '',
+              messageId: messageId,
+              userId: userId,
+              status: status,
+              updatedAt: DateTime.now(),
+            ));
+          }
+
+          _messages[index] = Message(
+            id: message.id,
+            conversationId: message.conversationId,
+            senderId: message.senderId,
+            type: message.type,
+            content: message.content,
+            fileName: message.fileName,
+            fileUrl: message.fileUrl,
+            fileSize: message.fileSize,
+            fileDuration: message.fileDuration,
+            mimeType: message.mimeType,
+            thumbnailUrl: message.thumbnailUrl,
+            replyToId: message.replyToId,
+            isEdited: message.isEdited,
+            isDeleted: message.isDeleted,
+            deletedAt: message.deletedAt,
+            metadata: message.metadata,
+            createdAt: message.createdAt,
+            updatedAt: message.updatedAt,
+            sender: message.sender,
+            replyTo: message.replyTo,
+            status: currentStatuses,
+          );
         }
       });
     }
   }
+
+  Future<void> _showConversationInfo() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final response = await _chatService.getConversation(widget.conversationId);
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (response != null) {
+        final otherParticipant = response.participants.firstWhere(
+          (p) => p.userId != _currentUserId,
+          orElse: () => response.participants.first,
+        );
+
+        final user = otherParticipant.user;
+        if (user != null) {
+          final localizations = AppLocalizations.of(context);
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Text(localizations?.info ?? 'Informations', textAlign: TextAlign.center),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: Colors.grey[200],
+                    backgroundImage: user.profilePicUrl != null && user.profilePicUrl!.isNotEmpty
+                        ? NetworkImage(user.profilePicUrl!) 
+                        : null,
+                    child: user.profilePicUrl == null || user.profilePicUrl!.isEmpty
+                        ? const Icon(Icons.person, size: 40, color: Colors.grey) 
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(user.fullName ?? 'Utilisateur', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  const SizedBox(height: 8),
+                  if (user.phone != null) 
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.phone, size: 16, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        Text(user.phone!, style: const TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('OK'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Impossible de charger les informations')),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e')),
+      );
+    }
+  }
+
 
   @override
   void dispose() {
@@ -306,7 +528,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'info') {
-                // TODO: Afficher les informations de la conversation
+                _showConversationInfo();
               }
             },
             itemBuilder: (context) => [
@@ -328,6 +550,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             onSend: _sendTextMessage,
             onImagePick: _sendImage,
             onVideoPick: _sendVideo,
+            onAudioPick: _sendAudio,
             onTyping: _onTyping,
             isSending: _isSending,
           ),
@@ -337,6 +560,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   }
 
   Widget _buildMessageList() {
+    final localizations = AppLocalizations.of(context);
+    
     if (_isLoading && _messages.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }

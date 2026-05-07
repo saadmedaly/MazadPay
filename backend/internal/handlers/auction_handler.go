@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"mime/multipart"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -49,45 +52,45 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 	var response []fiber.Map
 	for _, auction := range auctions {
 		response = append(response, fiber.Map{
-			"id":              auction.ID,
-			"seller_id":       auction.SellerID,
-			"category_id":     auction.CategoryID,
-			"sub_category_id": auction.SubCategoryID,
-			"location_id":     auction.LocationID,
-			"title_ar":        auction.TitleAr,
-			"title_fr":        auction.TitleFr,
-			"title_en":        auction.TitleEn,
-			"description_ar":  auction.DescriptionAr,
-			"description_fr":  auction.DescriptionFr,
-			"description_en":  auction.DescriptionEn,
-			"start_price":     auction.StartPrice,
-			"current_price":   auction.CurrentPrice,
-			"min_increment":   auction.MinIncrement,
+			"id":               auction.ID,
+			"seller_id":        auction.SellerID,
+			"category_id":      auction.CategoryID,
+			"sub_category_id":  auction.SubCategoryID,
+			"location_id":      auction.LocationID,
+			"title_ar":         auction.TitleAr,
+			"title_fr":         auction.TitleFr,
+			"title_en":         auction.TitleEn,
+			"description_ar":   auction.DescriptionAr,
+			"description_fr":   auction.DescriptionFr,
+			"description_en":   auction.DescriptionEn,
+			"start_price":      auction.StartPrice,
+			"current_price":    auction.CurrentPrice,
+			"min_increment":    auction.MinIncrement,
 			"insurance_amount": auction.InsuranceAmount,
-			"reserve_price":   auction.ReservePrice,
-			"start_time":      auction.StartTime,
-			"end_time":        auction.EndTime,
-			"status":          auction.Status,
-			"lot_number":      auction.LotNumber,
-			"views":           auction.Views,
-			"bidder_count":    auction.BidderCount,
-			"winner_id":       auction.WinnerID,
-			"winning_bid_id":  auction.WinningBidID,
+			"reserve_price":    auction.ReservePrice,
+			"start_time":       auction.StartTime,
+			"end_time":         auction.EndTime,
+			"status":           auction.Status,
+			"lot_number":       auction.LotNumber,
+			"views":            auction.Views,
+			"bidder_count":     auction.BidderCount,
+			"winner_id":        auction.WinnerID,
+			"winning_bid_id":   auction.WinningBidID,
 			"payment_deadline": auction.PaymentDeadline,
-			"is_featured":     auction.IsFeatured,
-			"featured_until":  auction.FeaturedUntil,
+			"is_featured":      auction.IsFeatured,
+			"featured_until":   auction.FeaturedUntil,
 			"rejection_reason": auction.RejectionReason,
-			"item_details":    auction.ItemDetails,
-			"buy_now_price":   auction.BuyNowPrice,
-			"condition":       auction.Condition,
-			"brand":           auction.Brand,
-			"is_verified":     auction.IsVerified,
-			"video_url":       auction.VideoURL,
-			"quantity":        auction.Quantity,
-			"category":        auction.CategoryNameAr,
-			"city":            auction.CityNameAr,
-			"images":          auction.GetImagesArray(),
-			"created_at":      auction.CreatedAt,
+			"item_details":     auction.ItemDetails,
+			"buy_now_price":    auction.BuyNowPrice,
+			"condition":        auction.Condition,
+			"brand":            auction.Brand,
+			"is_verified":      auction.IsVerified,
+			"video_url":        auction.VideoURL,
+			"quantity":         auction.Quantity,
+			"category":         auction.CategoryNameAr,
+			"city":             auction.CityNameAr,
+			"images":           auction.GetImagesArray(),
+			"created_at":       auction.CreatedAt,
 		})
 	}
 
@@ -112,8 +115,7 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 }
 
 type CreateAuctionRequest struct {
-	// Accept category as string (mobile sends string) - will be mapped to ID
-	// OR category_id as int (web admin sends int directly)
+
 	Category        string                 `json:"category"`        // Optional: category name for mobile
 	SubCategory     string                 `json:"sub_category"`    // Optional: subcategory name for mobile
 	CategoryID      int                    `json:"category_id"`     // Required: category ID (used by web)
@@ -135,11 +137,11 @@ type CreateAuctionRequest struct {
 	ItemDetails     map[string]interface{} `json:"item_details"`
 	Images          []string               `json:"images"`
 	// New fields from migration 000024
-	Condition       *string                `json:"condition" validate:"omitempty,oneof=new used refurbished damaged"`
-	Brand           *string                `json:"brand"`
-	VideoURL        *string                `json:"video_url"`
+	Condition *string `json:"condition" validate:"omitempty,oneof=new used refurbished damaged"`
+	Brand     *string `json:"brand"`
+	VideoURL  *string `json:"video_url"`
 	// New field from migration 000032
-	Quantity        int                    `json:"quantity" validate:"omitempty,min=1"` // Nombre d'items (défaut: 1)
+	Quantity int `json:"quantity" validate:"omitempty,min=1"` // Nombre d'items (défaut: 1)
 }
 
 func (h *AuctionHandler) Create(c *fiber.Ctx) error {
@@ -409,7 +411,8 @@ func (h *AuctionHandler) Report(c *fiber.Ctx) error {
 	}
 
 	type ReportRequest struct {
-		Reason string `json:"reason" validate:"required,min=5"`
+		ReasonID string `json:"reason_id" validate:"required"`
+		Details  string `json:"details"`
 	}
 
 	var req ReportRequest
@@ -417,12 +420,22 @@ func (h *AuctionHandler) Report(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
+	if req.ReasonID == "" {
+		return BadRequest(c, "Reason ID is required")
+	}
+
 	reporterID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c)
 	}
 
-	if err := h.service.ReportAuction(c.Context(), id, reporterID, req.Reason); err != nil {
+	// Combine reason_id and details for the service
+	reason := req.ReasonID
+	if req.Details != "" {
+		reason = fmt.Sprintf("[%s] %s", req.ReasonID, req.Details)
+	}
+
+	if err := h.service.ReportAuction(c.Context(), id, reporterID, reason); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
@@ -435,6 +448,23 @@ func (h *AuctionHandler) AddImages(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid auction ID")
 	}
 
+	sellerID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	// Check if multipart form data (file upload) or JSON (URLs)
+	contentType := strings.TrimSpace(c.Get("Content-Type"))
+	h.logger.Info("[AddImages] Request received", zap.String("content_type", contentType), zap.String("auction_id", id.String()))
+
+	isMultipart := len(c.Request().Header.MultipartFormBoundary()) > 0 ||
+		strings.HasPrefix(strings.ToLower(contentType), "multipart/form-data")
+
+	if isMultipart {
+		return h.handleMultipartImages(c, id, sellerID)
+	}
+
+	// Fallback to URL-based images (legacy support)
 	type ImageRequest struct {
 		URLs []string `json:"urls" validate:"required,min=1,max=10"`
 	}
@@ -448,16 +478,168 @@ func (h *AuctionHandler) AddImages(c *fiber.Ctx) error {
 		return BadRequest(c, "At least one image URL required")
 	}
 
-	sellerID, err := middleware.GetUserID(c)
-	if err != nil {
-		return Unauthorized(c)
-	}
-
 	if err := h.service.AddImages(c.Context(), id, sellerID, req.URLs); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
 	return OK(c, fiber.Map{"message": "Images added successfully"})
+}
+
+func (h *AuctionHandler) handleMultipartImages(c *fiber.Ctx, auctionID, sellerID uuid.UUID) error {
+	h.logger.Info("[handleMultipartImages] Starting image upload process",
+		zap.String("auction_id", auctionID.String()),
+		zap.String("seller_id", sellerID.String()))
+
+	// Pre-validate auction ownership before uploading to R2
+	auction, _, err := h.service.GetByID(c.Context(), auctionID)
+	if err != nil {
+		h.logger.Error("[handleMultipartImages] Auction not found",
+			zap.Error(err),
+			zap.String("auction_id", auctionID.String()))
+		return NotFound(c, "Auction")
+	}
+	if auction.SellerID != sellerID {
+		h.logger.Warn("[handleMultipartImages] Unauthorized - user does not own auction",
+			zap.String("auction_id", auctionID.String()),
+			zap.String("seller_id", sellerID.String()),
+			zap.String("actual_seller", auction.SellerID.String()))
+		return Forbidden(c)
+	}
+
+	h.logger.Info("[handleMultipartImages] Auction ownership validated",
+		zap.String("auction_id", auctionID.String()))
+
+	// Get the media service from the context (set up in routes)
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		h.logger.Error("[handleMultipartImages] Media service not available in context")
+		return InternalError(c, "Media service not available")
+	}
+
+	// Parse multipart form (max 10 files, max 10MB each)
+	form, err := c.MultipartForm()
+	if err != nil {
+		h.logger.Error("[handleMultipartImages] Failed to parse multipart form",
+			zap.Error(err))
+		return BadRequest(c, "Failed to parse form data: "+err.Error())
+	}
+
+	files := form.File["images"]
+	if len(files) == 0 {
+		h.logger.Warn("[handleMultipartImages] No images provided in form data")
+		return BadRequest(c, "No images provided")
+	}
+
+	if len(files) > 10 {
+		h.logger.Warn("[handleMultipartImages] Too many images",
+			zap.Int("count", len(files)))
+		return BadRequest(c, "Maximum 10 images allowed")
+	}
+
+	h.logger.Info("[handleMultipartImages] Processing files",
+		zap.Int("file_count", len(files)))
+
+	var fileReaders []multipart.File
+	var headers []*multipart.FileHeader
+
+	// Ensure all file handles are closed even if upload fails
+	defer func() {
+		for _, f := range fileReaders {
+			if f != nil {
+				f.Close()
+			}
+		}
+	}()
+
+	for i, file := range files {
+		// Validate file size (max 10MB)
+		if file.Size > 10*1024*1024 {
+			h.logger.Warn("[handleMultipartImages] File too large",
+				zap.String("filename", file.Filename),
+				zap.Int64("size", file.Size))
+			return BadRequest(c, "File too large: "+file.Filename+" (max 10MB)")
+		}
+
+		// Validate file type
+		allowedTypes := map[string]bool{
+			"image/jpeg": true,
+			"image/jpg":  true,
+			"image/png":  true,
+			"image/webp": true,
+		}
+		contentType := file.Header.Get("Content-Type")
+		if !allowedTypes[contentType] {
+			h.logger.Warn("[handleMultipartImages] Invalid file type",
+				zap.String("filename", file.Filename),
+				zap.String("content_type", contentType))
+			return BadRequest(c, "Invalid file type: "+file.Filename+" (only JPEG, PNG, WebP allowed)")
+		}
+
+		f, err := file.Open()
+		if err != nil {
+			h.logger.Error("[handleMultipartImages] Failed to open file",
+				zap.Error(err),
+				zap.String("filename", file.Filename))
+			return InternalError(c, "Failed to open file: "+file.Filename)
+		}
+		fileReaders = append(fileReaders, f)
+		headers = append(headers, file)
+		h.logger.Info("[handleMultipartImages] File validated and opened",
+			zap.Int("index", i+1),
+			zap.String("filename", file.Filename),
+			zap.Int64("size", file.Size))
+	}
+
+	// Upload to R2
+	h.logger.Info("[handleMultipartImages] Starting R2 upload",
+		zap.String("auction_id", auctionID.String()),
+		zap.Int("file_count", len(fileReaders)))
+
+	urls, err := mediaSvc.UploadAuctionImages(c.Context(), fileReaders, headers, auctionID)
+	if err != nil {
+		h.logger.Error("[handleMultipartImages] R2 upload failed - detailed error",
+			zap.Error(err),
+			zap.String("auction_id", auctionID.String()),
+			zap.String("error_type", "CLOUDFLARE_R2_ERROR"),
+			zap.Int("attempted_files", len(fileReaders)))
+		return InternalError(c, "Failed to upload images to Cloudflare R2: "+err.Error())
+	}
+
+	h.logger.Info("[handleMultipartImages] R2 upload successful",
+		zap.String("auction_id", auctionID.String()),
+		zap.Int("uploaded_count", len(urls)))
+
+	// Save URLs to database
+	if err := h.service.AddImages(c.Context(), auctionID, sellerID, urls); err != nil {
+		h.logger.Error("[handleMultipartImages] Failed to save image URLs to database - cleaning up R2",
+			zap.Error(err),
+			zap.String("auction_id", auctionID.String()),
+			zap.Strings("urls", urls))
+
+		// Clean up uploaded images from R2 to prevent orphaned files
+		for _, url := range urls {
+			if delErr := mediaSvc.DeleteFile(c.Context(), url); delErr != nil {
+				h.logger.Warn("[handleMultipartImages] Failed to cleanup R2 image after DB error",
+					zap.String("url", url),
+					zap.Error(delErr))
+			} else {
+				h.logger.Info("[handleMultipartImages] Cleaned up R2 image after DB error",
+					zap.String("url", url))
+			}
+		}
+
+		return MapError(c, h.logger, err)
+	}
+
+	h.logger.Info("[handleMultipartImages] Images saved to database successfully",
+		zap.String("auction_id", auctionID.String()),
+		zap.Int("count", len(urls)))
+
+	return OK(c, fiber.Map{
+		"message": "Images uploaded successfully",
+		"urls":    urls,
+		"count":   len(urls),
+	})
 }
 
 func (h *AuctionHandler) BuyNow(c *fiber.Ctx) error {

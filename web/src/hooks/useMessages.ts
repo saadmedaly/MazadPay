@@ -27,15 +27,29 @@ export function useMessages(conversationId: string) {
 export function useSendMessage() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ conversationId, payload }: { 
-      conversationId: string; 
-      payload: { type: 'text' | 'image' | 'file'; content?: string } 
+    mutationFn: ({ conversationId, payload }: {
+      conversationId: string;
+      payload: { type: 'text' | 'image' | 'video' | 'audio' | 'file'; content?: string; file_url?: string }
     }) => api.sendMessage(conversationId, payload),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: messageKeys.list(vars.conversationId) })
       qc.invalidateQueries({ queryKey: messageKeys.conversations() })
     },
     onError: (err: Error) => toast.error(err.message),
+  })
+}
+
+export function useUploadChatMedia() {
+  return useMutation({
+    mutationFn: ({ conversationId, file, type }: {
+      conversationId: string;
+      file: File;
+      type: 'image' | 'video' | 'audio' | 'file'
+    }) => api.uploadChatMedia(conversationId, file, type),
+    onError: (err: any) => {
+      const message = err.response?.data?.message || err.message || 'فشل رفع الملف'
+      toast.error(message)
+    },
   })
 }
 
@@ -52,7 +66,7 @@ export function useMarkAsRead() {
 export function useCreateConversation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { type: 'direct' | 'group' | 'support', user_ids: string[], title?: string }) => 
+    mutationFn: (payload: { type: 'direct' | 'group' | 'support', user_ids: string[], title?: string }) =>
       api.createConversation(payload),
     onSuccess: (newConv) => {
       qc.invalidateQueries({ queryKey: messageKeys.conversations() })

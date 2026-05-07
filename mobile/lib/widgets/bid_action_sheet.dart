@@ -2,7 +2,7 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/auction_provider.dart';
+import '../providers/auction_provider_api.dart';
 import '../services/bid_api.dart';
 
 class BidActionSheet extends ConsumerStatefulWidget {
@@ -142,92 +142,42 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
           if (_step == 1) {
             setState(() => _step = 2);
           } else {
-            // Confirm Bid using API
+            // Confirm Bid using Optimistic UI
             setState(() => _isLoading = true);
-            // Debug: log auction ID being used
-            debugPrint('Placing bid for auction ID: ${widget.auctionId}, amount: $_bidAmount');
+            debugPrint('Placing optimistic bid for auction ID: ${widget.auctionId}, amount: $_bidAmount');
+            
             try {
-              final response = await _bidApi.placeBid(
-                auctionId: widget.auctionId,
-                amount: _bidAmount,
-              );
+              // Appeler la méthode optimiste du provider
+              await ref.read(auctionNotifierApiProvider(widget.auctionId).notifier)
+                  .placeBidOptimistically(_bidAmount);
               
               if (mounted) {
-                if (response.success) {
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(AppLocalizations.of(context)!.text_373),
-                      backgroundColor: const Color(0xFF00C58D),
-                    ),
-                  );
-                  // Refresh auction data
-                  ref.invalidate(auctionNotifierProvider(widget.auctionId));
-                } else {
-                  // Extract error code and message
-                  final errorCode = response.error?.code ?? '';
-                  final errorMessage = response.message ?? 'Erreur lors de l\'enchère';
-                  
-                  // Handle specific error codes
-                  String displayMessage = errorMessage;
-                  if (errorCode == 'self_bid') {
-                    displayMessage = 'Vous ne pouvez pas enchérir sur votre propre enchère';
-                  } else if (errorCode == 'insufficient_funds') {
-                    displayMessage = 'Solde insuffisant pour placer cette enchère';
-                  } else if (errorCode == 'auction_ended') {
-                    displayMessage = 'Cette enchère est déjà terminée';
-                  } else if (errorCode == 'bid_too_low') {
-                    displayMessage = 'Le montant de l\'enchère est trop faible';
-                  } else if (errorMessage.contains('not found') || errorMessage.contains('404')) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Cette enchère n\'existe plus ou a été supprimée'),
-                        backgroundColor: Colors.red,
-                        duration: const Duration(seconds: 3),
-                      ),
-                    );
-                    // Close the modal and navigate back
-                    Navigator.of(context).pop();
-                    Navigator.of(context).pop();
-                    return;
-                  }
-                  
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(displayMessage),
-                      backgroundColor: Colors.red,
-                      duration: const Duration(seconds: 3),
-                    ),
-                  );
-                }
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(AppLocalizations.of(context)!.text_373),
+                    backgroundColor: const Color(0xFF00C58D),
+                  ),
+                );
               }
             } catch (e) {
               if (mounted) {
-                final errorStr = e.toString();
-                // Check if it's a NotFoundException
-                if (errorStr.contains('not found') || errorStr.contains('404')) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Cette enchère n\'existe plus ou a été supprimée'),
-                      backgroundColor: Colors.red,
-                      duration: const Duration(seconds: 3),
-                    ),
-                  );
-                  // Close the modal and navigate back
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Erreur: ${e.toString()}'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            } finally {
-              if (mounted) {
                 setState(() => _isLoading = false);
+                
+                String errorMessage = e.toString();
+                if (errorMessage.contains('insufficient_funds')) {
+                  errorMessage = 'Solde insuffisant pour placer cette enchère';
+                } else if (errorMessage.contains('self_bid')) {
+                  errorMessage = 'Vous ne pouvez pas enchérir sur votre propre enchère';
+                }
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(errorMessage),
+                    backgroundColor: Colors.red,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
               }
             }
           }

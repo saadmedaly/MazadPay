@@ -23,6 +23,9 @@ import { BlockedPhonesPage } from './pages/BlockedPhonesPage'
 import { PaymentMethodsPage } from './pages/PaymentMethodsPage'
 import { DeliveryDriversPage } from './pages/DeliveryDriversPage'
 import { MessagesPage } from './pages/MessagesPage'
+import { SponsorsPage } from './pages/SponsorsPage'
+import { RatingsPage } from './pages/RatingsPage'
+import { ComplaintsPage } from './pages/ComplaintsPage'
 import { useAuthStore } from './stores/authStore'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -57,7 +60,7 @@ export default function App() {
         
         <Route path="reports" element={<ReportsPage />} />
         <Route path="banners" element={<BannersPage />} />
-        <Route path="kyc" element={<KYCPage />} />
+        <Route path="requests" element={<KYCPage />} />
         <Route path="faq" element={<FAQPage />} />
         <Route path="tutorials" element={<TutorialsPage />} />
         <Route path="categories" element={<CategoriesPage />} />
@@ -69,6 +72,9 @@ export default function App() {
         <Route path="payment-methods" element={<PaymentMethodsPage />} />
         <Route path="delivery-drivers" element={<DeliveryDriversPage />} />
         <Route path="messages" element={<MessagesPage />} />
+        <Route path="sponsors" element={<SponsorsPage />} />
+        <Route path="ratings" element={<RatingsPage />} />
+        <Route path="complaints" element={<ComplaintsPage />} />
       </Route>
 
       <Route path="/admin/register-admin" element={<AdminInvitePage />} />

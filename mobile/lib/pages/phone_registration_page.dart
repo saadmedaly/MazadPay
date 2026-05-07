@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'login_page.dart';
 import 'otp_entry_page.dart';
 import '../services/auth_api.dart';
+import '../services/category_api.dart';
 
 class PhoneRegistrationPage extends ConsumerStatefulWidget {
   const PhoneRegistrationPage({super.key});
@@ -15,7 +16,10 @@ class PhoneRegistrationPage extends ConsumerStatefulWidget {
 class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
   final _phoneController = TextEditingController();
   final AuthApi _authApi = AuthApi();
+  final CategoryApi _categoryApi = CategoryApi();
   bool _isLoading = false;
+  List<dynamic> _countries = [];
+  Map<String, dynamic>? _selectedCountry;
 
   @override
   void initState() {
@@ -23,6 +27,28 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
     _phoneController.addListener(() {
       setState(() {});
     });
+    _loadCountries();
+  }
+
+  Future<void> _loadCountries() async {
+    final response = await _categoryApi.getCountries();
+    if (response.success && response.data != null) {
+      if (mounted) {
+        setState(() {
+          _countries = response.data!;
+          // Select default country (+222 Mauritania) or first available
+          try {
+            _selectedCountry = _countries.firstWhere(
+              (c) => c['country_code'] == '+222' || c['code'] == 'MR',
+            );
+          } catch (e) {
+            if (_countries.isNotEmpty) {
+              _selectedCountry = _countries.first;
+            }
+          }
+        });
+      }
+    }
   }
 
   void dispose() {
@@ -41,8 +67,9 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
     setState(() => _isLoading = true);
 
     try {
+      final countryCode = _selectedCountry?['country_code'] ?? '+222';
       final response = await _authApi.sendOTP(
-        phone: '+222 ${_phoneController.text}',
+        phone: '$countryCode ${_phoneController.text}',
         purpose: 'register',
       );
 
@@ -53,7 +80,7 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
           context,
           MaterialPageRoute(
             builder: (context) => OtpEntryPage(
-              phoneNumber: '+222 ${_phoneController.text}',
+              phoneNumber: '${_selectedCountry?['country_code'] ?? '+222'} ${_phoneController.text}',
             ),
           ),
         );
@@ -185,23 +212,32 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
-                            '+222',
-                            style: TextStyle(
+                          Text(
+                            _selectedCountry?['country_code'] ?? '+222',
+                            style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
                               color: Colors.grey,
                             ),
+                            textDirection: TextDirection.ltr,
                           ),
                           const SizedBox(width: 8),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(2),
-                            child: Image.asset(
-                              'assets/mr.png',
-                              width: 24,
-                              height: 16,
-                              fit: BoxFit.cover,
-                            ),
+                            child: _selectedCountry?['code'] != null 
+                              ? Image.network(
+                                  'https://flagcdn.com/w80/${_selectedCountry!['code'].toString().toLowerCase()}.png',
+                                  width: 24,
+                                  height: 16,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stack) => Image.asset('assets/mr.png', width: 24, height: 16, fit: BoxFit.cover),
+                                )
+                              : Image.asset(
+                                  'assets/mr.png',
+                                  width: 24,
+                                  height: 16,
+                                  fit: BoxFit.cover,
+                                ),
                           ),
                         ],
                       ),
@@ -387,51 +423,33 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
-              // Current Country
-              _buildCountryItem(
-                context,
-                name: AppLocalizations.of(context)!.text_220,
-                code: '+222',
-                flagUrl: 'assets/mr.png',
-                isAvailable: true,
-              ),
-              const Divider(height: 32),
-              // Future Countries
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: Text(
-                  AppLocalizations.of(context)!.text_165,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildCountryItem(
-                context,
-                name: AppLocalizations.of(context)!.text_221,
-                code: '+221',
-                flagUrl: 'https://flagcdn.com/w80/sn.png',
-                isAvailable: false,
-              ),
-              const SizedBox(height: 12),
-              _buildCountryItem(
-                context,
-                name: AppLocalizations.of(context)!.text_222,
-                code: '+212',
-                flagUrl: 'https://flagcdn.com/w80/ma.png',
-                isAvailable: false,
-              ),
-              const SizedBox(height: 12),
-              _buildCountryItem(
-                context,
-                name: AppLocalizations.of(context)!.text_223,
-                code: '+216',
-                flagUrl: 'https://flagcdn.com/w80/tn.png',
-                isAvailable: false,
-              ),
+              if (_countries.isEmpty)
+                const CircularProgressIndicator()
+              else
+                ..._countries.map((country) {
+                  final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+                  final isFrench = Localizations.localeOf(context).languageCode == 'fr';
+                  final name = isArabic 
+                      ? country['name_ar'] 
+                      : (isFrench ? country['name_fr'] : country['name_en']);
+                  
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: _buildCountryItem(
+                      context,
+                      name: name ?? 'Unknown',
+                      code: country['country_code'] ?? '',
+                      flagUrl: 'https://flagcdn.com/w80/${country['code'].toString().toLowerCase()}.png',
+                      isAvailable: country['is_active'] ?? true,
+                      onTap: () {
+                        if (country['is_active'] ?? true) {
+                          setState(() => _selectedCountry = country);
+                          Navigator.pop(context);
+                        }
+                      },
+                    ),
+                  );
+                }).toList(),
               const SizedBox(height: 40),
             ],
           ),
@@ -446,11 +464,12 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
     required String code,
     required String flagUrl,
     required bool isAvailable,
+    VoidCallback? onTap,
   }) {
     return Opacity(
       opacity: isAvailable ? 1.0 : 0.5,
       child: InkWell(
-        onTap: isAvailable ? () => Navigator.pop(context) : null,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

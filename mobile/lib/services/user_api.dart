@@ -225,4 +225,25 @@ class UserApi {
       return ApiResponse.error(e.toString());
     }
   }
+
+  /// Rechercher des utilisateurs
+  Future<ApiResponse<List<dynamic>>> searchUsers(String query) async {
+    try {
+      final response = await _apiService.get<Map<String, dynamic>>(
+        '/users/search',
+        queryParameters: {'q': query},
+      );
+      
+      if (response != null && response['success'] == true && response['data'] != null) {
+        return ApiResponse<List<dynamic>>(
+          success: true,
+          data: response['data'] as List<dynamic>,
+        );
+      }
+      return ApiResponse.error('Échec de la recherche');
+    } catch (e) {
+      return ApiResponse.error(e.toString());
+    }
+  }
 }
+

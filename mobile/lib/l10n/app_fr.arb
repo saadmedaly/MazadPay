@@ -336,9 +336,6 @@
   "text_334": "Nous pouvons supprimer votre compte pour infraction.",
   "text_335": "2. Législation :",
   "text_336": "Ce service respecte les lois de la Mauritanie.",
-  "text_337": "Règles des enchères :",
-  "text_338": "Un dépôt est requis.",
-  "text_339": "Restitution automatique sous une heure.",
   "text_340": "Non restituable si vous gagnez sans payer.",
   "text_341": "Droit d'annulation de l'administration.",
   "text_342": "Abonnement annuel de 100 MRU requis.",
@@ -376,8 +373,6 @@
   "text_374": "Confirmer",
   "text_375": "Mazad ",
   "text_376": "Pay",
-  "text_377": "Vidéos",
-  "text_378": "Ajouter",
   "text_379": "Déposer maintenant",
   "text_380": "Contactez-nous",
   "text_381": "Informations personnelles",
@@ -476,5 +471,7 @@
   "text_399": "Ajouter des images",
   "text_400": "Contacter le vendeur",
   "text_401": "Mes Demandes",
-  "text_402": "Nouvelle conversation"
+  "text_402": "Nouvelle conversation",
+  "no_auctions_found": "Aucune enchère dans cette ville",
+  "error_too_many_requests": "Trop de tentatives. Veuillez réessayer plus tard."
 }

@@ -65,7 +65,7 @@ class MessageBubble extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       color: isMe 
-                          ? theme.colorScheme.onPrimary.withOpacity(0.7)
+                          ? theme.colorScheme.onPrimary.withValues(alpha: 0.7)
                           : Colors.grey[600],
                     ),
                   ),
@@ -79,7 +79,7 @@ class MessageBubble extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 10,
                         color: isMe 
-                            ? theme.colorScheme.onPrimary.withOpacity(0.7)
+                            ? theme.colorScheme.onPrimary.withValues(alpha: 0.7)
                             : Colors.grey[500],
                       ),
                     ),
@@ -257,7 +257,7 @@ class MessageBubble extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               color: isMe 
-                  ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)
+                  ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7)
                   : Colors.grey[600],
             ),
           ),
@@ -296,7 +296,7 @@ class MessageBubble extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               color: isMe 
-                  ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)
+                  ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7)
                   : Colors.grey[600],
             ),
           ),
@@ -306,15 +306,39 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildStatusIcon(BuildContext context) {
-    IconData icon = Icons.check;
-    Color color = Theme.of(context).colorScheme.onPrimary.withOpacity(0.7);
-    
+    if (message.status == null || message.status!.isEmpty) {
+      return Icon(
+        Icons.access_time,
+        size: 14,
+        color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7),
+      );
+    }
+
+    final statuses = message.status!;
+    bool isRead = statuses.any((s) => s.status == 'read');
+    bool isDelivered = statuses.any((s) => s.status == 'delivered' || s.status == 'read');
+
+    IconData icon;
+    Color color = Theme.of(context).colorScheme.onPrimary;
+
+    if (isRead) {
+      icon = Icons.done_all;
+      color = Colors.lightBlueAccent;
+    } else if (isDelivered) {
+      icon = Icons.done_all;
+      color = color.withValues(alpha: 0.7);
+    } else {
+      icon = Icons.done;
+      color = color.withValues(alpha: 0.7);
+    }
+
     return Icon(
       icon,
       size: 14,
       color: color,
     );
   }
+
 
   String _formatTime(DateTime time) {
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';

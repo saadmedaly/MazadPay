@@ -8,8 +8,9 @@ import (
 
 type Report struct {
 	ID         uuid.UUID  `db:"id"          json:"id"`
-	AuctionID  uuid.UUID  `db:"auction_id"  json:"auction_id"`
+	AuctionID  *uuid.UUID `db:"auction_id"  json:"auction_id"`
 	ReporterID uuid.UUID  `db:"reporter_id" json:"reporter_id"`
+	Type       string     `db:"type"        json:"type"` // 'auction' or 'app'
 	Reason     string     `db:"reason"      json:"reason"`
 	Status     string     `db:"status"      json:"status"`
 	ReviewedBy *uuid.UUID `db:"reviewed_by" json:"reviewed_by"`

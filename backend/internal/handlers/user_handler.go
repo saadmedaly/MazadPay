@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"fmt"
+	"path/filepath"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/middleware"
@@ -33,14 +36,14 @@ func (h *UserHandler) GetMe(c *fiber.Ctx) error {
 
 func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
 	type Request struct {
-		FullName    string  `json:"full_name"`
-		Email       string  `json:"email"`
-		City        string  `json:"city"`
-		CountryCode string  `json:"country_code"`
-		Address     string  `json:"address"`
-		PostalCode  string  `json:"postal_code"`
-		DateOfBirth string  `json:"date_of_birth"`
-		Gender      string  `json:"gender"`
+		FullName    string `json:"full_name"`
+		Email       string `json:"email"`
+		City        string `json:"city"`
+		CountryCode string `json:"country_code"`
+		Address     string `json:"address"`
+		PostalCode  string `json:"postal_code"`
+		DateOfBirth string `json:"date_of_birth"`
+		Gender      string `json:"gender"`
 	}
 	var req Request
 	if err := c.BodyParser(&req); err != nil {
@@ -75,6 +78,103 @@ func (h *UserHandler) UpdateAvatar(c *fiber.Ctx) error {
 		return InternalError(c, "Failed to update avatar")
 	}
 	return OK(c, fiber.Map{"message": "Avatar updated"})
+}
+
+// UploadAvatarMultipart handles multipart file upload for profile avatar to R2
+func (h *UserHandler) UploadAvatarMultipart(c *fiber.Ctx) error {
+	h.logger.Info("[UploadAvatarMultipart] Starting avatar upload")
+
+	// Get user ID from JWT
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	// Get media service from context
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		h.logger.Error("[UploadAvatarMultipart] Media service not available in context")
+		return InternalError(c, "Media service not available")
+	}
+
+	// Parse multipart form (max 1 file, max 5MB)
+	file, err := c.FormFile("avatar")
+	if err != nil {
+		h.logger.Error("[UploadAvatarMultipart] Failed to get avatar file", zap.Error(err))
+		return BadRequest(c, "No avatar file provided")
+	}
+
+	// Validate file size (max 5MB)
+	if file.Size > 5*1024*1024 {
+		h.logger.Warn("[UploadAvatarMultipart] File too large", zap.Int64("size", file.Size))
+		return BadRequest(c, "File too large (max 5MB)")
+	}
+
+	// Validate file type
+	ext := filepath.Ext(file.Filename)
+	allowedExts := map[string]bool{
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".webp": true,
+	}
+	if !allowedExts[ext] {
+		h.logger.Warn("[UploadAvatarMultipart] Invalid file type", zap.String("ext", ext))
+		return BadRequest(c, "Invalid file type (only JPG, PNG, WebP allowed)")
+	}
+
+	// Open file
+	fileReader, err := file.Open()
+	if err != nil {
+		h.logger.Error("[UploadAvatarMultipart] Failed to open file", zap.Error(err))
+		return InternalError(c, "Failed to open file")
+	}
+	defer fileReader.Close()
+
+	// Upload to R2 with user ID as filename: users/{userID}.{ext}
+	folder := "users"
+	key := fmt.Sprintf("%s/%s%s", folder, userID.String(), ext)
+
+	h.logger.Info("[UploadAvatarMultipart] Uploading to R2",
+		zap.String("user_id", userID.String()),
+		zap.String("key", key))
+
+	url, err := mediaSvc.UploadFile(c.Context(), fileReader, file, folder)
+	if err != nil {
+		h.logger.Error("[UploadAvatarMultipart] R2 upload failed",
+			zap.Error(err),
+			zap.String("user_id", userID.String()))
+		return InternalError(c, "Failed to upload avatar to Cloudflare R2: "+err.Error())
+	}
+
+	h.logger.Info("[UploadAvatarMultipart] R2 upload successful",
+		zap.String("user_id", userID.String()),
+		zap.String("url", url))
+
+	// Update user profile with avatar URL
+	if err := h.service.UpdateAvatar(c.Context(), userID, url); err != nil {
+		h.logger.Error("[UploadAvatarMultipart] Failed to update avatar in DB",
+			zap.Error(err),
+			zap.String("user_id", userID.String()),
+			zap.String("url", url))
+
+		// Cleanup R2 file on DB error
+		if delErr := mediaSvc.DeleteFile(c.Context(), url); delErr != nil {
+			h.logger.Warn("[UploadAvatarMultipart] Failed to cleanup R2 after DB error",
+				zap.String("url", url),
+				zap.Error(delErr))
+		}
+
+		return InternalError(c, "Failed to update avatar in database")
+	}
+
+	h.logger.Info("[UploadAvatarMultipart] Avatar updated successfully",
+		zap.String("user_id", userID.String()))
+
+	return OK(c, fiber.Map{
+		"message": "Avatar uploaded successfully",
+		"url":     url,
+	})
 }
 
 func (h *UserHandler) AddFavorite(c *fiber.Ctx) error {
@@ -254,13 +354,13 @@ func (h *UserHandler) GetUserSettings(c *fiber.Ctx) error {
 
 func (h *UserHandler) UpdateUserSettings(c *fiber.Ctx) error {
 	type Request struct {
-		Currency              string `json:"currency"`
-		Theme                 string `json:"theme"`
-		Language              string `json:"language"`
-		NotificationsEmail    bool   `json:"notifications_email"`
-		NotificationsPush     bool   `json:"notifications_push"`
-		NotificationsSMS      bool   `json:"notifications_sms"`
-		TwoFactorEnabled      bool   `json:"two_factor_enabled"`
+		Currency           string `json:"currency"`
+		Theme              string `json:"theme"`
+		Language           string `json:"language"`
+		NotificationsEmail bool   `json:"notifications_email"`
+		NotificationsPush  bool   `json:"notifications_push"`
+		NotificationsSMS   bool   `json:"notifications_sms"`
+		TwoFactorEnabled   bool   `json:"two_factor_enabled"`
 	}
 	var req Request
 	if err := c.BodyParser(&req); err != nil {
@@ -354,3 +454,27 @@ func (h *UserHandler) MyBidsLost(c *fiber.Ctx) error {
 	}
 	return OK(c, bids)
 }
+
+func (h *UserHandler) Search(c *fiber.Ctx) error {
+	query := c.Query("q")
+	if len(query) < 2 {
+		return OK(c, []models.User{})
+	}
+
+	page := c.QueryInt("page", 1)
+	perPage := c.QueryInt("per_page", 20)
+
+	users, _, err := h.service.Search(c.Context(), query, page, perPage)
+	if err != nil {
+		return InternalError(c, "Search failed")
+	}
+
+	// Mask phone numbers for privacy
+	maskedUsers := make([]*ResponseUser, len(users))
+	for i := range users {
+		maskedUsers[i] = MaskUserPhone(&users[i])
+	}
+
+	return OK(c, maskedUsers)
+}
+

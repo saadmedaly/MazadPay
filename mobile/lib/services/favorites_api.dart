@@ -9,7 +9,7 @@ class FavoritesApi {
   Future<ApiResponse<Map<String, dynamic>>> getFavorites() async {
     try {
       final response = await _apiService.get<Map<String, dynamic>>(
-        '/favorites',
+        '/users/me/favorites',
       );
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
@@ -21,8 +21,7 @@ class FavoritesApi {
   Future<ApiResponse<Map<String, dynamic>>> addFavorite(String auctionId) async {
     try {
       final response = await _apiService.post<Map<String, dynamic>>(
-        '/favorites',
-        data: {'auction_id': auctionId},
+        '/users/me/favorites/$auctionId',
       );
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
@@ -34,7 +33,7 @@ class FavoritesApi {
   Future<ApiResponse<Map<String, dynamic>>> removeFavorite(String auctionId) async {
     try {
       final response = await _apiService.delete<Map<String, dynamic>>(
-        '/favorites/$auctionId',
+        '/users/me/favorites/$auctionId',
       );
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {

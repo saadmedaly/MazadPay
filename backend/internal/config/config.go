@@ -119,7 +119,7 @@ func Load() *Config {
 			Endpoint:    getEnv("R2_ENDPOINT", "xxxxxxxx.r2.cloudflarestorage.com"),
 			AccessKey:   getEnv("R2_ACCESS_KEY", "your_r2_access_key"),
 			SecretKey:   getEnv("R2_SECRET_KEY", "your_r2_secret_key"),
-			BucketMedia: getEnv("R2_BUCKET_MEDIA", "mazadpay-media"),
+			BucketMedia: getEnv("R2_BUCKET_MEDIA", "mazad-mwdia"),
 			PublicURL:   getEnv("R2_PUBLIC_URL", "https://pub-xxxxxx.r2.dev"),
 		},
 		Twilio: TwilioConfig{

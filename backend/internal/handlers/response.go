@@ -215,6 +215,18 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 			logger.Info("Auction date validation failed", logFields...)
 			return BadRequest(c, "تاريخ الإغلاق يجب أن يكون في المستقبل")
 		}
+		if strings.Contains(errStr, "at least one image is required") {
+			logger.Info("Auction image validation failed", logFields...)
+			return BadRequest(c, "يجب إضافة صورة واحدة على الأقل للمزاد")
+		}
+		if strings.Contains(errStr, "category with ID") && strings.Contains(errStr, "does not exist") {
+			logger.Info("Category validation failed", logFields...)
+			return BadRequest(c, "الفئة المحددة غير موجودة")
+		}
+		if strings.Contains(errStr, "location with ID") && strings.Contains(errStr, "does not exist") {
+			logger.Info("Location validation failed", logFields...)
+			return BadRequest(c, "الموقع المحدد غير موجود")
+		}
 
 		// Gestion des erreurs de base de données courantes (Postgres)
 		if contains(errStr, "23505") || contains(errStr, "duplicate key") {

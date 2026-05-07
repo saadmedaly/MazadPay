@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -81,6 +82,36 @@ func (h *RequestHandler) CreateBannerRequest(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{"message": "Banner request submitted successfully", "id": req.ID})
+}
+
+// Upload Banner Request Image (public endpoint for users)
+func (h *RequestHandler) UploadBannerRequestImage(c *fiber.Ctx) error {
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		return InternalError(c, "Media service not found")
+	}
+
+	fileHeader, err := c.FormFile("image")
+	if err != nil {
+		return BadRequest(c, "Image is required")
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		return InternalError(c, "Failed to open image")
+	}
+	defer file.Close()
+
+	// Folder structure: banner-requests/{userID}
+	userID, _ := middleware.GetUserID(c)
+	folder := fmt.Sprintf("banner-requests/%s", userID.String())
+
+	url, err := mediaSvc.UploadFile(c.Context(), file, fileHeader, folder)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, fiber.Map{"url": url})
 }
 
 // Get Auction Requests

@@ -1,4 +1,3 @@
-import 'package:uuid/uuid.dart';
 import 'user.dart';
 
 class Conversation {
@@ -135,6 +134,7 @@ class UserConversation {
   final DateTime? lastReadAt;
   final int unreadCount;
   final bool isMuted;
+  final List<ConversationParticipant>? participants;
 
   UserConversation({
     required this.userId,
@@ -150,12 +150,16 @@ class UserConversation {
     this.lastReadAt,
     required this.unreadCount,
     required this.isMuted,
+    this.participants,
   });
+
+  List<ConversationParticipant> get participantsList => participants ?? [];
+
 
   factory UserConversation.fromJson(Map<String, dynamic> json) {
     return UserConversation(
       userId: json['user_id'] ?? '',
-      conversationId: json['conversation_id'] ?? '',
+      conversationId: json['conversation_id'] ?? json['id'] ?? '',
       type: json['type'] ?? 'direct',
       title: json['title'],
       lastMessageAt: json['last_message_at'] != null 
@@ -171,9 +175,13 @@ class UserConversation {
           : null,
       unreadCount: json['unread_count'] ?? 0,
       isMuted: json['is_muted'] ?? false,
+      participants: (json['participants'] as List<dynamic>?)
+          ?.map((e) => ConversationParticipant.fromJson(e))
+          .toList() ?? [],
     );
   }
 }
+
 
 class ConversationResponse {
   final Conversation conversation;

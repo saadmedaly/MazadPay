@@ -2,15 +2,11 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 
 import 'package:flutter/material.dart';
 
-import 'package:mezadpay/widgets/side_menu_drawer.dart';
-
 import 'package:mezadpay/pages/account_page.dart';
 
 import 'package:mezadpay/pages/services_page.dart';
 
 import 'package:mezadpay/pages/create_ad_start_page.dart';
-
-import 'package:mezadpay/pages/notifications_page.dart';
 
 import 'package:flutter/services.dart';
 
@@ -23,14 +19,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 
 import '../widgets/side_menu_drawer.dart';
-
 import '../widgets/live_indicator.dart';
 
 import 'all_auctions_page.dart';
 
 import 'auction_details_page.dart';
-
-import 'notifications_page.dart';
 
 import '../services/auction_api.dart';
 
@@ -39,12 +32,16 @@ import '../services/category_api.dart';
 import '../services/cache_service.dart';
 
 import '../services/banner_api.dart';
+import '../services/sponsor_api.dart';
+import 'notifications_page.dart';
 
-import '../providers/locale_provider.dart';
-
-import '../providers/location_provider.dart';
-
-import '../providers/favorites_provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:mezadpay/providers/favorites_provider.dart';
+import 'package:mezadpay/providers/location_provider.dart';
+import 'package:mezadpay/providers/home_provider.dart';
+import 'package:mezadpay/models/auction.dart';
+import 'package:mezadpay/utils/time_utils.dart';
 
 
 
@@ -75,7 +72,6 @@ class _HomePageState extends ConsumerState<HomePage> {
   List<Map<String, dynamic>> _dbCities = []; // Villes depuis la BD
 
   Set<String> _citiesWithAuctions = {}; // IDs des villes qui ont des enchères
-
   bool _isLoadingCities = true;
 
   final AuctionApi _auctionApi = AuctionApi();
@@ -87,6 +83,12 @@ class _HomePageState extends ConsumerState<HomePage> {
   List<Map<String, dynamic>> _banners = []; // Bannières depuis la BD
 
   bool _isLoadingBanners = true;
+
+  final SponsorApi _sponsorApi = SponsorApi();
+
+  List<Map<String, dynamic>> _sponsors = [];
+
+  bool _isLoadingSponsors = true;
 
   List<Map<String, dynamic>> _auctions = [];
 
@@ -107,6 +109,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     // Load banners from database
 
     _loadBanners();
+
+    // Load sponsors from database
+
+    _loadSponsors();
 
     // Check if location modal was shown before
 
@@ -462,7 +468,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       final exactMatchIndex = citiesList.indexWhere((c) {
         final nameAr = c['name_ar']?.toString() ?? c['city_name_ar']?.toString() ?? '';
         final nameFr = c['name_fr']?.toString() ?? c['city_name_fr']?.toString() ?? '';
-        final nameEn = c['name_en']?.toString() ?? c['city_name_en']?.toString() ?? '';
+        final nameEn = c['name_en']?.toString() ?? c['city_name_fr']?.toString() ?? '';
         final name = c['name']?.toString() ?? '';
         
         final cleanUserCity = userCityName.toLowerCase().trim();
@@ -476,10 +482,9 @@ class _HomePageState extends ConsumerState<HomePage> {
       });
 
       if (exactMatchIndex != -1) {
-        // Déplacer la ville correspondante au début
         final city = citiesList.removeAt(exactMatchIndex);
         citiesList.insert(0, city);
-        return; // Priorité au nom, on s'arrête là
+        return;
       }
     }
 
@@ -500,113 +505,43 @@ class _HomePageState extends ConsumerState<HomePage> {
 
         return distA.compareTo(distB);
       });
+      return;
+    }
+
+    // 3. FALLBACK: Si pas de localisation, mettre Nouakchott en premier
+    final nouakchottIndex = citiesList.indexWhere((c) {
+      final nameFr = c['name_fr']?.toString() ?? c['city_name_fr']?.toString() ?? '';
+      return nameFr.toLowerCase().contains('nouakchott');
+    });
+    if (nouakchottIndex != -1) {
+      final city = citiesList.removeAt(nouakchottIndex);
+      citiesList.insert(0, city);
     }
   }
 
   String _getCityName(BuildContext context, Map<String, dynamic> city) {
-
-    // Récupérer la langue actuelle de l'app
-
     final locale = Localizations.localeOf(context).languageCode;
-
     
-
-    // Retourner le nom selon la langue, avec fallback
-
-    String cityName;
-
-    switch (locale) {
-
-      case 'ar':
-
-        cityName = city['city_name_ar']?.toString() ?? 
-
-                   city['name_ar']?.toString() ?? 
-
-                   city['name']?.toString() ?? 
-
-                   city['city_name']?.toString() ?? 
-
-                   'Unknown';
-
-        break;
-
-      case 'fr':
-
-        // Correction spéciale pour Nouadhibou (API retourne arabe dans city_name_fr)
-
-        String frenchName = city['city_name_fr']?.toString() ?? 
-
-                           city['name_fr']?.toString() ?? 
-
-                           city['city_name_ar']?.toString() ?? 
-
-                           city['name']?.toString() ?? 
-
-                           'Unknown';
-
-        
-
-        // Si le nom français contient des caractères arabes, utiliser une traduction statique
-
-        if (frenchName.contains('انواذيبو') || frenchName == 'انواذيبو') {
-
-          cityName = 'Nouadhibou';
-
-        } else if (frenchName.contains('انواكشوط') || frenchName == 'انواكشوط') {
-
-          cityName = 'Nouakchott';
-
-        } else {
-
-          cityName = frenchName;
-
-        }
-
-        break;
-
-      case 'en':
-
-        cityName = city['city_name_en']?.toString() ?? 
-
-                   city['name_en']?.toString() ?? 
-
-                   city['city_name_ar']?.toString() ?? 
-
-                   city['name']?.toString() ?? 
-
-                   'Unknown';
-
-        
-
-        // Correction pour l'anglais aussi
-
-        if (cityName.contains('انواذيبو') || cityName == 'انواذيبو') {
-
-          cityName = 'Nouadhibou';
-
-        } else if (cityName.contains('انواكشوط') || cityName == 'انواكشوط') {
-
-          cityName = 'Nouakchott';
-
-        }
-
-        break;
-
-      default:
-
-        cityName = city['city_name_ar']?.toString() ?? 
-
-                   city['name']?.toString() ?? 
-
-                   'Unknown';
-
+    if (locale == 'ar') {
+      return city['city_name_ar']?.toString() ?? 
+             city['name_ar']?.toString() ?? 
+             city['name']?.toString() ?? 
+             'غير معروف';
+    } else {
+      // Pour FR et EN, utiliser city_name_fr comme demandé
+      String name = city['city_name_fr']?.toString() ?? 
+                    city['name_fr']?.toString() ?? 
+                    city['name']?.toString() ?? 
+                    'Unknown';
+      
+      // Overrides pour les noms qui reviennent en Arabe de l'API
+      if (name.contains('انواذيبو') || name == 'انواذيبو') return 'Nouadhibou';
+      if (name.contains('انواكشوط') || name == 'انواكشوط') return 'Nouakchott';
+      if (name.contains('أطار') || name == 'أطار') return 'Atar';
+      if (name.contains('روصو') || name == 'روصو') return 'Rosso';
+      
+      return name;
     }
-
-    
-
-    return cityName;
-
   }
 
 
@@ -647,7 +582,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     try {
       debugPrint('=== LOADING BANNERS ===');
       
-      // OPTIMISTIC UI: Charger depuis le cache d'abord
       final cachedBanners = await CacheService.instance.getCachedBanners();
       final isCacheValid = await CacheService.instance.isBannersCacheValid();
       
@@ -659,20 +593,17 @@ class _HomePageState extends ConsumerState<HomePage> {
         });
       }
       
-      // Requête API en arrière-plan
       final response = await _bannerApi.getBanners();
       
       if (response.success && response.data != null) {
         final List<dynamic> bannerList = response.data!;
         debugPrint('Loaded ${bannerList.length} banners');
         
-        // Filtrer seulement les bannières actives
         final activeBanners = bannerList
             .map((item) => item as Map<String, dynamic>)
             .where((banner) => banner['is_active'] == true)
             .toList();
             
-        // Mettre en cache
         await CacheService.instance.cacheBanners(activeBanners);
         
         debugPrint('Active banners: ${activeBanners.length}');
@@ -699,6 +630,36 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
     }
   }
+
+  Future<void> _loadSponsors() async {
+    try {
+      final response = await _sponsorApi.getSponsors();
+      
+      if (response.success && response.data != null) {
+        final List<dynamic> sponsorList = response.data!;
+        
+        if (!mounted) return;
+        setState(() {
+          _sponsors = sponsorList.map((item) => item as Map<String, dynamic>).toList();
+          _isLoadingSponsors = false;
+        });
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoadingSponsors = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading sponsors: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingSponsors = false;
+        });
+      }
+    }
+  }
+
 
   /// Helper pour obtenir des textes localisés sans dépendre des clés AppLocalizations
   String _getLocalizedText(BuildContext context, String key, String defaultValue) {
@@ -1052,141 +1013,16 @@ class _HomePageState extends ConsumerState<HomePage> {
 
               ),
 
-              // Location indicator
-
-              Consumer(builder: (context, ref, child) {
-
-                final locationState = ref.watch(locationProvider);
-
-                final locationNotifier = ref.read(locationProvider.notifier);
-
-
-
-                return Row(
-
-                  children: [
-
-                    // Location chip
-
-                    GestureDetector(
-
-                      onTap: () => locationNotifier.refreshLocation(),
-
-                      child: Container(
-
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-
-                        decoration: BoxDecoration(
-
-                          color: isDarkMode 
-
-                              ? const Color(0xFF2D2D2D) 
-
-                              : const Color(0xFFE8F5E9),
-
-                          borderRadius: BorderRadius.circular(20),
-
-                          border: Border.all(
-
-                            color: const Color(0xFF2E7D32).withOpacity(0.3),
-
-                          ),
-
-                        ),
-
-                        child: Row(
-
-                          mainAxisSize: MainAxisSize.min,
-
-                          children: [
-
-                            Icon(
-
-                              Icons.location_on,
-
-                              size: 14,
-
-                              color: const Color(0xFF2E7D32),
-
-                            ),
-
-                            const SizedBox(width: 4),
-
-                            if (locationState.isLoading)
-
-                              SizedBox(
-
-                                width: 12,
-
-                                height: 12,
-
-                                child: CircularProgressIndicator(
-
-                                  strokeWidth: 2,
-
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-
-                                    const Color(0xFF2E7D32),
-
-                                  ),
-
-                                ),
-
-                              )
-
-                            else
-
-                              Text(
-
-                                locationState.location?.displayName ?? '...',
-
-                                style: TextStyle(
-
-                                  fontSize: 12,
-
-                                  fontWeight: FontWeight.w600,
-
-                                  color: const Color(0xFF2E7D32),
-
-                                ),
-
-                              ),
-
-                          ],
-
-                        ),
-
-                      ),
-
-                    ),
-
-                    const SizedBox(width: 8),
-
-                    // Notifications
-
-                    IconButton(
-
-                      icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 28),
-
-                      onPressed: () {
-
-                         Navigator.push(
-
-                          context,
-
-                          MaterialPageRoute(builder: (context) => const NotificationsPage()),
-
-                        );
-
-                      },
-
-                    ),
-
-                  ],
-
-                );
-
-              }),
+              // Notifications
+              IconButton(
+                icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 28),
+                onPressed: () {
+                   Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationsPage()),
+                  );
+                },
+              ),
 
             ],
 
@@ -1294,58 +1130,30 @@ class _HomePageState extends ConsumerState<HomePage> {
 
                       mainAxisSize: MainAxisSize.min,
 
-                      children: _cities.asMap().entries.map((entry) {
-
+                      children: _dbCities.asMap().entries.map((entry) {
                         int idx = entry.key;
-
-                        String city = entry.value;
-
+                        var cityData = entry.value;
+                        String city = _getCityName(context, cityData);
                         bool isSelected = _selectedCityIndex == idx;
-
                         
-
                         return GestureDetector(
-
                           onTap: () {
-
+                            if (_selectedCityIndex == idx) return;
+                            
                             setState(() {
-
                               _selectedCityIndex = idx;
-
+                              _isLoading = true;
                             });
 
-                            // Recharger les enchères seulement si la ville en a
-
-                            if (_dbCities.isNotEmpty && idx < _dbCities.length) {
-
-                              final selectedCity = _dbCities[idx];
-
-                              final cityId = selectedCity['id']?.toString();
-
-                              
-
-                              // Vérifier si cette ville a des enchères
-
-                              if (cityId != null && _citiesWithAuctions.contains(cityId)) {
-
-                                _loadAuctions(locationId: cityId);
-
-                              } else {
-
-                                // Ville sans enchères - vider la liste
-
-                                setState(() {
-
-                                  _auctions = [];
-
-                                  _isLoading = false;
-
-                                });
-
-                              }
-
+                            final cityId = cityData['id']?.toString();
+                            if (cityId != null) {
+                              _loadAuctions(locationId: cityId);
+                            } else {
+                              setState(() {
+                                _auctions = [];
+                                _isLoading = false;
+                              });
                             }
-
                           },
 
                           child: AnimatedContainer(
@@ -1466,43 +1274,22 @@ class _HomePageState extends ConsumerState<HomePage> {
               // Horizontal list of auctions
 
               SizedBox(
-
                 height: 210,
-
-                child: _isLoading
-
-                    ? const Center(child: CircularProgressIndicator())
-
-                    : _auctions.isEmpty
-
-                        ? _buildEmptyAuctionsWidget(context, isDarkMode)
-
-                        : ListView.builder(
-
-                            scrollDirection: Axis.horizontal,
-
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-
-                            itemCount: _auctions.length,
-
-                            itemBuilder: (context, index) {
-
-                              final auction = _auctions[index];
-
-                              return _buildAuctionCard(
-
-                                auction,
-
-                                isDarkMode,
-
-                                index + 1,
-
-                              );
-
-                            },
-
-                          ),
-
+                child: ref.watch(homeAuctionsProvider).when(
+                  data: (auctions) {
+                    if (auctions.isEmpty) return _buildEmptyAuctionsWidget(context, isDarkMode);
+                    return ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: auctions.length,
+                      itemBuilder: (context, index) {
+                        return _buildAuctionCard(context, auctions[index], isDarkMode, index + 1);
+                      },
+                    );
+                  },
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (err, stack) => Center(child: Text('Error: $err')),
+                ),
               ),
 
               const SizedBox(height: 16),
@@ -1557,49 +1344,58 @@ class _HomePageState extends ConsumerState<HomePage> {
 
               // Sponsors/Brands (الروعات)
 
-              Padding(
-
-                padding: EdgeInsets.symmetric(horizontal: 20.0),
-
-                child: Text(
-
-                  AppLocalizations.of(context)!.text_201,
-
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-
+              if (_isLoadingSponsors || _sponsors.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20.0),
+                  child: Text(
+                    AppLocalizations.of(context)!.text_201,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                 ),
 
-              ),
+              if (_isLoadingSponsors || _sponsors.isNotEmpty)
+                const SizedBox(height: 16),
 
-              const SizedBox(height: 16),
-
-              Padding(
-
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-
-                child: GridView.count(
-
-                  shrinkWrap: true,
-
-                  physics: const NeverScrollableScrollPhysics(),
-
-                  crossAxisCount: 2,
-
-                  crossAxisSpacing: 12,
-
-                  mainAxisSpacing: 12,
-
-                  childAspectRatio: 2.2,
-
-                  children: [
-
-                    _buildSponsorLogo('assets/Bankily.png'),
-
-                  ],
-
+              if (_isLoadingSponsors)
+                const Center(child: CircularProgressIndicator())
+              else if (_sponsors.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 2.2,
+                    children: _sponsors.map((sponsor) {
+                      final logoUrl = sponsor['image_url'] ?? '';
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: logoUrl.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: logoUrl,
+                                  fit: BoxFit.contain,
+                                  placeholder: (context, url) => Shimmer.fromColors(
+                                    baseColor: Colors.grey[300]!,
+                                    highlightColor: Colors.grey[100]!,
+                                    child: Container(color: Colors.white),
+                                  ),
+                                  errorWidget: (context, url, error) =>
+                                      const Icon(Icons.image_not_supported, color: Colors.grey),
+                                )
+                              : const Icon(Icons.image, color: Colors.grey),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
-
-              ),
 
               const SizedBox(height: 40), // Space for bottom nav
 
@@ -1894,21 +1690,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
               )
             else if (imageUrl.startsWith('http'))
-              Image.network(
-                imageUrl,
+              CachedNetworkImage(
+                imageUrl: imageUrl,
                 width: double.infinity,
                 height: 160,
                 fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    color: Colors.grey[200],
-                    child: const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
+                placeholder: (context, url) => Shimmer.fromColors(
+                  baseColor: Colors.grey[300]!,
+                  highlightColor: Colors.grey[100]!,
+                  child: Container(color: Colors.white),
+                ),
+                errorWidget: (context, url, error) {
                   return Container(
                     color: Colors.grey[300],
                     child: const Center(
@@ -2002,63 +1794,25 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
   Widget _buildEmptyAuctionsWidget(BuildContext context, bool isDarkMode) {
-
     return Center(
-
       child: Column(
-
         mainAxisAlignment: MainAxisAlignment.center,
-
         children: [
-
           Icon(
-
-            Icons.location_off_outlined,
-
-            size: 48,
-
-            color: isDarkMode ? Colors.grey[400] : Colors.grey[500],
-
+            Icons.search_off_outlined,
+            size: 64,
+            color: isDarkMode ? Colors.grey[600] : Colors.grey[400],
           ),
-
           const SizedBox(height: 16),
-
           Text(
-
-            AppLocalizations.of(context)?.page_not_available ?? 'Cette page n\'est pas accessible pour le moment',
-
+            AppLocalizations.of(context)?.no_auctions_found ?? 'No auctions found in this city',
             textAlign: TextAlign.center,
-
             style: TextStyle(
-
               fontSize: 16,
-
-              fontWeight: FontWeight.w500,
-
-              color: isDarkMode ? Colors.grey[300] : Colors.grey[600],
-
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white70 : Colors.black54,
             ),
-
           ),
-
-          const SizedBox(height: 8),
-
-          Text(
-
-            AppLocalizations.of(context)?.return_to_first_city ?? 'Retournez à la première ville',
-
-            textAlign: TextAlign.center,
-
-            style: TextStyle(
-
-              fontSize: 14,
-
-              color: isDarkMode ? Colors.grey[400] : Colors.grey[500],
-
-            ),
-
-          ),
-
           const SizedBox(height: 24),
 
           ElevatedButton.icon(
@@ -2127,149 +1881,16 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   }
 
-  Widget _buildAuctionCard(Map<String, dynamic> auction, bool isDarkMode, int displayNumber) {
-
+  Widget _buildAuctionCard(BuildContext context, Auction auction, bool isDarkMode, int displayNumber) {
     final favoritesAsync = ref.watch(favoritesProvider);
-
-    final id = auction['id']?.toString() ?? '';
-
-    final isFavorite = favoritesAsync.value?.contains(id) ?? false;
-
-    
-
-    // Extraction des données API avec fallbacks intelligents pour le titre
-
-    final locale = Localizations.localeOf(context).languageCode;
-
-    String title = '';
-
-    
-
-    // 1. Essayer d'abord la langue actuelle de l'app
-
-    switch (locale) {
-
-      case 'ar':
-
-        title = auction['title_ar']?.toString() ?? '';
-
-        break;
-
-      case 'fr':
-
-        title = auction['title_fr']?.toString() ?? '';
-
-        break;
-
-      case 'en':
-
-        title = auction['title_en']?.toString() ?? '';
-
-        break;
-
-    }
-
-    
-
-    // 2. Si vide, essayer l'arabe (langue par défaut)
-
-    if (title.isEmpty) {
-
-      title = auction['title_ar']?.toString() ?? '';
-
-    }
-
-    
-
-    // 3. Si toujours vide, essayer les autres langues
-
-    if (title.isEmpty) {
-
-      title = auction['title_fr']?.toString() ??
-
-              auction['title_en']?.toString() ??
-
-              auction['title']?.toString() ??
-
-              _getLocalizedText(context, 'no_title', 'Sans titre');
-
-    }
-
-    
-
-    final price = '${auction['current_price'] ?? auction['current_bid'] ?? 0} MRU';
-
-    final bidCount = auction['bidder_count'] ?? auction['bids'] ?? 0;
-
-    
-
-    // Formatage du temps restant
-
-    String time = '';
-
-    if (auction['end_time'] != null) {
-
-      try {
-
-        final endTime = DateTime.parse(auction['end_time']);
-
-        final now = DateTime.now();
-
-        final diff = endTime.difference(now);
-
-        
-
-        if (diff.isNegative) {
-
-          time = _getLocalizedText(context, 'ended', 'Terminé');
-
-        } else if (diff.inDays > 0) {
-
-          time = '${diff.inDays}${_getLocalizedText(context, 'days_abbr', 'j')} ${diff.inHours % 24}${_getLocalizedText(context, 'hours_abbr', 'h')} ${_getLocalizedText(context, 'remaining', 'restants')}';
-
-        } else if (diff.inHours > 0) {
-
-          time = '${diff.inHours}${_getLocalizedText(context, 'hours_abbr', 'h')} ${diff.inMinutes % 60}${_getLocalizedText(context, 'minutes_abbr', 'm')} ${_getLocalizedText(context, 'remaining', 'restants')}';
-
-        } else {
-
-          time = '${diff.inMinutes}${_getLocalizedText(context, 'minutes_abbr', 'm')} ${_getLocalizedText(context, 'remaining', 'restants')}';
-
-        }
-
-      } catch (e) {
-
-        time = auction['end_time']?.toString() ?? '';
-
-      }
-
-    }
-
-    
-
-    // Gestion des images - utiliser le tableau images depuis l'API (affiche seulement la première)
-
-    String imageUrl = 'assets/corolla.png';
-
-    bool isNetworkImage = false;
-
-    
-
-    // Vérifier si l'API retourne images (tableau de toutes les images)
-
-    if (auction['images'] != null && auction['images'] is List && (auction['images'] as List).isNotEmpty) {
-
-      final images = auction['images'] as List;
-
-      if (images.isNotEmpty && images[0] != null) {
-
-        imageUrl = images[0].toString();
-
-        isNetworkImage = imageUrl.startsWith('http');
-
-      }
-
-    }
+    final isFavorite = favoritesAsync.value?.contains(auction.id) ?? false;
+    final id = auction.id;
+    final title = auction.title;
+    final price = '${auction.currentPrice.toStringAsFixed(0)} MRU';
+    final bidCount = auction.bidderCount;
+    final time = TimeUtils.formatDuration(context, auction.endTime.difference(DateTime.now()));
+    final imageUrl = auction.imageUrls.isNotEmpty ? auction.imageUrls[0] : 'assets/corolla.png';
+    final isNetworkImage = imageUrl.startsWith('http');
 
 
 
@@ -2341,9 +1962,9 @@ class _HomePageState extends ConsumerState<HomePage> {
 
                   child: isNetworkImage
 
-                    ? Image.network(
+                    ? CachedNetworkImage(
 
-                        imageUrl,
+                        imageUrl: imageUrl,
 
                         height: 110,
 
@@ -2351,7 +1972,17 @@ class _HomePageState extends ConsumerState<HomePage> {
 
                         fit: BoxFit.cover,
 
-                        errorBuilder: (c, e, s) => Image.asset(
+                        placeholder: (context, url) => Shimmer.fromColors(
+
+                          baseColor: Colors.grey[300]!,
+
+                          highlightColor: Colors.grey[100]!,
+
+                          child: Container(color: Colors.white),
+
+                        ),
+
+                        errorWidget: (c, e, s) => Image.asset(
 
                           'assets/corolla.png',
 
@@ -2362,22 +1993,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                           fit: BoxFit.cover,
 
                         ),
-
-                        loadingBuilder: (context, child, loadingProgress) {
-
-                          if (loadingProgress == null) return child;
-
-                          return Container(
-
-                            height: 110,
-
-                            color: Colors.grey[200],
-
-                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-
-                          );
-
-                        },
 
                       )
 

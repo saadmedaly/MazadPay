@@ -10,7 +10,6 @@ import 'package:mezadpay/pages/services_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/auction_details_page.dart';
 import '../services/auction_api.dart';
-import '../providers/category_provider.dart';
 import '../services/category_api.dart';
 
 class AllAuctionsPage extends ConsumerStatefulWidget {
@@ -36,7 +35,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   int _selectedCategoryIndex = 0;
   int _selectedSubCategoryIndex = -1;
   bool _isLoading = true;
-  bool _isLoadingCategories = true;
   String? _selectedCategoryId;
 
   // Pagination variables
@@ -46,7 +44,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   final ScrollController _scrollController = ScrollController();
 
   // Advanced filter variables
-  bool _showAdvancedFilter = false;
   double _minPrice = 0;
   double _maxPrice = 1000000;
   RangeValues _priceRange = const RangeValues(0, 1000000);
@@ -134,13 +131,11 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         ];
         // Store subcategories map for quick access
         _subCategoriesMap = subCategoriesMap;
-        _isLoadingCategories = false;
       });
       print('Final _categories length: ${_categories.length}');
     } catch (e) {
       print('Error loading categories: $e');
       setState(() {
-        _isLoadingCategories = false;
         // En cas d'erreur, on garde la catégorie "All" par défaut
         _categories = [
           {'id': 'all', 'name_ar': 'الكل', 'name_fr': 'Tout', 'name_en': 'All', 'image': 'assets/auctions/other.png', 'key': 'all'},
@@ -504,7 +499,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0084FF).withOpacity(0.1) : (isDarkMode ? Colors.grey.shade800 : Colors.grey.shade100),
+          color: isSelected ? const Color(0xFF0084FF).withValues(alpha: 0.1) : (isDarkMode ? Colors.grey.shade800 : Colors.grey.shade100),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected ? const Color(0xFF0084FF) : Colors.transparent,
@@ -1047,8 +1042,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
 
   Widget _buildHorizontalAuctionCard(BuildContext context, bool isDarkMode, Map<String, dynamic> auction) {
     const Color softRed = Color(0xFFFF3B30);
-    const Color lightGreyBg = Color(0xFFF2F2F7);
-    const Color darkGreyBg = Color(0xFF2C2C2E);
 
     final id = auction['id']?.toString() ?? '';
     final favoritesAsync = ref.watch(favoritesProvider);
@@ -1388,19 +1381,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     }
   }
 
-  String _getFinishedText(BuildContext context) {
-    final locale = Localizations.localeOf(context).languageCode;
-    switch (locale) {
-      case 'ar':
-        return 'انتهى المزاد';
-      case 'fr':
-        return 'Enchère terminée';
-      case 'en':
-      default:
-        return 'Auction ended';
-    }
-  }
-
   String _getAuctionTypesTitle(BuildContext context) {
     final locale = Localizations.localeOf(context).languageCode;
     switch (locale) {
@@ -1458,36 +1438,5 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     }
 
     return name;
-  }
-
-  String _getLocalizedTitle(String key, AppLocalizations l10n) {
-    // Si c'est une catégorie de l'API (commence par name_)
-    if (key.startsWith('name_')) {
-      return key;
-    }
-    switch (key) {
-      case 'text_74': return l10n.text_74;
-      case 'text_86': return l10n.text_86;
-      case 'text_130': return l10n.text_130;
-      case 'text_119': return l10n.text_119;
-      case 'text_127': return l10n.text_127;
-      case 'text_120': return l10n.text_120;
-      case 'text_114': return l10n.text_114;
-      case 'text_115': return l10n.text_115;
-      case 'text_116': return l10n.text_116;
-      case 'text_117': return l10n.text_117;
-      case 'text_118': return l10n.text_118;
-      case 'text_122': return l10n.text_122;
-      case 'text_123': return l10n.text_123;
-      case 'text_124': return l10n.text_124;
-      case 'text_125': return l10n.text_125;
-      case 'text_129': return l10n.text_129;
-      case 'text_131': return l10n.text_131;
-      case 'text_133': return l10n.text_133;
-      case 'text_134': return l10n.text_134;
-      case 'text_137': return l10n.text_137;
-      case 'text_139': return l10n.text_139;
-      default: return "Category";
-    }
   }
 }

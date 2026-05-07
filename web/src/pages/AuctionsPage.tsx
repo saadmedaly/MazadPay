@@ -8,6 +8,7 @@ import {
 import { PageHeader } from '@/components/shared/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Input } from '@/components/ui/input'
+import { ImageUpload } from '@/components/shared/ImageUpload'
 import {
   useAuctions, useValidateAuction, useCreateAuction,
   useUpdateAuction, useDeleteAuction
@@ -16,7 +17,7 @@ import { useCategories, useLocations } from '@/hooks/useMetadata'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import type { Auction } from '@/types/api'
 import type { AuctionPayload } from '@/api/auctions'
-import { fetchAuction } from '@/api/auctions'
+import { fetchAuction, uploadAuctionImages } from '@/api/auctions'
 import type { ColumnDef } from '@tanstack/react-table'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { DataTable } from '@/components/shared/DataTable'
@@ -38,7 +39,7 @@ const EMPTY_FORM = {
   start_time: '', 
   end_time: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
   phone_contact: '',
-  images: [''] as string[],
+  images: [] as string[],
   item_details: {} as Record<string, any>,
 }
 
@@ -59,6 +60,12 @@ export function AuctionsPage() {
   const [activeLang, setActiveLang] = useState<'ar'|'fr'|'en'>('ar')
   const [form, setForm]           = useState<FormState>(EMPTY_FORM)
   const [editLoading, setEditLoading] = useState(false)
+
+  // Image upload states
+  const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([])
+  const [uploadingImages, setUploadingImages] = useState(false)
 
   const status = searchParams.get('status') ?? ''
   const page   = parseInt(searchParams.get('page') ?? '1')
@@ -222,9 +229,12 @@ export function AuctionsPage() {
     }
 
     // Images validation
-    const validImages = form.images.filter(img => img && img.trim())
-    if (validImages.length === 0) {
-      toast('لا توجد صور - ينصح بإضافة صورة واحدة على الأقل', { icon: '⚠️' })
+    const validImagesCount = form.images.filter(img => img && img.trim()).length + imageFiles.length
+    if (validImagesCount === 0) {
+      toast.error('يجب إضافة صورة واحدة على الأقل للمزاد 📸', {
+        description: 'يرجى رفع صورة أو إضافة رابط صورة واحدة على الأقل'
+      })
+      return null
     }
 
     // Build item_details from form
@@ -257,23 +267,57 @@ export function AuctionsPage() {
     }
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     console.log('[AuctionsPage] Creating auction...')
+
+    // Validate at least 1 image before creating
+    const totalImages = imageFiles.length + existingImageUrls.length
+    if (totalImages === 0) {
+      toast.error('يجب إضافة صورة واحدة على الأقل للمزاد 📸', {
+        description: 'يرجى رفع صورة واحدة على الأقل قبل إنشاء المزاد'
+      })
+      return
+    }
+
     const payload = buildPayload()
     if (!payload) {
       console.log('[AuctionsPage] Validation failed, payload is null')
       return
     }
-    
+
     console.log('[AuctionsPage] Payload ready:', payload)
-    
+
     createMut.mutate(payload, {
-      onSuccess: (data) => { 
+      onSuccess: async (data) => {
         console.log('[AuctionsPage] Auction created successfully:', data)
+        const auctionId = data?.id
+
+        // Upload images if auction created and images exist
+        if (auctionId && imageFiles.length > 0) {
+          setUploadingImages(true)
+          try {
+            const uploadResult = await uploadAuctionImages(auctionId, imageFiles)
+            toast.success(`تم رفع ${uploadResult.count} صور بنجاح 📸`)
+          } catch (uploadError: any) {
+            console.error('[AuctionsPage] Image upload error:', uploadError)
+            // Show detailed error from backend
+            const errorMsg = uploadError?.response?.data?.message || uploadError?.message || 'فشل رفع الصور إلى Cloudflare R2'
+            toast.error('تم إنشاء المزاد ولكن فشل رفع الصور ⚠️', {
+              description: errorMsg,
+              duration: 8000
+            })
+          } finally {
+            setUploadingImages(false)
+          }
+        }
+
         toast.success(`تم إنشاء المزاد بنجاح! 🎉 - المزاد "${payload.title_ar}" تم حفظه`)
-        setMode(null) 
-        setForm(EMPTY_FORM) 
-        refetch() 
+        setMode(null)
+        setForm(EMPTY_FORM)
+        setImageFiles([])
+        setImagePreviews([])
+        setExistingImageUrls([])
+        refetch()
       },
       onError: (err: any) => {
         console.error('[AuctionsPage] Failed to create auction:', err)
@@ -283,24 +327,80 @@ export function AuctionsPage() {
     })
   }
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!editingId) return
+
+    // Validate at least 1 image before updating
+    const totalImages = imageFiles.length + existingImageUrls.length
+    if (totalImages === 0) {
+      toast.error('يجب إضافة صورة واحدة على الأقل للمزاد 📸', {
+        description: 'يجب أن يحتوي المزاد على صورة واحدة على الأقل'
+      })
+      return
+    }
+
     const payload = buildPayload()
     if (!payload) return
-    
-    updateMut.mutate({ id: editingId!, payload }, {
-      onSuccess: () => { 
-        toast.success('تم تعديل المزاد بنجاح! ✨')
-        setMode(null) 
-        setEditingId(null) 
-        setForm(EMPTY_FORM) 
-        refetch() 
-      },
-      onError: (err: any) => {
-        const errorMessage = err?.response?.data?.message || err?.message || 'حدث خطأ غير معروف'
-        toast.error(`فشل تعديل المزاد ❌ - ${errorMessage}`)
+
+    // Upload new images FIRST, then update auction with all URLs combined
+    if (imageFiles.length > 0) {
+      setUploadingImages(true)
+      try {
+        const uploadResult = await uploadAuctionImages(editingId!, imageFiles)
+        toast.success(`تم رفع ${uploadResult.count} صور جديدة بنجاح 📸`)
+
+        // Combine existing URLs with new URLs, then update auction
+        const allImages = [...existingImageUrls, ...uploadResult.urls]
+        const updatePayload = { ...payload, images: allImages }
+
+        updateMut.mutate({ id: editingId!, payload: updatePayload }, {
+          onSuccess: () => {
+            toast.success('تم تعديل المزاد بنجاح! ✨')
+            setMode(null)
+            setEditingId(null)
+            setForm(EMPTY_FORM)
+            setImageFiles([])
+            setImagePreviews([])
+            setExistingImageUrls([])
+            refetch()
+          },
+          onError: (err: any) => {
+            const errorMessage = err?.response?.data?.message || err?.message || 'حدث خطأ غير معروف'
+            toast.error(`فشل تعديل المزاد ❌ - ${errorMessage}`)
+          }
+        })
+      } catch (uploadError: any) {
+        console.error('[AuctionsPage] Image upload error:', uploadError)
+        const errorMsg = uploadError?.response?.data?.message || uploadError?.message || 'فشل رفع الصور إلى Cloudflare R2'
+        toast.error('فشل رفع الصور الجديدة ⚠️', {
+          description: errorMsg,
+          duration: 8000
+        })
+        setUploadingImages(false)
+        return // Don't proceed with auction update if image upload failed
+      } finally {
+        setUploadingImages(false)
       }
-    })
+    } else {
+      // No new images to upload, just update with existing images
+      const updatePayload = { ...payload, images: existingImageUrls }
+      updateMut.mutate({ id: editingId!, payload: updatePayload }, {
+        onSuccess: () => {
+          toast.success('تم تعديل المزاد بنجاح! ✨')
+          setMode(null)
+          setEditingId(null)
+          setForm(EMPTY_FORM)
+          setImageFiles([])
+          setImagePreviews([])
+          setExistingImageUrls([])
+          refetch()
+        },
+        onError: (err: any) => {
+          const errorMessage = err?.response?.data?.message || err?.message || 'حدث خطأ غير معروف'
+          toast.error(`فشل تعديل المزاد ❌ - ${errorMessage}`)
+        }
+      })
+    }
   }
 
   const openEdit = async (auction: Auction) => {
@@ -316,6 +416,11 @@ export function AuctionsPage() {
       const imgs: string[] = imageUrls.map((img: string | {url: string}) =>
         typeof img === 'string' ? img : img.url
       ).filter(Boolean)
+
+      // Set existing images for display
+      setExistingImageUrls(imgs)
+      setImageFiles([])
+      setImagePreviews([])
 
       setForm({
         title_ar:       full.title_ar ?? '',
@@ -350,8 +455,24 @@ export function AuctionsPage() {
   const addImage    = ()          => setForm(f => ({ ...f, images: [...f.images, ''] }))
   const removeImage = (i: number) => setForm(f => {
     const imgs = [...f.images]; imgs.splice(i, 1)
-    return { ...f, images: imgs.length ? imgs : [''] }
+    return { ...f, images: imgs }
   })
+
+  const removeExistingImage = (index: number) => {
+    const newUrls = [...existingImageUrls]
+    newUrls.splice(index, 1)
+    setExistingImageUrls(newUrls)
+    // Also remove from form.images which is what gets sent to the API
+    setForm(f => ({
+      ...f,
+      images: f.images.filter(img => img !== existingImageUrls[index])
+    }))
+  }
+
+  const handleImagesChange = (newFiles: File[], newPreviews: string[]) => {
+    setImageFiles(newFiles)
+    setImagePreviews(newPreviews)
+  }
 
   /* ─── columns ─── */
   const columns: ColumnDef<Auction>[] = [
@@ -754,42 +875,14 @@ export function AuctionsPage() {
                 <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ الإغلاق <span className="text-red-500">*</span></label>
                 <Input type="datetime-local" value={form.end_time} onChange={e => setForm(f => ({...f, end_time: e.target.value}))} />
               </div>
-            </div>
-          </div>
-
-          {/* Images */}
-          <div className="pt-4 border-t border-surface-border">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg"><ImageIcon className="w-5 h-5" /></div>
-                <h4 className="font-bold text-white">صور المزاد</h4>
               </div>
-              <button onClick={addImage} className="flex items-center gap-2 text-xs font-bold text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors">
-                <Plus className="w-4 h-4" /> إضافة رابط صورة
-              </button>
             </div>
-            <div className="grid gap-3 max-w-2xl">
-              {form.images.map((url, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input placeholder="https://..." value={url} dir="ltr" className="ltr-input"
-                    onChange={e => {
-                      const imgs = [...form.images]; imgs[i] = e.target.value
-                      setForm(f => ({ ...f, images: imgs }))
-                    }} />
-                  <button onClick={() => removeImage(i)} className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors">
-                    <MinusCircle className="w-5 h-5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Contact & Item Details */}
-          <div className="pt-4 border-t border-surface-border">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-orange-500/20 text-orange-400 rounded-lg"><Tag className="w-5 h-5" /></div>
-              <h4 className="font-bold text-white">معلومات إضافية</h4>
-            </div>
+            <div className="pt-4 border-t border-surface-border">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-orange-500/20 text-orange-400 rounded-lg"><Tag className="w-5 h-5" /></div>
+                <h4 className="font-bold text-white">معلومات إضافية</h4>
+              </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="space-y-2">
                 <label className="text-xs text-surface-muted font-bold block">رقم الهاتف للتواصل</label>
@@ -854,16 +947,114 @@ export function AuctionsPage() {
             </div>
           </div>
 
+          {/* Images Upload */}
+          <div className="pt-4 border-t border-surface-border">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <ImageIcon className="w-5 h-5 text-mazad-primary" />
+                <h3 className="text-lg font-semibold">صور المزاد</h3>
+              </div>
+            </div>
+
+            {/* Existing images (when editing) */}
+            {mode === 'edit' && existingImageUrls.length > 0 && (
+              <div className="mb-6">
+                <p className="text-sm text-surface-muted mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  الصور المحفوظة حالياً ({existingImageUrls.length}):
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {existingImageUrls.map((url, i) => (
+                    <div key={`existing-${i}`} className="relative group aspect-square rounded-xl overflow-hidden border border-surface-border bg-surface-base">
+                      <img src={url} alt={`Existing ${i + 1}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          onClick={() => removeExistingImage(i)}
+                          className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-lg"
+                          title="حذف الصورة"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/60 text-white text-[10px] font-mono">
+                        {i + 1}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2 mb-4">
+              <p className="text-sm text-surface-muted">
+                {mode === 'edit' ? 'إضافة صور جديدة:' : 'اختر صور المزاد (الحد الأقصى 10):'}
+              </p>
+              <ImageUpload
+                images={imageFiles}
+                previewUrls={imagePreviews}
+                onImagesChange={handleImagesChange}
+                maxImages={10}
+                maxSizeMB={10}
+                disabled={uploadingImages || createMut.isPending || updateMut.isPending}
+                uploading={uploadingImages}
+              />
+            </div>
+
+            {/* Manual URL input fallback */}
+            <details className="mt-6 border-t border-surface-border/30 pt-4">
+              <summary className="text-xs text-surface-muted cursor-pointer hover:text-white transition-colors flex items-center gap-2 opacity-60 hover:opacity-100">
+                <Plus className="w-3 h-3" /> إضافة روابط URL يدوياً (متقدم)
+              </summary>
+              <div className="pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-surface-muted font-bold">روابط الصور المباشرة</span>
+                  <button onClick={addImage} className="px-3 py-1 bg-mazad-primary/10 text-mazad-primary rounded-lg hover:bg-mazad-primary/20 text-xs font-bold transition-all">
+                    + إضافة حقل
+                  </button>
+                </div>
+                <div className="grid gap-2 max-w-2xl">
+                  {form.images.map((url, i) => (
+                    <div key={i} className="flex items-center gap-2 animate-slide-in">
+                      <Input placeholder="https://..." value={url} dir="ltr" className="ltr-input text-xs"
+                        onChange={e => {
+                          const imgs = [...form.images]; imgs[i] = e.target.value
+                          setForm(f => ({ ...f, images: imgs }))
+                        }} />
+                      <button onClick={() => removeImage(i)} className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                        <MinusCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          </div>
+
           {/* Actions */}
           <div className="pt-6 border-t border-surface-border flex justify-end gap-3">
-            <button onClick={() => { setMode(null); setForm(EMPTY_FORM) }} className="px-6 py-3 rounded-xl text-sm font-bold text-surface-muted border border-surface-border hover:bg-surface-border/50 transition-all">إلغاء</button>
             <button
-              disabled={isPending || !form.title_ar || !form.start_price || !form.end_time}
+              onClick={() => { setMode(null); setForm(EMPTY_FORM) }}
+              disabled={isPending || uploadingImages}
+              className="px-6 py-3 rounded-xl text-sm font-bold text-surface-muted border border-surface-border hover:bg-surface-border/50 transition-all disabled:opacity-50"
+            >
+              إلغاء
+            </button>
+            <button
+              disabled={isPending || uploadingImages || !form.title_ar || !form.start_price || !form.end_time}
               onClick={isEdit ? handleUpdate : handleCreate}
               className="px-8 py-3 rounded-xl text-sm font-bold bg-mazad-primary hover:bg-mazad-primary-dark text-white shadow-lg shadow-mazad-primary/20 disabled:opacity-50 flex items-center gap-2 transition-all"
             >
-              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {isEdit ? 'حفظ التعديلات' : 'حفظ وبث المزاد'}
+              {isPending || uploadingImages ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {uploadingImages ? 'جاري رفع الصور...' : isEdit ? 'جاري الحفظ...' : 'جاري الإنشاء...'}
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  {isEdit ? 'حفظ التعديلات' : 'حفظ وبث المزاد'}
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -880,8 +1071,7 @@ export function AuctionsPage() {
     </div>
   )
 
-  /* ─── List ─── */
-  return (
+   return (
     <div className="animate-fade-in" dir="rtl">
       <PageHeader
         title="المزادات"

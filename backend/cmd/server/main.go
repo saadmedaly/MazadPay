@@ -60,6 +60,7 @@ func main() {
 		AppName:      cfg.App.Name,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
+		BodyLimit:    50 * 1024 * 1024, // 50MB pour les uploads d'images
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {

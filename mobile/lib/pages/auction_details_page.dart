@@ -3,15 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/auction_provider.dart';
 import '../models/auction.dart';
 import '../models/bid.dart';
 import '../widgets/bid_action_sheet.dart';
-import '../widgets/auction_winner_dialog.dart';
 import '../pages/auction_history_page.dart';
 import '../providers/favorites_provider.dart';
-import '../pages/all_auctions_page.dart';
 import '../services/auction_api.dart';
+import 'home_page.dart';
 import '../services/bid_api.dart';
 import '../services/cache_service.dart';
 import '../services/chat_service.dart';
@@ -19,6 +17,11 @@ import '../services/auth_service.dart';
 import '../models/message.dart';
 import '../pages/chat/chat_room_page.dart';
 import '../widgets/app_modals.dart';
+import '../providers/auction_provider_api.dart';
+import '../models/bid.dart' as model_bid;
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
+import '../utils/time_utils.dart';
 
 class AuctionDetailsPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -29,27 +32,36 @@ class AuctionDetailsPage extends ConsumerStatefulWidget {
 }
 
 class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
-  Timer? _timer;
-  Duration _timeLeft = Duration.zero;
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
   final AuctionApi _auctionApi = AuctionApi();
   final BidApi _bidApi = BidApi();
-  bool _isLoading = true;
-  Map<String, dynamic>? _auctionData;
-  List<Bid>? _bidHistory;
-  late Future<dynamic> _relatedAuctionsFuture; // Cache pour éviter appels multiples
-  bool _isDisposed = false;
+  
+  // State from Provider
   String? _userId;
+  
+  // Timer state
+  Duration _timeLeft = Duration.zero;
+  Timer? _timer;
+  
+  // UI State
+  int _currentPage = 0;
+  final PageController _pageController = PageController();
+  
+  // Related auctions
+  Future<dynamic>? _relatedAuctionsFuture;
+
+  // Temporary bid history (could be refactored to provider later)
+  List<model_bid.Bid>? _bidHistory;
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
     debugPrint('Initializing AuctionDetailsPage for auction: ${widget.auctionId}');
-    _loadAuctionDetails();
-    _loadBidHistory();
     _loadUserId();
     _relatedAuctionsFuture = _auctionApi.getAuctions(); // Cache le Future
+    
+    // Incrémenter les vues une seule fois à l'ouverture
+    _auctionApi.incrementViews(widget.auctionId);
   }
 
   Future<void> _loadUserId() async {
@@ -61,137 +73,16 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     }
   }
 
-  Future<void> _loadAuctionDetails() async {
-    try {
-      debugPrint('=== LOADING AUCTION DETAILS ===');
-      debugPrint('Auction ID: ${widget.auctionId}');
-      
-      // === OPTIMISTIC UI: Charger depuis le cache d'abord (instantané) ===
-      final cachedDetail = await CacheService.instance.getCachedAuctionDetail(widget.auctionId);
-      final isCacheValid = await CacheService.instance.isAuctionDetailCacheValid(widget.auctionId);
-
-      debugPrint('Cache valid: $isCacheValid');
-      debugPrint('Cached detail: ${cachedDetail != null}');
-
-      if (cachedDetail != null && isCacheValid) {
-        // Afficher les données du cache immédiatement (0ms)
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _auctionData = cachedDetail;
-          debugPrint('Loaded from cache: ${_auctionData != null}');
-          if (_auctionData != null) {
-            _startTimer();
-          }
-        });
-      }
-
-      // === CHARGER DEPUIS L'API EN ARRIÈRE-PLAN ===
-      debugPrint('Fetching from API...');
-      final response = await _auctionApi.getAuctionDetails(widget.auctionId);
-
-      debugPrint('API Response success: ${response.success}');
-      debugPrint('API Response data: ${response.data != null}');
-
-      if (response.success && response.data != null) {
-        final data = response.data!;
-        debugPrint('Data type: ${data.runtimeType}');
-        debugPrint('Data keys: ${data is Map ? (data as Map).keys.toList() : "Not a map"}');
-        
-        Map<String, dynamic>? auctionData;
-        
-        // Extraction robuste avec multiples fallbacks pour différentes structures API
-        if (data is Map<String, dynamic>) {
-          auctionData = data['auction'] ?? data['data'] ?? data;
-          debugPrint('Extracted auctionData: ${auctionData != null}');
-          debugPrint('AuctionData keys: ${auctionData?.keys.toList()}');
-          // API retourne les images dans une clé séparée - les fusionner
-          if (data['images'] != null && auctionData != null) {
-            auctionData['images'] = data['images'];
-          }
-          // Cache les détails de l'enchère
-          if (auctionData != null) {
-            await CacheService.instance.cacheAuctionDetail(widget.auctionId, auctionData);
-          }
-        } else if (data is List && data.isNotEmpty) {
-          auctionData = data[0];
-          debugPrint('Extracted from list: ${auctionData != null}');
-          if (auctionData != null) {
-            await CacheService.instance.cacheAuctionDetail(widget.auctionId, auctionData);
-          }
-        }
-
-        // === INCREMENTER LE COMPTEUR DE VUES ===
-        debugPrint('=== INCREMENTING VIEWS ===');
-        debugPrint('Auction ID: ${widget.auctionId}');
-        
-        final viewResponse = await _auctionApi.incrementViews(widget.auctionId);
-        debugPrint('View increment API response: success=${viewResponse.success}, message=${viewResponse.message}');
-        
-        if (!viewResponse.success) {
-          debugPrint('Failed to increment views: ${viewResponse.message}');
-        } else {
-          debugPrint('Views incremented successfully on backend');
-          
-          // Incrémenter localement pour feedback immédiat
-          if (auctionData != null) {
-            final currentViews = auctionData['views'] ?? auctionData['view_count'] ?? 0;
-            auctionData['views'] = currentViews + 1;
-            auctionData['view_count'] = currentViews + 1;
-            debugPrint('Updated local views from $currentViews to ${currentViews + 1}');
-          }
-        }
-
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _auctionData = auctionData;
-          debugPrint('Final auctionData: ${_auctionData != null}');
-          if (_auctionData != null) {
-            _startTimer();
-          }
-        });
-      } else {
-        debugPrint('API response failed or no data');
-        // Si le cache existe mais l'API échoue, garder le cache
-        if (cachedDetail == null && mounted) {
-          setState(() => _isLoading = false);
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading auction details: $e');
-      setState(() => _isLoading = false);
+  Future<void> _contactSeller(Auction auction) async {
+    final sellerId = auction.sellerId; 
+    if (sellerId.isEmpty) {
       if (mounted) {
-        final errorStr = e.toString();
-        // Check if auction not found
-        if (errorStr.contains('not found') || errorStr.contains('404')) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Cette enchère n\'existe plus ou a été supprimée'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-          // Navigate back after showing error
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) Navigator.of(context).pop();
-          });
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auction_details)),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auction)), // Fallback generic error or you can create a specific one
+        );
       }
-    } finally {
-      if (!_isDisposed) {
-        setState(() => _isLoading = false);
-      }
+      return;
     }
-  }
-
-  Future<void> _contactSeller() async {
-    final sellerId = _auctionData?['seller_id'] ?? _auctionData?['sellerId'];
-    if (sellerId == null) return;
 
     final isLoggedIn = await AuthService().isLoggedIn();
     if (!isLoggedIn) {
@@ -221,38 +112,27 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       }
       
       // Check for existing direct conversation
-      var conversation = await chatService.getDirectConversation(sellerId.toString());
-      debugPrint('Direct conversation check result: ${conversation?.id}');
+      // Note: This logic assumes sellerId is the actual user ID. 
+      // If it's a phone number, you might need to resolve it to a user ID first.
+      var conversation = await chatService.getDirectConversation(sellerId);
       
       if (conversation == null) {
         debugPrint('Creating new conversation with seller: $sellerId');
-        // Create new conversation
         conversation = await chatService.createConversation(
           CreateConversationRequest(
             type: 'direct',
-            userIds: [sellerId.toString()],
+            userIds: [sellerId],
           ),
         );
-        debugPrint('New conversation created: ${conversation?.id}');
       }
 
       if (mounted && conversation != null) {
-        debugPrint('Navigating to ChatRoomPage with ID: ${conversation.id}');
-        final locale = Localizations.localeOf(context).languageCode;
-        String title = '';
-        switch (locale) {
-          case 'ar': title = _auctionData?['title_ar']?.toString() ?? ''; break;
-          case 'fr': title = _auctionData?['title_fr']?.toString() ?? ''; break;
-          case 'en': title = _auctionData?['title_en']?.toString() ?? ''; break;
-        }
-        if (title.isEmpty) title = _auctionData?['title']?.toString() ?? 'Chat';
-
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ChatRoomPage(
               conversationId: conversation!.id,
-              title: title,
+              title: auction.title,
             ),
           ),
         );
@@ -282,7 +162,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           final bidsList = data['bids'] as List<dynamic>? ?? [];
           bids = bidsList.map((e) => Bid.fromJson(e as Map<String, dynamic>)).toList();
         } else if (data is List) {
-          bids = (data as List<dynamic>).map((e) => Bid.fromJson(e as Map<String, dynamic>)).toList();
+          final listData = data as List<dynamic>;
+          bids = listData.map((e) => Bid.fromJson(e as Map<String, dynamic>)).toList();
         }
         
         debugPrint('Loaded ${bids.length} bids');
@@ -309,13 +190,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     }
   }
 
-  void _startTimer() {
-    if (_auctionData == null) return;
-    
-    final endTimeStr = _auctionData!['end_time'] ?? _auctionData!['ends_at'] ?? '';
-    final endTime = DateTime.tryParse(endTimeStr);
-    if (endTime == null) return;
-    
+  void _startTimer(Auction auction) {
+    final endTime = auction.endTime;
     _timeLeft = endTime.difference(DateTime.now());
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_isDisposed || !mounted) {
@@ -351,75 +227,76 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     super.dispose();
   }
 
-  String _formatDuration(Duration d) {
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    final days = d.inDays;
-    final hours = d.inHours.remainder(24);
-    final minutes = d.inMinutes.remainder(60);
-    final seconds = d.inSeconds.remainder(60);
-    
-    if (days > 0) {
-      return "${twoDigits(days)}j ${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}";
-    }
-    return "${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}";
-  }
+
 
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final auctionAsync = ref.watch(auctionNotifierApiProvider(widget.auctionId));
 
-    if (_isLoading) {
-      return Scaffold(
+    return auctionAsync.when(
+      loading: () => Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_auctionData == null) {
-      return Scaffold(
+      ),
+      error: (err, stack) => Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         body: Center(child: Text(AppLocalizations.of(context)!.error_loading_auction)),
-      );
-    }
+      ),
+      data: (auction) {
+        // Démarrer le timer si pas encore fait
+        if (_timer == null) {
+          _startTimer(auction);
+        }
+        
+        // Mettre à jour le temps restant à chaque build basé sur le timer
+        _updateTimeLeft(auction.endTime);
 
-    return Scaffold(
-        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
-        body: Column(
-          children: [
-            Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  _buildSliverAppBar(context, _auctionData!, isDarkMode),
-                  SliverToBoxAdapter(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildPriceSection(context, _auctionData!, isDarkMode),
-                        _buildMainInfoSection(context, _auctionData!, isDarkMode),
-                        _buildExternalLinks(context, _auctionData!, isDarkMode),
-                        _buildCarDetailsSection(context, _auctionData!, isDarkMode),
-                        _buildBidHistorySection(context, isDarkMode),
+        return Scaffold(
+          backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
+          body: Column(
+            children: [
+              Expanded(
+                child: CustomScrollView(
+                  slivers: [
+                    _buildSliverAppBar(context, auction, isDarkMode),
+                    SliverToBoxAdapter(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildPriceSection(context, auction, isDarkMode),
+                          _buildMainInfoSection(context, auction, isDarkMode),
+                          _buildExternalLinks(context, auction, isDarkMode),
+                          _buildCarDetailsSection(context, auction, isDarkMode),
+                          _buildBidHistorySection(context, isDarkMode, auction),
 
-                        // Action Buttons (Auto-Bid, Boost, Report, etc.)
-                        _buildActionButtons(context, isDarkMode),
+                          // Action Buttons (Auto-Bid, Boost, Report, etc.)
+                          _buildActionButtons(context, isDarkMode, auction),
 
-                        // Active Auctions Section (NEW)
-                        _buildActiveAuctionsSection(context, isDarkMode),
-                        
-                        const SizedBox(height: 100), // Space for bottom button
-                      ],
+                          // Active Auctions Section (NEW)
+                          _buildActiveAuctionsSection(context, isDarkMode),
+                          
+                          const SizedBox(height: 100), // Space for bottom button
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            _buildBottomAction(context, _auctionData!, isDarkMode),
-          ],
-        ),
-      );
+              _buildBottomAction(context, auction, isDarkMode),
+            ],
+          ),
+        );
+      },
+    );
   }
 
-  Widget _buildSliverAppBar(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
+  void _updateTimeLeft(DateTime endTime) {
+    _timeLeft = endTime.difference(DateTime.now());
+    if (_timeLeft.isNegative) _timeLeft = Duration.zero;
+  }
+
+  Widget _buildSliverAppBar(BuildContext context, Auction auction, bool isDarkMode) {
     final favoritesAsync = ref.watch(favoritesProvider);
     final isFavorite = favoritesAsync.value?.contains(widget.auctionId) ?? false;
 
@@ -463,57 +340,38 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             PageView.builder(
               controller: _pageController,
               onPageChanged: (index) => setState(() => _currentPage = index),
-              itemCount: (auction['images'] as List?)?.length ?? 1,
+              itemCount: auction.imageUrls.length,
               itemBuilder: (context, index) {
-                final images = auction['images'] as List?;
-                if (images != null && images.isNotEmpty) {
-                  // Gérer format objet (detail API) ou string (list API)
-                  final imageItem = images[index];
-                  String imageUrl;
-                  if (imageItem is Map<String, dynamic>) {
-                    imageUrl = imageItem['url']?.toString() ?? '';
-                  } else {
-                    imageUrl = imageItem.toString();
-                  }
-                  final isNetworkImage = imageUrl.startsWith('http');
-                  if (isNetworkImage) {
-                    return Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Container(
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                      ),
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          color: Colors.grey[200],
-                          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                        );
-                      },
-                    );
-                  } else if (imageUrl.isNotEmpty && !imageUrl.startsWith('{')) {
-                    // Asset local valide
-                    return Image.asset(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Container(
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                      ),
-                    );
-                  } else {
-                    // URL invalide ou vide - afficher placeholder
-                    return Container(
+                final imageUrl = auction.imageUrls[index];
+                if (imageUrl.startsWith('http')) {
+                  return CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Shimmer.fromColors(
+                      baseColor: Colors.grey[300]!,
+                      highlightColor: Colors.grey[100]!,
+                      child: Container(color: Colors.white),
+                    ),
+                    errorWidget: (context, url, error) => Container(
                       color: Colors.grey[300],
-                      child: const Icon(Icons.image, color: Colors.grey),
-                    );
-                  }
+                      child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                    ),
+                  );
+                } else if (imageUrl.isNotEmpty) {
+                  return Image.asset(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                    ),
+                  );
+                } else {
+                  return Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.image, color: Colors.grey),
+                  );
                 }
-                return Container(
-                  color: Colors.grey[300],
-                  child: const Icon(Icons.image, color: Colors.grey),
-                );
               },
             ),
             Positioned(
@@ -522,12 +380,12 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
+                  color: Colors.black.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${_currentPage + 1}/${(auction['images'] as List?)?.length ?? 1} 🗂️',
-                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
+                  '${_currentPage + 1}/${auction.imageUrls.length} 🗂️',
+                  style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -556,7 +414,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildPriceSection(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
+  Widget _buildPriceSection(BuildContext context, Auction auction, bool isDarkMode) {
     return Row(
       children: [
         Expanded(
@@ -568,10 +426,10 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(AppLocalizations.of(context)!.text_57, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white70, fontSize: 14)),
+                Text(AppLocalizations.of(context)!.text_57, style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 4),
-                Text('${auction['current_bid'] ?? auction['current_price'] ?? 0} MRU', 
-                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                Text('${auction.currentPrice.toStringAsFixed(0)} MRU', 
+                    style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -581,15 +439,15 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             height: 100,
             decoration: BoxDecoration(
               color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-              border: Border(left: BorderSide(color: Colors.grey.withOpacity(0.1))),
+              border: Border(left: BorderSide(color: Colors.grey.withValues(alpha: 0.1))),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(AppLocalizations.of(context)!.text_58, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 14)),
+                Text(AppLocalizations.of(context)!.text_58, style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 14)),
                 const SizedBox(height: 4),
-                Text('${auction['min_increment'] ?? auction['minIncrement'] ?? 0} MRU', 
-                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontSize: 20, fontWeight: FontWeight.bold)),
+                Text('${auction.minIncrement.toStringAsFixed(0)} MRU', 
+                    style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -598,7 +456,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildMainInfoSection(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
+  Widget _buildMainInfoSection(BuildContext context, Auction auction, bool isDarkMode) {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
@@ -606,42 +464,11 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 20, offset: const Offset(0, 10)),
         ],
       ),
       child: Builder(builder: (context) {
-        // Récupérer le titre avec fallback intelligent
-        final locale = Localizations.localeOf(context).languageCode;
-        String title = '';
-        
-        // 1. Essayer d'abord la langue actuelle de l'app
-        switch (locale) {
-          case 'ar':
-            title = auction['title_ar']?.toString() ?? '';
-            break;
-          case 'fr':
-            title = auction['title_fr']?.toString() ?? '';
-            break;
-          case 'en':
-            title = auction['title_en']?.toString() ?? '';
-            break;
-        }
-        
-        // 2. Si vide, essayer l'arabe (langue par défaut)
-        if (title.isEmpty) {
-          title = auction['title_ar']?.toString() ?? '';
-        }
-        
-        // 3. Si toujours vide, essayer les autres langues
-        if (title.isEmpty) {
-          title = auction['title_fr']?.toString() ??
-                  auction['title_en']?.toString() ??
-                  auction['title']?.toString() ??
-                  '';
-        }
-        
-        // 4. Si toujours vide, afficher "Sans titre"
-        if (title.isEmpty) title = AppLocalizations.of(context)!.no_title;
+        final title = auction.title.isEmpty ? AppLocalizations.of(context)!.no_title : auction.title;
 
         return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -660,7 +487,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('${auction['views'] ?? 0}', style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey)),
+                  Text('${auction.views}', style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey)),
                   const SizedBox(width: 4),
                   const Icon(Icons.visibility_outlined, size: 18, color: Colors.grey),
                 ],
@@ -675,14 +502,14 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             decoration: BoxDecoration(
               color: const Color(0xFFF9FAFB),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.withOpacity(0.1)),
+              border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildTimerUnit(AppLocalizations.of(context)!.text_59, _formatDuration(_timeLeft).split(':')[2].split(' ')[0]),
-                _buildTimerUnit(AppLocalizations.of(context)!.text_60, _formatDuration(_timeLeft).split(':')[1]),
-                _buildTimerUnit(AppLocalizations.of(context)!.text_61, _formatDuration(_timeLeft).split(':')[0].split(' ').last),
+                _buildTimerUnit(AppLocalizations.of(context)!.text_59, _timeLeft.inDays.toString().padLeft(2, '0')),
+                _buildTimerUnit(AppLocalizations.of(context)!.text_60, (_timeLeft.inHours % 24).toString().padLeft(2, '0')),
+                _buildTimerUnit(AppLocalizations.of(context)!.text_61, (_timeLeft.inMinutes % 60).toString().padLeft(2, '0')),
               ],
             ),
           ),
@@ -703,14 +530,14 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 Expanded(
                   child: GestureDetector(
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction['id']?.toString() ?? widget.auctionId, auctionData: _mapAuctionData(auction))),
+                      MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction.id, auctionData: auction)),
                     ),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0081FF).withOpacity(0.1),
+                            color: const Color(0xFF0081FF).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Icon(Icons.gavel, color: Color(0xFF0081FF), size: 20),
@@ -721,7 +548,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '${auction['bidder_count'] ?? auction['bidderCount'] ?? 0}',
+                                '${auction.bidderCount}',
                                 style: const TextStyle(
                                   fontFamily: 'Plus Jakarta Sans',
                                   fontSize: 18,
@@ -750,7 +577,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 Container(
                   width: 1,
                   height: 40,
-                  color: Colors.grey.withOpacity(0.3),
+                  color: Colors.grey.withValues(alpha: 0.3),
                 ),
                 
                 // Nombre de visiteurs
@@ -760,7 +587,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF00C58D).withOpacity(0.1),
+                          color: const Color(0xFF00C58D).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(Icons.visibility_outlined, color: Color(0xFF00C58D), size: 20),
@@ -771,7 +598,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${auction['views'] ?? auction['view_count'] ?? 0}',
+                              '${auction.views}',
                               style: const TextStyle(
                                 fontFamily: 'Plus Jakarta Sans',
                                 fontSize: 18,
@@ -805,23 +632,29 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             children: [
               Expanded(
                 child: GestureDetector(
-                  onTap: _contactSeller,
+                  onTap: () => _contactSeller(auction),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
                       color: const Color(0xFF00C58D).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.chat_outlined, color: Color(0xFF00C58D), size: 18),
                         const SizedBox(width: 8),
-                        Text(
-                          AppLocalizations.of(context)!.text_224, // "Contact"
-                          style: const TextStyle(
-                            fontFamily: 'Plus Jakarta Sans',
-                            color: Color(0xFF00C58D),
-                            fontWeight: FontWeight.bold,
+                        Flexible(
+                          child: Text(
+                            AppLocalizations.of(context)!.text_400, // "Contact"
+                            style: const TextStyle(
+                              fontFamily: 'Plus Jakarta Sans',
+                              color: Color(0xFF00C58D),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
                       ],
@@ -829,26 +662,34 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0081FF).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.inventory_2_outlined, color: Color(0xFF0081FF), size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${AppLocalizations.of(context)!.lot} ${auction['lot_number'] ?? auction['lotNumber'] ?? ''}',
-                      style: const TextStyle(
-                        fontFamily: 'Plus Jakarta Sans',
-                        color: Color(0xFF0081FF),
-                        fontWeight: FontWeight.bold,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0081FF).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.inventory_2_outlined, color: Color(0xFF0081FF), size: 18),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          auction.lotNumber ?? '',
+                          style: const TextStyle(
+                            fontFamily: 'Plus Jakarta Sans',
+                            color: Color(0xFF0081FF),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -868,7 +709,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildExternalLinks(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
+  Widget _buildExternalLinks(BuildContext context, Auction auction, bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -879,7 +720,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           const SizedBox(height: 12),
           GestureDetector(
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction['id']?.toString() ?? widget.auctionId, auctionData: _mapAuctionData(auction))),
+              MaterialPageRoute(builder: (context) => AuctionHistoryPage(auctionId: auction.id)),
             ),
             child: Container(
               width: double.infinity,
@@ -904,10 +745,10 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildCarDetailsSection(BuildContext context, Map<String, dynamic> auction, bool isDarkMode) {
-    if (auction['manufacturer'] == null && auction['fuel_type'] == null &&
-        auction['transmission'] == null && auction['year'] == null &&
-        auction['mileage'] == null && auction['model'] == null) {
+  Widget _buildCarDetailsSection(BuildContext context, Auction auction, bool isDarkMode) {
+    if (auction.manufacturer == null && auction.fuelType == null &&
+        auction.transmission == null && auction.year == null &&
+        auction.mileage == null && auction.model == null) {
       return const SizedBox.shrink();
     }
     return Container(
@@ -928,18 +769,18 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             spacing: 24,
             runSpacing: 16,
             children: [
-              if (auction['manufacturer'] != null)
-                _buildCarDetailItem(Icons.home_work_outlined, AppLocalizations.of(context)!.text_65, auction['manufacturer']?.toString() ?? '', isDarkMode),
-              if (auction['transmission'] != null)
-                _buildCarDetailItem(Icons.vertical_split_outlined, AppLocalizations.of(context)!.text_66, auction['transmission']?.toString() ?? '', isDarkMode),
-              if (auction['fuel_type'] != null)
-                _buildCarDetailItem(Icons.local_gas_station_outlined, AppLocalizations.of(context)!.text_67, auction['fuel_type']?.toString() ?? '', isDarkMode),
-              if (auction['year'] != null)
-                _buildCarDetailItem(Icons.calendar_month_outlined, AppLocalizations.of(context)!.text_68, auction['year']?.toString() ?? '', isDarkMode),
-              if (auction['mileage'] != null)
-                _buildCarDetailItem(Icons.speed_rounded, AppLocalizations.of(context)!.text_69, auction['mileage']?.toString() ?? '', isDarkMode),
-              if (auction['model'] != null)
-                _buildCarDetailItem(Icons.directions_car_filled, AppLocalizations.of(context)!.text_70, auction['model']?.toString() ?? '', isDarkMode),
+              if (auction.manufacturer != null)
+                _buildCarDetailItem(Icons.home_work_outlined, AppLocalizations.of(context)!.text_65, auction.manufacturer!, isDarkMode),
+              if (auction.transmission != null)
+                _buildCarDetailItem(Icons.vertical_split_outlined, AppLocalizations.of(context)!.text_66, auction.transmission!, isDarkMode),
+              if (auction.fuelType != null)
+                _buildCarDetailItem(Icons.local_gas_station_outlined, AppLocalizations.of(context)!.text_67, auction.fuelType!, isDarkMode),
+              if (auction.year != null)
+                _buildCarDetailItem(Icons.calendar_month_outlined, AppLocalizations.of(context)!.text_68, auction.year!, isDarkMode),
+              if (auction.mileage != null)
+                _buildCarDetailItem(Icons.speed_rounded, AppLocalizations.of(context)!.text_69, auction.mileage!, isDarkMode),
+              if (auction.model != null)
+                _buildCarDetailItem(Icons.directions_car_filled, AppLocalizations.of(context)!.text_70, auction.model!, isDarkMode),
             ],
           ),
         ],
@@ -985,8 +826,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildBidHistorySection(BuildContext context, bool isDarkMode) {
-    final bidderCount = _auctionData?['bidder_count'] ?? 0;
+  Widget _buildBidHistorySection(BuildContext context, bool isDarkMode, Auction auction) {
+    final bidderCount = auction.bidderCount;
     final bidList = _bidHistory ?? [];
     
     if (bidList.isEmpty && bidderCount == 0) {
@@ -1035,7 +876,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: bidList.length > 5 ? 5 : bidList.length,
               separatorBuilder: (context, index) => Divider(
-                color: Colors.grey.withOpacity(0.1),
+                color: Colors.grey.withValues(alpha: 0.1),
                 height: 1,
               ),
               itemBuilder: (context, index) {
@@ -1141,78 +982,34 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  }
-
-  Widget _buildActionButtons(BuildContext context, bool isDarkMode) {
-    final sellerId = _auctionData?['seller_id']?.toString() ?? _auctionData?['sellerId']?.toString();
+  Widget _buildActionButtons(BuildContext context, bool isDarkMode, Auction auction) {
+    final sellerId = auction.sellerId; 
     final isOwner = _userId != null && _userId == sellerId;
     
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
-          if (isOwner) ...[
-            _buildActionRow([
+          _buildActionRow([
+            if (isOwner)
               _buildActionButton(
                 context,
                 icon: Icons.add_a_photo_outlined,
-                label: AppLocalizations.of(context)!.text_399, // Add Images
+                label: AppLocalizations.of(context)!.text_399,
                 color: Colors.purple,
                 onTap: () => _handleAddImages(),
               ),
-              _buildActionButton(
-                context,
-                icon: Icons.rocket_launch_outlined,
-                label: AppLocalizations.of(context)!.text_394, // Boost
-                color: Colors.orange,
-                onTap: () => _handleBoost(),
-              ),
-            ]),
+            _buildActionButton(
+              context,
+              icon: Icons.report_gmailerrorred_outlined,
+              label: AppLocalizations.of(context)!.text_395,
+              color: Colors.red,
+              onTap: () => _handleReport(),
+            ),
+          ]),
+          if (!isOwner) ...[
             const SizedBox(height: 12),
-            _buildActionRow([
-              _buildActionButton(
-                context,
-                icon: Icons.edit_calendar_outlined,
-                label: AppLocalizations.of(context)!.text_398, // Extend
-                color: Colors.blue,
-                onTap: () => _handleExtend(),
-              ),
-              _buildActionButton(
-                context,
-                icon: Icons.refresh_outlined,
-                label: AppLocalizations.of(context)!.text_396, // Relist
-                color: Colors.green,
-                onTap: () => _handleRelist(),
-              ),
-            ]),
-            const SizedBox(height: 12),
-            _buildActionRow([
-               _buildActionButton(
-                context,
-                icon: Icons.cancel_outlined,
-                label: AppLocalizations.of(context)!.text_397, // Cancel
-                color: Colors.red,
-                onTap: () => _handleCancel(),
-              ),
-              const Spacer(),
-            ]),
-          ] else ...[
-            _buildActionRow([
-              _buildActionButton(
-                context,
-                icon: Icons.auto_mode_outlined,
-                label: AppLocalizations.of(context)!.text_393, // Auto-Bid
-                color: const Color(0xFF0081FF),
-                onTap: () => _handleAutoBid(),
-              ),
-              _buildActionButton(
-                context,
-                icon: Icons.report_gmailerrorred_outlined,
-                label: AppLocalizations.of(context)!.text_395, // Report
-                color: Colors.red,
-                onTap: () => _handleReport(),
-              ),
-            ]),
+           
           ],
         ],
       ),
@@ -1231,17 +1028,15 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [
@@ -1273,10 +1068,11 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   }
 
   Future<void> _handleAutoBid() async {
-    final currentPrice = double.tryParse(
-      _auctionData?['current_bid']?.toString() ?? 
-      _auctionData?['current_price']?.toString() ?? '0'
-    ) ?? 0;
+    final auctionAsync = ref.read(auctionNotifierApiProvider(widget.auctionId));
+    final auction = auctionAsync.value;
+    if (auction == null) return;
+
+    final currentPrice = auction.currentPrice;
     
     AppModals.showAutoBidModal(
       context, 
@@ -1292,118 +1088,30 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Future<void> _handleBoost() async {
-    try {
-      final response = await _auctionApi.boostAuction(widget.auctionId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.message ?? 'Boost activé !')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
-        );
-      }
-    }
-  }
+ 
 
-  Future<void> _handleCancel() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.text_397),
-        content: Text('Êtes-vous sûr de vouloir annuler cette enchère ?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(AppLocalizations.of(context)!.cancel)),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(AppLocalizations.of(context)!.confirm, style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
+ 
+ 
+ 
 
-    if (confirm == true) {
-      try {
-        final response = await _auctionApi.cancelAuction(widget.auctionId);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(response.message ?? 'Enchère annulée')),
-          );
-          Navigator.pop(context);
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur: $e')),
-          );
-        }
-      }
-    }
-  }
+  Widget _buildBottomAction(BuildContext context, Auction auction, bool isDarkMode) {
 
-  Future<void> _handleRelist() async {
-    try {
-      final response = await _auctionApi.relistAuction(widget.auctionId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.message ?? 'Enchère remise en ligne')),
-        );
-        _loadAuctionDetails();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleExtend() async {
-    try {
-      final response = await _auctionApi.extendAuction(widget.auctionId, 24); // Extend by 24h by default
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.message ?? 'Enchère prolongée')),
-        );
-        _loadAuctionDetails();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
-        );
-      }
-    }
-  }
-
-    // Extract auction ID with fallbacks - use widget.auctionId as primary source
-    final auctionId = auction['id']?.toString() ?? widget.auctionId;
+     final auctionId = auction.id;
     
-    // Extract auction data with fallbacks
-    final currentPrice = double.tryParse(
-      auction['current_bid']?.toString() ?? 
-      auction['current_price']?.toString() ?? 
-      auction['starting_price']?.toString() ?? 
-      auction['start_price']?.toString() ?? '0'
-    ) ?? 0;
+    final currentPrice = auction.currentPrice;
     
-    final minIncrement = double.tryParse(
-      auction['min_increment']?.toString() ?? 
-      auction['minIncrement']?.toString() ?? 
-      '500'
-    ) ?? 500;
+    final minIncrement = auction.minIncrement;
     
-    final bidCount = auction['bidder_count'] ?? auction['bid_count'] ?? auction['bids_count'] ?? 0;
+    final bidCount = auction.bidderCount;
     
-    final timeLeftStr = _formatDuration(_timeLeft);
+    final timeLeftStr = TimeUtils.formatDuration(context, _timeLeft);
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5)),
         ],
       ),
       child: SafeArea(
@@ -1412,7 +1120,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           width: double.infinity,
           height: 60,
           child: ElevatedButton(
-            onPressed: auction['is_user_highest_bidder'] == true ? null : () {
+            onPressed: auction.isUserHighestBidder ? null : () {
               showModalBottomSheet(
                 context: context,
                 backgroundColor: Colors.transparent,
@@ -1427,14 +1135,14 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: auction['is_user_highest_bidder'] == true ? const Color(0xFF00C58D) : const Color(0xFF0081FF),
+              backgroundColor: auction.isUserHighestBidder ? const Color(0xFF00C58D) : const Color(0xFF0081FF),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               disabledBackgroundColor: const Color(0xFF00C58D),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (auction['is_user_highest_bidder'] == true) ...[
+                if (auction.isUserHighestBidder) ...[
                    const Icon(Icons.back_hand_outlined, color: Colors.white),
                    const SizedBox(width: 8),
                    Flexible(
@@ -1484,9 +1192,10 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               ),
               GestureDetector(
                 onTap: () {
-                  Navigator.push(
+                  Navigator.pushAndRemoveUntil(
                     context,
-                    MaterialPageRoute(builder: (context) => const AllAuctionsPage()),
+                    MaterialPageRoute(builder: (context) => const HomePage()),
+                    (route) => false,
                   );
                 },
                 child: Container(
@@ -1519,17 +1228,17 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              List<Map<String, dynamic>> relatedAuctions = [];
-              if (snapshot.hasData && snapshot.data!.success && snapshot.data!.data != null) {
-                final dynamic responseData = snapshot.data!.data!;
+              List<Auction> relatedAuctions = [];
+              final data = snapshot.data as dynamic;
+              if (snapshot.hasData && data?.success == true && data?.data != null) {
+                final dynamic responseData = data.data!;
                 List<dynamic> auctionList = [];
-                // La réponse peut être directement une liste ou un objet avec 'data' ou 'auctions'
                 if (responseData is List) {
                   auctionList = responseData;
                 } else if (responseData is Map<String, dynamic>) {
                   auctionList = (responseData['auctions'] ?? responseData['data'] ?? []) as List<dynamic>;
                 }
-                relatedAuctions = auctionList.map((item) => item as Map<String, dynamic>).toList();
+                relatedAuctions = auctionList.map((item) => Auction.fromJson(item as Map<String, dynamic>)).toList();
               }
 
               if (relatedAuctions.isEmpty) {
@@ -1541,34 +1250,15 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 );
               }
 
-              return ListView(
+              return ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: relatedAuctions.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final auction = entry.value;
-                  final id = auction['id']?.toString() ?? '';
-                  final displayNumber = index + 1; // Auto-incrément
-                  final title = (auction['title_ar'] ?? auction['title'])?.toString() ?? AppLocalizations.of(context)!.no_title;
-                  final price = '${auction['current_price'] ?? auction['current_bid'] ?? 0} MRU';
-                  final timeRaw = auction['end_time'] ?? auction['ends_at'] ?? '';
-                  final time = _formatDateTime(timeRaw);
-
-                  // Gestion des images - format objet (detail API) ou string (list API)
-                  String imagePath = 'assets/corolla.png';
-                  if (auction['images'] != null && auction['images'] is List && (auction['images'] as List).isNotEmpty) {
-                    final firstImage = (auction['images'] as List)[0];
-                    if (firstImage is Map<String, dynamic>) {
-                      imagePath = firstImage['url']?.toString() ?? 'assets/corolla.png';
-                    } else {
-                      imagePath = firstImage.toString();
-                    }
-                  } else if (auction['image'] != null) {
-                    imagePath = auction['image'].toString();
-                  }
-
-                  return _buildRelatedAuctionCard(title, price, time, imagePath, id, isDarkMode, auction, displayNumber);
-                }).toList(),
+                itemCount: relatedAuctions.length,
+                itemBuilder: (context, index) {
+                  final auction = relatedAuctions[index];
+                  if (auction.id == widget.auctionId) return const SizedBox.shrink();
+                  return _buildRelatedAuctionCard(context, auction, isDarkMode, index + 1);
+                },
               );
             },
           ),
@@ -1577,15 +1267,15 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Widget _buildRelatedAuctionCard(String title, String price, String time, String imagePath, String id, bool isDarkMode, Map<String, dynamic> auction, int displayNumber) {
+  Widget _buildRelatedAuctionCard(BuildContext context, Auction auction, bool isDarkMode, int displayNumber) {
     final favoritesAsync = ref.watch(favoritesProvider);
-    final isFavorite = favoritesAsync.value?.contains(id) ?? false;
+    final isFavorite = favoritesAsync.value?.contains(auction.id) ?? false;
+    final imagePath = auction.imageUrls.isNotEmpty ? auction.imageUrls[0] : 'assets/corolla.png';
 
     return GestureDetector(
       onTap: () {
-        if (id == widget.auctionId) return;
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => AuctionDetailsPage(auctionId: id)),
+          MaterialPageRoute(builder: (context) => AuctionDetailsPage(auctionId: auction.id)),
         );
       },
       child: Container(
@@ -1602,7 +1292,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             BoxShadow(
               color: isDarkMode
                   ? Colors.black.withOpacity(0.3)
-                  : const Color(0xFF101828).withOpacity(0.08),
+                  : const Color(0xFF101828).withValues(alpha: 0.08),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -1616,40 +1306,31 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                   child: imagePath.startsWith('http')
-                    ? Image.network(
-                        imagePath,
+                    ? CachedNetworkImage(
+                        imageUrl: imagePath,
                         height: 120,
                         width: double.infinity,
                         fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => Image.asset('assets/corolla.png', height: 120, width: double.infinity, fit: BoxFit.cover),
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            height: 120,
-                            color: Colors.grey[200],
-                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                          );
-                        },
-                      )
-                    : imagePath.isNotEmpty && !imagePath.startsWith('{')
-                      ? Image.asset(imagePath, height: 120, width: double.infinity, fit: BoxFit.cover)
-                      : Container(
-                          height: 120,
-                          color: Colors.grey[300],
-                          child: const Center(child: Icon(Icons.image, color: Colors.grey)),
+                        placeholder: (context, url) => Shimmer.fromColors(
+                          baseColor: Colors.grey[300]!,
+                          highlightColor: Colors.grey[100]!,
+                          child: Container(color: Colors.white),
                         ),
+                        errorWidget: (c, e, s) => Image.asset('assets/corolla.png', height: 120, width: double.infinity, fit: BoxFit.cover),
+                      )
+                    : Image.asset(imagePath, height: 120, width: double.infinity, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(height: 120, color: Colors.grey[300])),
                 ),
                 Positioned(
                   top: 4, right: 4,
                   child: IconButton(
                     iconSize: 18,
                     onPressed: () {
-                      ref.read(favoritesProvider.notifier).toggleFavorite(id);
+                      ref.read(favoritesProvider.notifier).toggleFavorite(auction.id);
                     },
                     icon: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.5),
+                        color: Colors.white.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Icon(
@@ -1678,17 +1359,17 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                  Text(auction.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
                       const Icon(Icons.timer_outlined, size: 12, color: Colors.red),
                       const SizedBox(width: 3),
-                      Text(time, style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.w600)),
+                      Text(TimeUtils.formatDuration(context, auction.endTime.difference(DateTime.now())), style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.w600)),
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(price, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Color(0xFF0081FF))),
+                  Text('${auction.currentPrice.toStringAsFixed(0)} MRU', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Color(0xFF0081FF))),
                 ],
               ),
             ),
@@ -1713,47 +1394,4 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     }
   }
 
-  Auction _mapAuctionData(Map<String, dynamic> auction) {
-    List<String> imageUrls = ['assets/corolla.png'];
-    if (auction['images'] != null && auction['images'] is List) {
-      imageUrls = (auction['images'] as List).map((img) {
-        if (img is Map<String, dynamic>) {
-          return img['url']?.toString() ?? 'assets/corolla.png';
-        } else {
-          return img.toString();
-        }
-      }).toList();
-    } else if (auction['image_urls'] != null && auction['image_urls'] is List) {
-      imageUrls = (auction['image_urls'] as List).map((img) {
-        if (img is Map<String, dynamic>) {
-          return img['url']?.toString() ?? 'assets/corolla.png';
-        } else {
-          return img.toString();
-        }
-      }).toList();
-    }
-
-    return Auction(
-      id: auction['id']?.toString() ?? '',
-      title: auction['title_ar'] ?? auction['title'] ?? 'Unknown',
-      description: auction['description_ar'] ?? auction['description'] ?? '',
-      imageUrls: imageUrls.isNotEmpty ? imageUrls : ['assets/corolla.png'],
-      startPrice: double.tryParse(auction['start_price']?.toString() ?? '') ?? double.tryParse(auction['starting_price']?.toString() ?? '') ?? 0,
-      currentPrice: double.tryParse(auction['current_price']?.toString() ?? '') ?? double.tryParse(auction['current_bid']?.toString() ?? '') ?? 0,
-      minIncrement: double.tryParse(auction['min_increment']?.toString() ?? '') ?? 500,
-      endTime: auction['end_time'] != null
-          ? DateTime.parse(auction['end_time'])
-          : DateTime.now().add(const Duration(hours: 13)),
-      bidderCount: auction['bidder_count'] ?? auction['bid_count'] ?? 0,
-      views: auction['views'] ?? 0,
-      lotNumber: auction['lot_number'] ?? 'N/A',
-      phoneNumber: auction['seller_phone'] ?? 'N/A',
-      manufacturer: auction['manufacturer'] ?? '',
-      fuelType: auction['fuel_type'] ?? '',
-      transmission: auction['transmission'] ?? '',
-      year: auction['year']?.toString() ?? '',
-      mileage: auction['mileage']?.toString() ?? '',
-      model: auction['model'] ?? '',
-    );
-  }
 }

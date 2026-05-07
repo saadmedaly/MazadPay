@@ -315,12 +315,14 @@ func (r *requestRepo) CreateBannerRequest(ctx context.Context, req *models.Banne
 	query := `
 		INSERT INTO banner_requests (
 			user_id, title_ar, title_fr, title_en, image_url, target_url,
+			description_ar, description_fr, description_en,
 			starts_at, ends_at, status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at
 	`
 	return r.db.QueryRowContext(ctx, query,
 		req.UserID, req.TitleAr, req.TitleFr, req.TitleEn, req.ImageURL, req.TargetURL,
+		req.DescriptionAr, req.DescriptionFr, req.DescriptionEn,
 		req.StartsAt, req.EndsAt, req.Status,
 	).Scan(&req.ID, &req.CreatedAt)
 }
@@ -417,7 +419,9 @@ func (r *requestRepo) GetBannerRequests(ctx context.Context, status string, user
 		var user models.User
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.TitleAr, &req.TitleFr, &req.TitleEn,
-			&req.ImageURL, &req.TargetURL, &req.StartsAt, &req.EndsAt,
+			&req.ImageURL, &req.TargetURL,
+			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
+			&req.StartsAt, &req.EndsAt,
 			&req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
@@ -444,7 +448,9 @@ func (r *requestRepo) GetBannerRequestByID(ctx context.Context, id uuid.UUID) (*
 	`
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&req.ID, &req.UserID, &req.TitleAr, &req.TitleFr, &req.TitleEn,
-		&req.ImageURL, &req.TargetURL, &req.StartsAt, &req.EndsAt,
+		&req.ImageURL, &req.TargetURL,
+		&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
+		&req.StartsAt, &req.EndsAt,
 		&req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 		&req.CreatedAt, &req.UpdatedAt,
 		&user.ID, &user.Phone, &user.FullName, &user.Role,
@@ -517,7 +523,9 @@ func (r *requestRepo) GetUserBannerRequests(ctx context.Context, userID uuid.UUI
 		var user models.User
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.TitleAr, &req.TitleFr, &req.TitleEn,
-			&req.ImageURL, &req.TargetURL, &req.StartsAt, &req.EndsAt,
+			&req.ImageURL, &req.TargetURL,
+			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
+			&req.StartsAt, &req.EndsAt,
 			&req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,

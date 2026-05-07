@@ -9,7 +9,6 @@ import 'auction_history_page.dart';
 import 'create_ad_form_page.dart';
 import '../services/auction_api.dart';
 import '../services/cache_service.dart';
-import '../widgets/app_modals.dart';
 
 class MyAuctionsPage extends ConsumerStatefulWidget {
   const MyAuctionsPage({super.key});
@@ -38,6 +37,8 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
   // Filtres
   String _searchQuery = '';
   String? _selectedStatus;
+
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
 
   @override
   void initState() {
@@ -86,12 +87,31 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
             category.contains(query) ||
             lotNumber.contains(query);
         
-         bool matchesStatus = _selectedStatus == null ||
-            auction['status']?.toString().toLowerCase() == _selectedStatus!.toLowerCase();
+        bool matchesStatus = _isStatusMatch(auction['status']?.toString(), _selectedStatus);
         
         return matchesSearch && matchesStatus;
       }).toList();
     });
+  }
+
+  bool _isStatusMatch(String? auctionStatus, String? filterStatus) {
+    if (filterStatus == null) return true;
+    if (auctionStatus == null) return false;
+    
+    final aStatus = auctionStatus.toLowerCase();
+    final fStatus = filterStatus.toLowerCase();
+    
+    if (fStatus == 'active') {
+      return aStatus == 'active' || aStatus == 'approved';
+    } else if (fStatus == 'pending') {
+      return aStatus == 'pending' || aStatus == 'draft';
+    } else if (fStatus == 'finished') {
+      return aStatus == 'finished' || aStatus == 'completed' || aStatus == 'sold' || aStatus == 'ended';
+    } else if (fStatus == 'rejected') {
+      return aStatus == 'rejected';
+    }
+    
+    return aStatus == fStatus;
   }
 
   Future<void> _loadMyAuctions() async {
@@ -112,7 +132,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
         setState(() {
           _isLoading = false;
           _myAuctions = auctionList.map((item) => item as Map<String, dynamic>).toList();
-          _filteredAuctions = List.from(_myAuctions);
+          _filterAuctions();
         });
       }
 
@@ -185,7 +205,6 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
@@ -248,8 +267,8 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
                                   const SizedBox(height: 16),
                                   Text(
                                     _searchQuery.isNotEmpty || _selectedStatus != null
-                                        ? 'لا توجد نتائج مطابقة'
-                                        : 'لا توجد مزادات حالياً',
+                                        ? l10n.text_54 // "No results found"
+                                        : l10n.no_my_auctions, // "You haven't created any auctions"
                                     style: TextStyle(
                                       color: Colors.grey[600],
                                       fontSize: 16,
@@ -259,7 +278,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
                                   if (_searchQuery.isEmpty && _selectedStatus == null) ...[
                                     const SizedBox(height: 8),
                                     Text(
-                                      'قم بإنشاء مزادك الأول!',
+                                      l10n.text_24, // "Start your auction journey!"
                                       style: TextStyle(
                                         color: Colors.grey[400],
                                         fontSize: 14,
@@ -276,7 +295,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
                                         );
                                       },
                                       icon: const Icon(Icons.add),
-                                      label: const Text('إنشاء مزاد جديد'),
+                                      label: Text(l10n.text_90), // "Create new ad"
                                     ),
                                   ],
                                 ],
@@ -305,23 +324,24 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
     );
   }
 
-  /// Obtenir le libellé du statut en arabe
+  /// Obtenir le libellé du statut
   String _getStatusLabel(String status, AppLocalizations l10n) {
     switch (status.toLowerCase()) {
       case 'active':
       case 'approved':
-        return 'نشط';
+        return l10n.localeName == 'ar' ? 'نشط' : (l10n.localeName == 'fr' ? 'Actif' : 'Active');
       case 'pending':
-        return 'قيد المراجعة';
+      case 'draft':
+        return l10n.text_280; // "Pending" / "En cours d'examen" / "قيد المراجعة"
       case 'rejected':
-        return 'مرفوض';
+        return l10n.localeName == 'ar' ? 'مرفوض' : (l10n.localeName == 'fr' ? 'Rejeté' : 'Rejected');
       case 'finished':
       case 'completed':
       case 'sold':
-        return 'منتهي';
+      case 'ended':
+        return l10n.localeName == 'ar' ? 'منتهي' : (l10n.localeName == 'fr' ? 'Terminé' : 'Finished');
       case 'cancelled':
-      case 'deleted':
-        return 'ملغي';
+        return l10n.localeName == 'ar' ? 'ملغي' : (l10n.localeName == 'fr' ? 'Annulé' : 'Cancelled');
       default:
         return status;
     }
@@ -342,6 +362,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
       case 'finished':
       case 'completed':
       case 'sold':
+      case 'ended':
         return const Color(0xFF0081FF);
       default:
         return Colors.grey;
@@ -626,7 +647,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
     }
   }
 
-  Widget _buildAuctionItem(BuildContext context, Map<String, dynamic> auction, bool isDarkMode, AppLocalizations l10n) {
+  Widget _buildAuctionItem(BuildContext context, Map<String, dynamic> auction, bool isDarkMode, AppLocalizations _) {
     // Extraction des données API avec fallbacks
     final id = auction['id']?.toString() ?? '';
 
@@ -1044,15 +1065,15 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildStatusFilterChip('الكل', null, isDarkMode),
+                _buildStatusFilterChip(l10n.text_74, null, isDarkMode), // "All"
                 const SizedBox(width: 8),
-                _buildStatusFilterChip('نشط', 'active', isDarkMode),
+                _buildStatusFilterChip(l10n.localeName == 'ar' ? 'نشط' : 'Active', 'active', isDarkMode),
                 const SizedBox(width: 8),
-                _buildStatusFilterChip('قيد المراجعة', 'pending', isDarkMode),
+                _buildStatusFilterChip(l10n.text_280, 'pending', isDarkMode),
                 const SizedBox(width: 8),
-                _buildStatusFilterChip('منتهي', 'finished', isDarkMode),
+                _buildStatusFilterChip(l10n.localeName == 'ar' ? 'منتهي' : 'Finished', 'finished', isDarkMode),
                 const SizedBox(width: 8),
-                _buildStatusFilterChip('مرفوض', 'rejected', isDarkMode),
+                _buildStatusFilterChip(l10n.localeName == 'ar' ? 'مرفوض' : 'Rejected', 'rejected', isDarkMode),
               ],
             ),
           ),
@@ -1062,7 +1083,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '${_filteredAuctions.length} مزاد ${_filteredAuctions.length == 1 ? '' : 'ات'}',
+                '${_filteredAuctions.length} ${l10n.auction}${_filteredAuctions.length > 1 ? (l10n.localeName == 'ar' ? 'ات' : 's') : ''}',
                 style: TextStyle(
                   fontFamily: 'Plus Jakarta Sans',
                   fontSize: 12,
@@ -1155,7 +1176,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'لا توجد صورة',
+            l10n.no_data, // "No data available"
             style: TextStyle(
               fontFamily: 'Plus Jakarta Sans',
               fontSize: 10,

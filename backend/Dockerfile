@@ -1,0 +1,41 @@
+# Stage 1 — Builder
+FROM golang:1.22-alpine AS builder
+
+# Installation des certificats CA pour les appels HTTPS externes (Neon, R2, etc.)
+RUN apk --no-cache add ca-certificates
+
+# Configuration de l'environnement de build pour un binaire statique minimal
+ENV CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=amd64
+
+WORKDIR /app
+
+# Optimisation du cache des dépendances (layer caching)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copier le reste du code
+COPY . .
+
+# Compilation ultra-optimisée
+# -trimpath : retire les chemins locaux du système de build du binaire
+# -ldflags="-s -w" : supprime la table des symboles et les infos de debug (réduit drastiquement la taille)
+RUN go build -trimpath -ldflags="-s -w" -o /app/server ./cmd/server
+
+# ==============================================================================
+# Stage 2 — Final (Image vide ultra-légère)
+# ==============================================================================
+FROM scratch
+
+# Nécessaire pour faire des requêtes TLS/HTTPS sortantes (Neon, S3/R2, Stripe)
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copier uniquement le binaire compilé
+COPY --from=builder /app/server /server
+
+# Exposition du port
+EXPOSE 8082
+
+# Démarrage
+ENTRYPOINT ["/server"]

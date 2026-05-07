@@ -10,6 +10,10 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+<string>Autoriser l'accès aux photos pour uploader des images</string>
+<key>NSCameraUsageDescription</key>
+<string>Autoriser l'accès à la caméra pour prendre des photos</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

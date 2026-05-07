@@ -2961,6 +2961,36 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'محادثة جديدة'**
   String get text_402;
+
+  /// No description provided for @no_auctions_found.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا يوجد مزاد في هذه المدينة'**
+  String get no_auctions_found;
+
+  /// No description provided for @text_403.
+  ///
+  /// In ar, this message translates to:
+  /// **'يكتب الآن...'**
+  String get text_403;
+
+  /// No description provided for @text_404.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد رسائل'**
+  String get text_404;
+
+  /// No description provided for @text_405.
+  ///
+  /// In ar, this message translates to:
+  /// **'أرسل رسالتك الأولى'**
+  String get text_405;
+
+  /// No description provided for @error_too_many_requests.
+  ///
+  /// In ar, this message translates to:
+  /// **'محاولات كثيرة جدا. يرجى المحاولة مرة أخرى في وقت لاحق.'**
+  String get error_too_many_requests;
 }
 
 class _AppLocalizationsDelegate

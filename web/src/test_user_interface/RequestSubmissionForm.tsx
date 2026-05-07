@@ -4,7 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import client from '@/api/client'
 import { toast } from 'sonner'
-import { Loader2, Upload, X, Image as ImageIcon } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import { ImageUpload } from '@/components/shared/ImageUpload'
+import { uploadAuctionImages } from '@/api/auctions'
 
 const auctionRequestSchema = z.object({
   title_ar: z.string().min(3, 'العنوان بالعربية مطلوب'),
@@ -84,56 +86,37 @@ export function RequestSubmissionForm({ type, onSuccess }: RequestSubmissionForm
     resolver: zodResolver(bannerRequestSchema),
   })
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    if (files.length + images.length > 10) {
-      toast.error('يمكنك رفع 10 صور كحد أقصى')
-      return
-    }
-
-    const newImages = [...images, ...files]
-    setImages(newImages)
-
-    const newPreviews = files.map(file => URL.createObjectURL(file))
-    setImagePreviews([...imagePreviews, ...newPreviews])
-  }
-
-  const removeImage = (index: number) => {
-    const newImages = images.filter((_, i) => i !== index)
-    const newPreviews = imagePreviews.filter((_, i) => i !== index)
+  const handleImagesChange = (newImages: File[], newPreviews: string[]) => {
     setImages(newImages)
     setImagePreviews(newPreviews)
-  }
-
-  const uploadImages = async (): Promise<string[]> => {
-    if (images.length === 0) return []
-
-    const formData = new FormData()
-    images.forEach(image => {
-      formData.append('images', image)
-    })
-
-    const response = await client.post('/v1/api/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-
-    return response.data.urls || []
   }
 
   const onSubmitAuction = async (data: AuctionRequestForm) => {
     setIsSubmitting(true)
     try {
-      const imageUrls = await uploadImages()
-
-      await client.post('/v1/api/requests/auctions', {
+      // 1. Create auction first (without images)
+      const auctionResponse = await client.post('/v1/api/requests/auctions', {
         ...data,
-        images: imageUrls,
+        images: [],
         start_price: data.start_price.toString(),
         reserve_price: data.reserve_price?.toString(),
         min_increment: data.min_increment.toString(),
         insurance_amount: data.insurance_amount.toString(),
         buy_now_price: data.buy_now_price?.toString(),
       })
+
+      const auctionId = auctionResponse.data.data?.id || auctionResponse.data.id
+
+      // 2. Upload images if auction created and images exist
+      if (auctionId && images.length > 0) {
+        try {
+          const uploadResult = await uploadAuctionImages(auctionId, images)
+          toast.success(`تم رفع ${uploadResult.count} صور بنجاح`)
+        } catch (uploadError) {
+          toast.error('تم إنشاء المزاد ولكن فشل رفع الصور')
+          console.error('Image upload error:', uploadError)
+        }
+      }
 
       toast.success('تم إرسال طلب المزاد بنجاح')
       auctionForm.reset()
@@ -142,6 +125,7 @@ export function RequestSubmissionForm({ type, onSuccess }: RequestSubmissionForm
       onSuccess?.()
     } catch (error) {
       toast.error('فشل إرسال طلب المزاد')
+      console.error('Auction creation error:', error)
     } finally {
       setIsSubmitting(false)
     }
@@ -344,41 +328,14 @@ export function RequestSubmissionForm({ type, onSuccess }: RequestSubmissionForm
         {/* Images Upload */}
         <div>
           <label className="block text-sm font-medium mb-2">صور المزاد (حتى 10 صور)</label>
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors">
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleImageChange}
-              className="hidden"
-              id="auction-images"
-            />
-            <label htmlFor="auction-images" className="cursor-pointer flex flex-col items-center">
-              <ImageIcon className="w-12 h-12 text-gray-400 mb-2" />
-              <span className="text-gray-600">اضغط لرفع الصور أو اسحبها هنا</span>
-            </label>
-          </div>
-
-          {imagePreviews.length > 0 && (
-            <div className="grid grid-cols-5 gap-2 mt-4">
-              {imagePreviews.map((preview, index) => (
-                <div key={index} className="relative">
-                  <img
-                    src={preview}
-                    alt={`Preview ${index + 1}`}
-                    className="w-full h-24 object-cover rounded-lg"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(index)}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 w-6 h-6 flex items-center justify-center hover:bg-red-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <ImageUpload
+            images={images}
+            previewUrls={imagePreviews}
+            onImagesChange={handleImagesChange}
+            maxImages={10}
+            maxSizeMB={10}
+            disabled={isSubmitting}
+          />
         </div>
 
         <button

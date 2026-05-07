@@ -1038,13 +1038,15 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_336 => 'Ce service respecte les lois de la Mauritanie.';
 
   @override
-  String get text_337 => 'Règles des enchères :';
+  String get text_337 => 'شروط المشاركة في المزادات:';
 
   @override
-  String get text_338 => 'Un dépôt est requis.';
+  String get text_338 =>
+      'يتطلب بعض المزادات دفع مبلغ تأمين لضمان جدية المزايدة.';
 
   @override
-  String get text_339 => 'Restitution automatique sous une heure.';
+  String get text_339 =>
+      'يُسترجع مبلغ التأمين تلقائيًا في حال عدم الفوز بالمزاد خلال ساعة من انتهاء المزاد.';
 
   @override
   String get text_340 => 'Non restituable si vous gagnez sans payer.';
@@ -1158,10 +1160,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_376 => 'Pay';
 
   @override
-  String get text_377 => 'Vidéos';
+  String get text_377 => 'الفيديوهات';
 
   @override
-  String get text_378 => 'Ajouter';
+  String get text_378 => 'إضافة';
 
   @override
   String get text_379 => 'Déposer maintenant';
@@ -1440,7 +1442,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_392 => 'Mes Messages';
 
   @override
-  String get text_393 => 'Auto-Enchère';
+  String get text_393 => 'Enchère Auto';
 
   @override
   String get text_394 => 'Booster l\'enchère';
@@ -1468,4 +1470,20 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get text_402 => 'Nouvelle conversation';
+
+  @override
+  String get no_auctions_found => 'Aucune enchère dans cette ville';
+
+  @override
+  String get text_403 => 'يكتب الآن...';
+
+  @override
+  String get text_404 => 'لا توجد رسائل';
+
+  @override
+  String get text_405 => 'أرسل رسالتك الأولى';
+
+  @override
+  String get error_too_many_requests =>
+      'Trop de tentatives. Veuillez réessayer plus tard.';
 }

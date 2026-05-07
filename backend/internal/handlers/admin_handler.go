@@ -493,7 +493,8 @@ func (h *AdminHandler) ListReports(c *fiber.Ctx) error {
 		perPage = 25
 	}
 
-	reports, total, err := h.svc.ListReports(c.Context(), page, perPage, status)
+	reportType := c.Query("type")
+	reports, total, err := h.svc.ListReports(c.Context(), page, perPage, status, reportType)
 	if err != nil {
 		return MapError(c, h.logger, err)
 	}
@@ -572,7 +573,22 @@ func (h *AdminHandler) ReviewReport(c *fiber.Ctx) error {
 		"report_id": id.String(),
 		"status":    req.Status,
 	})
-} // KYC management
+}
+
+func (h *AdminHandler) DeleteReport(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid report ID")
+	}
+
+	if err := h.svc.DeleteReport(c.Context(), id); err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, fiber.Map{"message": "Report deleted", "id": id.String()})
+}
+
+// KYC management
 func (h *AdminHandler) ListKYCs(c *fiber.Ctx) error {
 	status := c.Query("status")
 	kycs, err := h.svc.ListKYC(c.Context(), status)

@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -171,4 +173,97 @@ func (h *MessageHandler) MarkAsRead(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{"message": "Messages marked as read"})
+}
+
+// UploadChatMedia handles file uploads for chat messages (images, videos, audio, files)
+func (h *MessageHandler) UploadChatMedia(c *fiber.Ctx) error {
+	h.logger.Info("[UploadChatMedia] Starting chat media upload")
+
+	// Get user ID from JWT
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	// Parse conversation ID
+	conversationID, err := uuid.Parse(c.Params("conversation_id"))
+	if err != nil {
+		return BadRequest(c, "Invalid conversation ID")
+	}
+
+	// Get media service from context
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		h.logger.Error("[UploadChatMedia] Media service not available in context")
+		return InternalError(c, "Media service not available")
+	}
+
+	// Parse multipart form (max 1 file, max 50MB for videos)
+	file, err := c.FormFile("file")
+	if err != nil {
+		h.logger.Error("[UploadChatMedia] Failed to get file", zap.Error(err))
+		return BadRequest(c, "No file provided")
+	}
+
+	// Validate file size (max 50MB)
+	if file.Size > 50*1024*1024 {
+		h.logger.Warn("[UploadChatMedia] File too large", zap.Int64("size", file.Size))
+		return BadRequest(c, "File too large (max 50MB)")
+	}
+
+	// Get file type from form
+	fileType := c.FormValue("type", "file") // image, video, audio, file
+
+	// Validate file type by extension
+	ext := filepath.Ext(file.Filename)
+	allowedTypes := map[string]map[string]bool{
+		"image": {".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true},
+		"video": {".mp4": true, ".webm": true, ".mov": true},
+		"audio": {".mp3": true, ".wav": true, ".ogg": true, ".m4a": true},
+		"file":  {".pdf": true, ".doc": true, ".docx": true, ".xls": true, ".xlsx": true, ".zip": true},
+	}
+
+	if typeExts, ok := allowedTypes[fileType]; !ok || !typeExts[ext] {
+		h.logger.Warn("[UploadChatMedia] Invalid file type", zap.String("type", fileType), zap.String("ext", ext))
+		return BadRequest(c, "Invalid file type for "+fileType)
+	}
+
+	// Open file
+	fileReader, err := file.Open()
+	if err != nil {
+		h.logger.Error("[UploadChatMedia] Failed to open file", zap.Error(err))
+		return InternalError(c, "Failed to open file")
+	}
+	defer fileReader.Close()
+
+	// Upload to R2: chats/{conversationID}/{userID}_{timestamp}_{filename}
+	folder := fmt.Sprintf("chats/%s", conversationID.String())
+
+	h.logger.Info("[UploadChatMedia] Uploading to R2",
+		zap.String("user_id", userID.String()),
+		zap.String("conversation_id", conversationID.String()),
+		zap.String("folder", folder),
+		zap.String("filename", file.Filename))
+
+	url, err := mediaSvc.UploadFile(c.Context(), fileReader, file, folder)
+	if err != nil {
+		h.logger.Error("[UploadChatMedia] R2 upload failed",
+			zap.Error(err),
+			zap.String("user_id", userID.String()),
+			zap.String("conversation_id", conversationID.String()))
+		return InternalError(c, "Failed to upload file to Cloudflare R2: "+err.Error())
+	}
+
+	h.logger.Info("[UploadChatMedia] R2 upload successful",
+		zap.String("user_id", userID.String()),
+		zap.String("conversation_id", conversationID.String()),
+		zap.String("url", url))
+
+	return OK(c, fiber.Map{
+		"message": "File uploaded successfully",
+		"url":     url,
+		"type":    fileType,
+		"size":    file.Size,
+		"name":    file.Filename,
+	})
 }

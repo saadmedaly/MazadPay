@@ -29,7 +29,7 @@ class SuccessDialog extends StatelessWidget {
               height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF135BEC).withOpacity(0.1),
+                color: const Color(0xFF135BEC).withValues(alpha: 0.1),
               ),
               child: Center(
                 child: Container(

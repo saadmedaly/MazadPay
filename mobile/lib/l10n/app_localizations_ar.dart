@@ -1483,4 +1483,20 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_402 => 'محادثة جديدة';
+
+  @override
+  String get no_auctions_found => 'لا يوجد مزاد في هذه المدينة';
+
+  @override
+  String get text_403 => 'يكتب الآن...';
+
+  @override
+  String get text_404 => 'لا توجد رسائل';
+
+  @override
+  String get text_405 => 'أرسل رسالتك الأولى';
+
+  @override
+  String get error_too_many_requests =>
+      'محاولات كثيرة جدا. يرجى المحاولة مرة أخرى في وقت لاحق.';
 }

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Trash2, ToggleLeft, ToggleRight, Image as ImageIcon, Loader2, AlertCircle, Edit2 } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Plus, Trash2, ToggleLeft, ToggleRight, Image as ImageIcon, Loader2, AlertCircle, Edit2, Upload, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -48,6 +48,8 @@ export function BannersPage() {
     is_active: true
   })
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const createMutation = useMutation({
     mutationFn: (b: typeof newBanner) => client.post('/v1/api/banners', b),
@@ -89,6 +91,51 @@ export function BannersPage() {
     },
     onError: (err: Error) => toast.error(err.message),
   })
+
+  // File upload handler
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('يرجى اختيار ملف صورة فقط (jpg, png, webp, gif)')
+      return
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('حجم الصورة كبير جداً (الحد الأقصى 10 ميجابايت)')
+      return
+    }
+
+    setUploadingFile(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await client.post('/v1/api/admin/banners/upload', formData, {
+        timeout: 30_000,
+        headers: { 'Content-Type': undefined },
+      })
+
+      const uploadedUrl = res.data.data.url
+      
+      if (isEdit && editingBanner) {
+        setEditingBanner({ ...editingBanner, image_url: uploadedUrl })
+      } else {
+        setNewBanner({ ...newBanner, image_url: uploadedUrl })
+      }
+      
+      toast.success('تم رفع الصورة بنجاح')
+    } catch (err: any) {
+      const message = err.response?.data?.message || err.message || 'فشل رفع الصورة'
+      toast.error(message)
+    } finally {
+      setUploadingFile(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   if (isError) return (
     <div className="admin-card p-20 text-center flex flex-col items-center gap-4">
@@ -144,27 +191,65 @@ export function BannersPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">رابط الصورة (URL) <span className="text-red-400">*</span></label>
+          {/* Image Upload Section */}
+          <div className="mb-4">
+            <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">صورة الإعلان <span className="text-red-400">*</span></label>
+            
+            {/* Image Preview */}
+            {newBanner.image_url && (
+              <div className="relative mb-4 rounded-xl overflow-hidden border border-surface-border">
+                <img src={newBanner.image_url} alt="Preview" className="w-full h-48 object-cover" />
+                <button
+                  onClick={() => setNewBanner({ ...newBanner, image_url: '' })}
+                  className="absolute top-2 left-2 p-1.5 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            
+            {/* Upload Button */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingFile}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-surface-border/50 hover:bg-surface-border border border-surface-border text-white transition-all disabled:opacity-50"
+              >
+                {uploadingFile ? (
+                  <><Loader2 className="w-5 h-5 animate-spin" /> جاري الرفع...</>
+                ) : (
+                  <><Upload className="w-5 h-5" /> رفع صورة من الجهاز</>
+                )}
+              </button>
+              <span className="text-surface-muted text-sm self-center">أو</span>
               <Input
                 value={newBanner.image_url}
                 onChange={(e) => setNewBanner({ ...newBanner, image_url: e.target.value })}
                 placeholder="https://example.com/image.jpg"
                 dir="ltr"
-                className="text-left"
+                className="flex-1 text-left"
               />
             </div>
-            <div>
-              <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">رابط الويب (اختياري)</label>
-              <Input
-                value={newBanner.target_url}
-                onChange={(e) => setNewBanner({ ...newBanner, target_url: e.target.value })}
-                placeholder="https://example.com/..."
-                dir="ltr"
-                className="text-left"
-              />
-            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(e) => handleFileUpload(e)}
+              className="hidden"
+            />
+            <p className="text-xs text-surface-muted mt-2">الصور المسموح بها: JPG, PNG, WebP, GIF (الحد الأقصى 10MB)</p>
+          </div>
+          
+          <div className="mb-4">
+            <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">رابط الويب (اختياري)</label>
+            <Input
+              value={newBanner.target_url}
+              onChange={(e) => setNewBanner({ ...newBanner, target_url: e.target.value })}
+              placeholder="https://example.com/..."
+              dir="ltr"
+              className="text-left"
+            />
           </div>
           <div className="mb-6">
             <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-2">ترتيب العرض</label>
@@ -337,25 +422,63 @@ export function BannersPage() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-surface-muted font-bold block mb-2">رابط الصورة</label>
+              {/* Image Upload Section for Edit */}
+              <div className="mb-4">
+                <label className="text-xs text-surface-muted font-bold block mb-2">صورة الإعلان</label>
+                
+                {/* Image Preview */}
+                {editingBanner.image_url && (
+                  <div className="relative mb-4 rounded-xl overflow-hidden border border-surface-border">
+                    <img src={editingBanner.image_url} alt="Preview" className="w-full h-32 object-cover" />
+                    <button
+                      onClick={() => setEditingBanner({ ...editingBanner, image_url: '' })}
+                      className="absolute top-2 left-2 p-1.5 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+                
+                {/* Upload Button */}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingFile}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-surface-border/50 hover:bg-surface-border border border-surface-border text-white transition-all disabled:opacity-50"
+                  >
+                    {uploadingFile ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> جاري الرفع...</>
+                    ) : (
+                      <><Upload className="w-4 h-4" /> تغيير الصورة</>
+                    )}
+                  </button>
+                  <span className="text-surface-muted text-sm self-center">أو</span>
                   <Input
                     value={editingBanner.image_url}
                     onChange={(e) => setEditingBanner({ ...editingBanner, image_url: e.target.value })}
+                    placeholder="https://example.com/image.jpg"
                     dir="ltr"
-                    className="text-left"
+                    className="flex-1 text-left"
                   />
                 </div>
-                <div>
-                  <label className="text-xs text-surface-muted font-bold block mb-2">رابط الويب</label>
-                  <Input
-                    value={editingBanner.target_url ?? ''}
-                    onChange={(e) => setEditingBanner({ ...editingBanner, target_url: e.target.value })}
-                    dir="ltr"
-                    className="text-left"
-                  />
-                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(e) => handleFileUpload(e, true)}
+                  className="hidden"
+                />
+              </div>
+              
+              <div>
+                <label className="text-xs text-surface-muted font-bold block mb-2">رابط الويب</label>
+                <Input
+                  value={editingBanner.target_url ?? ''}
+                  onChange={(e) => setEditingBanner({ ...editingBanner, target_url: e.target.value })}
+                  dir="ltr"
+                  className="text-left"
+                />
               </div>
               <div>
                 <label className="text-xs text-surface-muted font-bold block mb-2">ترتيب العرض</label>

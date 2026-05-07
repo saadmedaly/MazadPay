@@ -21,6 +21,7 @@ class AuctionNotifier extends _$AuctionNotifier {
       views: 106,
       lotNumber: '49495',
       phoneNumber: '36601175',
+      sellerId: 'mock-seller-id',
       manufacturer: 'تويوتا',
       fuelType: 'بنزين',
       transmission: 'أوتوماتيكي',
@@ -44,6 +45,7 @@ class AuctionNotifier extends _$AuctionNotifier {
       views: state.views,
       lotNumber: state.lotNumber,
       phoneNumber: state.phoneNumber,
+      sellerId: state.sellerId,
       isUserHighestBidder: true,
     );
   }

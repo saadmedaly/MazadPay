@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"path/filepath"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -130,4 +131,64 @@ func (h *BannerHandler) Update(c *fiber.Ctx) error {
 	}
 
 	return OK(c, banner)
+}
+
+// UploadBannerImage uploads a banner image to R2 (banners/ folder)
+func (h *BannerHandler) UploadBannerImage(c *fiber.Ctx) error {
+	h.logger.Info("[UploadBannerImage] Starting banner upload")
+
+	// Get media service from context
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		h.logger.Error("[UploadBannerImage] Media service not available")
+		return InternalError(c, "Media service not available")
+	}
+
+	// Parse multipart form
+	file, err := c.FormFile("file")
+	if err != nil {
+		h.logger.Error("[UploadBannerImage] Failed to get file", zap.Error(err))
+		return BadRequest(c, "No file provided")
+	}
+
+	// Validate file size (max 10MB for banners)
+	if file.Size > 10*1024*1024 {
+		h.logger.Warn("[UploadBannerImage] File too large", zap.Int64("size", file.Size))
+		return BadRequest(c, "File too large (max 10MB)")
+	}
+
+	// Validate file type (only images)
+	ext := filepath.Ext(file.Filename)
+	allowedExts := map[string]bool{
+		".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true,
+	}
+	if !allowedExts[ext] {
+		h.logger.Warn("[UploadBannerImage] Invalid file type", zap.String("ext", ext))
+		return BadRequest(c, "Invalid file type (only jpg, jpeg, png, webp, gif allowed)")
+	}
+
+	// Open file
+	fileReader, err := file.Open()
+	if err != nil {
+		h.logger.Error("[UploadBannerImage] Failed to open file", zap.Error(err))
+		return InternalError(c, "Failed to open file")
+	}
+	defer fileReader.Close()
+
+	// Upload to R2 (banners/ folder)
+	url, err := mediaSvc.UploadFile(c.Context(), fileReader, file, "banners")
+	if err != nil {
+		h.logger.Error("[UploadBannerImage] R2 upload failed", zap.Error(err))
+		return InternalError(c, "Failed to upload banner: "+err.Error())
+	}
+
+	h.logger.Info("[UploadBannerImage] Upload successful", zap.String("url", url))
+
+	return OK(c, fiber.Map{
+		"message": "Banner uploaded successfully",
+		"url":     url,
+		"type":    "image",
+		"size":    file.Size,
+		"name":    file.Filename,
+	})
 }

@@ -221,7 +221,7 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                               );
                             },
                             child: Text(
-                              AppLocalizations.of(context)!.text_391 ?? 'تسجيل الدخول',
+                              AppLocalizations.of(context)!.text_391,
                               style: const TextStyle(
                                 color: Color(0xFF135BEC),
                                 fontWeight: FontWeight.bold,

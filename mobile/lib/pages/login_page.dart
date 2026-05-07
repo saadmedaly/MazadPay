@@ -3,14 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'login_controller.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'phone_registration_page.dart';
 import 'language_page.dart';
 import '../widgets/mazad_pay_logo.dart';
 import 'new_password_page.dart';
 import 'home_page.dart';
-import 'otp_entry_page.dart';
 import '../widgets/success_dialog.dart';
 import 'phone_password_page.dart';
+import '../services/category_api.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   final bool showSuccessDialog;
@@ -24,7 +23,10 @@ class LoginPage extends ConsumerStatefulWidget {
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final CategoryApi _categoryApi = CategoryApi();
   bool _obscurePassword = true;
+  List<dynamic> _countries = [];
+  Map<String, dynamic>? _selectedCountry;
 
   @override
   void initState() {
@@ -35,7 +37,33 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _passwordController.addListener(() {
       setState(() {});
     });
+    
+    _loadCountries();
+    _checkShowSuccessDialog();
+  }
 
+  Future<void> _loadCountries() async {
+    final response = await _categoryApi.getCountries();
+    if (response.success && response.data != null) {
+      if (mounted) {
+        setState(() {
+          _countries = response.data!;
+          // Select default country (+222 Mauritania) or first available
+          try {
+            _selectedCountry = _countries.firstWhere(
+              (c) => c['country_code'] == '+222' || c['code'] == 'MR',
+            );
+          } catch (e) {
+            if (_countries.isNotEmpty) {
+              _selectedCountry = _countries.first;
+            }
+          }
+        });
+      }
+    }
+  }
+
+  void _checkShowSuccessDialog() {
     if (widget.showSuccessDialog) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showSuccessDialog(
@@ -56,6 +84,32 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  String _getLocalizedError(BuildContext context, String? code, String defaultMessage) {
+    final l10n = AppLocalizations.of(context)!;
+    
+    switch (code) {
+      case 'invalid_pin':
+      case 'unauthorized':
+      case 'not_found':
+      case 'invalid_credentials':
+      case 'user_not_found':
+        return l10n.error_invalid_credentials;
+      case 'connection_error':
+        return l10n.error_connection;
+      case 'too_many_requests':
+      case 'otp_rate_limited':
+        return l10n.error_too_many_requests;
+      case 'account_blocked':
+      case 'account_disabled':
+        return 'Compte bloqué ou désactivé'; // TODO: Add to l10n if needed
+      default:
+         if (defaultMessage.contains('connexion') || defaultMessage.contains('connection')) {
+          return l10n.error_connection;
+        }
+        return l10n.error_login_failed;
+    }
   }
 
   @override
@@ -148,8 +202,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 // Affichage des erreurs
                 Consumer(
                   builder: (context, ref, child) {
-                    final error = ref.watch(loginControllerProvider).error;
-                    if (error == null) return const SizedBox.shrink();
+                    final loginState = ref.watch(loginControllerProvider);
+                    if (loginState.error == null) return const SizedBox.shrink();
+                    
                     return Container(
                       margin: const EdgeInsets.only(top: 16),
                       padding: const EdgeInsets.all(12),
@@ -164,7 +219,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              error,
+                              _getLocalizedError(context, loginState.errorCode, loginState.error!),
                               style: const TextStyle(color: Colors.red, fontSize: 14),
                             ),
                           ),
@@ -227,8 +282,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     onPressed: ref.watch(loginControllerProvider).isLoading
                       ? null
                       : () async {
+                          final countryCode = _selectedCountry?['country_code'] ?? '+222';
+                          final fullPhone = '$countryCode${_phoneController.text}';
                           final success = await ref.read(loginControllerProvider.notifier).login(
-                            _phoneController.text,
+                            fullPhone,
                             _passwordController.text,
                           );
                           
@@ -346,17 +403,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(2),
-                            child: Image.asset(
-                              'assets/mr.png',
-                              width: 24,
-                              height: 16,
-                              fit: BoxFit.cover,
-                            ),
+                            child: _selectedCountry?['code'] != null 
+                              ? Image.network(
+                                  'https://flagcdn.com/w80/${_selectedCountry!['code'].toString().toLowerCase()}.png',
+                                  width: 24,
+                                  height: 16,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stack) => Image.asset('assets/mr.png', width: 24, height: 16, fit: BoxFit.cover),
+                                )
+                              : Image.asset(
+                                  'assets/mr.png',
+                                  width: 24,
+                                  height: 16,
+                                  fit: BoxFit.cover,
+                                ),
                           ),
                           const SizedBox(width: 8),
-                          const Text(
-                            '+222',
-                            style: TextStyle(
+                          Text(
+                            _selectedCountry?['country_code'] ?? '+222',
+                            style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
                               color: Color(0xFF475467),
@@ -440,49 +505,33 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
-              _buildCountryItem(
-                context,
-                name: AppLocalizations.of(context)!.text_220,
-                code: '+222',
-                flagUrl: 'assets/mr.png',
-                isAvailable: true,
-              ),
-              const Divider(height: 32),
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: Text(
-                  AppLocalizations.of(context)!.text_165,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildCountryItem(
-                context,
-                name: AppLocalizations.of(context)!.text_221,
-                code: '+221',
-                flagUrl: 'https://flagcdn.com/w80/sn.png',
-                isAvailable: false,
-              ),
-              const SizedBox(height: 12),
-              _buildCountryItem(
-                context,
-                name: AppLocalizations.of(context)!.text_222,
-                code: '+212',
-                flagUrl: 'https://flagcdn.com/w80/ma.png',
-                isAvailable: false,
-              ),
-              const SizedBox(height: 12),
-              _buildCountryItem(
-                context,
-                name: AppLocalizations.of(context)!.text_223,
-                code: '+216',
-                flagUrl: 'https://flagcdn.com/w80/tn.png',
-                isAvailable: false,
-              ),
+              if (_countries.isEmpty)
+                const CircularProgressIndicator()
+              else
+                ..._countries.map((country) {
+                  final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+                  final isFrench = Localizations.localeOf(context).languageCode == 'fr';
+                  final name = isArabic 
+                      ? country['name_ar'] 
+                      : (isFrench ? country['name_fr'] : country['name_en']);
+                  
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: _buildCountryItem(
+                      context,
+                      name: name ?? 'Unknown',
+                      code: country['country_code'] ?? '',
+                      flagUrl: 'https://flagcdn.com/w80/${country['code'].toString().toLowerCase()}.png',
+                      isAvailable: country['is_active'] ?? true,
+                      onTap: () {
+                        if (country['is_active'] ?? true) {
+                          setState(() => _selectedCountry = country);
+                          Navigator.pop(context);
+                        }
+                      },
+                    ),
+                  );
+                }).toList(),
               const SizedBox(height: 40),
             ],
           ),
@@ -497,11 +546,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     required String code,
     required String flagUrl,
     required bool isAvailable,
+    VoidCallback? onTap,
   }) {
     return Opacity(
       opacity: isAvailable ? 1.0 : 0.5,
       child: InkWell(
-        onTap: isAvailable ? () => Navigator.pop(context) : null,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

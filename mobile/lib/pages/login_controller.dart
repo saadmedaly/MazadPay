@@ -5,13 +5,15 @@ import '../services/favorites_service.dart';
 class LoginState {
   final bool isLoading;
   final String? error;
+  final String? errorCode;
 
-  LoginState({this.isLoading = false, this.error});
+  LoginState({this.isLoading = false, this.error, this.errorCode});
 
-  LoginState copyWith({bool? isLoading, String? error}) {
+  LoginState copyWith({bool? isLoading, String? error, String? errorCode}) {
     return LoginState(
       isLoading: isLoading ?? this.isLoading,
       error: error ?? this.error,
+      errorCode: errorCode ?? this.errorCode,
     );
   }
 }
@@ -22,7 +24,7 @@ class LoginController extends StateNotifier<LoginState> {
   LoginController() : super(LoginState());
 
   Future<bool> login(String phone, String password) async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: true, error: null, errorCode: null);
     
     try {
       final response = await _authApi.login(
@@ -48,6 +50,7 @@ class LoginController extends StateNotifier<LoginState> {
         state = state.copyWith(
           isLoading: false,
           error: response.error?.message ?? 'Erreur de connexion',
+          errorCode: response.error?.code,
         );
         return false;
       }
@@ -55,6 +58,7 @@ class LoginController extends StateNotifier<LoginState> {
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
+        errorCode: 'connection_error',
       );
       return false;
     }

@@ -31,8 +31,9 @@ type AdminService interface {
 	DeleteAuction(ctx context.Context, id uuid.UUID) error
 	ListTransactions(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error)
 	ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error
-	ListReports(ctx context.Context, page, perPage int, status string) ([]models.Report, int, error)
+	ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error)
 	ReviewReport(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
+	DeleteReport(ctx context.Context, id uuid.UUID) error
 
 	// KYC
 	ListKYC(ctx context.Context, status string) ([]models.KYCVerification, error)
@@ -136,6 +137,7 @@ type adminService struct {
 	invRepo      repository.AdminInvitationRepository
 	reqRepo      repository.RequestRepository
 	settingsRepo repository.SettingsRepository
+	mediaSvc     MediaService
 }
 
 func NewAdminService(
@@ -150,6 +152,7 @@ func NewAdminService(
 	invRepo repository.AdminInvitationRepository,
 	reqRepo repository.RequestRepository,
 	settingsRepo repository.SettingsRepository,
+	mediaSvc MediaService,
 ) AdminService {
 	return &adminService{
 		db:           db,
@@ -163,6 +166,7 @@ func NewAdminService(
 		invRepo:      invRepo,
 		reqRepo:      reqRepo,
 		settingsRepo: settingsRepo,
+		mediaSvc:     mediaSvc,
 	}
 }
 
@@ -292,6 +296,17 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 }
 
 func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input UpdateAuctionInput) error {
+	// Validate at least 1 image
+	validImageCount := 0
+	for _, url := range input.Images {
+		if url != "" {
+			validImageCount++
+		}
+	}
+	if validImageCount == 0 {
+		return fmt.Errorf("at least one image is required for the auction")
+	}
+
 	auction, err := s.auctionRepo.FindByID(ctx, id)
 	if err != nil {
 		return err
@@ -339,19 +354,32 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 		auction.StartTime = *input.StartTime
 	}
 
+	// Start transaction for atomic update
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	if err := s.auctionRepo.Update(ctx, auction); err != nil {
 		return err
 	}
 
-	// Sync images: Delete existing and add new ones
-	if err := s.auctionRepo.DeleteImages(ctx, id); err != nil {
+	// Get existing images before deleting (for R2 cleanup)
+	existingImages, err := s.auctionRepo.GetImages(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get existing images: %w", err)
+	}
+
+	// Sync images: Delete existing from DB and add new ones
+	if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
 		return err
 	}
 	for i, url := range input.Images {
 		if url == "" {
 			continue
 		}
-		err := s.auctionRepo.AddImage(ctx, &models.AuctionImage{
+		err := s.auctionRepo.AddImageTx(ctx, tx, &models.AuctionImage{
 			AuctionID:    id,
 			URL:          url,
 			MediaType:    "image",
@@ -362,11 +390,47 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 		}
 	}
 
+	// Commit transaction first
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// After successful commit, delete old images from R2 (best effort, don't fail if error)
+	if s.mediaSvc != nil {
+		for _, img := range existingImages {
+			if err := s.mediaSvc.DeleteFile(ctx, img.URL); err != nil {
+				// Log but don't fail - the DB update succeeded
+				fmt.Printf("[Admin UpdateAuction] Warning: failed to delete old image from R2: %s, error: %v\n", img.URL, err)
+			}
+		}
+	}
+
 	return nil
 }
 
 func (s *adminService) DeleteAuction(ctx context.Context, id uuid.UUID) error {
-	return s.auctionRepo.Delete(ctx, id)
+	// Get existing images before deleting (for R2 cleanup)
+	existingImages, err := s.auctionRepo.GetImages(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get existing images: %w", err)
+	}
+
+	// Delete auction from DB
+	if err := s.auctionRepo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	// After successful DB deletion, delete images from R2 (best effort)
+	if s.mediaSvc != nil {
+		for _, img := range existingImages {
+			if err := s.mediaSvc.DeleteFile(ctx, img.URL); err != nil {
+				// Log but don't fail - the DB deletion succeeded
+				fmt.Printf("[Admin DeleteAuction] Warning: failed to delete image from R2: %s, error: %v\n", img.URL, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *adminService) ListTransactions(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error) {
@@ -381,12 +445,16 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	return s.txRepo.UpdateStatus(ctx, id, status, notes, adminID)
 }
 
-func (s *adminService) ListReports(ctx context.Context, page, perPage int, status string) ([]models.Report, int, error) {
-	return s.reportRepo.ListPaginated(ctx, page, perPage, status)
+func (s *adminService) ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error) {
+	return s.reportRepo.ListPaginated(ctx, page, perPage, status, reportType)
 }
 
 func (s *adminService) ReviewReport(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error {
 	return s.reportRepo.UpdateStatus(ctx, id, status, notes, adminID)
+}
+
+func (s *adminService) DeleteReport(ctx context.Context, id uuid.UUID) error {
+	return s.reportRepo.Delete(ctx, id)
 }
 
 func (s *adminService) ListKYC(ctx context.Context, status string) ([]models.KYCVerification, error) {

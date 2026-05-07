@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { useMe, useUpdateProfile, useChangePin } from '@/hooks/useUsers'
+import { useMe, useUpdateProfile, useChangePin, useUploadAvatar } from '@/hooks/useUsers'
 import { 
   User, Shield, Phone, Mail, MapPin, Loader2, Eye, EyeOff, 
-  Lock, Globe, Calendar, CheckCircle, Save, Pencil 
+  Lock, Globe, Calendar, CheckCircle, Save, Pencil, Camera, Upload 
 } from 'lucide-react'
 import { formatDate } from '@/lib/formatters'
 import { toast } from 'sonner'
@@ -16,6 +16,9 @@ export function ProfilePage() {
   const { data: user, isLoading } = useMe()
   const { mutate: updateProfile, isPending: isUpdating } = useUpdateProfile()
   const { mutate: changePin, isPending: isChangingPin } = useChangePin()
+  const { mutate: uploadAvatar, isPending: isUploadingAvatar } = useUploadAvatar()
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -52,6 +55,17 @@ export function ProfilePage() {
       })
     }
   }, [user])
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      uploadAvatar(file)
+    }
+  }
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click()
+  }
 
   if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-mazad-primary" /></div>
 
@@ -94,8 +108,39 @@ export function ProfilePage() {
           <CardHeader className="text-center relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-mazad-primary/5 rounded-full -mr-16 -mt-16 blur-2xl" />
             <div className="relative">
-              <div className="w-24 h-24 rounded-3xl bg-mazad-primary/10 border-2 border-mazad-primary/20 flex items-center justify-center text-3xl text-mazad-primary font-bold mx-auto mb-4">
-                {(user?.full_name ?? 'U')[0]}
+              {/* Avatar with upload button */}
+              <div className="relative w-24 h-24 mx-auto mb-4">
+                <div className="w-24 h-24 rounded-3xl bg-mazad-primary/10 border-2 border-mazad-primary/20 flex items-center justify-center text-3xl text-mazad-primary font-bold overflow-hidden">
+                  {user?.profile_pic_url ? (
+                    <img 
+                      src={user.profile_pic_url} 
+                      alt={user?.full_name || 'User'} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    (user?.full_name ?? 'U')[0]
+                  )}
+                </div>
+                {/* Upload button overlay */}
+                <button
+                  onClick={triggerFileInput}
+                  disabled={isUploadingAvatar}
+                  className="absolute -bottom-1 -left-1 w-8 h-8 bg-mazad-primary hover:bg-mazad-primary-dark text-white rounded-full flex items-center justify-center shadow-lg transition-all disabled:opacity-50"
+                  title="تغيير الصورة"
+                >
+                  {isUploadingAvatar ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Camera className="w-4 h-4" />
+                  )}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleAvatarChange}
+                  className="hidden"
+                />
               </div>
               <CardTitle className="text-xl font-display">{user?.full_name || 'مشرف النظام'}</CardTitle>
               <div className="flex justify-center gap-2 mt-2">

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
@@ -64,18 +65,22 @@ type AuctionService interface {
 }
 
 type auctionService struct {
+	db          *sqlx.DB
 	auctionRepo repository.AuctionRepository
 	reportRepo  repository.ReportRepository
 	notifSvc    NotificationService
 	userRepo    repository.UserRepository
+	mediaSvc    MediaService
 }
 
-func NewAuctionService(auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository) AuctionService {
+func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService) AuctionService {
 	return &auctionService{
+		db:          db,
 		auctionRepo: auctionRepo,
 		reportRepo:  reportRepo,
 		notifSvc:    notifSvc,
 		userRepo:    userRepo,
+		mediaSvc:    mediaSvc,
 	}
 }
 
@@ -97,6 +102,9 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 	if input.EndTime.Before(time.Now().Add(1 * time.Minute)) {
 		return nil, fmt.Errorf("end_time must be at least 1 minute in the future (got: %s)", input.EndTime.Format(time.RFC3339))
 	}
+
+	// Note: Image validation is intentionally skipped here because images are uploaded
+	// separately after auction creation via the multipart endpoint POST /v1/api/auctions/:id/images
 
 	// Vérifier que la catégorie existe
 	if input.CategoryID > 0 {
@@ -198,19 +206,34 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 		Version:         1,
 	}
 
-	if err := s.auctionRepo.Create(ctx, nil, auction); err != nil {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := s.auctionRepo.Create(ctx, tx, auction); err != nil {
 		return nil, err
 	}
 
 	// Sauvegarder les images
 	for i, url := range input.Images {
+		if url == "" {
+			continue
+		}
 		img := &models.AuctionImage{
 			AuctionID:    auction.ID,
 			URL:          url,
 			MediaType:    "image",
 			DisplayOrder: i + 1,
 		}
-		_ = s.auctionRepo.AddImage(ctx, img)
+		if err := s.auctionRepo.AddImageTx(ctx, tx, img); err != nil {
+			return nil, fmt.Errorf("failed to save image URL to database: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	// Notifier les admins via FCM avec support multi-langues
@@ -232,7 +255,7 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 				"auctionId": auction.ID.String(),
 				"sellerId":  sellerID.String(),
 			}
-			_ = s.notifSvc.NotifyAdminsLocalized(context.Background(), "auction_pending", params, data)
+			_ = s.notifSvc.NotifyAdminsLocalized(context.Background(), "new_auction", params, data)
 		}()
 	}
 
@@ -328,21 +351,53 @@ func (s *auctionService) Update(ctx context.Context, id uuid.UUID, input CreateA
 		auction.StartTime = *input.StartTime
 	}
 
+	// Get existing images before update (for R2 cleanup)
+	existingImages, err := s.auctionRepo.GetImages(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get existing images: %w", err)
+	}
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	if err := s.auctionRepo.Update(ctx, auction); err != nil {
 		return nil, err
 	}
 
-	_ = s.auctionRepo.DeleteImages(ctx, id)
+	// Synchroniser les images (toujours vider et re-remplir pour garantir la cohérence)
+	if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
+		return nil, fmt.Errorf("failed to clear images: %w", err)
+	}
+
 	for i, url := range input.Images {
 		if url == "" {
 			continue
 		}
-		_ = s.auctionRepo.AddImage(ctx, &models.AuctionImage{
+		if err := s.auctionRepo.AddImageTx(ctx, tx, &models.AuctionImage{
 			AuctionID:    id,
 			URL:          url,
 			MediaType:    "image",
-			DisplayOrder: i,
-		})
+			DisplayOrder: i + 1,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to update image URL in database: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// After successful commit, delete old images from R2 (best effort, don't fail if error)
+	if s.mediaSvc != nil {
+		for _, img := range existingImages {
+			if err := s.mediaSvc.DeleteFile(ctx, img.URL); err != nil {
+				// Log but don't fail - the DB update succeeded
+				fmt.Printf("[AuctionService Update] Warning: failed to delete old image from R2: %s, error: %v\n", img.URL, err)
+			}
+		}
 	}
 
 	return auction, nil
@@ -351,9 +406,10 @@ func (s *auctionService) Update(ctx context.Context, id uuid.UUID, input CreateA
 func (s *auctionService) ReportAuction(ctx context.Context, auctionID, reporterID uuid.UUID, reason string) error {
 	report := &models.Report{
 		ID:         uuid.New(),
-		AuctionID:  auctionID,
+		AuctionID:  &auctionID,
 		ReporterID: reporterID,
 		Reason:     reason,
+		Type:       "auction",
 		Status:     "pending",
 	}
 
@@ -480,23 +536,53 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 		auction.StartTime = *input.StartTime
 	}
 
+	// Get existing images before update (for R2 cleanup)
+	existingImages, err := s.auctionRepo.GetImages(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get existing images: %w", err)
+	}
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	if err := s.auctionRepo.Update(ctx, auction); err != nil {
 		return err
 	}
 
-	// Mettre à jour les images si fournies
-	if len(input.Images) > 0 {
-		_ = s.auctionRepo.DeleteImages(ctx, id)
-		for i, url := range input.Images {
-			if url == "" {
-				continue
+	// Mettre à jour les images
+	// On vide et on re-remplit systématiquement pour refléter exactement l'état du formulaire
+	if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
+		return fmt.Errorf("failed to clear old images: %w", err)
+	}
+
+	for i, url := range input.Images {
+		if url == "" {
+			continue
+		}
+		if err := s.auctionRepo.AddImageTx(ctx, tx, &models.AuctionImage{
+			AuctionID:    id,
+			URL:          url,
+			MediaType:    "image",
+			DisplayOrder: i + 1,
+		}); err != nil {
+			return fmt.Errorf("failed to save new image URL to database: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// After successful commit, delete old images from R2 (best effort, don't fail if error)
+	if s.mediaSvc != nil {
+		for _, img := range existingImages {
+			if err := s.mediaSvc.DeleteFile(ctx, img.URL); err != nil {
+				// Log but don't fail - the DB update succeeded
+				fmt.Printf("[AuctionService UpdateAuction] Warning: failed to delete old image from R2: %s, error: %v\n", img.URL, err)
 			}
-			_ = s.auctionRepo.AddImage(ctx, &models.AuctionImage{
-				AuctionID:    id,
-				URL:          url,
-				MediaType:    "image",
-				DisplayOrder: i,
-			})
 		}
 	}
 
@@ -520,7 +606,28 @@ func (s *auctionService) DeleteAuction(ctx context.Context, id uuid.UUID, userID
 		return fmt.Errorf("can only delete pending auctions")
 	}
 
-	return s.auctionRepo.Delete(ctx, id)
+	// Get existing images before deleting (for R2 cleanup)
+	existingImages, err := s.auctionRepo.GetImages(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get existing images: %w", err)
+	}
+
+	// Delete auction from DB
+	if err := s.auctionRepo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	// After successful DB deletion, delete images from R2 (best effort)
+	if s.mediaSvc != nil {
+		for _, img := range existingImages {
+			if err := s.mediaSvc.DeleteFile(ctx, img.URL); err != nil {
+				// Log but don't fail - the DB deletion succeeded
+				fmt.Printf("[AuctionService DeleteAuction] Warning: failed to delete image from R2: %s, error: %v\n", img.URL, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // GetBidStatus - Statut de ma bid pour une enchère
@@ -568,6 +675,12 @@ func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid
 		return apperr.ErrUnauthorized
 	}
 
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	for i, url := range urls {
 		img := &models.AuctionImage{
 			AuctionID:    auctionID,
@@ -575,9 +688,11 @@ func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid
 			MediaType:    "image",
 			DisplayOrder: i + 1,
 		}
-		_ = s.auctionRepo.AddImage(ctx, img)
+		if err := s.auctionRepo.AddImageTx(ctx, tx, img); err != nil {
+			return fmt.Errorf("failed to save uploaded image URL to database: %w", err)
+		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (s *auctionService) BuyNow(ctx context.Context, auctionID, buyerID uuid.UUID) (*models.Auction, error) {

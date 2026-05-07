@@ -22,7 +22,7 @@ class AdSuccessPage extends StatelessWidget {
                   width: 140,
                   height: 140,
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Center(
