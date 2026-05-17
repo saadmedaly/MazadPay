@@ -30,5 +30,6 @@ SKILLS/
 .env.*
 node_modules/
 dist/
+build/
 .windsurf/
 MESSAGING_SYSTEM_SETUP.md

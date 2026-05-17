@@ -13,6 +13,9 @@ export default defineConfig({
       host: 'localhost',
     },
   },
+  build: {
+    outDir: 'build',
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
