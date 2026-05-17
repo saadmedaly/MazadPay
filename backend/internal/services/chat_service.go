@@ -23,6 +23,7 @@ type ChatService interface {
 	JoinConversation(ctx context.Context, conversationID, userID uuid.UUID) error
 	LeaveConversation(ctx context.Context, conversationID, userID uuid.UUID) error
 	GetOrCreateDirectConversation(ctx context.Context, userID1, userID2 uuid.UUID) (*models.Conversation, error)
+	UpdateConversationMetadata(ctx context.Context, conversationID, userID uuid.UUID, metadata models.JSONB) error
 
 	// Messages
 	SendMessage(ctx context.Context, conversationID, senderID uuid.UUID, req *models.SendMessageRequest) (*models.Message, error)
@@ -236,6 +237,26 @@ func (s *chatService) GetOrCreateDirectConversation(ctx context.Context, userID1
 	}
 
 	return s.CreateConversation(ctx, req, userID1)
+}
+
+// UpdateConversationMetadata met à jour les métadonnées d'une conversation
+func (s *chatService) UpdateConversationMetadata(ctx context.Context, conversationID, userID uuid.UUID, metadata models.JSONB) error {
+	// Vérifier que l'utilisateur est participant
+	isParticipant, err := s.conversationRepo.IsParticipant(ctx, conversationID, userID)
+	if err != nil {
+		return err
+	}
+	if !isParticipant {
+		return fmt.Errorf("unauthorized: user is not a participant of this conversation")
+	}
+
+	conversation, err := s.conversationRepo.GetByID(ctx, conversationID)
+	if err != nil {
+		return err
+	}
+
+	conversation.Metadata = metadata
+	return s.conversationRepo.Update(ctx, conversation)
 }
 
 // SendMessage envoie un message dans une conversation

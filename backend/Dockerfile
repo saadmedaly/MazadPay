@@ -1,5 +1,5 @@
 # Stage 1 — Builder
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Installation des certificats CA et de tzdata (pour la gestion des timezones)
 RUN apk --no-cache add ca-certificates tzdata

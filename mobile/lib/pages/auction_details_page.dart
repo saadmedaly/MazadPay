@@ -134,6 +134,20 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             },
           ),
         );
+      } else {
+        // If the conversation exists, update its metadata on the server so other participants see the auction context
+        debugPrint('Updating conversation metadata for existing conversation...');
+        await chatService.updateConversationMetadata(
+          conversation.id,
+          {
+            'auction_id': auction.id,
+            'auction_title': auction.title,
+            'auction_image': (auction.imageUrls != null && auction.imageUrls!.isNotEmpty)
+                ? auction.imageUrls![0]
+                : null,
+            'auction_description': auction.description ?? '',
+          },
+        );
       }
 
       if (mounted && conversation != null) {

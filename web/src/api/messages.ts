@@ -11,6 +11,12 @@ export interface Conversation {
   is_active: boolean
   unread_count: number
   participants?: Participant[]
+  metadata?: {
+    auction_id?: string
+    auction_title?: string
+    auction_image?: string
+    auction_description?: string
+  }
 }
 
 export interface Participant {

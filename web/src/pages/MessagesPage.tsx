@@ -325,6 +325,42 @@ export function MessagesPage() {
                 </div>
               </div>
 
+              {/* Auction Context Banner */}
+              {selectedConv?.metadata?.auction_id && (
+                <div className="bg-surface-card/90 border-b border-surface-border p-4 flex items-center justify-between gap-4 animate-fade-in relative z-10">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-12 h-12 rounded-xl bg-surface-border flex items-center justify-center overflow-hidden shrink-0 border border-surface-border/50">
+                      {selectedConv.metadata.auction_image ? (
+                        <img 
+                          src={selectedConv.metadata.auction_image} 
+                          alt={selectedConv.metadata.auction_title || "المزاد"} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-mazad-primary/10 flex items-center justify-center text-mazad-primary text-xl">
+                          📦
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 text-right">
+                      <h4 className="text-sm font-bold text-white truncate">
+                        {selectedConv.metadata.auction_title || "تفاصيل المزاد"}
+                      </h4>
+                      <p className="text-xs text-surface-muted truncate mt-1 max-w-[400px]">
+                        {selectedConv.metadata.auction_description || "لا يوجد وصف متوفر"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/auctions/${selectedConv.metadata?.auction_id}`)}
+                    className="shrink-0 text-xs bg-mazad-primary hover:bg-mazad-primary/90 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition-all duration-200 flex items-center gap-2 hover:scale-[1.02]"
+                  >
+                    <span>عرض تفاصيل المزاد</span>
+                    <Info className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               {/* Messages List */}
               <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin flex flex-col">
                 {isMsgsLoading && messages.length === 0 ? (

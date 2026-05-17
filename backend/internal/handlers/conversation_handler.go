@@ -171,3 +171,31 @@ func (h *ConversationHandler) GetSupportConversations(c *fiber.Ctx) error {
 
 	return c.JSON(SuccessResponse(conversations))
 }
+
+// UpdateConversationMetadata met à jour les métadonnées d'une conversation
+func (h *ConversationHandler) UpdateConversationMetadata(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse("Unauthorized"))
+	}
+
+	conversationID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse("Invalid conversation ID"))
+	}
+
+	var req struct {
+		Metadata models.JSONB `json:"metadata"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse("Invalid request body"))
+	}
+
+	err = h.chatSvc.UpdateConversationMetadata(c.Context(), conversationID, userID, req.Metadata)
+	if err != nil {
+		h.logger.Error("failed to update conversation metadata", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse(err.Error()))
+	}
+
+	return c.JSON(SuccessResponse("Metadata updated"))
+}

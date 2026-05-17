@@ -45,6 +45,7 @@ func setupChatRoutes(
 	conversations.Get("/:id", convHandler.GetConversation)
 	conversations.Post("/:id/join", convHandler.JoinConversation)
 	conversations.Post("/:id/leave", convHandler.LeaveConversation)
+	conversations.Put("/:id/metadata", convHandler.UpdateConversationMetadata)
 
 	// Routes REST pour les messages
 	conversations.Get("/:conversation_id/messages", msgHandler.GetMessages)

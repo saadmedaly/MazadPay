@@ -337,4 +337,12 @@ class ChatService extends ChangeNotifier {
     final response = await ApiService().post<Map<String, dynamic>>('/conversations/$conversationId/leave');
     return response != null && response['success'] == true;
   }
+
+  Future<bool> updateConversationMetadata(String conversationId, Map<String, dynamic> metadata) async {
+    final response = await ApiService().put<Map<String, dynamic>>(
+      '/conversations/$conversationId/metadata',
+      data: {'metadata': metadata},
+    );
+    return response != null && response['success'] == true;
+  }
 }

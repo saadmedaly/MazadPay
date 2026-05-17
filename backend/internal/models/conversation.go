@@ -93,6 +93,7 @@ type UserConversation struct {
 	LastReadAt          *time.Time `db:"last_read_at" json:"last_read_at,omitempty"`
 	UnreadCount         int        `db:"unread_count" json:"unread_count"`
 	IsMuted             bool       `db:"is_muted" json:"is_muted"`
+	Metadata            JSONB      `db:"metadata" json:"metadata,omitempty"`
 	
 	// Added for frontend to identify participants
 	Participants        []ConversationParticipant `json:"participants,omitempty"`

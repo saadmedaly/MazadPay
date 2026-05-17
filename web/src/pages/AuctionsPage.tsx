@@ -591,15 +591,7 @@ export function AuctionsPage() {
       accessorKey: 'status',
       cell: ({ getValue }) => <StatusBadge status={getValue<string>()} />
     },
-    {
-      header: 'الماركة',
-      id: 'brand-cell',
-      accessorKey: 'item_details',
-      cell: ({ getValue }) => {
-        const details = getValue<Record<string, any>>() || {}
-        return <span className="text-xs text-surface-muted">{details?.brand || '-'}</span>
-      }
-    },
+  
     {
       header: 'الحالة',
       id: 'condition-cell',
@@ -637,29 +629,7 @@ export function AuctionsPage() {
       accessorKey: 'created_at',
       cell: ({ getValue }) => <span className="text-xs text-surface-muted">{formatDate(getValue<string>())}</span>
     },
-    {
-      header: 'موثق',
-      accessorKey: 'is_verified',
-      cell: ({ getValue }) => (
-        <span className={`text-xs font-bold px-2 py-1 rounded ${getValue<boolean>() ? 'bg-green-500/20 text-green-400' : 'bg-surface-border/40 text-surface-muted'}`}>
-          {getValue<boolean>() ? 'نعم' : 'لا'}
-        </span>
-      )
-    },
-    {
-      header: 'Boost',
-      accessorKey: 'boosted_until',
-      cell: ({ getValue }) => {
-        const boostedUntil = getValue<string | null>()
-        if (!boostedUntil) return <span className="text-xs text-surface-muted">-</span>
-        const isBoosted = new Date(boostedUntil) > new Date()
-        return (
-          <span className={`text-xs font-bold ${isBoosted ? 'text-yellow-400' : 'text-surface-muted'}`}>
-            {isBoosted ? 'نشط' : 'منتهي'}
-          </span>
-        )
-      }
-    },
+    
     {
       header: 'الإجراءات',
       id: 'actions',
