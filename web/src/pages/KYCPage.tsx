@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, XCircle, Eye, ShieldCheck, Image as ImageIcon, Tag, Trash2, Search, Calendar, CheckSquare, Square } from 'lucide-react'
+import { CheckCircle2, XCircle, Eye, ShieldCheck, Image as ImageIcon, Tag, Trash2, Search, Calendar } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { DataTable } from '@/components/shared/DataTable'
@@ -33,10 +33,10 @@ export function KYCPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [bulkAction, setBulkAction] = useState<'approve' | 'reject' | 'delete' | null>(null)
 
-  const [categoryId, setCategoryId] = useState<number | undefined>()
-  const [locationId, setLocationId] = useState<number | undefined>()
-  const [minPrice, setMinPrice] = useState<number | undefined>()
-  const [maxPrice, setMaxPrice] = useState<number | undefined>()
+  const categoryId = undefined
+  const locationId = undefined
+  const minPrice = undefined
+  const maxPrice = undefined
 
   const auctionFilters = {
     status,
@@ -276,7 +276,7 @@ export function KYCPage() {
     }
   ]
 
-  const columns = requestType === 'auction' ? auctionColumns : bannerColumns
+  const columns = (requestType === 'auction' ? auctionColumns : bannerColumns) as ColumnDef<any, any>[]
 
   const handleReview = () => {
     if (!reviewTarget) return
@@ -340,7 +340,7 @@ export function KYCPage() {
       })
     } else {
       const mutation = requestType === 'auction' ? bulkReviewAuction : bulkReviewBanner
-      mutation.mutate({ ids: selectedIds, status: bulkAction, notes: notes || undefined }, {
+      mutation.mutate({ ids: selectedIds, status: bulkAction === 'approve' ? 'approved' : 'rejected', notes: notes || undefined }, {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['auction-requests'] })
           queryClient.invalidateQueries({ queryKey: ['banner-requests'] })

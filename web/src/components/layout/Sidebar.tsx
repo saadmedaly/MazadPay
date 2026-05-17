@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Gavel, CreditCard, Users,
   Flag, Image, LogOut, Hammer, ShieldCheck, HelpCircle, Video, Bell, User, Settings, PhoneOff,
-  Wallet, Truck, MessageSquare, Handshake, Star, LifeBuoy
+  Wallet, MessageSquare, Handshake, Star, LifeBuoy
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'

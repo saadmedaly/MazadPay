@@ -9,8 +9,6 @@ import {
   MessageSquare,
   Check,
   CheckCheck,
-  Phone,
-  Video,
   Info,
   AlertCircle,
   RefreshCw,
@@ -23,7 +21,7 @@ import { cn } from '@/lib/utils'
 import { useConversations, useMessages, useSendMessage, useMarkAsRead, useCreateConversation, useUploadChatMedia } from '@/hooks/useMessages'
 import type { Conversation } from '@/api/messages'
 import { useUsers } from '@/hooks/useUsers'
-import { formatRelative, formatDate } from '@/lib/formatters'
+import { formatRelative } from '@/lib/formatters'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { useAuthStore } from '@/stores/authStore'
@@ -55,8 +53,7 @@ export function MessagesPage() {
 
   const { 
     data: messagesData, 
-    isLoading: isMsgsLoading,
-    refetch: refetchMsgs
+    isLoading: isMsgsLoading
   } = useMessages(selectedConvId || '')
   const messages = messagesData ?? []
 

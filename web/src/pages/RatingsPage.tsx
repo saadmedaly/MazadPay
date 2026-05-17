@@ -40,7 +40,7 @@ function useStats() {
 }
 
 export function RatingsPage() {
-  const [page, setPage] = useState(1)
+  const page = 1
   const qc = useQueryClient()
   const { data, isLoading, isError } = useRatings(page)
   const { data: stats } = useStats()

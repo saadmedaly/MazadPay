@@ -1,7 +1,7 @@
 import {
   Gavel, CreditCard, Users, Flag,
   TrendingUp, RefreshCw, AlertTriangle, AlertCircle, ShieldCheck,
-  Plus, Settings, Edit2, Trash2, Grid3x3
+  Plus, Edit2
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -14,8 +14,7 @@ import { useDashboardStats, useRevenueChart, useActivityFeed } from '@/hooks/use
 import { exportRevenue } from '@/api/dashboard'
 import { formatPrice, formatRelative, formatDateShort } from '@/lib/formatters'
 import { MetricCard } from '@/components/shared/MetricCard'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { Input } from '@/components/ui/input'
+
 import { useState } from 'react'
 
 const ChartTooltip = ({ active, payload, label }: any) => {
@@ -30,42 +29,14 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const [showWidgetModal, setShowWidgetModal] = useState(false)
-  const [editingWidget, setEditingWidget] = useState<any>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
 
-  const { data: stats, isLoading, isError, refetch, isFetching } = useDashboardStats()
+
+  const { data: stats, isLoading, isError, refetch } = useDashboardStats()
   const { data: revenueData } = useRevenueChart()
   const revenue = Array.isArray(revenueData) ? revenueData : []
   const { data: activityData } = useActivityFeed()
   const activity = Array.isArray(activityData) ? activityData : []
-
-  // Widget management - DISABLED (API not implemented)
-  // const { data: widgets = [] } = useDashboardWidgets()
-  // const createWidget = useCreateDashboardWidget()
-  // const updateWidget = useUpdateDashboardWidget()
-  // const deleteWidget = useDeleteDashboardWidget()
-  // const repositionWidgets = useRepositionWidgets()
-  const widgets: any[] = []
-
-  const [newWidget, setNewWidget] = useState({
-    title: '',
-    type: 'metric' as const,
-    position: { x: 0, y: 0, w: 4, h: 2 },
-    config: {}
-  })
-
-  const handleDeleteWidget = () => {
-    // DISABLED - API not implemented
-    // if (!deleteConfirm) return
-    // deleteWidget.mutate(deleteConfirm, {
-    //   onSuccess: () => {
-    //     setDeleteConfirm(null)
-    //   }
-    // })
-    setDeleteConfirm(null)
-  }
 
   const METRICS = [
     {

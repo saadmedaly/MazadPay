@@ -88,7 +88,17 @@ export const NotificationsPage = () => {
     }
   };
 
-   const uniqueNotifications = notifications.filter((notif: any, index: number, self: any[]) => 
+  interface NotificationItem {
+    id: string;
+    type: string;
+    is_read: boolean;
+    title: string;
+    body: string;
+    created_at: string;
+    reference_id?: string;
+  }
+
+  const uniqueNotifications = (notifications as NotificationItem[]).filter((notif, index, self) => 
     index === self.findIndex((n) => n.id === notif.id)
   );
   

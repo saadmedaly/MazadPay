@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { messageKeys } from './useMessages'
-import toast from 'react-hot-toast'
+
 
 export function useChatWebSocket(conversationId?: string | null) {
   const socketRef = useRef<WebSocket | null>(null)

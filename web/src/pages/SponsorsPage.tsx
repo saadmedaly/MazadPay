@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, ToggleLeft, ToggleRight, Building2, Loader2, AlertCircle, Edit2, Upload, X, Phone, Globe } from 'lucide-react'
+import { Plus, Trash2, ToggleLeft, ToggleRight, Building2, Loader2, AlertCircle, Edit2, Upload, Phone, Globe } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -7,7 +7,6 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { Input } from '@/components/ui/input'
-import { formatDate } from '@/lib/formatters'
 import client from '@/api/client'
 
 interface Sponsor {

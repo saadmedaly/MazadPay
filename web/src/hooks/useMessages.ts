@@ -57,7 +57,7 @@ export function useMarkAsRead() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (conversationId: string) => api.markAsRead(conversationId),
-    onSuccess: (_, conversationId) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: messageKeys.conversations() })
     },
   })
@@ -68,7 +68,7 @@ export function useCreateConversation() {
   return useMutation({
     mutationFn: (payload: { type: 'direct' | 'group' | 'support', user_ids: string[], title?: string }) =>
       api.createConversation(payload),
-    onSuccess: (newConv) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: messageKeys.conversations() })
       toast.success('تم إنشاء المحادثة بنجاح')
     },

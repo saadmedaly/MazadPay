@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Save, Settings as SettingsIcon, Shield, Clock, Phone, AlertTriangle, Check, Plus, Edit2, Trash2 } from 'lucide-react'
-import { useSettings, useUpdateSetting, useCreateSetting, useDeleteSetting, useBulkUpdateSettings } from '@/hooks/useSettingsCRUD'
+import { Save, Settings as SettingsIcon, Shield, Clock, Phone, AlertTriangle, Check } from 'lucide-react'
+import { useSettings, useUpdateSetting } from '@/hooks/useSettingsCRUD'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -102,20 +102,9 @@ function getSettingValue(settings: Setting[], key: string): string {
 }
 
 export function SettingsPage() {
-  const { data: settings, isLoading } = useSettings()
-  const { mutate: updateSetting } = useUpdateSetting()
-  const createSetting = useCreateSetting()
-  const deleteSetting = useDeleteSetting()
+  const { data: settings, isLoading, refetch } = useSettings()
+  const updateSetting = useUpdateSetting()
   
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [newSetting, setNewSetting] = useState({
-    key: '',
-    value: '',
-    type: 'text' as const,
-    description: '',
-    group: 'general'
-  })
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
@@ -125,7 +114,7 @@ export function SettingsPage() {
   const handleSave = async (key: string, type: string) => {
     setSaving(true)
     try {
-      await updateSettings.mutateAsync({ key, value: editValue, type })
+      await updateSetting.mutateAsync({ key, value: editValue, type })
       setEditingKey(null)
       refetch()
       toast.success('تم حفظ الإعداد بنجاح')
@@ -140,7 +129,7 @@ export function SettingsPage() {
     const newValue = currentValue === 'true' ? 'false' : 'true'
     setSaving(true)
     try {
-      await updateSettings.mutateAsync({ key, value: newValue, type: 'boolean' })
+      await updateSetting.mutateAsync({ key, value: newValue, type: 'boolean' })
       refetch()
       toast.success('تم حفظ الإعداد بنجاح')
     } catch (err) {
@@ -171,7 +160,7 @@ export function SettingsPage() {
 
               <div className="divide-y divide-surface-border">
                 {group.settings.map((settingDef) => {
-                  const currentValue = getSettingValue(settings, settingDef.key)
+                  const currentValue = getSettingValue(settingsData, settingDef.key)
                   const isEditing = editingKey === settingDef.key
 
                   return (

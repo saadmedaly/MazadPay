@@ -83,7 +83,7 @@ export async function fetchMessages(conversationId: string) {
 }
 
 export async function sendMessage(conversationId: string, payload: {
-  type: 'text' | 'image' | 'file'
+  type: 'text' | 'image' | 'video' | 'audio' | 'file'
   content?: string
   file_url?: string
 }) {

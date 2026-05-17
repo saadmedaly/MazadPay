@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { useMe, useUpdateProfile, useChangePin, useUploadAvatar } from '@/hooks/useUsers'
 import { 
   User, Shield, Phone, Mail, MapPin, Loader2, Eye, EyeOff, 
-  Lock, Globe, Calendar, CheckCircle, Save, Pencil, Camera, Upload 
+  Lock, Globe, Calendar, CheckCircle, Save, Pencil, Camera 
 } from 'lucide-react'
 import { formatDate } from '@/lib/formatters'
 import { toast } from 'sonner'
