@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react'
 import {
   Plus, Search, Pencil, Trash2,
   AlertCircle, Loader2, ChevronRight, Folder,
-  Image as ImageIcon, Link, X, Eye
+  Image as ImageIcon, Link, X, Eye, Upload
 } from 'lucide-react'
 import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '@/hooks/useMetadata'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -10,6 +10,8 @@ import { type Category } from '@/types/api'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataTable } from '@/components/shared/DataTable'
 import { Input } from '@/components/ui/input'
+import client from '@/api/client'
+import { toast } from 'sonner'
 
 export function CategoriesPage() {
   const { data: categories, isLoading, isError } = useCategories()
@@ -30,6 +32,7 @@ export function CategoriesPage() {
     image_url: '' as string
   })
   const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [uploadingFile, setUploadingFile] = useState(false)
 
   // Build category hierarchy
   const categoryTree = useMemo(() => {
@@ -92,6 +95,28 @@ export function CategoriesPage() {
       image_url: cat.image_url || ''
     })
     setIsModalOpen(true)
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setUploadingFile(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await client.post('/v1/api/admin/categories/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const url = res.data.data.url
+      setForm(f => ({ ...f, image_url: url }))
+      toast.success('تم رفع الصورة بنجاح')
+    } catch (err: any) {
+      console.error(err)
+      toast.error('فشل رفع الصورة')
+    } finally {
+      setUploadingFile(false)
+    }
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -373,34 +398,50 @@ export function CategoriesPage() {
                 </div>
               </div>
 
-              {/* Image URL */}
+              {/* Image URL & File Upload */}
               <div className="space-y-2">
                 <label className="text-xs text-surface-muted font-bold flex items-center gap-1.5">
                   <ImageIcon className="w-3 h-3" />
-                  رابط الصورة (اختياري)
+                  صورة الفئة (اختياري)
                 </label>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-muted" />
-                    <Input
-                      dir="ltr"
-                      value={form.image_url}
-                      onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))}
-                      placeholder="https://example.com/image.png"
-                      className="pl-10 text-left"
-                    />
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('category-upload')?.click()}
+                    disabled={uploadingFile}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-border/30 hover:bg-surface-border border border-surface-border/60 text-white transition-all text-sm font-semibold disabled:opacity-50"
+                  >
+                    {uploadingFile ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-mazad-primary" />
+                    ) : (
+                      <Upload className="w-4 h-4 text-mazad-primary" />
+                    )}
+                    {uploadingFile ? 'جاري الرفع...' : 'رفع صورة من الجهاز'}
+                  </button>
+                  <div className="relative flex-[2] flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-muted" />
+                      <Input
+                        dir="ltr"
+                        value={form.image_url}
+                        onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))}
+                        placeholder="أو ضع رابط الصورة هنا..."
+                        className="pl-10 text-left text-sm"
+                      />
+                    </div>
+                    {form.image_url && (
+                      <button
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, image_url: '' }))}
+                        className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
+                        title="حذف الصورة"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
-                  {form.image_url && (
-                    <button
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, image_url: '' }))}
-                      className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-all"
-                      title="حذف الصورة"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
                 </div>
+                <input id="category-upload" type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
                 {/* Image Preview */}
                 {form.image_url && (
                   <div className="mt-2 relative group inline-block">

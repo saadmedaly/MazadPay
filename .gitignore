@@ -6,3 +6,7 @@ MOBILE_LOCALIZATION_KEYS.json
 backend-avancement
 /docs
 docs/*
+.vscode/*
+.idea/*
+.windsurf/*
+.cursor/*

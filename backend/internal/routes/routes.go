@@ -111,7 +111,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
 	setupAuctionRoutes(api, auctionSvc, chatSvc, bidHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupUserRoutes(api, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
-	setupAdminRoutes(api, adminHandler, userHandler, cfg.JWT.Secret, logger, rdb)
+	setupAdminRoutes(api, adminHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupBannerRoutes(api, bannerHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupContentRoutes(api, contentHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupNotificationRoutes(api, notifHandler, cfg.JWT.Secret, logger, rdb)
@@ -246,7 +246,7 @@ func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, wallet
 	users.Get("/wallet/payment-methods", walletHandler.GetPaymentMethods)
 }
 
-func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, userHandler *handlers.UserHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, userHandler *handlers.UserHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	adminMiddleware := middleware.AdminOnly(logger)
 
@@ -289,6 +289,10 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Post("/categories", adminHandler.CreateCategory)
 	admin.Put("/categories/:id", adminHandler.UpdateCategory)
 	admin.Delete("/categories/:id", adminHandler.DeleteCategory)
+	admin.Post("/categories/upload", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return adminHandler.UploadCategoryImage(c)
+	})
 
 	// Location management
 	admin.Post("/locations", adminHandler.CreateLocation)

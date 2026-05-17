@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -1197,4 +1198,64 @@ func (h *AdminHandler) ExportRevenueCSV(c *fiber.Ctx) error {
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=revenue_%s.csv", time.Now().Format("2006-01-02")))
 	
 	return c.SendString(csvData)
+}
+
+// UploadCategoryImage uploads a category image to R2 (categories/ folder)
+func (h *AdminHandler) UploadCategoryImage(c *fiber.Ctx) error {
+	h.logger.Info("[UploadCategoryImage] Starting category image upload")
+
+	// Get media service from context
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		h.logger.Error("[UploadCategoryImage] Media service not available")
+		return InternalError(c, "Media service not available")
+	}
+
+	// Parse multipart form
+	file, err := c.FormFile("file")
+	if err != nil {
+		h.logger.Error("[UploadCategoryImage] Failed to get file", zap.Error(err))
+		return BadRequest(c, "No file provided")
+	}
+
+	// Validate file size (max 10MB)
+	if file.Size > 10*1024*1024 {
+		h.logger.Warn("[UploadCategoryImage] File too large", zap.Int64("size", file.Size))
+		return BadRequest(c, "File too large (max 10MB)")
+	}
+
+	// Validate file type (only images)
+	ext := filepath.Ext(file.Filename)
+	allowedExts := map[string]bool{
+		".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true,
+	}
+	if !allowedExts[ext] {
+		h.logger.Warn("[UploadCategoryImage] Invalid file type", zap.String("ext", ext))
+		return BadRequest(c, "Invalid file type (only jpg, jpeg, png, webp, gif allowed)")
+	}
+
+	// Open file
+	fileReader, err := file.Open()
+	if err != nil {
+		h.logger.Error("[UploadCategoryImage] Failed to open file", zap.Error(err))
+		return InternalError(c, "Failed to open file")
+	}
+	defer fileReader.Close()
+
+	// Upload to R2 (categories/ folder)
+	url, err := mediaSvc.UploadFile(c.Context(), fileReader, file, "categories")
+	if err != nil {
+		h.logger.Error("[UploadCategoryImage] R2 upload failed", zap.Error(err))
+		return InternalError(c, "Failed to upload category image: "+err.Error())
+	}
+
+	h.logger.Info("[UploadCategoryImage] Upload successful", zap.String("url", url))
+
+	return OK(c, fiber.Map{
+		"message": "Category image uploaded successfully",
+		"url":     url,
+		"type":    "image",
+		"size":    file.Size,
+		"name":    file.Filename,
+	})
 }
