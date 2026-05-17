@@ -2,6 +2,7 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_api.dart';
 import '../models/api_response.dart';
+import 'package:flutter/services.dart';
 import 'otp_entry_page.dart';
 import 'login_page.dart';
 
@@ -42,7 +43,31 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
     super.dispose();
   }
 
+  String _getLocalizedError(BuildContext context, String? code, String defaultMessage) {
+    final l10n = AppLocalizations.of(context)!;
+    
+    switch (code) {
+      case 'phone_already_registered':
+        return l10n.error_phone_already_registered;
+      case 'invalid_pin':
+      case 'weak_pin':
+        return l10n.error_invalid_pin;
+      case 'connection_error':
+        return l10n.error_connection;
+      case 'too_many_requests':
+      case 'otp_rate_limited':
+        return l10n.error_too_many_requests;
+      default:
+        if (defaultMessage.toLowerCase().contains('connexion') || 
+            defaultMessage.toLowerCase().contains('connection')) {
+          return l10n.error_connection;
+        }
+        return l10n.error_register;
+    }
+  }
+
   Future<void> _register() async {
+    final l10n = AppLocalizations.of(context)!;
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
     final password = _passwordController.text;
@@ -96,36 +121,24 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
       );
 
       if (response.success && mounted) {
-        // Send OTP for verification
-        final otpResponse = await _authApi.sendOTP(
-          phone: formattedPhone,
-          purpose: 'register',
+        // Le backend envoie déjà l'OTP automatiquement lors du Register (Désactivé pour le moment)
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => LoginPage(),
+          ),
         );
-
-        if (otpResponse.success && mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => OtpEntryPage(
-                phoneNumber: formattedPhone,
-              ),
-            ),
-          );
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(otpResponse.message ?? 'Erreur OTP'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.profile_created), // Use l10n key for success
+            backgroundColor: Colors.green,
+          ),
+        );
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(response.message ?? AppLocalizations.of(context)!.error_register),
+              content: Text(_getLocalizedError(context, response.error?.code, response.message ?? '')),
               backgroundColor: Colors.red,
             ),
           );
@@ -340,7 +353,11 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                           color: Colors.black,
                           fontSize: 15,
                         ),
+                        keyboardType: TextInputType.number,
+                        maxLength: 4,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: InputDecoration(
+                          counterText: "",
                           hintText: l10n.text_5,
                           hintStyle: TextStyle(
                             color: Color(0xFF9E9E9E),
@@ -388,7 +405,11 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                           color: Colors.black,
                           fontSize: 15,
                         ),
+                        keyboardType: TextInputType.number,
+                        maxLength: 4,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: InputDecoration(
+                          counterText: "",
                           hintText: l10n.text_7,
                           hintStyle: TextStyle(
                             color: Color(0xFF9E9E9E),
@@ -452,28 +473,25 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Text(
-                        //   l10n.text_391 ?? 'لديك حساب؟',
-                        //   style: TextStyle(
-                        //     color: Color(0xFF667085),
-                        //     fontSize: 14,
-                        //   ),
-                        // ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const LoginPage(),
+                        Flexible(
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const LoginPage(),
+                                ),
+                              );
+                            },
+                            child: Text(
+                              l10n.text_11,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF135BEC),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
                               ),
-                            );
-                          },
-                          child: Text(
-                            l10n.text_11,
-                            style: const TextStyle(
-                              color: Color(0xFF135BEC),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
                             ),
                           ),
                         ),

@@ -1484,6 +1484,23 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_405 => 'أرسل رسالتك الأولى';
 
   @override
+  String get error_otp_expired => 'Le code OTP a expiré';
+
+  @override
+  String get error_otp_max_attempts =>
+      'Trop de tentatives échouées. Veuillez demander un nouveau code.';
+
+  @override
+  String get error_phone_already_registered =>
+      'Ce numéro de téléphone est déjà enregistré';
+
+  @override
+  String get error_invalid_pin => 'Code PIN invalide';
+
+  @override
+  String get error_account_blocked => 'Ce compte a été bloqué ou désactivé';
+
+  @override
   String get error_too_many_requests =>
       'Trop de tentatives. Veuillez réessayer plus tard.';
 }

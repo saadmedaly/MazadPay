@@ -1031,7 +1031,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
               color: isDarkMode ? Colors.white : Colors.black,
             ),
             decoration: InputDecoration(
-              hintText: 'البحث في مزاداتي...',
+              hintText: l10n.text_53, // "Search for an auction..."
               hintStyle: TextStyle(
                 fontFamily: 'Plus Jakarta Sans',
                 color: Colors.grey[400],

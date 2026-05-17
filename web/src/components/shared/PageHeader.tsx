@@ -4,15 +4,16 @@ interface Props {
   title: string
   subtitle?: string
   icon?: LucideIcon
-  action?: {
+  actions?: {
     label: string
     icon: LucideIcon
     onClick: () => void
-  }
-  children?: React.ReactNode  // additional action buttons or components
+    variant?: 'primary' | 'outline' | 'ghost'
+  }[]
+  children?: React.ReactNode
 }
 
-export function PageHeader({ title, subtitle, icon: Icon, action, children }: Props) {
+export function PageHeader({ title, subtitle, icon: Icon, actions, children }: Props) {
   return (
     <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-8">
       <div className="flex items-start gap-4">
@@ -28,15 +29,20 @@ export function PageHeader({ title, subtitle, icon: Icon, action, children }: Pr
       </div>
       
       <div className="flex items-center gap-2">
-        {action && (
+        {actions?.map((action, idx) => (
           <button
+            key={idx}
             onClick={action.onClick}
-            className="flex items-center gap-2 bg-mazad-primary text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-mazad-primary/20 hover:bg-mazad-primary-dk transition-all active:scale-95"
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg transition-all active:scale-95 ${
+              action.variant === 'outline' 
+                ? 'bg-transparent border border-surface-border text-surface-muted hover:text-white hover:border-white'
+                : 'bg-mazad-primary text-white shadow-mazad-primary/20 hover:bg-mazad-primary-dk'
+            }`}
           >
             <action.icon className="w-4 h-4" />
             {action.label}
           </button>
-        )}
+        ))}
         {children}
       </div>
     </div>

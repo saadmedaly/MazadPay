@@ -93,13 +93,16 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 		ID:           uuid.New(),
 		Phone:        phone,
 		PasswordHash: string(hash),
-		FullName:     &fullName,
-		Email:        &email,
-		City:         &city,
-		CountryCode:  &countryCode,
+		FullName:     stringPtr(fullName),
+		Email:        stringPtr(email),
+		City:         stringPtr(city),
+		CountryCode:  stringPtr(countryCode),
 		LanguagePref: "ar",
 		Role:         "user",
-		IsVerified:   false,
+		IsActive:     true,
+		IsVerified:   true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	return s.userRepo.Create(ctx, user)
@@ -148,7 +151,7 @@ func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) er
 	existingOTP, _ := s.userRepo.FindLatestOTP(ctx, phone, purpose)
 	if existingOTP != nil && time.Now().Before(existingOTP.ExpiresAt) {
 		// Un OTP valide existe déjà, retourner un message clair
-		return fmt.Errorf("an OTP verification code is already active for this phone number. Please wait before requesting a new one")
+		return apperr.ErrOTPRateLimited
 	}
 
 	// Save new OTP to database for verification
@@ -167,12 +170,18 @@ func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) er
 		return err
 	}
 
-	// Send SMS via Twilio
-	if s.smsService != nil {
-		if err := s.smsService.SendOTP(phone, code); err != nil {
-			return err
+	// Send SMS via Twilio (COMMENTED FOR NOW)
+	/*
+		if s.smsService != nil {
+			if err := s.smsService.SendOTP(phone, code); err != nil {
+				if s.env == "development" {
+					fmt.Printf("DEBUG: SMS sending failed in development (%v). Continuing registration flow because development OTP is allowed.\n", err)
+					return nil
+				}
+				return err
+			}
 		}
-	}
+	*/
 
 	return nil
 }
@@ -287,4 +296,11 @@ func (s *authService) ValidateJWT(tokenString string) (*JWTClaims, error) {
 // pour détecter les abus (brute force attempts)
 func (s *authService) TrackPasswordReset(ctx context.Context, phone, ip string) error {
 	return s.userRepo.LogPasswordResetAttempt(ctx, phone, ip)
+}
+
+func stringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

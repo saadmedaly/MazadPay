@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )
 
@@ -71,9 +73,10 @@ type auctionService struct {
 	notifSvc    NotificationService
 	userRepo    repository.UserRepository
 	mediaSvc    MediaService
+	rdb         *redis.Client
 }
 
-func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService) AuctionService {
+func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client) AuctionService {
 	return &auctionService{
 		db:          db,
 		auctionRepo: auctionRepo,
@@ -81,6 +84,7 @@ func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, re
 		notifSvc:    notifSvc,
 		userRepo:    userRepo,
 		mediaSvc:    mediaSvc,
+		rdb:         rdb,
 	}
 }
 
@@ -722,9 +726,20 @@ func (s *auctionService) BuyNow(ctx context.Context, auctionID, buyerID uuid.UUI
 	// Notify seller
 	if s.notifSvc != nil {
 		go func() {
-			_ = s.notifSvc.SendPush(context.Background(), auction.SellerID,
-				"تم بيع!", fmt.Sprintf("تم شراء مزاد %s بسعر نهائي", auction.TitleAr),
-				"auction_sold", map[string]string{"type": "auction_sold", "id": auction.ID.String()})
+			language := "ar"
+			// Get seller language pref if possible
+			seller, _ := s.userRepo.FindByID(ctx, auction.SellerID)
+			if seller != nil && seller.LanguagePref != "" {
+				language = seller.LanguagePref
+			}
+			params := map[string]string{
+				"auctionTitle": auction.TitleAr,
+			}
+			data := map[string]string{
+				"type": "auction_sold",
+				"id":   auction.ID.String(),
+			}
+			_ = s.notifSvc.SendLocalizedPush(context.Background(), auction.SellerID, "auction_sold", language, params, data)
 		}()
 	}
 
@@ -855,11 +870,61 @@ func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 }
 
 func (s *auctionService) GetCategories(ctx context.Context) ([]models.Category, error) {
-	return s.auctionRepo.GetCategories(ctx)
+	cacheKey := "categories"
+
+	// Try to get from cache
+	if s.rdb != nil {
+		val, err := s.rdb.Get(ctx, cacheKey).Result()
+		if err == nil {
+			var categories []models.Category
+			if err := json.Unmarshal([]byte(val), &categories); err == nil {
+				return categories, nil
+			}
+		}
+	}
+
+	// Get from DB
+	categories, err := s.auctionRepo.GetCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save to cache (1 hour)
+	if s.rdb != nil && len(categories) > 0 {
+		data, _ := json.Marshal(categories)
+		_ = s.rdb.Set(ctx, cacheKey, data, 1*time.Hour).Err()
+	}
+
+	return categories, nil
 }
 
 func (s *auctionService) GetLocations(ctx context.Context) ([]models.Location, error) {
-	return s.auctionRepo.GetLocations(ctx)
+	cacheKey := "locations"
+
+	// Try to get from cache
+	if s.rdb != nil {
+		val, err := s.rdb.Get(ctx, cacheKey).Result()
+		if err == nil {
+			var locations []models.Location
+			if err := json.Unmarshal([]byte(val), &locations); err == nil {
+				return locations, nil
+			}
+		}
+	}
+
+	// Get from DB
+	locations, err := s.auctionRepo.GetLocations(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save to cache (1 hour)
+	if s.rdb != nil && len(locations) > 0 {
+		data, _ := json.Marshal(locations)
+		_ = s.rdb.Set(ctx, cacheKey, data, 1*time.Hour).Err()
+	}
+
+	return locations, nil
 }
 
 func (s *auctionService) GetCountries(ctx context.Context) ([]models.Country, error) {

@@ -4,16 +4,18 @@ import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
 import '../services/user_api.dart';
 import '../models/api_response.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/auth_provider.dart';
 import 'account_page.dart';
 
-class AccountProfilePage extends StatefulWidget {
+class AccountProfilePage extends ConsumerStatefulWidget {
   const AccountProfilePage({super.key});
 
   @override
-  State<AccountProfilePage> createState() => _AccountProfilePageState();
+  ConsumerState<AccountProfilePage> createState() => _AccountProfilePageState();
 }
 
-class _AccountProfilePageState extends State<AccountProfilePage> {
+class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
   final UserApi _userApi = UserApi();
   bool _isLoading = true;
   bool _isSaving = false;
@@ -336,12 +338,17 @@ class _AccountProfilePageState extends State<AccountProfilePage> {
                       width: double.infinity,
                       height: 54,
                       child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (context) => const AccountPage()),
-                            (route) => false,
-                          );
+                        onPressed: () async {
+                          // Déconnexion propre via le provider (efface les tokens et l'état)
+                          await ref.read(authNotifierProvider.notifier).logout();
+                          
+                          if (mounted) {
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (context) => const AccountPage()),
+                              (route) => false,
+                            );
+                          }
                         },
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: Colors.red, width: 1.5),

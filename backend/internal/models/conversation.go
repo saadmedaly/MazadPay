@@ -126,6 +126,7 @@ type CreateConversationRequest struct {
 	Title     *string     `json:"title,omitempty"`
 	UserIDs   []uuid.UUID `json:"user_ids" validate:"required,min=1"`
 	InitialMessage *string `json:"initial_message,omitempty"`
+	Metadata       JSONB   `json:"metadata,omitempty"`
 }
 
 // SendMessageRequest représente une requête d'envoi de message
@@ -139,6 +140,7 @@ type SendMessageRequest struct {
 	MimeType     *string     `json:"mime_type,omitempty"`
 	ThumbnailURL *string     `json:"thumbnail_url,omitempty"`
 	ReplyToID    *uuid.UUID  `json:"reply_to_id,omitempty"`
+	Metadata     JSONB       `json:"metadata,omitempty"`
 }
 
 // MarkReadRequest représente une requête de marquage comme lu

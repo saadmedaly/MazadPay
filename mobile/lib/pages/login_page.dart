@@ -91,6 +91,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     
     switch (code) {
       case 'invalid_pin':
+        return l10n.error_invalid_pin;
       case 'unauthorized':
       case 'not_found':
       case 'invalid_credentials':
@@ -103,9 +104,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return l10n.error_too_many_requests;
       case 'account_blocked':
       case 'account_disabled':
-        return 'Compte bloqué ou désactivé'; // TODO: Add to l10n if needed
+        return l10n.error_account_blocked;
+      case 'phone_already_registered':
+        return l10n.error_phone_already_registered;
       default:
-         if (defaultMessage.contains('connexion') || defaultMessage.contains('connection')) {
+        if (defaultMessage.toLowerCase().contains('connexion') || 
+            defaultMessage.toLowerCase().contains('connection')) {
           return l10n.error_connection;
         }
         return l10n.error_login_failed;

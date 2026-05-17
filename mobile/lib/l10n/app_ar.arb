@@ -481,5 +481,10 @@
   "text_403": "يكتب الآن...",
   "text_404": "لا توجد رسائل",
   "text_405": "أرسل رسالتك الأولى",
+  "error_otp_expired": "انتهت صلاحية رمز OTP",
+  "error_otp_max_attempts": "محاولات فاشلة كثيرة جدا. يرجى طلب رمز جديد.",
+  "error_phone_already_registered": "رقم الهاتف هذا مسجل بالفعل",
+  "error_invalid_pin": "رمز PIN غير صحيح",
+  "error_account_blocked": "هذا الحساب محظور أو معطل",
   "error_too_many_requests": "محاولات كثيرة جدا. يرجى المحاولة مرة أخرى في وقت لاحق."
 }

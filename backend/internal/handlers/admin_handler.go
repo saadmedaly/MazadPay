@@ -16,12 +16,13 @@ import (
 )
 
 type AdminHandler struct {
-	svc    services.AdminService
-	logger *zap.Logger
+	svc       services.AdminService
+	reportSvc services.ReportService
+	logger    *zap.Logger
 }
 
-func NewAdminHandler(svc services.AdminService, logger *zap.Logger) *AdminHandler {
-	return &AdminHandler{svc: svc, logger: logger}
+func NewAdminHandler(svc services.AdminService, reportSvc services.ReportService, logger *zap.Logger) *AdminHandler {
+	return &AdminHandler{svc: svc, reportSvc: reportSvc, logger: logger}
 }
 
 // Dashboard stats
@@ -1155,4 +1156,45 @@ func (h *AdminHandler) UpdateAutoBid(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{"message": "Auto bid updated successfully"})
+}
+
+// ExportTransactionsCSV exports transactions to CSV
+func (h *AdminHandler) ExportTransactionsCSV(c *fiber.Ctx) error {
+	status := c.Query("status")
+	
+	// Parse dates if provided
+	var startDate, endDate *time.Time
+	if s := c.Query("start_date"); s != "" {
+		if t, err := time.Parse("2006-01-02", s); err == nil {
+			startDate = &t
+		}
+	}
+	if s := c.Query("end_date"); s != "" {
+		if t, err := time.Parse("2006-01-02", s); err == nil {
+			endDate = &t
+		}
+	}
+
+	csvData, err := h.reportSvc.ExportTransactionsCSV(c.Context(), status, startDate, endDate)
+	if err != nil {
+		return InternalError(c, "Failed to export transactions: "+err.Error())
+	}
+
+	c.Set("Content-Type", "text/csv")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=transactions_%s.csv", time.Now().Format("2006-01-02")))
+	
+	return c.SendString(csvData)
+}
+
+// ExportRevenueCSV exports revenue stats to CSV
+func (h *AdminHandler) ExportRevenueCSV(c *fiber.Ctx) error {
+	csvData, err := h.reportSvc.ExportRevenueCSV(c.Context())
+	if err != nil {
+		return InternalError(c, "Failed to export revenue: "+err.Error())
+	}
+
+	c.Set("Content-Type", "text/csv")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=revenue_%s.csv", time.Now().Format("2006-01-02")))
+	
+	return c.SendString(csvData)
 }

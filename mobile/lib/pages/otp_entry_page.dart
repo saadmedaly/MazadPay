@@ -15,10 +15,10 @@ class OtpEntryPage extends ConsumerStatefulWidget {
 
 class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
   final List<TextEditingController> _controllers = List.generate(
-    6,
-    (_) => TextEditingController(),
+    4,
+    (index) => TextEditingController(text: (index < 4) ? ['1', '2', '3', '4'][index] : ''),
   );
-  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
   final AuthApi _authApi = AuthApi();
   bool _isLoading = false;
 
@@ -33,8 +33,29 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
     super.dispose();
   }
 
+  String _getLocalizedError(BuildContext context, String? code, String defaultMessage) {
+    final l10n = AppLocalizations.of(context)!;
+    
+    switch (code) {
+      case 'otp_invalid':
+        return l10n.error_otp_invalid;
+      case 'otp_expired':
+        return l10n.error_otp_expired;
+      case 'otp_max_attempts':
+        return l10n.error_otp_max_attempts;
+      case 'connection_error':
+        return l10n.error_connection;
+      default:
+        if (defaultMessage.toLowerCase().contains('connexion') || 
+            defaultMessage.toLowerCase().contains('connection')) {
+          return l10n.error_connection;
+        }
+        return l10n.error_otp_invalid;
+    }
+  }
+
   void _onChanged(String value, int index) {
-    if (value.length == 1 && index < 5) {
+    if (value.length == 1 && index < 3) {
       _focusNodes[index + 1].requestFocus();
     }
     if (value.isEmpty && index > 0) {
@@ -45,7 +66,7 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
   Future<void> _verifyOTP() async {
     final otp = _controllers.map((c) => c.text).join();
     
-    if (otp.length != 6) {
+    if (otp.length != 4) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppLocalizations.of(context)!.error_otp_required)),
       );
@@ -73,7 +94,7 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.error?.message ?? AppLocalizations.of(context)!.error_otp_invalid)),
+          SnackBar(content: Text(_getLocalizedError(context, response.error?.code, response.error?.message ?? ''))),
         );
       }
     } catch (e) {
@@ -201,7 +222,7 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
                 textDirection: TextDirection.ltr,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(6, (index) {
+                  children: List.generate(4, (index) {
                     return SizedBox(
                       width: 48,
                       height: 56,

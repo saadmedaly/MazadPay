@@ -56,6 +56,14 @@ class ConversationTile extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          if (conversation.type == 'direct' && _getOtherParticipant()?.user?.phone != null)
+            Text(
+              _getOtherParticipant()!.user!.phone!,
+              style: TextStyle(
+                color: Colors.grey[500],
+                fontSize: 12,
+              ),
+            ),
           const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -481,5 +481,10 @@
   "text_403": "is typing...",
   "text_404": "No messages",
   "text_405": "Send your first message",
-  "error_too_many_requests": "Too many attempts. Please try again later."
+  "error_too_many_requests": "Too many attempts. Please try again later.",
+  "error_phone_already_registered": "This phone number is already registered",
+  "error_invalid_pin": "Invalid PIN code",
+  "error_account_blocked": "This account has been blocked or disabled",
+  "error_otp_expired": "OTP code has expired",
+  "error_otp_max_attempts": "Too many failed attempts. Please request a new code."
 }

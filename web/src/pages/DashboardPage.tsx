@@ -11,6 +11,7 @@ import {
 import { PageHeader } from '@/components/shared/PageHeader'
  import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { useDashboardStats, useRevenueChart, useActivityFeed } from '@/hooks/useDashboard'
+import { exportRevenue } from '@/api/dashboard'
 import { formatPrice, formatRelative, formatDateShort } from '@/lib/formatters'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -139,19 +140,22 @@ export function DashboardPage() {
         subtitle="نظرة مباشرة على منصة MazadPay"
         actions={[
           {
+            label: "تصدير البيانات",
+            icon: TrendingUp,
+            onClick: async () => {
+              try {
+                await exportRevenue()
+              } catch (err) {
+                console.error('Export failed', err)
+              }
+            }
+          },
+          {
             label: isEditMode ? "إيقاف تعديل" : "وضع التعديل",
             icon: isEditMode ? AlertCircle : Edit2,
-            onClick: () => setIsEditMode(!isEditMode)
+            onClick: () => setIsEditMode(!isEditMode),
+            variant: 'outline'
           },
-          // {
-          //   label: "إضافة widget",
-          //   icon: Plus,
-          //   onClick: () => setShowWidgetModal(true)
-          // },
-          // {
-          //   label: "إدارة widgets",
-          //   icon: Settings,
-          //   onClick: () => {/* Navigate to widget management */}}
         ]}
       />
 

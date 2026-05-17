@@ -113,7 +113,8 @@ SELECT
     cp.joined_at,
     cp.last_read_at,
     cp.unread_count,
-    cp.is_muted
+    cp.is_muted,
+    c.updated_at
 FROM conversation_participants cp
 JOIN conversations c ON cp.conversation_id = c.id
 WHERE c.is_active = TRUE;

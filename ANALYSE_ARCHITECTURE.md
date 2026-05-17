@@ -362,6 +362,15 @@ GET    /api/v1/admin/invitations                ✅ Existe
 POST   /api/v1/admin/invitations                ✅ Existe
 GET    /api/v1/admin/admins                     ✅ Existe - Liste admins
 PUT    /api/v1/admin/admins/:id/role             ❌ MANQUANT - Changer rôle
+
+### 2.14 ADVANCED ANALYTICS & REPORTING
+```http
+# التقارير التحليلية (Advanced Analytics)
+GET    /api/v1/admin/reports/revenue/export     ❌ MANQUANT - تصدير تقارير الأرباح (PDF/Excel)
+GET    /api/v1/admin/reports/taxes/export       ❌ MANQUANT - تقارير الضرائب والمحاسبة
+GET    /api/v1/admin/reports/users/export       ❌ MANQUANT - تصدير بيانات المستخدمين
+```
+
  ```
 
 ---
@@ -556,7 +565,7 @@ internal/
 1. WebSocket pour temps réel (bids, notifications)
 2. Système de messagerie
 3. Module CMS complet
-4. Analytics avancés
+4. Analytics avancés & التقارير التحليلية (تصدير PDF/Excel)
 
 ---
 

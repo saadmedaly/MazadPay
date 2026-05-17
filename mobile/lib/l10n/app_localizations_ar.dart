@@ -1497,6 +1497,22 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_405 => 'أرسل رسالتك الأولى';
 
   @override
+  String get error_otp_expired => 'انتهت صلاحية رمز OTP';
+
+  @override
+  String get error_otp_max_attempts =>
+      'محاولات فاشلة كثيرة جدا. يرجى طلب رمز جديد.';
+
+  @override
+  String get error_phone_already_registered => 'رقم الهاتف هذا مسجل بالفعل';
+
+  @override
+  String get error_invalid_pin => 'رمز PIN غير صحيح';
+
+  @override
+  String get error_account_blocked => 'هذا الحساب محظور أو معطل';
+
+  @override
   String get error_too_many_requests =>
       'محاولات كثيرة جدا. يرجى المحاولة مرة أخرى في وقت لاحق.';
 }

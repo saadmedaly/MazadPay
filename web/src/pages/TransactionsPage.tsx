@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { DataTable } from '@/components/shared/DataTable'
 import { useTransactions } from '@/hooks/useTransactions'
+import { exportTransactions } from '@/api/transactions'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { GATEWAY_LABELS } from '@/lib/constants'
 import type { Transaction } from '@/types/api'
@@ -104,6 +105,19 @@ export function TransactionsPage() {
       <PageHeader
         title="المعاملات المالية"
         subtitle="مراجعة وتأكيد الإيداعات والسحوبات"
+        actions={[
+          {
+            label: "تصدير التقرير",
+            icon: CreditCard,
+            onClick: async () => {
+              try {
+                await exportTransactions({ status: status || undefined })
+              } catch (err) {
+                console.error('Export failed', err)
+              }
+            }
+          }
+        ]}
       />
 
       {/* Tabs */}

@@ -195,12 +195,14 @@ class CreateConversationRequest {
   final String? title;
   final List<String> userIds;
   final String? initialMessage;
+  final Map<String, dynamic>? metadata;
 
   CreateConversationRequest({
     required this.type,
     this.title,
     required this.userIds,
     this.initialMessage,
+    this.metadata,
   });
 
   Map<String, dynamic> toJson() {
@@ -209,6 +211,7 @@ class CreateConversationRequest {
       'title': title,
       'user_ids': userIds,
       'initial_message': initialMessage,
+      'metadata': metadata,
     };
   }
 }
@@ -222,6 +225,7 @@ class SendMessageRequest {
   final int? fileDuration;
   final String? mimeType;
   final String? thumbnailUrl;
+  final Map<String, dynamic>? metadata;
   final String? replyToId;
 
   SendMessageRequest({
@@ -234,6 +238,7 @@ class SendMessageRequest {
     this.mimeType,
     this.thumbnailUrl,
     this.replyToId,
+    this.metadata,
   });
 
   Map<String, dynamic> toJson() {
@@ -247,6 +252,7 @@ class SendMessageRequest {
       'mime_type': mimeType,
       'thumbnail_url': thumbnailUrl,
       'reply_to_id': replyToId,
+      'metadata': metadata,
     };
   }
 }

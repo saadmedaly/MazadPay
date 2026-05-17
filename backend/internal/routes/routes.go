@@ -49,13 +49,14 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath, logger, adminHub)
 	smsSvc := services.NewSMSService(cfg.Twilio.AccountSID, cfg.Twilio.AuthToken, cfg.Twilio.PhoneNumber, logger)
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4)
-	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc)
+	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
 	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc)
 	walletSvc := services.NewWalletService(walletRepo, txRepo)
 	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc)
 	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, auditRepo, notifSvc)
+	reportSvc := services.NewReportService(txRepo)
 
 	// Chat Hub & Service
 	chatHub := ws.NewChatHub(logger, nil) // Service will be set after creation
@@ -84,7 +85,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	adminWSHandler := handlers.NewAdminWSHandler(adminHub, cfg.JWT.Secret, logger)
 	bidHandler := handlers.NewBidHandler(bidSvc, logger)
 	userHandler := handlers.NewUserHandler(userSvc, logger)
-	adminHandler := handlers.NewAdminHandler(adminSvc, logger)
+	adminHandler := handlers.NewAdminHandler(adminSvc, reportSvc, logger)
 	bannerHandler := handlers.NewBannerHandler(contentSvc, logger)
 	walletHandler := handlers.NewWalletHandler(walletSvc, logger)
 	reqHandler := handlers.NewRequestHandler(reqSvc, logger)
@@ -279,6 +280,10 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)
 	admin.Delete("/reports/:id", adminHandler.DeleteReport)
+
+	// Exports
+	admin.Get("/reports/transactions/export", adminHandler.ExportTransactionsCSV)
+	admin.Get("/reports/revenue/export", adminHandler.ExportRevenueCSV)
 
 	// Category management
 	admin.Post("/categories", adminHandler.CreateCategory)

@@ -241,13 +241,14 @@ func (r *conversationRepository) GetParticipants(ctx context.Context, conversati
 		FullName      *string   `db:"u_full_name"`
 		ProfilePicURL *string   `db:"u_profile_pic_url"`
 		UserRole      string    `db:"u_role"`
+		Phone         *string   `db:"u_phone"`
 		IsActive      bool      `db:"u_is_active"`
 	}
 
 	query := `
 		SELECT cp.*, u.id as u_id, u.full_name as u_full_name, 
 		       u.profile_pic_url as u_profile_pic_url, u.role as u_role,
-		       u.is_active as u_is_active
+		       u.phone as u_phone, u.is_active as u_is_active
 		FROM conversation_participants cp
 		LEFT JOIN users u ON cp.user_id = u.id
 		WHERE cp.conversation_id = $1
@@ -260,11 +261,18 @@ func (r *conversationRepository) GetParticipants(ctx context.Context, conversati
 	participants := make([]models.ConversationParticipant, len(results))
 	for i, res := range results {
 		participants[i] = res.ConversationParticipant
+		
+		phone := ""
+		if res.Phone != nil {
+			phone = *res.Phone
+		}
+
 		participants[i].User = &models.User{
 			ID:            res.UserID,
 			FullName:      res.FullName,
 			ProfilePicURL: res.ProfilePicURL,
 			Role:          res.UserRole,
+			Phone:         phone,
 			IsActive:      res.IsActive,
 		}
 	}

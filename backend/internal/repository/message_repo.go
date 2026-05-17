@@ -112,7 +112,7 @@ func (r *messageRepository) GetByConversation(ctx context.Context, conversationI
 		LEFT JOIN users u ON m.sender_id = u.id
 		LEFT JOIN messages rm ON m.reply_to_id = rm.id
 		WHERE m.conversation_id = $1 AND m.is_deleted = false
-		ORDER BY m.created_at ASC
+		ORDER BY m.created_at DESC
 		LIMIT $2 OFFSET $3
 	`
 	err := r.db.SelectContext(ctx, &results, query, conversationID, limit, offset)

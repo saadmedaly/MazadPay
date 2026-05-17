@@ -30,10 +30,10 @@ func NewAuthHandler(service services.AuthService, logger *zap.Logger, rdb *redis
 }
 
 type RegisterRequest struct {
-	Phone       string `json:"phone"       validate:"required,min=8,max=20,numeric"`
+	Phone       string `json:"phone"       validate:"required,min=8,max=20"`
 	Pin         string `json:"pin"         validate:"required,len=4,numeric"`
 	FullName    string `json:"full_name"   validate:"required,min=2,max=100"`
-	Email       string `json:"email"       validate:"required,email"`
+	Email       string `json:"email"       validate:"omitempty,email"`
 	City        string `json:"city"        validate:"omitempty,max=100"`
 	CountryCode string `json:"country_code" validate:"omitempty,oneof=+222 +221 +212 +216"`
 }
@@ -79,17 +79,19 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return BadRequest(c, "PIN is too weak. Avoid repeating digits (1111) or sequences (1234)")
 	}
 
-	ip := c.IP()
+	// ip := c.IP()
 	if err := h.service.Register(c.Context(), req.Phone, req.Pin, req.FullName, req.Email, req.City, req.CountryCode); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
+	/*
 	// Automatically send OTP after registration
 	if err := h.service.SendOTP(c.Context(), req.Phone, "register", ip); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	*/
 
-	return OK(c, fiber.Map{"message": "Registration successful. OTP has been sent via SMS."})
+	return OK(c, fiber.Map{"message": "Registration successful. You can now login."})
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {

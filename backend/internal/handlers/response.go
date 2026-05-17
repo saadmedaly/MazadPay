@@ -242,6 +242,11 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 			return Fail(c, 500, "schema_error", "Database schema error: please run migrations")
 		}
 
+		if strings.Contains(errStr, "failed to send SMS") {
+			logger.Warn("SMS delivery failed", logFields...)
+			return Fail(c, 503, "sms_delivery_failed", "Failed to send SMS. If you are in development, check if the number is verified in Twilio or use the development OTP.")
+		}
+
 		// Erreur interne imprévue : Log au niveau ERROR
 		logger.Error("Unhandled internal error", logFields...)
 		return InternalError(c)

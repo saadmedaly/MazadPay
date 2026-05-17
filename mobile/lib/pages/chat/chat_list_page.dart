@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/conversation.dart';
 import '../../services/chat_service.dart';
@@ -24,6 +25,7 @@ class _ChatListPageState extends State<ChatListPage> {
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   List<UserConversation> _filteredConversations = [];
+  StreamSubscription? _messageSubscription;
 
   @override
   void initState() {
@@ -34,9 +36,16 @@ class _ChatListPageState extends State<ChatListPage> {
 
   void _setupStreams() {
     // Écouter les nouveaux messages pour actualiser la liste
-    _chatService.messageStream.listen((message) {
+    _messageSubscription = _chatService.messageStream.listen((message) {
       _refreshConversations();
     });
+  }
+
+  @override
+  void dispose() {
+    _messageSubscription?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadConversations({bool refresh = false}) async {
@@ -47,6 +56,7 @@ class _ChatListPageState extends State<ChatListPage> {
 
     if (!_hasMore && !refresh) return;
 
+    if (!mounted) return;
     setState(() {
       if (refresh) _isLoading = true;
     });
@@ -57,6 +67,7 @@ class _ChatListPageState extends State<ChatListPage> {
         offset: _offset,
       );
 
+      if (!mounted) return;
       setState(() {
         if (refresh) {
           _conversations = conversations;
@@ -70,6 +81,7 @@ class _ChatListPageState extends State<ChatListPage> {
         _error = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;

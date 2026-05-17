@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import '../../models/message.dart';
+import '../../pages/auction_details_page.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -55,6 +57,7 @@ class MessageBubble extends StatelessWidget {
                     ),
                   ),
                 ),
+              _buildAuctionHeader(context),
               _buildContent(context),
               const SizedBox(height: 4),
               Row(
@@ -106,6 +109,129 @@ class MessageBubble extends StatelessWidget {
       default:
         return const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
     }
+  }
+
+  Widget _buildAuctionHeader(BuildContext context) {
+    if (message.metadata == null || message.metadata!['auction_id'] == null) {
+      return const SizedBox.shrink();
+    }
+
+    final auctionTitle = message.metadata!['auction_title'] ?? 'Enchère';
+    final auctionImage = message.metadata!['auction_image'] as String?;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AuctionDetailsPage(
+              auctionId: message.metadata!['auction_id'].toString(),
+            ),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        decoration: BoxDecoration(
+          color: (isMe ? Colors.black26 : Colors.black12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  color: isMe ? Colors.white70 : theme.colorScheme.primary,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(8),
+                    bottomLeft: Radius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isMe ? 'Vous' : (message.sender?.fullName ?? 'Vendeur'),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isMe ? Colors.white70 : theme.colorScheme.primary,
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios,
+                            size: 10,
+                            color: Colors.grey,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        auctionTitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isMe ? Colors.white : Colors.black87,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        maxLines: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (auctionImage != null)
+                Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: _buildHeaderImage(auctionImage),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderImage(String imageUrl) {
+    if (imageUrl.isEmpty) {
+      return const SizedBox(width: 40, height: 40);
+    }
+    if (imageUrl.startsWith('data:image')) {
+      try {
+        final base64String = imageUrl.split(',').last;
+        return Image.memory(
+          base64.decode(base64String),
+          width: 40,
+          height: 40,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) =>
+              const Icon(Icons.broken_image, size: 20),
+        );
+      } catch (e) {
+        return const Icon(Icons.image, size: 20);
+      }
+    }
+    return Image.network(
+      imageUrl,
+      width: 40,
+      height: 40,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => const Icon(Icons.image, size: 20),
+    );
   }
 
   Widget _buildContent(BuildContext context) {
@@ -166,32 +292,54 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildImage(BuildContext context) {
+    final imageUrl = message.fileUrl!;
+    
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: Image.network(
-        message.fileUrl!,
-        width: 200,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Container(
-            width: 200,
-            height: 150,
-            color: Colors.grey[300],
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            width: 200,
-            height: 150,
-            color: Colors.grey[300],
-            child: const Icon(Icons.error),
-          );
-        },
-      ),
+      child: _buildImageWidget(imageUrl),
+    );
+  }
+
+  Widget _buildImageWidget(String imageUrl) {
+    if (imageUrl.startsWith('data:image')) {
+      try {
+        final base64String = imageUrl.split(',').last;
+        return Image.memory(
+          base64Decode(base64String),
+          width: 200,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildErrorWidget(),
+        );
+      } catch (e) {
+        return _buildErrorWidget();
+      }
+    }
+
+    return Image.network(
+      imageUrl,
+      width: 200,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Container(
+          width: 200,
+          height: 150,
+          color: Colors.grey[300],
+          child: const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) => _buildErrorWidget(),
+    );
+  }
+
+  Widget _buildErrorWidget() {
+    return Container(
+      width: 200,
+      height: 150,
+      color: Colors.grey[300],
+      child: const Icon(Icons.error),
     );
   }
 

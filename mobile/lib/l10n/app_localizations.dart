@@ -2986,6 +2986,36 @@ abstract class AppLocalizations {
   /// **'أرسل رسالتك الأولى'**
   String get text_405;
 
+  /// No description provided for @error_otp_expired.
+  ///
+  /// In ar, this message translates to:
+  /// **'انتهت صلاحية رمز OTP'**
+  String get error_otp_expired;
+
+  /// No description provided for @error_otp_max_attempts.
+  ///
+  /// In ar, this message translates to:
+  /// **'محاولات فاشلة كثيرة جدا. يرجى طلب رمز جديد.'**
+  String get error_otp_max_attempts;
+
+  /// No description provided for @error_phone_already_registered.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم الهاتف هذا مسجل بالفعل'**
+  String get error_phone_already_registered;
+
+  /// No description provided for @error_invalid_pin.
+  ///
+  /// In ar, this message translates to:
+  /// **'رمز PIN غير صحيح'**
+  String get error_invalid_pin;
+
+  /// No description provided for @error_account_blocked.
+  ///
+  /// In ar, this message translates to:
+  /// **'هذا الحساب محظور أو معطل'**
+  String get error_account_blocked;
+
   /// No description provided for @error_too_many_requests.
   ///
   /// In ar, this message translates to:

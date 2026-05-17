@@ -1,8 +1,8 @@
 # Stage 1 — Builder
 FROM golang:1.22-alpine AS builder
 
-# Installation des certificats CA pour les appels HTTPS externes (Neon, R2, etc.)
-RUN apk --no-cache add ca-certificates
+# Installation des certificats CA et de tzdata (pour la gestion des timezones)
+RUN apk --no-cache add ca-certificates tzdata
 
 # Configuration de l'environnement de build pour un binaire statique minimal
 ENV CGO_ENABLED=0 \
@@ -28,8 +28,9 @@ RUN go build -trimpath -ldflags="-s -w" -o /app/server ./cmd/server
 # ==============================================================================
 FROM scratch
 
-# Nécessaire pour faire des requêtes TLS/HTTPS sortantes (Neon, S3/R2, Stripe)
+# Nécessaire pour faire des requêtes TLS/HTTPS sortantes (Neon, S3/R2, Stripe) et pour la gestion du temps
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
 # Copier uniquement le binaire compilé
 COPY --from=builder /app/server /server

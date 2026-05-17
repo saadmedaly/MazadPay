@@ -56,6 +56,26 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
     super.dispose();
   }
 
+  String _getLocalizedError(BuildContext context, String? code, String defaultMessage) {
+    final l10n = AppLocalizations.of(context)!;
+    
+    switch (code) {
+      case 'phone_already_registered':
+        return l10n.error_phone_already_registered;
+      case 'otp_rate_limited':
+      case 'too_many_requests':
+        return l10n.error_too_many_requests;
+      case 'connection_error':
+        return l10n.error_connection;
+      default:
+        if (defaultMessage.toLowerCase().contains('connexion') || 
+            defaultMessage.toLowerCase().contains('connection')) {
+          return l10n.error_connection;
+        }
+        return l10n.error_generic.replaceFirst('{error}', defaultMessage);
+    }
+  }
+
   Future<void> _sendOTP() async {
     if (_phoneController.text.length != 8) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -86,7 +106,7 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.error?.message ?? AppLocalizations.of(context)!.error_connection)),
+          SnackBar(content: Text(_getLocalizedError(context, response.error?.code, response.error?.message ?? ''))),
         );
       }
     } catch (e) {

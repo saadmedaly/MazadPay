@@ -158,7 +158,7 @@ func (r *requestRepo) GetAuctionRequests(ctx context.Context, status string, use
 
 	// Get total count
 	var total int
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM auction_requests %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM auction_requests ar %s", whereClause)
 	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}
@@ -390,7 +390,7 @@ func (r *requestRepo) GetBannerRequests(ctx context.Context, status string, user
 
 	// Get total count
 	var total int
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM banner_requests %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM banner_requests br %s", whereClause)
 	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}

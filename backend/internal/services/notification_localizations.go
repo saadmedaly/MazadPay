@@ -162,6 +162,20 @@ var NotificationLocalizations = map[string]map[string]NotificationLocalization{
 			Body:  "Your banner request {bannerTitle} has been rejected",
 		},
 	},
+	"auction_sold": {
+		"ar": {
+			Title: "تم بيع المزاد!",
+			Body:  "تم شراء مزاد {auctionTitle} بسعر نهائي",
+		},
+		"fr": {
+			Title: "Enchère vendue !",
+			Body:  "Votre enchère {auctionTitle} a été achetée au prix final",
+		},
+		"en": {
+			Title: "Auction sold!",
+			Body:  "Your auction {auctionTitle} has been bought at the final price",
+		},
+	},
 }
 
 // GetLocalizedNotification retrieves a localized notification by type and language

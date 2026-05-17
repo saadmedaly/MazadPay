@@ -473,5 +473,10 @@
   "text_401": "Mes Demandes",
   "text_402": "Nouvelle conversation",
   "no_auctions_found": "Aucune enchère dans cette ville",
-  "error_too_many_requests": "Trop de tentatives. Veuillez réessayer plus tard."
+  "error_too_many_requests": "Trop de tentatives. Veuillez réessayer plus tard.",
+  "error_phone_already_registered": "Ce numéro de téléphone est déjà enregistré",
+  "error_invalid_pin": "Code PIN invalide",
+  "error_account_blocked": "Ce compte a été bloqué ou désactivé",
+  "error_otp_expired": "Le code OTP a expiré",
+  "error_otp_max_attempts": "Trop de tentatives échouées. Veuillez demander un nouveau code."
 }

@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+tmp/
+scratch/
+test/
+tests/
+main.exe
+.air.toml
+run_*.ps1
+run_*.sh
+docker-compose.yml
+fly.toml
+*.md

@@ -95,6 +95,7 @@ func NewChatService(
 		Type:      req.Type,
 		Title:     req.Title,
 		CreatedBy: &creatorID,
+		Metadata:  req.Metadata,
 	}
 
 	if err := s.conversationRepo.Create(ctx, conversation); err != nil {
@@ -136,8 +137,9 @@ func NewChatService(
 	// Envoyer message initial si fourni
 	if req.InitialMessage != nil && *req.InitialMessage != "" {
 		msgReq := &models.SendMessageRequest{
-			Type:    "text",
-			Content: req.InitialMessage,
+			Type:     "text",
+			Content:  req.InitialMessage,
+			Metadata: req.Metadata,
 		}
 		_, err := s.SendMessage(ctx, conversation.ID, creatorID, msgReq)
 		if err != nil {
@@ -273,6 +275,7 @@ func (s *chatService) SendMessage(ctx context.Context, conversationID, senderID 
 		MimeType:       req.MimeType,
 		ThumbnailURL:   req.ThumbnailURL,
 		ReplyToID:      req.ReplyToID,
+		Metadata:       req.Metadata,
 	}
 
 	if err := s.messageRepo.Create(ctx, message); err != nil {

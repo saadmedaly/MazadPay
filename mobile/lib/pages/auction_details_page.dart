@@ -1,5 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -122,17 +123,31 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           CreateConversationRequest(
             type: 'direct',
             userIds: [sellerId],
+            initialMessage: 'Interessé par l\'enchère: ${auction.title}',
+            metadata: {
+              'auction_id': auction.id,
+              'auction_title': auction.title,
+              'auction_image': (auction.imageUrls != null && auction.imageUrls!.isNotEmpty)
+                  ? auction.imageUrls![0]
+                  : null,
+              'auction_description': auction.description ?? '',
+            },
           ),
         );
       }
 
       if (mounted && conversation != null) {
+        // If it's not a new conversation, we might want to send a message anyway 
+        // if we want the seller to see the context. 
+        // But for now, let's just navigate.
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ChatRoomPage(
               conversationId: conversation!.id,
               title: auction.title,
+              linkedAuction: auction,
+              initialMessage: 'Interessé par l\'enchère: ${auction.title}',
             ),
           ),
         );
@@ -357,6 +372,23 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                       child: const Icon(Icons.image_not_supported, color: Colors.grey),
                     ),
                   );
+                } else if (imageUrl.startsWith('data:image')) {
+                  try {
+                    final base64String = imageUrl.split(',').last;
+                    return Image.memory(
+                      base64.decode(base64String),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                      ),
+                    );
+                  } catch (e) {
+                    return Container(
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                    );
+                  }
                 } else if (imageUrl.isNotEmpty) {
                   return Image.asset(
                     imageUrl,
