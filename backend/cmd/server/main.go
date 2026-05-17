@@ -95,7 +95,11 @@ func main() {
 	app.Use(fiberLogger.New(fiberLogger.Config{
 		Format: "[${time}] ${status} - ${latency} ${method} ${path}\n",
 	}))
-	app.Use(cors.New())
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "*",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-User-ID",
+		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
+	}))
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"success": true, "data": fiber.Map{"status": "ok"}})

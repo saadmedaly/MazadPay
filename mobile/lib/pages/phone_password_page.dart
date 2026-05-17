@@ -5,6 +5,8 @@ import '../models/api_response.dart';
 import 'package:flutter/services.dart';
 import 'otp_entry_page.dart';
 import 'login_page.dart';
+import '../services/auth_service.dart';
+
 
 class PhonePasswordPage extends StatefulWidget {
   final String? fullName;
@@ -122,6 +124,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
 
       if (response.success && mounted) {
         // Le backend envoie déjà l'OTP automatiquement lors du Register (Désactivé pour le moment)
+        await AuthService().saveHasRegistered(true);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(

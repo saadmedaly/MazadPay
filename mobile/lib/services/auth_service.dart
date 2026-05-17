@@ -20,10 +20,23 @@ class AuthService {
   static const String _tokenKey = 'jwt_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userIdKey = 'user_id';
+  static const String _hasRegisteredKey = 'has_registered';
   
   /// Sauvegarder le JWT token
   Future<void> saveToken(String token) async {
     await _storage.write(key: _tokenKey, value: token);
+    await saveHasRegistered(true);
+  }
+  
+  /// Sauvegarder l'état d'inscription
+  Future<void> saveHasRegistered(bool value) async {
+    await _storage.write(key: _hasRegisteredKey, value: value.toString());
+  }
+  
+  /// Récupérer l'état d'inscription (si l'utilisateur s'est déjà inscrit ou connecté auparavant)
+  Future<bool> hasRegistered() async {
+    final val = await _storage.read(key: _hasRegisteredKey);
+    return val == 'true';
   }
   
   /// Sauvegarder le refresh token

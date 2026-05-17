@@ -32,8 +32,9 @@ FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
-# Copier uniquement le binaire compilé
+# Copier uniquement le binaire compilé et les configurations nécessaires
 COPY --from=builder /app/server /server
+COPY --from=builder /app/configs /configs
 
 # Exposition du port
 EXPOSE 8082
