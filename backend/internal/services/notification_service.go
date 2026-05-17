@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"os"
 	"time"
 
 	firebase "firebase.google.com/go/v4"
@@ -46,11 +47,21 @@ type notificationService struct {
 	logger    *zap.Logger
 }
 
-func NewNotificationService(repo repository.NotificationRepository, userRepo repository.UserRepository, serviceAccountPath string, logger *zap.Logger, adminHub AdminHub) NotificationService {
+func NewNotificationService(repo repository.NotificationRepository, userRepo repository.UserRepository, serviceAccountPath string, serviceAccountJSON string, logger *zap.Logger, adminHub AdminHub) NotificationService {
 	var fcmClient *messaging.Client
+	var opt option.ClientOption
 
-	if serviceAccountPath != "" {
-		opt := option.WithCredentialsFile(serviceAccountPath)
+	if serviceAccountJSON != "" {
+		opt = option.WithCredentialsJSON([]byte(serviceAccountJSON))
+	} else if serviceAccountPath != "" {
+		if _, err := os.Stat(serviceAccountPath); err == nil {
+			opt = option.WithCredentialsFile(serviceAccountPath)
+		} else {
+			logger.Warn("firebase credentials file not found, skipping fcm initialization", zap.String("path", serviceAccountPath))
+		}
+	}
+
+	if opt != nil {
 		app, err := firebase.NewApp(context.Background(), nil, opt)
 		if err != nil {
 			logger.Error("error initializing firebase app", zap.Error(err))
@@ -62,6 +73,8 @@ func NewNotificationService(repo repository.NotificationRepository, userRepo rep
 				fcmClient = client
 			}
 		}
+	} else {
+		logger.Warn("no firebase credentials provided (path or json), fcm will be disabled")
 	}
 
 	return &notificationService{

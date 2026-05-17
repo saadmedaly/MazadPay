@@ -77,6 +77,7 @@ type BusinessConfig struct {
 
 type FirebaseConfig struct {
 	ServiceAccountPath string
+	ServiceAccountJSON string
 }
 
 func Load() *Config {
@@ -134,6 +135,7 @@ func Load() *Config {
 		},
 		Firebase: FirebaseConfig{
 			ServiceAccountPath: getEnv("FIREBASE_SERVICE_ACCOUNT_PATH", ""),
+			ServiceAccountJSON: getEnv("FIREBASE_SERVICE_ACCOUNT_JSON", ""),
 		},
 	}
 }
