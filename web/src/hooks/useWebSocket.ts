@@ -89,7 +89,7 @@ export function useWebSocket(url: string) {
 // Hook spécifique pour les notifications admin
 export function useAdminNotifications() {
   const { isConnected, lastMessage } = useWebSocket(
-    `${import.meta.env.VITE_WS_URL || 'ws://localhost:8080'}/ws/admin`
+    `${import.meta.env.VITE_WS_URL || 'ws://localhost:8082'}/ws/admin`
   )
 
   return {

@@ -14,8 +14,7 @@ export function useChatWebSocket(conversationId?: string | null) {
   const connect = useCallback(() => {
     if (!token || socketRef.current?.readyState === WebSocket.OPEN) return
 
-    const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8082'
-    const wsBase = apiUrl.replace(/^http/, 'ws')
+    const wsBase = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8082'
     const wsUrl = `${wsBase}/v1/api/chat/ws?token=${token}`
 
     console.log('Connecting to Chat WebSocket...')

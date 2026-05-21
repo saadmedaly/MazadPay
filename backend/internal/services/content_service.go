@@ -94,7 +94,7 @@ func (s *contentService) DeleteTutorial(ctx context.Context, id int) error {
 		}
 		if tutorial.ThumbnailURL != nil {
 			if err := s.mediaSvc.DeleteFile(ctx, *tutorial.ThumbnailURL); err != nil {
-				fmt.Printf("[DeleteTutorial] Warning: failed to delete thumbnail from R2: %s, error: %v\n", tutorial.ThumbnailURL, err)
+				fmt.Printf("[DeleteTutorial] Warning: failed to delete thumbnail from R2: %s, error: %v\n", *tutorial.ThumbnailURL, err)
 			}
 		}
 	}

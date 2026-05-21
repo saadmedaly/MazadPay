@@ -5,12 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/create_ad_start_page.dart';
-import 'package:mezadpay/pages/account_page.dart';
-import 'package:mezadpay/pages/services_page.dart';
-import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/auction_details_page.dart';
 import '../services/auction_api.dart';
 import '../services/category_api.dart';
+import 'my_auctions_page.dart';
 
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
@@ -73,33 +71,28 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       final categoryApi = CategoryApi();
       final response = await categoryApi.getCategories();
 
-      print('=== DEBUG CATEGORIES ===');
-      print('Response success: ${response.success}');
-      print('Response data type: ${response.data.runtimeType}');
 
       List<Map<String, dynamic>> parentCategories = [];
       Map<String, List<Map<String, dynamic>>> subCategoriesMap = {};
 
       if (response.success && response.data != null) {
         final categoriesList = response.data!;
-        print('CategoriesList length: ${categoriesList.length}');
+        debugPrint('Categories loaded: ${categoriesList.length}');
 
         // Separate parent categories and subcategories
         for (var item in categoriesList) {
           final cat = item as Map<String, dynamic>;
           final parentId = cat['parent_id'];
-          print('Category: ${cat['name_ar']}, parent_id: $parentId');
-          
+
           if (parentId == null) {
-            // This is a parent category
             parentCategories.add({
               'id': cat['id']?.toString() ?? '',
               'name_ar': cat['name_ar'] ?? cat['name'] ?? '',
               'name_fr': cat['name_fr'] ?? cat['name'] ?? '',
               'name_en': cat['name_en'] ?? cat['name'] ?? '',
-              'image': cat['image_url'] ?? cat['image'] ?? 'assets/auctions/other.png',
+              'image': cat['image_url'] ?? cat['image'],
               'key': cat['key'] ?? cat['slug'] ?? cat['id']?.toString() ?? '',
-              'count': cat['auction_count'] ?? cat['count'] ?? 0,
+              'count': (cat['subcategories_count'] as int?) ?? 0,
               'has_subcategories': cat['has_subcategories'] ?? false,
             });
           } else {
@@ -113,28 +106,36 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
               'name_ar': cat['name_ar'] ?? cat['name'] ?? '',
               'name_fr': cat['name_fr'] ?? cat['name'] ?? '',
               'name_en': cat['name_en'] ?? cat['name'] ?? '',
-              'image': cat['image_url'] ?? cat['image'] ?? 'assets/auctions/other.png',
+              'image': cat['image_url'] ?? cat['image'],
               'key': cat['key'] ?? cat['slug'] ?? cat['id']?.toString() ?? '',
               'parent_id': parentKey,
             });
           }
         }
+
       }
 
-      print('Parent categories count: ${parentCategories.length}');
-      print('SubCategoriesMap keys: ${subCategoriesMap.keys}');
 
+      if (!mounted) return;
       setState(() {
         _categories = [
-          {'id': 'all', 'name_ar': 'الكل', 'name_fr': 'Tout', 'name_en': 'All', 'image': 'assets/auctions/other.png', 'key': 'all'},
+          {
+            'id': 'all',
+            'name_ar': 'الكل',
+            'name_fr': 'Tout',
+            'name_en': 'All',
+            'image': 'assets/auctions/other.png',
+            'key': 'all',
+            'count': 0, // no subcategories for "All"
+          },
           ...parentCategories,
         ];
         // Store subcategories map for quick access
         _subCategoriesMap = subCategoriesMap;
       });
-      print('Final _categories length: ${_categories.length}');
     } catch (e) {
-      print('Error loading categories: $e');
+      debugPrint('Error loading categories: $e');
+      if (!mounted) return;
       setState(() {
         // En cas d'erreur, on garde la catégorie "All" par défaut
         _categories = [
@@ -182,6 +183,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         sortBy: _sortBy,
       );
 
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _isLoadingMore = false;
@@ -215,15 +217,14 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         }
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _isLoadingMore = false;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auctions)),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auctions)),
+      );
     }
   }
 
@@ -681,7 +682,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                                     shape: BoxShape.circle,
                                   ),
                                   child: Text(
-                                    cat['count'].toString(),
+                                    ((cat['count'] as int?) ?? 0).toString(),
                                     style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                                   ),
                                 ),
@@ -977,7 +978,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
               _buildSimpleNavItem(Icons.home_outlined, l10n.text_1, 0),
               _buildSimpleNavItem(Icons.local_shipping_outlined, l10n.text_32, 1),
               const SizedBox(width: 48),
-              _buildSimpleNavItem(Icons.storefront_outlined, l10n.text_33, 2),
+              _buildSimpleNavItem(Icons.gavel_outlined, l10n.text_27, 2),
               _buildSimpleNavItem(Icons.person_outline, l10n.text_19, 3),
             ],
           ),
@@ -1310,12 +1311,13 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   Widget _buildSimpleNavItem(IconData icon, String label, int index) {
     return InkWell(
       onTap: () {
-        if (index == 0) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
-        } else if (index == 1) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ServicesPage()));
-        } else if (index == 3) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AccountPage()));
+        if (index == 0 || index == 1 || index == 3) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        } else if (index == 2) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyAuctionsPage()),
+          );
         }
       },
       child: Column(

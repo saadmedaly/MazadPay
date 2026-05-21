@@ -85,7 +85,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	adminWSHandler := handlers.NewAdminWSHandler(adminHub, cfg.JWT.Secret, logger)
 	bidHandler := handlers.NewBidHandler(bidSvc, logger)
 	userHandler := handlers.NewUserHandler(userSvc, logger)
-	adminHandler := handlers.NewAdminHandler(adminSvc, reportSvc, logger)
+	adminHandler := handlers.NewAdminHandler(adminSvc, reportSvc, logger, rdb)
 	bannerHandler := handlers.NewBannerHandler(contentSvc, logger)
 	walletHandler := handlers.NewWalletHandler(walletSvc, logger)
 	reqHandler := handlers.NewRequestHandler(reqSvc, logger)
@@ -126,6 +126,15 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 	// Chat routes
 	setupChatRoutes(api, chatSvc, chatHub, mediaSvc, cfg.JWT.Secret, logger, rdb)
+
+	// Serve locally uploaded files (fallback when R2 is not configured)
+	app.Use("/uploads", func(c *fiber.Ctx) error {
+		c.Set("Access-Control-Allow-Origin", "*")
+		return c.Next()
+	})
+	app.Static("/uploads", "./uploads", fiber.Static{
+		Browse: false,
+	})
 
 	return auctionSvc, notifSvc, auctionScheduler
 }
@@ -273,6 +282,10 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Put("/auctions/:id/validate", adminHandler.ValidateAuction)
 	admin.Put("/auctions/:id", adminHandler.UpdateAuction)
 	admin.Delete("/auctions/:id", adminHandler.DeleteAuction)
+	admin.Post("/auctions/:id/images", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return adminHandler.UploadAuctionImages(c)
+	})
 
 	// Additional management routes
 	admin.Get("/transactions", adminHandler.ListTransactions)

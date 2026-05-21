@@ -1,16 +1,11 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:mezadpay/widgets/side_menu_drawer.dart';
-import 'package:mezadpay/pages/home_page.dart';
-import 'package:mezadpay/pages/services_page.dart';
 import 'deposit_page.dart';
 import 'account_profile_page.dart';
 import 'my_auctions_page.dart';
 import 'favorites_page.dart';
 import 'my_winnings_page.dart';
 import 'withdraw_page.dart';
-import 'notifications_page.dart';
-import 'create_ad_start_page.dart';
 import '../services/wallet_api.dart';
 
 class AccountPage extends StatefulWidget {
@@ -21,7 +16,6 @@ class AccountPage extends StatefulWidget {
 }
 
 class _AccountPageState extends State<AccountPage> {
-  int _currentIndex = 3;
   bool _showBalance = false;
   final WalletApi _walletApi = WalletApi();
   double _balance = 0.0;
@@ -36,6 +30,7 @@ class _AccountPageState extends State<AccountPage> {
     try {
       final response = await _walletApi.getBalance();
 
+      if (!mounted) return;
       setState(() {
         if (response.success && response.data != null) {
           _balance = (response.data!['balance'] ?? 0).toDouble();
@@ -55,50 +50,7 @@ class _AccountPageState extends State<AccountPage> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     const Color primaryBlue = Color(0xFF0084FF);
 
-    return Scaffold(
-        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
-        endDrawer: const SideMenuDrawer(),
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          toolbarHeight: 70,
-          automaticallyImplyLeading: false, // Custom layout
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: Icon(Icons.arrow_forward_ios, color: isDarkMode ? Colors.white : Colors.black, size: 20),
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const HomePage()),
-                  );
-                },
-              ),
-              Text(
-                AppLocalizations.of(context)!.text_19,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
-              ),
-              IconButton(
-                icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 24),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsPage()),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-        body: _currentIndex == 2 
-          ? Center(
-              child: Text(
-                AppLocalizations.of(context)!.text_34,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
-              ),
-            )
-          : SingleChildScrollView(
+    return SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0),
             child: Column(
@@ -408,53 +360,11 @@ class _AccountPageState extends State<AccountPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 40), // Space for bottom nav
+                const SizedBox(height: 80), // Space for bottom nav
               ],
             ),
           ),
-        ),
-        floatingActionButton: Padding(
-          padding: const EdgeInsetsDirectional.only(top: 20.0),
-          child: SizedBox(
-            height: 70,
-            width: 70,
-            child: FloatingActionButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const CreateAdStartPage()),
-                );
-              },
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              highlightElevation: 0,
-              child: Image.asset(
-                'assets/botum_bar.png',
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: BottomAppBar(
-          color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-          shape: const CircularNotchedRectangle(),
-          notchMargin: 8,
-          child: SizedBox(
-            height: 70, // Increased height
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(Icons.home_outlined, Icons.home, AppLocalizations.of(context)!.text_1, 0),
-                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, AppLocalizations.of(context)!.text_32, 1),
-                const SizedBox(width: 48), // Space for FAB
-                _buildNavItem(Icons.storefront_outlined, Icons.storefront, AppLocalizations.of(context)!.text_33, 2),
-                _buildNavItem(Icons.person_outline, Icons.person, AppLocalizations.of(context)!.text_19, 3),
-              ],
-            ),
-          ),
-        ),
-      );
+        );
   }
 
   Widget _buildActivityItem({required IconData icon, required String title, Color? iconColor, required bool isDarkMode, VoidCallback? onTap}) {
@@ -494,45 +404,4 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
-  Widget _buildNavItem(IconData icon, IconData activeIcon, String label, int index) {
-    bool isSelected = _currentIndex == index;
-    const Color primaryBlue = Color(0xFF0084FF);
-    return InkWell(
-      onTap: () {
-        if (index == 0) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomePage()),
-          );
-        } else if (index == 1) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const ServicesPage()),
-          );
-        } else if (index == 2) {
-          setState(() => _currentIndex = index);
-        } else if (index == 3) {
-          setState(() => _currentIndex = index);
-        } else {
-          setState(() => _currentIndex = index);
-        }
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(isSelected ? activeIcon : icon, color: isSelected ? primaryBlue : Colors.grey[600]),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? primaryBlue : Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

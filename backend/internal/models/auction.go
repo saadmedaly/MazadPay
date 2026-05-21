@@ -111,9 +111,13 @@ type Category struct {
 	IconName     *string `db:"icon_name"        json:"icon_name"`
 	DisplayOrder int     `db:"display_order"    json:"display_order"`
 	// New fields from migration 000025
-	IsActive         bool    `db:"is_active"         json:"is_active"`
-	ImageURL         *string `db:"image_url"         json:"image_url"`
-	HasSubcategories bool    `db:"has_subcategories" json:"has_subcategories"`
+	IsActive         bool    `db:"is_active"          json:"is_active"`
+	ImageURL         *string `db:"image_url"          json:"image_url"`
+	HasSubcategories bool    `db:"has_subcategories"  json:"has_subcategories"`
+	// Count of active auctions in this category (includes subcategories for parent categories)
+	AuctionCount int `db:"auction_count" json:"auction_count"`
+	// Count of direct subcategories for this category
+	SubcategoriesCount int `db:"subcategories_count" json:"subcategories_count"`
 }
 
 type Location struct {

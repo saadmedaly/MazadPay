@@ -12,7 +12,6 @@ import 'package:mezadpay/pages/all_auctions_page.dart';
 import 'package:mezadpay/pages/privacy_policy_page.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
 import 'package:mezadpay/services/user_api.dart';
-import 'package:mezadpay/pages/chat/chat_list_page.dart';
 import 'package:mezadpay/pages/requests_page.dart';
 import 'package:mezadpay/pages/settings_page.dart';
 
@@ -247,16 +246,6 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
                   ),
                   _buildMenuItem(
                     context,
-                    title: AppLocalizations.of(context)!.text_380,
-                    icon: Icons.chat_bubble_outline,
-                  ),
-                  _buildMenuItem(
-                    context,
-                    title: AppLocalizations.of(context)!.text_392,
-                    icon: Icons.message_outlined,
-                  ),
-                  _buildMenuItem(
-                    context,
                     title: AppLocalizations.of(context)!.text_401,
                     icon: Icons.request_quote_outlined,
                   ),
@@ -453,8 +442,6 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const AllAuctionsPage()));
           } else if (title == AppLocalizations.of(context)!.text_380) {
             AppModals.showContactModal(context);
-          } else if (title == AppLocalizations.of(context)!.text_392) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatListPage()));
           } else if (title == AppLocalizations.of(context)!.text_401) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const RequestsPage()));
           } else if (title == AppLocalizations.of(context)!.text_44) {

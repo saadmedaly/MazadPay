@@ -149,7 +149,38 @@ class AuctionWinnerPage extends ConsumerWidget {
        ),
        child: ClipRRect(
          borderRadius: BorderRadius.circular(12),
-         child: Image.asset(auction.imageUrls[0], width: 300, height: 180, fit: BoxFit.cover),
+         child: auction.imageUrls.isNotEmpty && auction.imageUrls[0].startsWith('http')
+             ? Image.network(
+                 auction.imageUrls[0],
+                 width: 300,
+                 height: 180,
+                 fit: BoxFit.cover,
+                 errorBuilder: (c, e, s) => Container(
+                   width: 300,
+                   height: 180,
+                   color: Colors.grey[200],
+                   child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                 ),
+               )
+             : auction.imageUrls.isNotEmpty
+                 ? Image.asset(
+                     auction.imageUrls[0],
+                     width: 300,
+                     height: 180,
+                     fit: BoxFit.cover,
+                     errorBuilder: (c, e, s) => Container(
+                       width: 300,
+                       height: 180,
+                       color: Colors.grey[200],
+                       child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                     ),
+                   )
+                 : Container(
+                     width: 300,
+                     height: 180,
+                     color: Colors.grey[200],
+                     child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                   ),
        ),
      );
   }

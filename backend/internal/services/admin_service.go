@@ -98,6 +98,9 @@ type AdminService interface {
 	// Bid Auto Bid (from migration 000031)
 	ListAutoBids(ctx context.Context) ([]models.BidAutoBid, error)
 	UpdateAutoBid(ctx context.Context, id uuid.UUID, isActive *bool) error
+
+	// Admin image upload (bypasses seller ownership check)
+	AdminAddAuctionImages(ctx context.Context, auctionID uuid.UUID, urls []string) error
 }
 
 type UpdateAuctionInput struct {
@@ -296,17 +299,6 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 }
 
 func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input UpdateAuctionInput) error {
-	// Validate at least 1 image
-	validImageCount := 0
-	for _, url := range input.Images {
-		if url != "" {
-			validImageCount++
-		}
-	}
-	if validImageCount == 0 {
-		return fmt.Errorf("at least one image is required for the auction")
-	}
-
 	auction, err := s.auctionRepo.FindByID(ctx, id)
 	if err != nil {
 		return err
@@ -335,21 +327,38 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 		phone = &input.PhoneContact
 	}
 
-	auction.CategoryID = input.CategoryID
-	auction.LocationID = input.LocationID
-	auction.TitleAr = input.TitleAr
+	if input.CategoryID != 0 {
+		auction.CategoryID = input.CategoryID
+	}
+	if input.LocationID != nil {
+		auction.LocationID = input.LocationID
+	}
+	if input.TitleAr != "" {
+		auction.TitleAr = input.TitleAr
+	}
 	auction.TitleFr = tFr
 	auction.TitleEn = tEn
 	auction.DescriptionAr = dAr
 	auction.DescriptionFr = dFr
 	auction.DescriptionEn = dEn
-	auction.StartPrice = input.StartPrice
-	auction.MinIncrement = input.MinIncrement
-	auction.InsuranceAmount = input.InsuranceAmount
-	auction.EndTime = input.EndTime
+	if !input.StartPrice.IsZero() {
+		auction.StartPrice = input.StartPrice
+	}
+	if !input.MinIncrement.IsZero() {
+		auction.MinIncrement = input.MinIncrement
+	}
+	if !input.InsuranceAmount.IsZero() {
+		auction.InsuranceAmount = input.InsuranceAmount
+	}
+	// Only update end_time if explicitly provided (non-zero)
+	if !input.EndTime.IsZero() {
+		auction.EndTime = input.EndTime
+	}
 	auction.PhoneContact = phone
 	auction.BuyNowPrice = input.BuyNowPrice
-	auction.ItemDetails = input.ItemDetails
+	if input.ItemDetails != nil {
+		auction.ItemDetails = input.ItemDetails
+	}
 	if input.StartTime != nil {
 		auction.StartTime = *input.StartTime
 	}
@@ -365,28 +374,40 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 		return err
 	}
 
-	// Get existing images before deleting (for R2 cleanup)
-	existingImages, err := s.auctionRepo.GetImages(ctx, id)
-	if err != nil {
-		return fmt.Errorf("failed to get existing images: %w", err)
+	// Only sync images if explicitly provided in the request
+	var existingImages []models.AuctionImage
+	hasNewImages := false
+	for _, url := range input.Images {
+		if url != "" {
+			hasNewImages = true
+			break
+		}
 	}
 
-	// Sync images: Delete existing from DB and add new ones
-	if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
-		return err
-	}
-	for i, url := range input.Images {
-		if url == "" {
-			continue
+	if hasNewImages {
+		// Get existing images before deleting (for R2 cleanup)
+		var imgErr error
+		existingImages, imgErr = s.auctionRepo.GetImages(ctx, id)
+		if imgErr != nil {
+			return fmt.Errorf("failed to get existing images: %w", imgErr)
 		}
-		err := s.auctionRepo.AddImageTx(ctx, tx, &models.AuctionImage{
-			AuctionID:    id,
-			URL:          url,
-			MediaType:    "image",
-			DisplayOrder: i,
-		})
-		if err != nil {
+
+		// Replace images
+		if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
 			return err
+		}
+		for i, url := range input.Images {
+			if url == "" {
+				continue
+			}
+			if addErr := s.auctionRepo.AddImageTx(ctx, tx, &models.AuctionImage{
+				AuctionID:    id,
+				URL:          url,
+				MediaType:    "image",
+				DisplayOrder: i,
+			}); addErr != nil {
+				return addErr
+			}
 		}
 	}
 
@@ -880,4 +901,28 @@ func (s *adminService) UpdateCountry(ctx context.Context, id int, code, countryC
 
 func (s *adminService) DeleteCountry(ctx context.Context, id int) error {
 	return s.auctionRepo.DeleteCountry(ctx, id)
+}
+
+
+func (s *adminService) AdminAddAuctionImages(ctx context.Context, auctionID uuid.UUID, urls []string) error {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+	for i, url := range urls {
+		if url == "" {
+			continue
+		}
+		img := &models.AuctionImage{
+			AuctionID:    auctionID,
+			URL:          url,
+			MediaType:    "image",
+			DisplayOrder: i + 1,
+		}
+		if err := s.auctionRepo.AddImageTx(ctx, tx, img); err != nil {
+			return fmt.Errorf("failed to save image: %w", err)
+		}
+	}
+	return tx.Commit()
 }

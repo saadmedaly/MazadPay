@@ -2,10 +2,6 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 
 import 'package:flutter/material.dart';
 
-import 'package:mezadpay/pages/account_page.dart';
-
-import 'package:mezadpay/pages/services_page.dart';
-
 import 'package:mezadpay/pages/create_ad_start_page.dart';
 
 import 'package:flutter/services.dart';
@@ -34,6 +30,9 @@ import '../services/cache_service.dart';
 import '../services/banner_api.dart';
 import '../services/sponsor_api.dart';
 import 'notifications_page.dart';
+import 'my_auctions_page.dart';
+import 'services_page.dart';
+import 'account_page.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
@@ -235,6 +234,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
           if (cityAuctions != null && cityAuctions.isNotEmpty) {
 
+            if (!mounted) return;
             setState(() {
 
               _selectedCityIndex = 0;
@@ -393,6 +393,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
           if (citiesWithAuctionsList.isNotEmpty) {
 
+            if (!mounted) return;
             setState(() {
 
               _selectedCityIndex = 0;
@@ -405,6 +406,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
           } else {
 
+            if (!mounted) return;
             setState(() {
 
               _auctions = [];
@@ -735,6 +737,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
+      if (!mounted) return;
       setState(() {
 
         _isLoading = false;
@@ -751,6 +754,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     } catch (e) {
 
+      if (!mounted) return;
       setState(() => _isLoading = false);
 
       if (mounted) {
@@ -1030,65 +1034,40 @@ class _HomePageState extends ConsumerState<HomePage> {
 
         ),
 
-        body: _selectedCityIndex == 1
-
-          ? Center(
-
-              child: Column(
-
-                mainAxisAlignment: MainAxisAlignment.center,
-
-                children: [
-
-                  Text(
-
-                    AppLocalizations.of(context)!.text_34,
-
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
-
+        body: IndexedStack(
+          index: _currentIndex,
+          children: [
+            // Tab 0: الرئيسية
+            _selectedCityIndex == 1
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.location_off_outlined, size: 64, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'لا توجد مزادات في انواذيبو حالياً',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: () => setState(() => _selectedCityIndex = 0),
+                        icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                        label: const Text(
+                          'العودة إلى الصفحة الرئيسية',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0084FF),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                        ),
+                      ),
+                    ],
                   ),
-
-                  const SizedBox(height: 24),
-
-                  ElevatedButton(
-
-                    onPressed: () {
-
-                      setState(() {
-
-                        _selectedCityIndex = 0;
-
-                      });
-
-                    },
-
-                    style: ElevatedButton.styleFrom(
-
-                      backgroundColor: const Color(0xFF0084FF),
-
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-
-                    ),
-
-                    child: Text(
-
-                      AppLocalizations.of(context)!.text_198,
-
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
-
-                    ),
-
-                  ),
-
-                ],
-
-              ),
-
-            )
-
-          : SingleChildScrollView(
+                )
+              : SingleChildScrollView(
 
           child: Column(
 
@@ -1100,131 +1079,98 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
-              // City tabs - only show if cities are loaded
-
-              if (_cities.isNotEmpty)
-
+              // City tabs — fixed list: نواكشوط / انواذيبو
               Padding(
-
                 padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-
                 child: Container(
-
                   height: 48,
-
                   decoration: BoxDecoration(
-
-                    color: Colors.transparent,
-
+                    color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
                     borderRadius: BorderRadius.circular(24),
-
                     border: Border.all(color: const Color(0xFF0084FF).withOpacity(0.3)),
-
                   ),
-
-                  child: SingleChildScrollView(
-
-                    scrollDirection: Axis.horizontal,
-
-                    child: Row(
-
-                      mainAxisSize: MainAxisSize.min,
-
-                      children: _dbCities.asMap().entries.map((entry) {
-                        int idx = entry.key;
-                        var cityData = entry.value;
-                        String city = _getCityName(context, cityData);
-                        bool isSelected = _selectedCityIndex == idx;
-                        
-                        return GestureDetector(
+                  child: Row(
+                    children: [
+                      // نواكشوط — index 0 — RIGHT (RTL first)
+                      Expanded(
+                        child: GestureDetector(
                           onTap: () {
-                            if (_selectedCityIndex == idx) return;
-                            
+                            if (_selectedCityIndex == 0) return;
                             setState(() {
-                              _selectedCityIndex = idx;
+                              _selectedCityIndex = 0;
                               _isLoading = true;
                             });
-
-                            final cityId = cityData['id']?.toString();
-                            if (cityId != null) {
-                              _loadAuctions(locationId: cityId);
-                            } else {
-                              setState(() {
-                                _auctions = [];
-                                _isLoading = false;
-                              });
-                            }
+                            _loadAuctions();
                           },
-
                           child: AnimatedContainer(
-
                             duration: const Duration(milliseconds: 200),
-
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-
+                            margin: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-
-                              color: isSelected ? primaryBlue : Colors.transparent,
-
-                              borderRadius: BorderRadius.circular(24),
-
+                              color: _selectedCityIndex == 0 ? primaryBlue : Colors.transparent,
+                              borderRadius: BorderRadius.circular(20),
                             ),
-
-                            child: Text(
-
-                              city,
-
-                              style: TextStyle(
-
-                                color: isSelected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87),
-
-                                fontWeight: FontWeight.bold,
-
+                            child: Center(
+                              child: Text(
+                                'نواكشوط',
+                                style: TextStyle(
+                                  color: _selectedCityIndex == 0 ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
                               ),
-
                             ),
-
                           ),
-
-                        );
-
-                      }).toList(),
-
-                    ),
-
+                        ),
+                      ),
+                      // انواذيبو — index 1 — LEFT
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            if (_selectedCityIndex == 1) return;
+                            setState(() {
+                              _selectedCityIndex = 1;
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: _selectedCityIndex == 1 ? primaryBlue : Colors.transparent,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'انواذيبو',
+                                style: TextStyle(
+                                  color: _selectedCityIndex == 1 ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-
                 ),
-
               ),
 
 
 
               // Hero Banner (Announcement Carousel)
-
-              SizedBox(
-
-                height: 160,
-
-                width: double.infinity,
-
-                child: PageView(
-
-                  children: _isLoadingBanners || _banners == null
-                      ? [
-                          _buildBannerCard(isDarkMode),
-                          _buildBannerCard(isDarkMode),
-                          _buildBannerCard(isDarkMode),
-                        ]
-                      : _banners!.isEmpty
-                          ? [
-                              _buildBannerCard(isDarkMode),
-                            ]
-                          : _banners!.map((banner) => _buildDynamicBannerCard(banner, isDarkMode)).toList(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: AspectRatio(
+                  aspectRatio: 16 / 7,
+                  child: PageView(
+                    children: _isLoadingBanners
+                        ? [_buildBannerCard(isDarkMode)]
+                        : _banners.isEmpty
+                            ? [_buildBannerCard(isDarkMode)]
+                            : _banners.map((banner) => _buildDynamicBannerCard(banner, isDarkMode)).toList(),
+                  ),
                 ),
-
               ),
 
 
@@ -1405,7 +1351,15 @@ class _HomePageState extends ConsumerState<HomePage> {
 
         ),
 
-        
+            // Tab 1: توصيل
+            const ServicesPage(),
+            // Tab 2: مزاداتي — opened via Navigator.push, never shown via IndexedStack
+            // (index 2 pushes MyAuctionsPage directly, so we put a placeholder here)
+            const SizedBox.shrink(),
+            // Tab 3: حسابي
+            const AccountPage(),
+          ],
+        ),
 
         // Custom Bottom Navigation Bar
 
@@ -1504,7 +1458,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
                 const SizedBox(width: 48), // Space for FAB
 
-                _buildNavItem(Icons.storefront_outlined, Icons.storefront, AppLocalizations.of(context)!.text_33, 2),
+                _buildNavItem(Icons.gavel_outlined, Icons.gavel, AppLocalizations.of(context)!.text_27, 2),
 
                 _buildNavItem(Icons.person_outline, Icons.person, AppLocalizations.of(context)!.text_19, 3),
 
@@ -1531,37 +1485,14 @@ class _HomePageState extends ConsumerState<HomePage> {
     return InkWell(
 
       onTap: () {
-
-        if (index == 1) {
-
-          Navigator.pushReplacement(
-
+        if (index == 2) {
+          Navigator.push(
             context,
-
-            MaterialPageRoute(builder: (context) => ServicesPage()),
-
+            MaterialPageRoute(builder: (context) => const MyAuctionsPage()),
           );
-
-        } else if (index == 2) {
-
-          setState(() => _currentIndex = index);
-
-        } else if (index == 3) {
-
-          Navigator.pushReplacement(
-
-            context,
-
-            MaterialPageRoute(builder: (context) => AccountPage()),
-
-          );
-
         } else {
-
           setState(() => _currentIndex = index);
-
         }
-
       },
 
       child: Column(
@@ -1603,41 +1534,20 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
   Widget _buildBannerCard(bool isDarkMode) {
-
-    return SizedBox(
-
-      width: double.infinity,
-
-      height: 160,
-
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
       child: Image.asset(
-
         'assets/announcement.png',
-
         width: double.infinity,
-
-        height: 160,
-
-        fit: BoxFit.cover,
-
+        fit: BoxFit.contain,
         errorBuilder: (c, e, s) => Container(
-
-          height: 160,
-
           color: Colors.grey[300],
-
           child: const Center(
-
             child: Icon(Icons.broken_image, size: 48, color: Colors.grey),
-
           ),
-
         ),
-
       ),
-
     );
-
   }
   
   Widget _buildDynamicBannerCard(Map<String, dynamic> banner, bool isDarkMode) {
@@ -1674,15 +1584,12 @@ class _HomePageState extends ConsumerState<HomePage> {
           debugPrint('Navigate to: $targetUrl');
         }
       },
-      child: SizedBox(
-        width: double.infinity,
-        height: 160,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
         child: Stack(
-          fit: StackFit.expand,
           children: [
             // Image ou vidéo
             if (isVideo && imageUrl.isNotEmpty)
-              // Pour les vidéos, on peut utiliser un widget vidéo
               Container(
                 color: Colors.grey[300],
                 child: const Center(
@@ -1693,8 +1600,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               CachedNetworkImage(
                 imageUrl: imageUrl,
                 width: double.infinity,
-                height: 160,
-                fit: BoxFit.cover,
+                fit: BoxFit.contain,
                 placeholder: (context, url) => Shimmer.fromColors(
                   baseColor: Colors.grey[300]!,
                   highlightColor: Colors.grey[100]!,
@@ -1713,8 +1619,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               Image.asset(
                 imageUrl,
                 width: double.infinity,
-                height: 160,
-                fit: BoxFit.cover,
+                fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
                     color: Colors.grey[300],

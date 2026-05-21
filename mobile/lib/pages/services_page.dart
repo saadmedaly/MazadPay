@@ -2,245 +2,156 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/delivery_details_page.dart';
 
-import 'package:mezadpay/widgets/side_menu_drawer.dart';
-import 'home_page.dart';
-import 'account_page.dart';
-import 'notifications_page.dart';
-import 'create_ad_start_page.dart';
-
-class ServicesPage extends StatefulWidget {
+class ServicesPage extends StatelessWidget {
   const ServicesPage({super.key});
 
-  @override
-  State<ServicesPage> createState() => _ServicesPageState();
-}
+  // Banner image URL from admin panel (null = use local asset)
+  static const String? _bannerImageUrl = null;
 
-class _ServicesPageState extends State<ServicesPage> {
-  int _currentIndex = 1;
+  static const List<_ServiceItem> _services = [
+    _ServiceItem('كورس',           Icons.local_taxi,          Color(0xFFFFF8E1), Colors.orange),
+    _ServiceItem('توصيل',          Icons.delivery_dining,     Color(0xFFE8F5E9), Color(0xFF2E7D32)),
+    _ServiceItem('نقل البضائع',    Icons.local_shipping,      Color(0xFFFFF3E0), Colors.deepOrange),
+    _ServiceItem('كورس عبر المدن', Icons.directions_bus,      Color(0xFFE8F5E9), Colors.green),
+    _ServiceItem('توصيل طعام',     Icons.restaurant,          Color(0xFFFCE4EC), Colors.red),
+    _ServiceItem('توصيل أدوية',    Icons.medical_services,    Color(0xFFE3F2FD), Colors.blue),
+    _ServiceItem('شحن من خارج',   Icons.flight,              Color(0xFFE8EAF6), Color(0xFF3949AB)),
+    _ServiceItem('رافعة سيارة',    Icons.car_repair,          Color(0xFFFFF8E1), Colors.amber),
+    _ServiceItem('شاحنة ماء',      Icons.water_drop,          Color(0xFFE3F2FD), Color(0xFF0277BD)),
+    _ServiceItem('توصيل مجاري',    Icons.plumbing,            Color(0xFFEDE7F6), Color(0xFF6A1B9A)),
+    _ServiceItem('نقل أثاث',       Icons.chair,               Color(0xFFF3E5F5), Color(0xFF8E24AA)),
+    _ServiceItem('توصيل أسماك ولحوم', Icons.set_meal,         Color(0xFFE0F7FA), Color(0xFF00838F)),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Scaffold(
-        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
-        endDrawer: const SideMenuDrawer(),
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          toolbarHeight: 70,
-          automaticallyImplyLeading: false,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: Icon(Icons.arrow_forward_ios, color: isDarkMode ? Colors.white : Colors.black, size: 28),
-                onPressed: () => Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const HomePage()),
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 28),
-                onPressed: () {
-                   Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsPage()),
-                  );
-                },
-              ),
-            ],
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Promo Banner ──────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: _bannerImageUrl != null && _bannerImageUrl!.isNotEmpty
+                  ? Image.network(
+                      _bannerImageUrl!,
+                      width: double.infinity,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => _localBanner(),
+                    )
+                  : _localBanner(),
+            ),
           ),
-        ),
-        body: _currentIndex == 2 
-          ? Center(
-              child: Text(
-                AppLocalizations.of(context)!.text_34,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
-              ),
-            )
-          : SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Promo Banner
-              Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Container(
-                  width: double.infinity,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
-                      begin: AlignmentDirectional.centerEnd,
-                      end: AlignmentDirectional.centerStart,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Stack(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              AppLocalizations.of(context)!.text_296,
-                              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
 
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20.0),
-                child: Text(
-                  AppLocalizations.of(context)!.text_297,
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
+          // ── Section Title ─────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Text(
+              AppLocalizations.of(context)!.text_297,
+              style: const TextStyle(
+                fontFamily: 'Plus Jakarta Sans',
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 16),
-
-              // Services Grid
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.2,
-                  children: [
-                    _buildServiceCard(
-                      AppLocalizations.of(context)!.text_32, 
-                      Colors.blue[50]!, 
-                      Icons.local_shipping_outlined, 
-                      const Color(0xFF00C58D),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const DeliveryDetailsPage()),
-                        );
-                      },
-                    ),
-                    _buildServiceCard(AppLocalizations.of(context)!.text_298, Colors.yellow[50]!, Icons.local_taxi, Colors.orange),
-                    _buildServiceCard(AppLocalizations.of(context)!.text_299, Colors.green[50]!, Icons.directions_bus, Colors.green),
-                    _buildServiceCard(AppLocalizations.of(context)!.text_300, Colors.orange[50]!, Icons.local_shipping, Colors.orangeAccent),
-                    _buildServiceCard(AppLocalizations.of(context)!.text_301, Colors.purple[50]!, Icons.more_horiz, Colors.purple),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 40),
-            ],
+            ),
           ),
-        ),
-        floatingActionButton: Padding(
-          padding: const EdgeInsetsDirectional.only(top: 20.0),
-          child: SizedBox(
-            height: 70,
-            width: 70,
-            child: FloatingActionButton(
-              onPressed: () {
-                Navigator.push(
+
+          // ── Services Grid ─────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.9,
+              ),
+              itemCount: _services.length,
+              itemBuilder: (context, index) {
+                final svc = _services[index];
+                return _buildServiceCard(
                   context,
-                  MaterialPageRoute(builder: (context) => const CreateAdStartPage()),
+                  svc,
+                  onTap: svc.title == 'توصيل'
+                      ? () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const DeliveryDetailsPage()),
+                          )
+                      : null,
                 );
               },
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              highlightElevation: 0,
-              child: Image.asset(
-                'assets/botum_bar.png',
-                fit: BoxFit.contain,
-              ),
             ),
           ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: BottomAppBar(
-          color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-          shape: const CircularNotchedRectangle(),
-          notchMargin: 8,
-          child: SizedBox(
-            height: 70, // Increased height
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(Icons.home_outlined, Icons.home, AppLocalizations.of(context)!.text_1, 0),
-                _buildNavItem(Icons.local_shipping_outlined, Icons.local_shipping, AppLocalizations.of(context)!.text_32, 1),
-                const SizedBox(width: 48), // Space for FAB
-                _buildNavItem(Icons.storefront_outlined, Icons.storefront, AppLocalizations.of(context)!.text_33, 2),
-                _buildNavItem(Icons.person_outline, Icons.person, AppLocalizations.of(context)!.text_19, 3),
-              ],
-            ),
-          ),
-        ),
-      );
+
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
   }
 
-  Widget _buildServiceCard(String title, Color bgColor, IconData icon, Color iconColor, {VoidCallback? onTap}) {
+  Widget _localBanner() {
+    return Image.asset(
+      'assets/khedemat.jpg',
+      width: double.infinity,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => Container(
+        height: 160,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF0084FF), Color(0xFF0055FF)],
+            begin: AlignmentDirectional.centerEnd,
+            end: AlignmentDirectional.centerStart,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.all(20),
+        child: const Text(
+          'اربح وقتك',
+          style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServiceCard(BuildContext context, _ServiceItem svc, {VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         decoration: BoxDecoration(
-          color: bgColor,
+          color: svc.bgColor,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 48, color: iconColor),
-            const SizedBox(height: 12),
+            Icon(svc.icon, size: 40, color: svc.iconColor),
+            const SizedBox(height: 10),
             Text(
-              title,
+              svc.title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: const TextStyle(
+                fontFamily: 'Plus Jakarta Sans',
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildNavItem(IconData icon, IconData activeIcon, String label, int index) {
-    bool isSelected = _currentIndex == index;
-    const Color primaryBlue = Color(0xFF0084FF);
-    return InkWell(
-      onTap: () {
-        if (index == 0) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
-        } else if (index == 1) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ServicesPage()));
-        } else if (index == 2) {
-          setState(() => _currentIndex = index);
-        } else if (index == 3) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AccountPage()));
-        } else {
-          setState(() => _currentIndex = index);
-        }
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(isSelected ? activeIcon : icon, color: isSelected ? primaryBlue : Colors.grey[600]),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? primaryBlue : Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+class _ServiceItem {
+  final String title;
+  final IconData icon;
+  final Color bgColor;
+  final Color iconColor;
+  const _ServiceItem(this.title, this.icon, this.bgColor, this.iconColor);
 }

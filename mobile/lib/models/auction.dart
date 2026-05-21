@@ -106,7 +106,7 @@ class Auction {
       id: json['id']?.toString() ?? '',
       title: json['title_ar']?.toString() ?? json['title']?.toString() ?? '',
       description: json['description_ar']?.toString() ?? json['description']?.toString() ?? '',
-      imageUrls: images.isNotEmpty ? images : ['assets/corolla.png'],
+      imageUrls: images,
       startPrice: double.tryParse(json['starting_price']?.toString() ?? json['start_price']?.toString() ?? '0') ?? 0,
       currentPrice: double.tryParse(json['current_price']?.toString() ?? json['current_bid']?.toString() ?? '0') ?? 0,
       minIncrement: double.tryParse(json['min_increment']?.toString() ?? '500') ?? 500,

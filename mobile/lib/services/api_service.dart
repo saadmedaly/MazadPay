@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:dio/dio.dart';
 import 'package:mezadpay/services/auth_service.dart';
@@ -32,14 +33,15 @@ class ApiService {
     _dio.interceptors.add(AuthInterceptor());
     _dio.interceptors.add(ErrorInterceptor());
     
-    // Logger interceptor pour le debug (à désactiver en production)
+    // Logger interceptor - minimal logging only
     _dio.interceptors.add(
       LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        requestHeader: true,
+        requestBody: false,
+        responseBody: false,
+        requestHeader: false,
         responseHeader: false,
         error: true,
+        logPrint: (obj) => debugPrint('[API] $obj'),
       ),
     );
   }
@@ -49,6 +51,7 @@ class ApiService {
   
   Dio get dio => _dio;
   static String get wsBaseUrl => _wsBaseUrl;
+  static String get apiBaseUrl => dotenv.env['API_BASE_URL'] ?? 'http://localhost:8082/v1/api';
   
   /// Méthode générique pour les requêtes GET
   Future<T?> get<T>(

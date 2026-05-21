@@ -102,6 +102,8 @@ class AuctionApi {
     required double startingPrice,
     required String category,
     required String subCategory,
+    int? categoryId,
+    int? subCategoryId,
     required String location,
     required List<String> images,
     required String phone,
@@ -110,25 +112,37 @@ class AuctionApi {
     try {
       // Calculer la date de fin par défaut (7 jours à partir de maintenant)
       final endDateTime = endTime ?? DateTime.now().add(const Duration(days: 7));
-      
+
+      final body = <String, dynamic>{
+        'title_ar': title,
+        'title_fr': title,
+        'title_en': title,
+        'description_ar': description,
+        'description_fr': description,
+        'description_en': description,
+        'start_price': startingPrice,
+        'location': location,
+        'images': images,
+        'phone': phone,
+        'end_time': '${endDateTime.toIso8601String()}Z',
+      };
+
+      // Prefer integer IDs; fall back to name strings for legacy compatibility
+      if (categoryId != null) {
+        body['category_id'] = categoryId;
+      } else if (category.isNotEmpty) {
+        body['category'] = category;
+      }
+      if (subCategoryId != null) {
+        body['sub_category_id'] = subCategoryId;
+      } else if (subCategory.isNotEmpty) {
+        body['sub_category'] = subCategory;
+      }
+
       // Créer l'enchère avec champs snake_case attendus par le backend
       final response = await _apiService.post<Map<String, dynamic>>(
         '/auctions',
-        data: {
-          'title_ar': title,
-          'title_fr': title,
-          'title_en': title,
-          'description_ar': description,
-          'description_fr': description,
-          'description_en': description,
-          'start_price': startingPrice,
-          'category': category,
-          'sub_category': subCategory,
-          'location': location,
-          'images': images,
-          'phone': phone,
-          'end_time': '${endDateTime.toIso8601String()}Z',
-        },
+        data: body,
       );
       
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
