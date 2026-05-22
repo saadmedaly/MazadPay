@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Gavel, CreditCard, Users,
   Flag, Image, LogOut, Hammer, ShieldCheck, HelpCircle, Video, Bell, User, Settings, PhoneOff,
-  Wallet, MessageSquare, Handshake, Star, LifeBuoy, Grid2x2, MapPin
+  Wallet, MessageSquare, Handshake, Star, LifeBuoy, Grid2x2, MapPin, X
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
@@ -62,9 +62,9 @@ const NAV_SECTIONS = [
   },
 ]
 
-interface SidebarProps { badges?: Record<string, number> }
+interface SidebarProps { badges?: Record<string, number>; onClose?: () => void }
 
-export function Sidebar({ badges = {} }: SidebarProps) {
+export function Sidebar({ badges = {}, onClose }: SidebarProps) {
   const logout = useAuthStore((s) => s.logout)
 
   return (
@@ -99,7 +99,7 @@ export function Sidebar({ badges = {} }: SidebarProps) {
         >
           <Hammer className="w-[17px] h-[17px] text-white" strokeWidth={2.5} />
         </div>
-        <div>
+        <div className="flex-1">
           <p
             className="font-black text-[15px] leading-none tracking-tight"
             style={{ color: '#F0F7FF', fontFamily: 'Cairo' }}
@@ -113,6 +113,17 @@ export function Sidebar({ badges = {} }: SidebarProps) {
             Admin Panel
           </p>
         </div>
+        {/* Close button — mobile only */}
+        {onClose && (
+          <button
+            className="md:hidden w-7 h-7 flex items-center justify-center rounded-lg"
+            style={{ color: '#3D5A78' }}
+            onClick={onClose}
+            aria-label="إغلاق القائمة"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* ── Nav ── */}
@@ -130,6 +141,7 @@ export function Sidebar({ badges = {} }: SidebarProps) {
                 key={item.to}
                 to={item.to}
                 end={item.to === '/'}
+                onClick={onClose}
                 className={({ isActive }) => cn(
                   'flex items-center gap-2.5 px-3 py-[6.5px] rounded-[8px] text-[12.5px] font-semibold transition-all duration-200 mb-0.5 group relative',
                   isActive ? 'text-white' : 'text-[#3D5A78]'

@@ -92,7 +92,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
               'name_en': cat['name_en'] ?? cat['name'] ?? '',
               'image': cat['image_url'] ?? cat['image'],
               'key': cat['key'] ?? cat['slug'] ?? cat['id']?.toString() ?? '',
-              'count': (cat['subcategories_count'] as int?) ?? 0,
+              'count': (cat['auction_count'] as int?) ?? 0,
               'has_subcategories': cat['has_subcategories'] ?? false,
             });
           } else {
@@ -117,6 +117,8 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
 
 
       if (!mounted) return;
+      final totalAuctionCount = parentCategories.fold<int>(
+        0, (sum, cat) => sum + ((cat['count'] as int?) ?? 0));
       setState(() {
         _categories = [
           {
@@ -126,7 +128,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
             'name_en': 'All',
             'image': 'assets/auctions/other.png',
             'key': 'all',
-            'count': 0, // no subcategories for "All"
+            'count': totalAuctionCount,
           },
           ...parentCategories,
         ];
