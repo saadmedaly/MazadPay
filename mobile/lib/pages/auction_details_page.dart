@@ -380,6 +380,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                           _buildMainInfoSection(context, auction, isDarkMode),
                           _buildExternalLinks(context, auction, isDarkMode),
                           _buildCarDetailsSection(context, auction, isDarkMode),
+                          _buildItemPropertiesSection(context, auction, isDarkMode),
                           _buildBidHistorySection(context, isDarkMode, auction),
 
                           // Action Buttons (Auto-Bid, Boost, Report, etc.)
@@ -917,6 +918,101 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildItemPropertiesSection(BuildContext context, Auction auction, bool isDarkMode) {
+    final Map<String, String> props = {};
+
+    if (auction.condition != null && auction.condition!.isNotEmpty)
+      props['الحالة'] = _localizeCondition(auction.condition!);
+    if (auction.brand != null && auction.brand!.isNotEmpty)
+      props['الماركة'] = auction.brand!;
+    if (auction.category != null && auction.category!.isNotEmpty)
+      props['الفئة'] = auction.category!;
+    if (auction.city != null && auction.city!.isNotEmpty)
+      props['المدينة'] = auction.city!;
+    if (auction.lotNumber.isNotEmpty && auction.lotNumber != 'N/A')
+      props['رقم LOT'] = auction.lotNumber;
+
+    // Flatten item_details map
+    if (auction.itemDetails != null) {
+      for (final entry in auction.itemDetails!.entries) {
+        final v = entry.value?.toString() ?? '';
+        if (v.isNotEmpty && v != 'null') {
+          props[entry.key] = v;
+        }
+      }
+    }
+
+    if (props.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDarkMode ? const Color(0xFF333333) : const Color(0xFFE4E7EC),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'خصائص العنصر',
+            style: TextStyle(
+              fontFamily: 'Plus Jakarta Sans',
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...props.entries.map((e) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 90,
+                  child: Text(
+                    e.key,
+                    style: TextStyle(
+                      fontFamily: 'Plus Jakarta Sans',
+                      fontSize: 13,
+                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    e.value,
+                    style: TextStyle(
+                      fontFamily: 'Plus Jakarta Sans',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
+  String _localizeCondition(String condition) {
+    switch (condition.toLowerCase()) {
+      case 'new': return 'جديد';
+      case 'used': return 'مستعمل';
+      case 'refurbished': return 'مجدد';
+      case 'damaged': return 'تالف';
+      default: return condition;
+    }
   }
 
   Widget _buildCarDetailItem(IconData icon, String label, String value, bool isDarkMode) {
