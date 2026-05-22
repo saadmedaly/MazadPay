@@ -17,8 +17,8 @@ class ServicesPage extends StatelessWidget {
     _ServiceItem('توصيل أدوية',    Icons.medical_services,    Color(0xFFE3F2FD), Colors.blue),
     _ServiceItem('شحن من خارج',   Icons.flight,              Color(0xFFE8EAF6), Color(0xFF3949AB)),
     _ServiceItem('رافعة سيارة',    Icons.car_repair,          Color(0xFFFFF8E1), Colors.amber),
-    _ServiceItem('شاحنة ماء',      Icons.local_shipping,      Color(0xFFE3F2FD), Color(0xFF0277BD)),
-    _ServiceItem('توصيل مجاري',    Icons.water_damage,        Color(0xFFE8F5E9), Color(0xFF2E7D32)),
+    _ServiceItem('شاحنة ماء',      Icons.water,               Color(0xFFE3F2FD), Color(0xFF0277BD)),
+    _ServiceItem('توصيل مجاري',    Icons.plumbing,            Color(0xFFE8F5E9), Color(0xFF558B2F)),
     _ServiceItem('نقل أثاث',       Icons.chair,               Color(0xFFF3E5F5), Color(0xFF8E24AA)),
     _ServiceItem('توصيل أسماك ولحوم', Icons.set_meal,         Color(0xFFE0F7FA), Color(0xFF00838F)),
   ];
