@@ -172,7 +172,7 @@ export function CategoriesPage() {
         const hasChildren = level === 0 && (row.original as any).children?.length > 0
         return (
           <div className="flex items-center gap-2">
-            <span className={`font-bold ${level === 0 ? 'text-white text-base' : 'text-surface-muted text-sm'}`}>
+            <span className={`font-bold ${level === 0 ? 'text-[#C8DEFF]' : 'text-[#4A6080] text-sm'}`}>
               {row.original.name_ar}
             </span>
             {hasChildren && (
@@ -193,7 +193,7 @@ export function CategoriesPage() {
       header: 'Nom (Français)',
       accessorKey: 'name_fr',
       cell: ({ row }) => (
-        <span className={`${row.original.level === 0 ? 'text-white' : 'text-surface-muted text-sm'}`} dir="ltr">
+        <span className={`${row.original.level === 0 ? 'text-[#8BA3C0]' : 'text-[#3D5A78] text-sm'}`} dir="ltr">
           {row.original.name_fr}
         </span>
       )
@@ -315,9 +315,9 @@ export function CategoriesPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
-          <div className="relative bg-surface-card border border-surface-border w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="relative w-full max-w-lg rounded-2xl overflow-hidden animate-in fade-in zoom-in duration-200" style={{ background: '#0D1B2E', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-4 border-b border-surface-border flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">{editingCategory ? 'تعديل الفئة' : 'إضافة فئة جديدة'}</h3>
+              <h3 className="text-lg font-bold" style={{ color: '#E2E8F0' }}>{editingCategory ? 'تعديل الفئة' : 'إضافة فئة جديدة'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-surface-muted hover:text-white transition-colors">
                 <Plus className="w-5 h-5 rotate-45" />
               </button>
@@ -364,7 +364,7 @@ export function CategoriesPage() {
                   <select
                     value={form.parent_id || ''}
                     onChange={e => setForm(f => ({ ...f, parent_id: e.target.value ? parseInt(e.target.value) : null }))}
-                    className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white focus:border-mazad-primary/60 outline-none"
+                    className="input-base w-full rounded-xl p-3 text-sm"
                   >
                     <option value="">فئة رئيسية (بدون أب)</option>
                     {parentCategories.map(parent => (

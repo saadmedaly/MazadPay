@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/language_page.dart';
+import 'package:mezadpay/pages/start_bidding_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
-import 'package:mezadpay/pages/login_page.dart';
-import '../services/auth_service.dart';
+import 'package:mezadpay/services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/mazad_pay_logo.dart';
 
 class SplashPage extends StatefulWidget {
@@ -16,41 +17,29 @@ class _SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    _checkRouting();
-  }
+    Future.delayed(const Duration(seconds: 4), () async {
+      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      final seen = prefs.getBool('onboarding_seen') ?? false;
+      final isLoggedIn = await AuthService().isLoggedIn();
+      if (!mounted) return;
 
-  Future<void> _checkRouting() async {
-    // Wait for splash screen minimum delay
-    await Future.delayed(const Duration(seconds: 4));
-    
-    if (!mounted) return;
-    
-    try {
-      final authService = AuthService();
-      final loggedIn = await authService.isLoggedIn();
-      
-      if (loggedIn) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
+      Widget destination;
+      if (!seen) {
+        // First time: show onboarding
+        destination = const LanguagePage();
+      } else if (isLoggedIn) {
+        // Seen onboarding + has valid token: go directly to home
+        destination = const HomePage();
       } else {
-        final registered = await authService.hasRegistered();
-        if (registered) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const LoginPage()),
-          );
-        } else {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const LanguagePage()),
-          );
-        }
+        // Seen onboarding but not logged in: show start/login screen
+        destination = StartBiddingPage();
       }
-    } catch (e) {
-      // Clean fallback in case of storage issues
+
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LanguagePage()),
+        MaterialPageRoute(builder: (_) => destination),
       );
-    }
+    });
   }
 
   @override

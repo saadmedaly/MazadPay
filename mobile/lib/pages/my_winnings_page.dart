@@ -74,6 +74,7 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
         }
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _error = e.toString();
@@ -185,6 +186,10 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
     String imageUrl = 'assets/corolla.png';
     if (winning['images'] != null && winning['images'] is List && (winning['images'] as List).isNotEmpty) {
       imageUrl = (winning['images'] as List)[0].toString();
+    } else if (winning['image_urls'] != null && winning['image_urls'] is List && (winning['image_urls'] as List).isNotEmpty) {
+      imageUrl = (winning['image_urls'] as List)[0].toString();
+    } else if (winning['image_url'] != null) {
+      imageUrl = winning['image_url'].toString();
     } else if (winning['image'] != null) {
       imageUrl = winning['image'].toString();
     }
@@ -205,18 +210,31 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.asset(
-                  imageUrl,
-                  width: 80,
-                  height: 80,
-                  fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) => Container(
-                    width: 80,
-                    height: 80,
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                  ),
-                ),
+                child: imageUrl.startsWith('http')
+                    ? Image.network(
+                        imageUrl,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(
+                          width: 80,
+                          height: 80,
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                        ),
+                      )
+                    : Image.asset(
+                        imageUrl,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(
+                          width: 80,
+                          height: 80,
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                        ),
+                      ),
               ),
               const SizedBox(width: 16),
               Expanded(

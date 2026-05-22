@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mezadpay/services/auth_service.dart';
+import 'package:mezadpay/services/auction_api.dart';
 import 'favorites_api.dart';
 
 /// Service hybride pour les favoris
@@ -62,10 +64,53 @@ class FavoritesService {
     return localFavorites;
   }
   
-  /// Récupérer les données complètes des enchères favorites (depuis le cache local)
+  /// Récupérer les données complètes des enchères favorites
+  /// Fetch depuis l'API pour chaque ID, avec fallback sur le cache local
   Future<List<Map<String, dynamic>>> getFavoriteAuctions() async {
     await _initPrefs();
-    return _getLocalFavoriteAuctions();
+    final ids = await getFavorites();
+    if (ids.isEmpty) return [];
+
+    final auctionApi = AuctionApi();
+    final results = <Map<String, dynamic>>[];
+    final cachedMap = _getLocalFavoriteAuctionsMap();
+
+    for (final id in ids) {
+      try {
+        final response = await auctionApi.getAuctionById(id);
+        if (response.success && response.data != null) {
+          // Backend returns: { "data": { "auction": {...}, "images": [...] } }
+          final auction = response.data!['auction'] as Map<String, dynamic>?;
+          final imagesList = response.data!['images'] as List<dynamic>?;
+          if (auction != null) {
+            // Extract image URLs into a simple list
+            final imageUrls = imagesList
+                ?.map((img) => img is Map ? img['url']?.toString() : null)
+                .where((u) => u != null)
+                .cast<String>()
+                .toList() ?? [];
+            final merged = Map<String, dynamic>.from(auction);
+            merged['images'] = imageUrls;
+            debugPrint('[Favorites] id=$id title=${merged["title_ar"]} images=${imageUrls.length}');
+            cachedMap[id] = merged;
+            results.add(merged);
+          } else if (cachedMap.containsKey(id)) {
+            results.add(cachedMap[id]!);
+          }
+        } else if (cachedMap.containsKey(id)) {
+          results.add(cachedMap[id]!);
+        }
+      } catch (e) {
+        debugPrint('[Favorites] error fetching $id: $e');
+        if (cachedMap.containsKey(id)) {
+          results.add(cachedMap[id]!);
+        }
+      }
+    }
+
+    // Mettre à jour le cache avec les nouvelles données
+    await _saveLocalFavoriteAuctions(cachedMap);
+    return results;
   }
   
   /// Sauvegarder les données d'une enchère favorite en cache
@@ -299,12 +344,6 @@ class FavoritesService {
   }
   
   // ==================== Cache des enchères complètes ====================
-  
-  /// Récupérer les enchères favorites en cache sous forme de liste
-  List<Map<String, dynamic>> _getLocalFavoriteAuctions() {
-    final auctionsMap = _getLocalFavoriteAuctionsMap();
-    return auctionsMap.values.toList();
-  }
   
   /// Récupérer les enchères favorites en cache sous forme de Map
   Map<String, Map<String, dynamic>> _getLocalFavoriteAuctionsMap() {

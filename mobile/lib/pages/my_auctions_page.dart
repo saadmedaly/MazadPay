@@ -7,8 +7,10 @@ import 'dart:convert';
 import 'auction_details_page.dart';
 import 'auction_history_page.dart';
 import 'create_ad_form_page.dart';
+import 'edit_auction_page.dart';
 import '../services/auction_api.dart';
 import '../services/cache_service.dart';
+import '../services/api_service.dart';
 
 class MyAuctionsPage extends ConsumerStatefulWidget {
   const MyAuctionsPage({super.key});
@@ -170,6 +172,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
     } catch (e, stackTrace) {
       debugPrint('Erreur _loadMyAuctions: $e');
       debugPrint('StackTrace: $stackTrace');
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _error = e.toString();
@@ -225,6 +228,28 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
           icon: Icon(Icons.arrow_back_ios, color: isDarkMode ? Colors.white : Colors.black, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CreateAdFormPage()),
+                ).then((_) => _loadMyAuctions());
+              },
+              icon: const Icon(Icons.add, color: Color(0xFF0081FF), size: 20),
+              label: const Text(
+                'إضافة',
+                style: TextStyle(
+                  fontFamily: 'Plus Jakarta Sans',
+                  color: Color(0xFF0081FF),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -546,21 +571,13 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
     final id = auction['id']?.toString() ?? '';
     if (id.isEmpty) return;
 
-    // TODO: Navigation vers la page d'édition
-    // Pour l'instant, afficher un message
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('سيتم فتح صفحة التعديل قريباً'),
-        backgroundColor: Color(0xFF0081FF),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EditAuctionPage(auction: auction),
       ),
-    );
-
-    // Option: Rediriger vers la page de création avec mode édition
-    // Navigator.of(context).push(
-    //   MaterialPageRoute(
-    //     builder: (context) => CreateAdFormPage(editMode: true, auctionData: auction),
-    //   ),
-    // );
+    ).then((updated) {
+      if (updated == true) _loadMyAuctions();
+    });
   }
 
   /// Confirmer la suppression
@@ -689,31 +706,51 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
     final bidCount = auction['bidder_count'] ?? auction['bid_count'] ?? auction['bids_count'] ?? 0;
     final viewCount = auction['views'] ?? auction['view_count'] ?? 0;
 
-     String imageUrl = '';
+    String imageUrl = '';
     bool hasImage = false;
-    
-    final imageUrls = auction['image_urls'];
-    if (imageUrls != null && imageUrls is List && imageUrls.isNotEmpty) {
-      imageUrl = imageUrls[0].toString();
+
+    // Priority order: image_urls (comma-separated string from ListPaginated),
+    // then images list, then individual url fields
+    final rawImageUrls = auction['image_urls'];
+    if (rawImageUrls != null && rawImageUrls.toString().isNotEmpty) {
+      // image_urls can be a comma-separated string OR a List
+      if (rawImageUrls is List && rawImageUrls.isNotEmpty) {
+        imageUrl = rawImageUrls[0].toString();
+      } else {
+        // comma-separated string
+        final parts = rawImageUrls.toString().split(',');
+        imageUrl = parts.first.trim();
+      }
       hasImage = imageUrl.isNotEmpty;
-    } else if (auction['image_url'] != null && auction['image_url'].toString().isNotEmpty) {
-      imageUrl = auction['image_url'].toString();
-      hasImage = true;
-    } else if (auction['images'] != null && auction['images'] is List && (auction['images'] as List).isNotEmpty) {
-      final firstImage = (auction['images'] as List)[0];
-      imageUrl = firstImage is Map ? firstImage['url']?.toString() ?? '' : firstImage.toString();
-      hasImage = imageUrl.isNotEmpty;
-    } else if (auction['image'] != null && auction['image'].toString().isNotEmpty) {
-      imageUrl = auction['image'].toString();
-      hasImage = true;
-    } else if (auction['thumbnail'] != null && auction['thumbnail'].toString().isNotEmpty) {
-      imageUrl = auction['thumbnail'].toString();
-      hasImage = true;
-    } else if (auction['main_image'] != null && auction['main_image'].toString().isNotEmpty) {
-      imageUrl = auction['main_image'].toString();
-      hasImage = true;
     }
-    
+
+    if (!hasImage) {
+      final imgList = auction['images'];
+      if (imgList is List && imgList.isNotEmpty) {
+        final first = imgList[0];
+        imageUrl = first is Map ? first['url']?.toString() ?? '' : first.toString();
+        hasImage = imageUrl.isNotEmpty;
+      }
+    }
+
+    if (!hasImage) {
+      for (final field in ['cover_image_url', 'image_url', 'image', 'thumbnail', 'main_image']) {
+        final v = auction[field]?.toString() ?? '';
+        if (v.isNotEmpty) { imageUrl = v; hasImage = true; break; }
+      }
+    }
+
+    // Fix relative URLs — derive host from API_BASE_URL env
+    if (hasImage && imageUrl.startsWith('/')) {
+      final uri = Uri.tryParse(ApiService.apiBaseUrl);
+      final host = uri != null
+          ? '${uri.scheme}://${uri.host}${uri.hasPort && uri.port != 80 && uri.port != 443 ? ":${uri.port}" : ""}'
+          : 'http://localhost:8082';
+      imageUrl = '$host$imageUrl';
+    }
+
+    debugPrint('[MyAuctions] title=$title imageUrl=$imageUrl hasImage=$hasImage');
+
     // Verifier le type d'image
     bool isNetworkImage = hasImage && (imageUrl.startsWith('http') || imageUrl.startsWith('https'));
     bool isDataUri = hasImage && imageUrl.startsWith('data:image');

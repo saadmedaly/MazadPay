@@ -278,7 +278,32 @@ func (r *auctionRepo) deleteImagesInternal(ctx context.Context, db sqlx.ExtConte
 
 func (r *auctionRepo) GetCategories(ctx context.Context) ([]models.Category, error) {
 	var cats []models.Category
-	err := r.db.SelectContext(ctx, &cats, `SELECT * FROM categories ORDER BY display_order`)
+	err := r.db.SelectContext(ctx, &cats, `
+		SELECT
+			c.id,
+			c.name_ar,
+			c.name_fr,
+			c.name_en,
+			c.parent_id,
+			c.icon_name,
+			c.display_order,
+			c.is_active,
+			c.image_url,
+			c.has_subcategories,
+			COALESCE((
+				SELECT COUNT(*)
+				FROM auctions a
+				WHERE a.status = 'active'
+				  AND (
+				      a.category_id = c.id
+				      OR a.category_id IN (
+				          SELECT id FROM categories sub WHERE sub.parent_id = c.id
+				      )
+				  )
+			), 0) AS auction_count,
+			(SELECT COUNT(*) FROM categories sub WHERE sub.parent_id = c.id) AS subcategories_count
+		FROM categories c
+		ORDER BY c.display_order`)
 	return cats, err
 }
 
@@ -302,15 +327,19 @@ func (r *auctionRepo) DeleteCategory(ctx context.Context, id int) error {
 
 func (r *auctionRepo) GetLocations(ctx context.Context) ([]models.Location, error) {
 	var locs []models.Location
-	err := r.db.SelectContext(ctx, &locs, `SELECT * FROM locations ORDER BY city_name_ar, area_name_ar`)
+	err := r.db.SelectContext(ctx, &locs, `
+		SELECT DISTINCT ON (city_name_ar) *
+		FROM locations
+		ORDER BY city_name_ar, area_name_ar`)
 	return locs, err
 }
 
 func (r *auctionRepo) GetLocationsByCountry(ctx context.Context, countryID int) ([]models.Location, error) {
-	// Pour l'instant, comme country_id n'existe pas dans la table locations,
-	// nous retournons toutes les locations triées par ville
 	var locs []models.Location
-	err := r.db.SelectContext(ctx, &locs, `SELECT * FROM locations ORDER BY city_name_ar, area_name_ar`)
+	err := r.db.SelectContext(ctx, &locs, `
+		SELECT DISTINCT ON (city_name_ar) *
+		FROM locations
+		ORDER BY city_name_ar, area_name_ar`)
 	return locs, err
 }
 
@@ -449,13 +478,15 @@ func (r *auctionRepo) ListPaginated(ctx context.Context, page, perPage int, f Au
 
 	offset := (page - 1) * perPage
 	query := fmt.Sprintf(`
-        SELECT a.*, 
+        SELECT a.*,
                c.name_ar as category_name_ar,
-               l.city_name_ar as city_name_ar
+               l.city_name_ar as city_name_ar,
+               (SELECT string_agg(ai.url, ',' ORDER BY ai.display_order)
+                FROM auction_images ai WHERE ai.auction_id = a.id) as image_urls
         FROM auctions a
         LEFT JOIN categories c ON a.category_id = c.id
         LEFT JOIN locations l ON a.location_id = l.id
-        %s 
+        %s
         ORDER BY a.created_at DESC LIMIT $%d OFFSET $%d`,
 		where, i, i+1)
 

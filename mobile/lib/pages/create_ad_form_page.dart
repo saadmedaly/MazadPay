@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, Uint8List, debugPrint;
 import 'package:image_picker/image_picker.dart';
 
 import 'auction_pending_approval_page.dart';
@@ -23,11 +23,13 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   final _phoneController = TextEditingController();
   final _priceController = TextEditingController();
   
-  String? _selectedMainCategory;
-  String? _selectedSubCategory;
+  String? _selectedMainCategory;     // display name (nameAr)
+  int?    _selectedMainCategoryId;   // actual ID sent to API
+  String? _selectedSubCategory;      // display name (nameAr)
+  int?    _selectedSubCategoryId;    // actual ID sent to API
   String? _selectedCity;
   DateTime? _endTime;
-  final List<File> _selectedImageFiles = []; // Fichiers locaux sélectionnés
+  final List<XFile> _selectedImageFiles = []; // XFile works on web + mobile
   final AuctionApi _auctionApi = AuctionApi();
   final R2UploadService _r2UploadService = R2UploadService();
   final CategoryApi _categoryApi = CategoryApi();
@@ -48,6 +50,8 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   // Charger depuis le cache d'abord (rapide), puis fetch en arrière-plan
   Future<void> _loadFromCache() async {
     try {
+      // Clear stale categories cache to ensure fresh data from API
+      await CacheService.instance.clearCategoriesCache();
       // Charger catégories depuis cache
       final cachedCategories = await CacheService.instance.getCachedCategories();
       if (cachedCategories != null && cachedCategories.isNotEmpty) {
@@ -128,15 +132,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     }
   }
   
-  List<Category> get _subCategories {
-    if (_selectedMainCategory == null) return [];
-    final parent = _categories.firstWhere(
-      (c) => c.nameAr == _selectedMainCategory,
-      orElse: () => Category(id: 0, nameAr: '', nameFr: '', nameEn: ''),
-    );
-    return _categories.where((c) => c.parentId == parent.id).toList();
-  }
-  
   // Helper pour obtenir le nom en arabe
   Future<void> _submitAd() async {
     final name = _nameController.text.trim();
@@ -168,6 +163,8 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         startingPrice: price,
         category: _selectedMainCategory ?? '',
         subCategory: _selectedSubCategory ?? '',
+        categoryId: _selectedMainCategoryId,
+        subCategoryId: _selectedSubCategoryId,
         location: _selectedCity ?? '',
         images: [], // Créer d'abord sans images
         phone: phone,
@@ -175,6 +172,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       );
 
       if (!createResponse.success || createResponse.data == null) {
+        if (!mounted) return;
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(createResponse.message ?? AppLocalizations.of(context)!.error_create_auction)),
@@ -185,6 +183,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       // Étape 2: Récupérer l'ID de l'enchère créée
       final auctionId = createResponse.data!['id'] as String?;
       if (auctionId == null) {
+        if (!mounted) return;
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(AppLocalizations.of(context)!.error_create_auction)),
@@ -198,14 +197,17 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         _uploadProgress = 0.0;
       });
 
-      final uploadedUrls = await _r2UploadService.uploadAuctionImages(
+      debugPrint('[Upload] auction_id=$auctionId images=${_selectedImageFiles.length}');
+      final uploadedUrls = await _r2UploadService.uploadAuctionXFiles(
         auctionId: auctionId,
         images: _selectedImageFiles,
         onProgress: (progress) {
           setState(() => _uploadProgress = progress);
         },
       );
+      debugPrint('[Upload] uploaded=${uploadedUrls.length} urls=$uploadedUrls');
 
+      if (!mounted) return;
       setState(() {
         _isUploadingImages = false;
         _isLoading = false;
@@ -220,6 +222,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
 
       final response = createResponse;
 
+      if (!mounted) return;
       setState(() => _isLoading = false);
 
       if (response.success) {
@@ -232,6 +235,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppLocalizations.of(context)!.error_connection)),
@@ -534,11 +538,27 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
                 margin: const EdgeInsetsDirectional.only(start: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  image: DecorationImage(
-                    image: FileImage(_selectedImageFiles[index]),
-                    fit: BoxFit.cover,
-                  ),
                 ),
+                child: kIsWeb
+                    ? FutureBuilder<Uint8List>(
+                        future: _selectedImageFiles[index].readAsBytes(),
+                        builder: (_, snap) => snap.hasData
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: Image.memory(snap.data!, width: 100, height: 100, fit: BoxFit.cover),
+                              )
+                            : Container(width: 100, height: 100, color: Colors.grey[200]),
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(
+                          _selectedImageFiles[index].path,
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(width: 100, height: 100, color: Colors.grey[200]),
+                        ),
+                      ),
               ),
               Positioned(
                 top: 4,
@@ -586,7 +606,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         return;
       }
 
-      final filesToAdd = pickedFiles.take(remainingSlots).map((xfile) => File(xfile.path)).toList();
+      final filesToAdd = pickedFiles.take(remainingSlots).toList();
 
       setState(() {
         _selectedImageFiles.addAll(filesToAdd);
@@ -629,26 +649,57 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       );
       return;
     }
-    
-    // Get parent categories (no parent_id)
+
     final parentCategories = _categories.where((c) => c.parentId == null).toList();
-    
+
+    List<Category> displayItems;
+    if (isMain) {
+      displayItems = parentCategories;
+    } else {
+      // Find selected parent by ID (more reliable than nameAr)
+      final parentId = _selectedMainCategoryId;
+      if (parentId == null) {
+        // Fallback: search by nameAr
+        final parent = _categories.firstWhere(
+          (c) => c.nameAr == _selectedMainCategory && c.parentId == null,
+          orElse: () => Category(id: 0, nameAr: '', nameFr: '', nameEn: ''),
+        );
+        displayItems = parent.id == 0 ? [] : _categories.where((c) => c.parentId == parent.id).toList();
+      } else {
+        displayItems = _categories.where((c) => c.parentId == parentId).toList();
+      }
+      debugPrint('[CreateAd] selectedCategoryId=$parentId selectedCategoryName=$_selectedMainCategory subcategories=${displayItems.length}');
+      debugPrint('[CreateAd] subcategory names: ${displayItems.map((c) => c.nameAr).toList()}');
+    }
+
+    if (!isMain && displayItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد فئات فرعية لهذه الفئة'))
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => _CategorySheet(
         title: isMain ? AppLocalizations.of(context)!.text_98 : AppLocalizations.of(context)!.text_99,
-        items: isMain
-          ? parentCategories.map((c) => c.nameAr).cast<String>().toList()
-          : _subCategories.map((c) => c.nameAr).cast<String>().toList(),
+        items: displayItems.map((c) => c.nameAr).toList(),
         onSelected: (val) {
+          final selected = displayItems.firstWhere(
+            (c) => c.nameAr == val,
+            orElse: () => Category(id: 0, nameAr: val, nameFr: val, nameEn: val),
+          );
           setState(() {
             if (isMain) {
               _selectedMainCategory = val;
-              _selectedSubCategory = null; // Reset subcategory when main changes
+              _selectedMainCategoryId = selected.id == 0 ? null : selected.id;
+              _selectedSubCategory = null;
+              _selectedSubCategoryId = null;
             } else {
               _selectedSubCategory = val;
+              _selectedSubCategoryId = selected.id == 0 ? null : selected.id;
             }
           });
           Navigator.of(context).pop();

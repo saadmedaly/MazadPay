@@ -81,7 +81,7 @@ export async function uploadAuctionImages(auctionId: string, images: File[]): Pr
   })
 
   const { data } = await client.post<APIResponse<UploadImagesResponse>>(
-    `/v1/api/auctions/${auctionId}/images`,
+    `/v1/api/admin/auctions/${auctionId}/images`,
     formData,
     {
       timeout: 60_000,

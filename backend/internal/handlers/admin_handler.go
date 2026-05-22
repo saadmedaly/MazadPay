@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
@@ -20,10 +22,21 @@ type AdminHandler struct {
 	svc       services.AdminService
 	reportSvc services.ReportService
 	logger    *zap.Logger
+	rdb       *redis.Client
 }
 
-func NewAdminHandler(svc services.AdminService, reportSvc services.ReportService, logger *zap.Logger) *AdminHandler {
-	return &AdminHandler{svc: svc, reportSvc: reportSvc, logger: logger}
+func NewAdminHandler(svc services.AdminService, reportSvc services.ReportService, logger *zap.Logger, rdb ...*redis.Client) *AdminHandler {
+	h := &AdminHandler{svc: svc, reportSvc: reportSvc, logger: logger}
+	if len(rdb) > 0 {
+		h.rdb = rdb[0]
+	}
+	return h
+}
+
+func (h *AdminHandler) invalidateCategoriesCache(ctx context.Context) {
+	if h.rdb != nil {
+		h.rdb.Del(ctx, "categories")
+	}
 }
 
 // Dashboard stats
@@ -334,9 +347,14 @@ func (h *AdminHandler) UpdateAuction(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	endTime, err := time.Parse(time.RFC3339, req.EndTime)
-	if err != nil {
-		return BadRequest(c, "Invalid end_time format, use RFC3339")
+	// end_time is optional — zero value means "keep existing" in service
+	var endTime time.Time
+	if req.EndTime != "" {
+		var parseErr error
+		endTime, parseErr = time.Parse(time.RFC3339, req.EndTime)
+		if parseErr != nil {
+			return BadRequest(c, "Invalid end_time format, use RFC3339")
+		}
 	}
 
 	var startTime *time.Time
@@ -635,6 +653,7 @@ func (h *AdminHandler) CreateCategory(c *fiber.Ctx) error {
 	if err := h.svc.CreateCategory(c.Context(), &cat); err != nil {
 		return InternalError(c, "Failed to create category: "+err.Error())
 	}
+	h.invalidateCategoriesCache(c.Context())
 	return Created(c, cat)
 }
 
@@ -648,6 +667,7 @@ func (h *AdminHandler) UpdateCategory(c *fiber.Ctx) error {
 	if err := h.svc.UpdateCategory(c.Context(), &cat); err != nil {
 		return InternalError(c, "Failed to update category: "+err.Error())
 	}
+	h.invalidateCategoriesCache(c.Context())
 	return OK(c, cat)
 }
 
@@ -656,6 +676,7 @@ func (h *AdminHandler) DeleteCategory(c *fiber.Ctx) error {
 	if err := h.svc.DeleteCategory(c.Context(), id); err != nil {
 		return InternalError(c, "Failed to delete category: "+err.Error())
 	}
+	h.invalidateCategoriesCache(c.Context())
 	return OK(c, fiber.Map{"message": "Category deleted"})
 }
 
@@ -1198,6 +1219,70 @@ func (h *AdminHandler) ExportRevenueCSV(c *fiber.Ctx) error {
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=revenue_%s.csv", time.Now().Format("2006-01-02")))
 	
 	return c.SendString(csvData)
+}
+
+// UploadAuctionImages uploads images for an auction (admin bypass — no seller ownership check)
+func (h *AdminHandler) UploadAuctionImages(c *fiber.Ctx) error {
+	auctionID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		h.logger.Error("[AdminUploadAuctionImages] Media service not available")
+		return InternalError(c, "Media service not available")
+	}
+
+	form, err := c.MultipartForm()
+	if err != nil {
+		h.logger.Error("[AdminUploadAuctionImages] Failed to parse multipart form", zap.Error(err))
+		return BadRequest(c, "Failed to parse form data: "+err.Error())
+	}
+
+	files := form.File["images"]
+	if len(files) == 0 {
+		return BadRequest(c, "No images provided")
+	}
+
+	// Upload each image individually using UploadFile
+	var urls []string
+	for _, file := range files {
+		if file.Size > 10*1024*1024 {
+			return BadRequest(c, "File too large: "+file.Filename+" (max 10MB)")
+		}
+		f, err := file.Open()
+		if err != nil {
+			return InternalError(c, "Failed to open file: "+file.Filename)
+		}
+		folder := "auctions/" + auctionID.String()
+		url, uploadErr := mediaSvc.UploadFile(c.Context(), f, file, folder)
+		f.Close()
+		if uploadErr != nil {
+			h.logger.Error("[AdminUploadAuctionImages] Upload failed", zap.String("file", file.Filename), zap.Error(uploadErr))
+			return InternalError(c, "Failed to upload: "+file.Filename+": "+uploadErr.Error())
+		}
+		urls = append(urls, url)
+	}
+
+	if len(urls) == 0 {
+		return InternalError(c, "No images uploaded")
+	}
+	if err := h.svc.AdminAddAuctionImages(c.Context(), auctionID, urls); err != nil {
+		h.logger.Error("[AdminUploadAuctionImages] Failed to save image URLs", zap.Error(err))
+		return InternalError(c, "Failed to save image URLs: "+err.Error())
+	}
+
+	h.logger.Info("[AdminUploadAuctionImages] Success",
+		zap.String("auction_id", auctionID.String()),
+		zap.Int("count", len(urls)),
+		zap.Strings("urls", urls))
+
+	return OK(c, fiber.Map{
+		"message": "Images uploaded successfully",
+		"urls":    urls,
+		"count":   len(urls),
+	})
 }
 
 // UploadCategoryImage uploads a category image to R2 (categories/ folder)

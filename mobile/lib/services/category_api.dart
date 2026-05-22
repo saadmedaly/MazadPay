@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:mezadpay/models/models.dart';
 import 'package:mezadpay/services/api_service.dart';
 
@@ -17,8 +18,6 @@ class CategoryApi {
         queryParameters: queryParams.isNotEmpty ? queryParams : null,
       );
 
-      print('=== CATEGORY API DEBUG ===');
-      print('Response type: ${response.runtimeType}');
 
       if (response == null) {
         return ApiResponse.error('Null response from server');
@@ -46,7 +45,7 @@ class CategoryApi {
         return ApiResponse.error('Invalid response format: expected Map, got ${response.runtimeType}');
       }
     } catch (e) {
-      print('Category API error: $e');
+      debugPrint('Category API error: $e');
       return ApiResponse.error(e.toString());
     }
   }

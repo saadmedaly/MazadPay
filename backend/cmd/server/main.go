@@ -152,14 +152,23 @@ func main() {
 		}
 	}()
 
-	// Démarrage gracieux
+	// PORT resolution: Render injects PORT, fallback to APP_PORT, then 8082
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = cfg.App.Port
+	}
+	if port == "" {
+		port = "8082"
+	}
+
+	// Démarrage gracieux — bind on 0.0.0.0 for Render
 	go func() {
-		if err := app.Listen(":" + cfg.App.Port); err != nil {
+		if err := app.Listen("0.0.0.0:" + port); err != nil {
 			logger.Fatal("Server failed", zap.Error(err))
 		}
 	}()
 
-	logger.Info("Server started", zap.String("port", cfg.App.Port))
+	logger.Info("Server started", zap.String("port", port))
 
 	// Arrêt gracieux sur signal OS
 	quit := make(chan os.Signal, 1)

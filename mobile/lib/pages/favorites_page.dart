@@ -3,13 +3,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
 import 'package:mezadpay/services/favorites_service.dart';
+import 'package:mezadpay/services/api_service.dart';
 import 'auction_details_page.dart';
 
-class FavoritesPage extends ConsumerWidget {
+class FavoritesPage extends ConsumerStatefulWidget {
   const FavoritesPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FavoritesPage> createState() => _FavoritesPageState();
+}
+
+class _FavoritesPageState extends ConsumerState<FavoritesPage> {
+  Future<List<Map<String, dynamic>>>? _auctionsFuture;
+
+  void _loadAuctions() {
+    setState(() {
+      _auctionsFuture = FavoritesService().getFavoriteAuctions();
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _auctionsFuture = FavoritesService().getFavoriteAuctions();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final favoritesAsync = ref.watch(favoritesProvider);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
@@ -33,7 +53,6 @@ class FavoritesPage extends ConsumerWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          // Bouton de synchronisation manuelle
           IconButton(
             icon: const Icon(Icons.sync, size: 20),
             onPressed: () async {
@@ -41,10 +60,10 @@ class FavoritesPage extends ConsumerWidget {
               await service.syncPendingFavorites();
               await service.migrateLocalFavorites();
               ref.read(favoritesProvider.notifier).refresh();
+              _loadAuctions();
               if (context.mounted) {
-                final l10n = AppLocalizations.of(context)!;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(l10n.favorites_synced)),
+                  SnackBar(content: Text(AppLocalizations.of(context)!.favorites_synced)),
                 );
               }
             },
@@ -74,15 +93,48 @@ class FavoritesPage extends ConsumerWidget {
         ),
         data: (favoriteIds) {
           if (favoriteIds.isEmpty) {
-            return _buildEmptyState(context, isDarkMode);
+            return _buildEmptyState(isDarkMode);
           }
-          return _buildFavoritesList(context, ref, isDarkMode, favoriteIds.toList());
+          return FutureBuilder<List<Map<String, dynamic>>>(
+            future: _auctionsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(child: Text('خطأ في تحميل المزادات', style: TextStyle(color: Colors.grey)));
+              }
+
+              final auctions = snapshot.data ?? [];
+
+              if (auctions.isEmpty) {
+                final idList = favoriteIds.toList();
+                return ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: idList.length,
+                  itemBuilder: (context, index) => _buildPlaceholder(idList[index]),
+                );
+              }
+
+              return GridView.builder(
+                padding: const EdgeInsets.all(20),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 0.58,
+                ),
+                itemCount: auctions.length,
+                itemBuilder: (context, index) => _buildFavoriteItem(auctions[index], isDarkMode),
+              );
+            },
+          );
         },
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, bool isDarkMode) {
+  Widget _buildEmptyState(bool isDarkMode) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -91,83 +143,14 @@ class FavoritesPage extends ConsumerWidget {
           const SizedBox(height: 16),
           Text(
             AppLocalizations.of(context)!.text_191,
-            style: TextStyle(
-              fontFamily: 'Plus Jakarta Sans',
-              fontSize: 16,
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            AppLocalizations.of(context)!.favorites_local_storage,
-            style: TextStyle(
-              fontFamily: 'Plus Jakarta Sans',
-              fontSize: 12,
-              color: Colors.grey.withOpacity(0.7),
-            ),
+            style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, color: Colors.grey),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFavoritesList(BuildContext context, WidgetRef ref, bool isDarkMode, List<String> favoriteIds) {
-    // TODO: Récupérer les données complètes des enchères depuis le cache ou l'API
-    // Pour l'instant, affichons juste les IDs avec des placeholders
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: FavoritesService().getFavoriteAuctions(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final auctions = snapshot.data ?? [];
-        
-        if (auctions.isEmpty) {
-          // Si pas de données en cache, afficher les IDs avec placeholder
-          return ListView.builder(
-            padding: const EdgeInsets.all(20),
-            itemCount: favoriteIds.length,
-            itemBuilder: (context, index) {
-              return _buildFavoriteItemPlaceholder(
-                context,
-                ref,
-                isDarkMode,
-                favoriteIds[index],
-              );
-            },
-          );
-        }
-
-        return GridView.builder(
-          padding: const EdgeInsets.all(20),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 0.58,
-          ),
-          itemCount: auctions.length,
-          itemBuilder: (context, index) {
-            final auction = auctions[index];
-            return _buildFavoriteItem(
-              context,
-              ref,
-              isDarkMode,
-              auction,
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildFavoriteItemPlaceholder(
-    BuildContext context,
-    WidgetRef ref,
-    bool isDarkMode,
-    String auctionId,
-  ) {
+  Widget _buildPlaceholder(String auctionId) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -182,25 +165,44 @@ class FavoritesPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildFavoriteItem(
-    BuildContext context,
-    WidgetRef ref,
-    bool isDarkMode,
-    Map<String, dynamic> auction,
-  ) {
-    final auctionId = auction['id']?.toString() ?? auction['auction_id']?.toString() ?? '';
-    
+  Widget _buildFavoriteItem(Map<String, dynamic> auction, bool isDarkMode) {
+    final auctionId = auction['id']?.toString() ?? '';
+
+    // Title: prefer Arabic, fallback to French/English
+    final title = (auction['title_ar']?.toString().isNotEmpty == true
+            ? auction['title_ar']
+            : null) ??
+        auction['title_fr']?.toString() ??
+        auction['title_en']?.toString() ??
+        auction['title']?.toString() ??
+        '';
+
+    // Price
+    final price = auction['current_price'] ?? auction['start_price'] ?? 0;
+
+    // Image URL: images list first, then image_url field
+    String? imageUrl;
+    final images = auction['images'];
+    if (images is List && images.isNotEmpty) {
+      imageUrl = images.first?.toString();
+    }
+    imageUrl ??= auction['image_url']?.toString() ?? auction['cover_image_url']?.toString();
+    // Fix relative URLs — derive host from API_BASE_URL env
+    if (imageUrl != null && imageUrl.startsWith('/')) {
+      final uri = Uri.tryParse(ApiService.apiBaseUrl);
+      final host = uri != null
+          ? '${uri.scheme}://${uri.host}${uri.hasPort && uri.port != 80 && uri.port != 443 ? ":${uri.port}" : ""}'
+          : 'http://localhost:8082';
+      imageUrl = '$host$imageUrl';
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.grey.withOpacity(0.1)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -210,19 +212,22 @@ class FavoritesPage extends ConsumerWidget {
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: Image.asset(
-                  auction['images'] is List && (auction['images'] as List).isNotEmpty
-                      ? auction['images'][0]
-                      : 'assets/corolla.png',
-                  height: 120,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) => Container(
-                    height: 120,
-                    color: Colors.grey[300],
-                    child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                  ),
-                ),
+                child: imageUrl != null && imageUrl.startsWith('http')
+                    ? Image.network(
+                        imageUrl,
+                        height: 120,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (c, child, progress) => progress == null
+                            ? child
+                            : Container(
+                                height: 120,
+                                color: Colors.grey[200],
+                                child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                              ),
+                        errorBuilder: (c, e, s) => _imagePlaceholder(),
+                      )
+                    : _imagePlaceholder(),
               ),
               Positioned(
                 top: 8,
@@ -231,10 +236,7 @@ class FavoritesPage extends ConsumerWidget {
                   onTap: () => ref.read(favoritesProvider.notifier).removeFavorite(auctionId),
                   child: Container(
                     padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                     child: const Icon(Icons.favorite, color: Colors.red, size: 20),
                   ),
                 ),
@@ -246,54 +248,19 @@ class FavoritesPage extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Builder(builder: (context) {
-                  // Récupérer le titre avec fallback intelligent
-                  final locale = Localizations.localeOf(context).languageCode;
-                  String title = '';
-                  
-                  // 1. Essayer d'abord la langue actuelle de l'app
-                  switch (locale) {
-                    case 'ar':
-                      title = auction['title_ar']?.toString() ?? '';
-                      break;
-                    case 'fr':
-                      title = auction['title_fr']?.toString() ?? '';
-                      break;
-                    case 'en':
-                      title = auction['title_en']?.toString() ?? '';
-                      break;
-                  }
-                  
-                  // 2. Si vide, essayer l'arabe (langue par défaut)
-                  if (title.isEmpty) {
-                    title = auction['title_ar']?.toString() ?? '';
-                  }
-                  
-                  // 3. Si toujours vide, essayer les autres langues
-                  if (title.isEmpty) {
-                    title = auction['title_fr']?.toString() ??
-                            auction['title_en']?.toString() ??
-                            auction['title']?.toString() ??
-                            '';
-                  }
-                  
-                  // 4. Si toujours vide, afficher "Sans titre"
-                  if (title.isEmpty) title = AppLocalizations.of(context)!.no_title;
-                  
-                  return Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Plus Jakarta Sans',
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  );
-                }),
+                Text(
+                  title.isNotEmpty ? title : AppLocalizations.of(context)!.no_title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Plus Jakarta Sans',
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  '${auction['current_price'] ?? auction['current_bid'] ?? auction['price'] ?? 0} MRU',
+                  '$price MRU',
                   style: const TextStyle(
                     fontFamily: 'Plus Jakarta Sans',
                     fontSize: 16,
@@ -305,29 +272,20 @@ class FavoritesPage extends ConsumerWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => AuctionDetailsPage(
-                            auctionId: auctionId,
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: auctionId.isNotEmpty
+                        ? () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => AuctionDetailsPage(auctionId: auctionId)),
+                            )
+                        : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0081FF),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     child: Text(
                       AppLocalizations.of(context)!.text_192,
-                      style: const TextStyle(
-                        fontFamily: 'Plus Jakarta Sans',
-                        fontSize: 12,
-                      ),
+                      style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12),
                     ),
                   ),
                 ),
@@ -336,6 +294,15 @@ class FavoritesPage extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      height: 120,
+      width: double.infinity,
+      color: Colors.grey[200],
+      child: const Icon(Icons.image_not_supported, color: Colors.grey),
     );
   }
 }

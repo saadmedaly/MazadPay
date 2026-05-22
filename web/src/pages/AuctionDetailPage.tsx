@@ -68,7 +68,8 @@ export function AuctionDetailPage() {
   useEffect(() => {
     if (!auction) return
 
-    const wsUrl = `ws://localhost:8082/ws/auction/${id}?token=${token || ''}`
+    const wsBase = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8082'
+    const wsUrl = `${wsBase}/ws/auction/${id}?token=${token || ''}`
     const ws = new WebSocket(wsUrl)
 
 
@@ -529,7 +530,7 @@ export function AuctionDetailPage() {
                        <button
                          onClick={() => {
                             // Send bid via WebSocket
-                            const ws = new WebSocket(`ws://localhost:8082/ws/auction/${id}?token=${token || ''}`)
+                            const ws = new WebSocket(`${import.meta.env.VITE_WS_URL ?? 'ws://localhost:8082'}/ws/auction/${id}?token=${token || ''}`)
                             ws.onopen = () => {
                               ws.send(JSON.stringify({
                                 type: 'place_bid',

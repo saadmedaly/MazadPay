@@ -17,6 +17,12 @@ class _StartBiddingPageState extends State<StartBiddingPage> {
   int _currentPage = 0;
 
   @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final List<Map<String, String>> onboardingData = [
       {

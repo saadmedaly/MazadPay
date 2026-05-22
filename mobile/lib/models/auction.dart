@@ -22,6 +22,14 @@ class Auction {
   final String? mileage;
   final String? model;
 
+  // General item properties
+  final String? condition;
+  final String? brand;
+  final String? category;
+  final String? city;
+  final Map<String, dynamic>? itemDetails;
+  final DateTime? startTime;
+
   Auction({
     required this.id,
     required this.title,
@@ -43,6 +51,12 @@ class Auction {
     this.year,
     this.mileage,
     this.model,
+    this.condition,
+    this.brand,
+    this.category,
+    this.city,
+    this.itemDetails,
+    this.startTime,
   });
 
   Auction copyWith({
@@ -66,6 +80,12 @@ class Auction {
     String? year,
     String? mileage,
     String? model,
+    String? condition,
+    String? brand,
+    String? category,
+    String? city,
+    Map<String, dynamic>? itemDetails,
+    DateTime? startTime,
   }) {
     return Auction(
       id: id ?? this.id,
@@ -88,6 +108,12 @@ class Auction {
       year: year ?? this.year,
       mileage: mileage ?? this.mileage,
       model: model ?? this.model,
+      condition: condition ?? this.condition,
+      brand: brand ?? this.brand,
+      category: category ?? this.category,
+      city: city ?? this.city,
+      itemDetails: itemDetails ?? this.itemDetails,
+      startTime: startTime ?? this.startTime,
     );
   }
 
@@ -106,11 +132,16 @@ class Auction {
       id: json['id']?.toString() ?? '',
       title: json['title_ar']?.toString() ?? json['title']?.toString() ?? '',
       description: json['description_ar']?.toString() ?? json['description']?.toString() ?? '',
-      imageUrls: images.isNotEmpty ? images : ['assets/corolla.png'],
+      imageUrls: images,
       startPrice: double.tryParse(json['starting_price']?.toString() ?? json['start_price']?.toString() ?? '0') ?? 0,
       currentPrice: double.tryParse(json['current_price']?.toString() ?? json['current_bid']?.toString() ?? '0') ?? 0,
       minIncrement: double.tryParse(json['min_increment']?.toString() ?? '500') ?? 500,
-      endTime: json['end_time'] != null ? DateTime.parse(json['end_time']) : DateTime.now(),
+      endTime: () {
+        final raw = json['end_time'] != null ? DateTime.parse(json['end_time']) : DateTime.now();
+        final startRaw = json['start_time'] != null ? DateTime.parse(json['start_time']) : DateTime.now();
+        final maxEnd = startRaw.add(const Duration(hours: 24));
+        return raw.isAfter(maxEnd) ? maxEnd : raw;
+      }(),
       bidderCount: json['bidder_count'] ?? json['bid_count'] ?? 0,
       views: json['views'] ?? json['view_count'] ?? 0,
       lotNumber: json['lot_number']?.toString() ?? 'N/A',
@@ -123,6 +154,16 @@ class Auction {
       year: json['year']?.toString(),
       mileage: json['mileage']?.toString(),
       model: json['model']?.toString(),
+      condition: json['condition']?.toString(),
+      brand: json['brand']?.toString(),
+      category: json['category']?.toString(),
+      city: json['city']?.toString(),
+      itemDetails: json['item_details'] is Map<String, dynamic>
+          ? json['item_details'] as Map<String, dynamic>
+          : null,
+      startTime: json['start_time'] != null
+          ? DateTime.tryParse(json['start_time'].toString())
+          : null,
     );
   }
 

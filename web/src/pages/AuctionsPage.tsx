@@ -36,8 +36,8 @@ const EMPTY_FORM = {
   description_ar: '', description_fr: '', description_en: '',
   start_price: 0, buy_now_price: 0, min_increment: 0, insurance_amount: 0,
   category_id: 0, location_id: 0,  // Will be set dynamically from available data
-  start_time: '', 
-  end_time: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+  start_time: '',
+  end_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
   phone_contact: '',
   images: [] as string[],
   item_details: {} as Record<string, any>,
@@ -147,51 +147,27 @@ export function AuctionsPage() {
       return null
     }
 
-    // End time validation
-    if (!form.end_time) { 
-      toast.error('تاريخ الإغلاق مطلوب - يرجى تحديد تاريخ نهاية المزاد') 
-      return null 
-    }
-
-    let end_time: string
-    try { 
-      const d = new Date(form.end_time)
-      if (isNaN(d.getTime())) {
-        toast.error('تاريخ الإغلاق غير صالح - تنسيق التاريخ غير صحيح')
-        return null
-      }
-      if (d <= new Date()) {
-        toast.error('تاريخ الإغلاق يجب أن يكون في المستقبل - يرجى اختيار تاريخ لاحق')
-        return null
-      }
-      end_time = d.toISOString() 
-    }
-    catch { 
-      toast.error('تاريخ الإغلاق غير صالح - حدث خطأ في تحليل التاريخ') 
-      return null 
-    }
-
     // Start time validation (optional)
     let start_time: string | undefined
+    let effectiveStart: Date = new Date()
     if (form.start_time) {
-      try { 
+      try {
         const st = new Date(form.start_time)
         if (isNaN(st.getTime())) {
           toast.error('تاريخ البدء غير صالح')
           return null
         }
-        // Check if start time is after end time
-        if (end_time && st > new Date(end_time)) {
-          toast.error('تاريخ البدء يجب أن يكون قبل تاريخ الإغلاق')
-          return null
-        }
-        start_time = st.toISOString() 
+        start_time = st.toISOString()
+        effectiveStart = st
       }
-      catch { 
-        toast.error('تاريخ البدء غير صالح') 
-        return null 
+      catch {
+        toast.error('تاريخ البدء غير صالح')
+        return null
       }
     }
+
+    // end_time is always start_time + 24h (enforced here regardless of form value)
+    const end_time = new Date(effectiveStart.getTime() + 24 * 60 * 60 * 1000).toISOString()
 
     // Category validation
     if (!form.category_id || form.category_id === 0) {
@@ -839,11 +815,17 @@ export function AuctionsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ البدء</label>
-                <Input type="datetime-local" value={form.start_time} onChange={e => setForm(f => ({...f, start_time: e.target.value}))} />
+                <Input type="datetime-local" value={form.start_time} onChange={e => {
+                  const st = e.target.value
+                  const endAuto = st
+                    ? new Date(new Date(st).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
+                    : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
+                  setForm(f => ({...f, start_time: st, end_time: endAuto}))
+                }} />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ الإغلاق <span className="text-red-500">*</span></label>
-                <Input type="datetime-local" value={form.end_time} onChange={e => setForm(f => ({...f, end_time: e.target.value}))} />
+                <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ الإغلاق <span className="text-red-500">*</span> <span className="text-surface-muted text-xs">(24 ساعة تلقائياً)</span></label>
+                <Input type="datetime-local" value={form.end_time} readOnly className="opacity-70 cursor-not-allowed" onChange={() => {}} />
               </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/start_bidding_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -123,6 +124,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                               curve: Curves.easeInOut,
                             );
                           } else {
+                            SharedPreferences.getInstance().then((prefs) {
+                              prefs.setBool('onboarding_seen', true);
+                            });
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
                                 builder: (_) => StartBiddingPage(),
@@ -157,6 +161,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       height: 48,
                       child: ElevatedButton(
                         onPressed: () {
+                          SharedPreferences.getInstance().then((prefs) {
+                            prefs.setBool('onboarding_seen', true);
+                          });
                           Navigator.of(context).pushReplacement(
                             MaterialPageRoute(
                               builder: (_) => StartBiddingPage(),

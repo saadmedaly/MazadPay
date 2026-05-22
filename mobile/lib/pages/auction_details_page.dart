@@ -17,7 +17,9 @@ import '../services/chat_service.dart';
 import '../services/auth_service.dart';
 import '../models/message.dart';
 import '../pages/chat/chat_room_page.dart';
+import '../pages/how_to_bid_page.dart';
 import '../widgets/app_modals.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/auction_provider_api.dart';
 import '../models/bid.dart' as model_bid;
 import 'package:cached_network_image/cached_network_image.dart';
@@ -73,6 +75,86 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       });
     }
   }
+
+  // ─── WhatsApp support contact ───────────────────────────────────────────
+  static const String _supportPhone = '22236601175';
+
+  Future<void> _openWhatsApp() async {
+    final uri = Uri.parse('https://wa.me/$_supportPhone');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذّر فتح واتساب. تأكد من تثبيته على جهازك.')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذّر فتح واتساب. تأكد من تثبيته على جهازك.')),
+      );
+    }
+  }
+
+  void _showTermsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        builder: (_, controller) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'أحكام وشروط المزايدة',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  children: const [
+                    Text(
+                      'تتم المزايدة وفق الشروط المحددة من إدارة MazadPay.\n\n'
+                      '١. يجب على المزايد الالتزام بالسعر الذي يقدمه، وفي حال الفوز يجب إكمال عملية الدفع خلال المدة المحددة.\n\n'
+                      '٢. لا يحق للمزايد سحب عرضه بعد تقديمه.\n\n'
+                      '٣. تحتفظ الإدارة بحق إلغاء أي مزايدة مخالفة للأنظمة والقوانين المعمول بها.\n\n'
+                      '٤. في حال عدم إتمام الدفع خلال المهلة المحددة، يحق للإدارة إلغاء الفوز ومنحه للمزايد التالي.\n\n'
+                      '٥. جميع المعلومات المقدمة يجب أن تكون صحيحة ودقيقة.\n\n'
+                      '٦. تخضع جميع النزاعات لقوانين جمهورية موريتانيا الإسلامية.',
+                      style: TextStyle(fontSize: 15, height: 1.6, color: Colors.black87),
+                      textDirection: TextDirection.rtl,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  // ────────────────────────────────────────────────────────────────────────
 
   Future<void> _contactSeller(Auction auction) async {
     final sellerId = auction.sellerId; 
@@ -253,6 +335,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     _timer?.cancel();
     _timer = null;
     _isDisposed = true;
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -297,6 +380,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                           _buildMainInfoSection(context, auction, isDarkMode),
                           _buildExternalLinks(context, auction, isDarkMode),
                           _buildCarDetailsSection(context, auction, isDarkMode),
+                          _buildItemPropertiesSection(context, auction, isDarkMode),
                           _buildBidHistorySection(context, isDarkMode, auction),
 
                           // Action Buttons (Auto-Bid, Boost, Report, etc.)
@@ -678,29 +762,25 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
             children: [
               Expanded(
                 child: GestureDetector(
-                  onTap: () => _contactSeller(auction),
+                  onTap: () => _openWhatsApp(),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF00C58D).withOpacity(0.1),
+                      color: const Color(0xFF25D366),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.chat_outlined, color: Color(0xFF00C58D), size: 18),
+                        const Icon(Icons.phone, color: Colors.white, size: 18),
                         const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            AppLocalizations.of(context)!.text_400, // "Contact"
-                            style: const TextStyle(
-                              fontFamily: 'Plus Jakarta Sans',
-                              color: Color(0xFF00C58D),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                        const Text(
+                          '36601175',
+                          style: TextStyle(
+                            fontFamily: 'Plus Jakarta Sans',
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
                           ),
                         ),
                       ],
@@ -723,7 +803,9 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          auction.lotNumber ?? '',
+                          (auction.lotNumber.isNotEmpty && auction.lotNumber != 'N/A')
+                              ? auction.lotNumber
+                              : 'LOT-${auction.id.substring(0, 6).toUpperCase()}',
                           style: const TextStyle(
                             fontFamily: 'Plus Jakarta Sans',
                             color: Color(0xFF0081FF),
@@ -760,9 +842,13 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          _buildListTile(Icons.info_outline, AppLocalizations.of(context)!.text_62, () {}, isDarkMode),
+          _buildListTile(Icons.info_outline, AppLocalizations.of(context)!.text_62, () => _showTermsBottomSheet(), isDarkMode),
           const SizedBox(height: 12),
-          _buildListTile(Icons.contact_support_outlined, AppLocalizations.of(context)!.text_63, () {}, isDarkMode),
+          _buildListTile(Icons.play_circle_outline, 'كيفية المزايدة والشحن', () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const HowToBidPage()),
+            );
+          }, isDarkMode),
           const SizedBox(height: 12),
           GestureDetector(
             onTap: () => Navigator.of(context).push(
@@ -832,6 +918,101 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildItemPropertiesSection(BuildContext context, Auction auction, bool isDarkMode) {
+    final Map<String, String> props = {};
+
+    if (auction.condition != null && auction.condition!.isNotEmpty)
+      props['الحالة'] = _localizeCondition(auction.condition!);
+    if (auction.brand != null && auction.brand!.isNotEmpty)
+      props['الماركة'] = auction.brand!;
+    if (auction.category != null && auction.category!.isNotEmpty)
+      props['الفئة'] = auction.category!;
+    if (auction.city != null && auction.city!.isNotEmpty)
+      props['المدينة'] = auction.city!;
+    if (auction.lotNumber.isNotEmpty && auction.lotNumber != 'N/A')
+      props['رقم LOT'] = auction.lotNumber;
+
+    // Flatten item_details map
+    if (auction.itemDetails != null) {
+      for (final entry in auction.itemDetails!.entries) {
+        final v = entry.value?.toString() ?? '';
+        if (v.isNotEmpty && v != 'null') {
+          props[entry.key] = v;
+        }
+      }
+    }
+
+    if (props.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDarkMode ? const Color(0xFF333333) : const Color(0xFFE4E7EC),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'خصائص العنصر',
+            style: TextStyle(
+              fontFamily: 'Plus Jakarta Sans',
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...props.entries.map((e) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 90,
+                  child: Text(
+                    e.key,
+                    style: TextStyle(
+                      fontFamily: 'Plus Jakarta Sans',
+                      fontSize: 13,
+                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    e.value,
+                    style: TextStyle(
+                      fontFamily: 'Plus Jakarta Sans',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
+  String _localizeCondition(String condition) {
+    switch (condition.toLowerCase()) {
+      case 'new': return 'جديد';
+      case 'used': return 'مستعمل';
+      case 'refurbished': return 'مجدد';
+      case 'damaged': return 'تالف';
+      default: return condition;
+    }
   }
 
   Widget _buildCarDetailItem(IconData icon, String label, String value, bool isDarkMode) {
@@ -1037,14 +1218,6 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       child: Column(
         children: [
           _buildActionRow([
-            if (isOwner)
-              _buildActionButton(
-                context,
-                icon: Icons.add_a_photo_outlined,
-                label: AppLocalizations.of(context)!.text_399,
-                color: Colors.purple,
-                onTap: () => _handleAddImages(),
-              ),
             _buildActionButton(
               context,
               icon: Icons.report_gmailerrorred_outlined,
@@ -1106,13 +1279,6 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     );
   }
 
-  Future<void> _handleAddImages() async {
-    // Placeholder for image picker integration
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sélectionnez des images à ajouter...')),
-    );
-  }
-
   Future<void> _handleAutoBid() async {
     final auctionAsync = ref.read(auctionNotifierApiProvider(widget.auctionId));
     final auction = auctionAsync.value;
@@ -1141,16 +1307,14 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
  
 
   Widget _buildBottomAction(BuildContext context, Auction auction, bool isDarkMode) {
-
-     final auctionId = auction.id;
-    
+    final auctionId = auction.id;
     final currentPrice = auction.currentPrice;
-    
     final minIncrement = auction.minIncrement;
-    
     final bidCount = auction.bidderCount;
-    
     final timeLeftStr = TimeUtils.formatDuration(context, _timeLeft);
+
+    // صاحب المزاد لا يمكنه المزايدة
+    final isOwner = _userId != null && _userId == auction.sellerId;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -1165,55 +1329,80 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
         child: SizedBox(
           width: double.infinity,
           height: 60,
-          child: ElevatedButton(
-            onPressed: auction.isUserHighestBidder ? null : () {
-              showModalBottomSheet(
-                context: context,
-                backgroundColor: Colors.transparent,
-                isScrollControlled: true,
-                builder: (context) => BidActionSheet(
-                  auctionId: auctionId,
-                  currentPrice: currentPrice,
-                  minIncrement: minIncrement,
-                  bidCount: bidCount,
-                  timeLeft: timeLeftStr,
+          child: isOwner
+              // ── صاحب المزاد: رسالة بدل زر المزايدة ──
+              ? Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.block, color: Colors.grey, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'لا يمكنك المزايدة على مزادك الخاص',
+                        style: TextStyle(
+                          fontFamily: 'Plus Jakarta Sans',
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              // ── مستخدم عادي: زر المزايدة ──
+              : ElevatedButton(
+                  onPressed: auction.isUserHighestBidder ? null : () {
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: Colors.transparent,
+                      isScrollControlled: true,
+                      builder: (context) => BidActionSheet(
+                        auctionId: auctionId,
+                        currentPrice: currentPrice,
+                        minIncrement: minIncrement,
+                        bidCount: bidCount,
+                        timeLeft: timeLeftStr,
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: auction.isUserHighestBidder ? const Color(0xFF00C58D) : const Color(0xFF0081FF),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    disabledBackgroundColor: const Color(0xFF00C58D),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (auction.isUserHighestBidder) ...[
+                        const Icon(Icons.back_hand_outlined, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            AppLocalizations.of(context)!.text_71,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ] else ...[
+                        const Icon(Icons.gavel, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            AppLocalizations.of(context)!.text_72,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: auction.isUserHighestBidder ? const Color(0xFF00C58D) : const Color(0xFF0081FF),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              disabledBackgroundColor: const Color(0xFF00C58D),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (auction.isUserHighestBidder) ...[
-                   const Icon(Icons.back_hand_outlined, color: Colors.white),
-                   const SizedBox(width: 8),
-                   Flexible(
-                     child: Text(
-                       AppLocalizations.of(context)!.text_71,
-                       maxLines: 1,
-                       overflow: TextOverflow.ellipsis,
-                       style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
-                     ),
-                   ),
-                ] else ...[
-                   const Icon(Icons.gavel, color: Colors.white),
-                   const SizedBox(width: 8),
-                   Flexible(
-                     child: Text(
-                       AppLocalizations.of(context)!.text_72,
-                       maxLines: 1,
-                       overflow: TextOverflow.ellipsis,
-                       style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.white, fontWeight: FontWeight.bold),
-                     ),
-                   ),
-                ],
-              ],
-            ),
-          ),
         ),
       ),
     );

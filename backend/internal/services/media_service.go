@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -28,10 +29,37 @@ type mediaService struct {
 	client    *s3.Client
 	bucket    string
 	publicURL string
+	appPort   string
+	appEnv    string
+	useLocal  bool // true when R2 is not configured
 	logger    *zap.Logger
 }
 
+// isR2Configured returns true only when real R2 credentials are present
+func isR2Configured(cfg *config.Config) bool {
+	return cfg.R2.AccessKey != "" &&
+		cfg.R2.AccessKey != "your_r2_access_key" &&
+		cfg.R2.SecretKey != "" &&
+		cfg.R2.SecretKey != "your_r2_secret_key" &&
+		!strings.Contains(cfg.R2.Endpoint, "xxxxxxxx")
+}
+
 func NewMediaService(cfg *config.Config, logger *zap.Logger) MediaService {
+	if !isR2Configured(cfg) {
+		if cfg.App.Env == "production" {
+			logger.Error("[MediaService] R2 not configured in production — uploads will fail. Set R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET_MEDIA, R2_PUBLIC_URL.")
+		} else {
+			logger.Warn("[MediaService] R2 not configured — using local storage under ./uploads/")
+		}
+		return &mediaService{
+			useLocal:  true,
+			appPort:   cfg.App.Port,
+			appEnv:    cfg.App.Env,
+			publicURL: "",
+			logger:    logger,
+		}
+	}
+
 	// Configure AWS SDK for R2 (S3-compatible)
 	awsCfg := aws.Config{
 		Region: "auto",
@@ -60,6 +88,9 @@ func NewMediaService(cfg *config.Config, logger *zap.Logger) MediaService {
 		client:    client,
 		bucket:    cfg.R2.BucketMedia,
 		publicURL: cfg.R2.PublicURL,
+		appPort:   cfg.App.Port,
+		appEnv:    cfg.App.Env,
+		useLocal:  false,
 		logger:    logger,
 	}
 }
@@ -67,12 +98,41 @@ func NewMediaService(cfg *config.Config, logger *zap.Logger) MediaService {
 func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, header *multipart.FileHeader, folder string) (string, error) {
 	defer file.Close()
 
-	// Generate unique filename - folder structure: mazad-mwdia/auctions/{auctionID}/{date}/{uuid}.ext
 	ext := filepath.Ext(header.Filename)
 	if ext == "" {
-		ext = ".jpg" // Default extension
+		ext = ".jpg"
 	}
-	key := fmt.Sprintf("%s/%s%s", folder, uuid.New().String(), ext)
+	filename := uuid.New().String() + ext
+
+	// --- Local storage fallback ---
+	if s.useLocal {
+		if s.appEnv == "production" {
+			return "", fmt.Errorf("file upload unavailable in production: R2 credentials not configured")
+		}
+		localDir := filepath.Join("uploads", folder)
+		if err := os.MkdirAll(localDir, 0755); err != nil {
+			return "", fmt.Errorf("failed to create upload dir: %w", err)
+		}
+		localPath := filepath.Join(localDir, filename)
+		dst, err := os.Create(localPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to create file: %w", err)
+		}
+		defer dst.Close()
+		if _, err := io.Copy(dst, file); err != nil {
+			return "", fmt.Errorf("failed to save file: %w", err)
+		}
+		port := s.appPort
+		if port == "" {
+			port = "8082"
+		}
+		publicURL := fmt.Sprintf("http://localhost:%s/uploads/%s/%s", port, folder, filename)
+		s.logger.Info("[LocalStorage] File saved", zap.String("path", localPath), zap.String("url", publicURL))
+		return publicURL, nil
+	}
+
+	// --- R2 upload ---
+	key := fmt.Sprintf("%s/%s", folder, filename)
 
 	// Read file content
 	content, err := io.ReadAll(file)

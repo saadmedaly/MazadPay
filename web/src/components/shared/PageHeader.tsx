@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface ActionItem {
   label: string
@@ -20,36 +21,56 @@ export function PageHeader({ title, subtitle, icon: Icon, actions, action, child
   const allActions = [...(actions || []), ...(action ? [action] : [])]
 
   return (
-    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-8">
-      <div className="flex items-start gap-4">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-7 animate-fade-in">
+      <div className="flex items-center gap-3.5">
         {Icon && (
-          <div className="w-12 h-12 rounded-2xl bg-surface-card border border-surface-border flex items-center justify-center text-mazad-primary shadow-xl shrink-0">
-            <Icon className="w-6 h-6" />
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{
+              background: 'rgba(59,130,246,0.12)',
+              color: '#60A5FA',
+              border: '1px solid rgba(59,130,246,0.2)',
+              boxShadow: '0 4px 12px rgba(59,130,246,0.1)',
+            }}
+          >
+            <Icon className="w-5 h-5" strokeWidth={2} />
           </div>
         )}
         <div>
-          <h1 className="text-3xl font-display font-bold text-white tracking-tight">{title}</h1>
-          {subtitle && <p className="text-sm text-surface-muted mt-1.5 font-medium">{subtitle}</p>}
+          <h1
+            className="text-[22px] font-black leading-tight"
+            style={{ color: '#E2E8F0', fontFamily: 'Cairo' }}
+          >
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="text-[12.5px] font-medium mt-0.5" style={{ color: '#3D5A78' }}>
+              {subtitle}
+            </p>
+          )}
         </div>
       </div>
-      
-      <div className="flex items-center gap-2">
-        {allActions.map((act, idx) => (
-          <button
-            key={idx}
-            onClick={act.onClick}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg transition-all active:scale-95 ${
-              act.variant === 'outline' 
-                ? 'bg-transparent border border-surface-border text-surface-muted hover:text-white hover:border-white'
-                : 'bg-mazad-primary text-white shadow-mazad-primary/20 hover:bg-mazad-primary-dk'
-            }`}
-          >
-            <act.icon className="w-4 h-4" />
-            {act.label}
-          </button>
-        ))}
-        {children}
-      </div>
+
+      {(allActions.length > 0 || children) && (
+        <div className="flex items-center gap-2 shrink-0">
+          {allActions.map((act, idx) => (
+            <button
+              key={idx}
+              onClick={act.onClick}
+              className={cn(
+                'btn',
+                act.variant === 'outline' ? 'btn-outline'
+                  : act.variant === 'ghost' ? 'btn-ghost'
+                  : 'btn-primary'
+              )}
+            >
+              <act.icon className="w-4 h-4" />
+              {act.label}
+            </button>
+          ))}
+          {children}
+        </div>
+      )}
     </div>
   )
 }

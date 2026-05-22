@@ -51,6 +51,12 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 	// Transform auctions to include images array instead of comma-separated string
 	var response []fiber.Map
 	for _, auction := range auctions {
+		// Cap end_time to start_time + 24h for display (does not modify DB)
+		cappedEndTime := auction.EndTime
+		maxAllowedEnd := auction.StartTime.Add(24 * time.Hour)
+		if cappedEndTime.After(maxAllowedEnd) {
+			cappedEndTime = maxAllowedEnd
+		}
 		response = append(response, fiber.Map{
 			"id":               auction.ID,
 			"seller_id":        auction.SellerID,
@@ -69,7 +75,7 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 			"insurance_amount": auction.InsuranceAmount,
 			"reserve_price":    auction.ReservePrice,
 			"start_time":       auction.StartTime,
-			"end_time":         auction.EndTime,
+			"end_time":         cappedEndTime,
 			"status":           auction.Status,
 			"lot_number":       auction.LotNumber,
 			"views":            auction.Views,
@@ -108,9 +114,54 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 		return NotFound(c, "Auction")
 	}
 
+	// Cap end_time to start_time + 24h for display (does not modify DB)
+	cappedEnd := auction.EndTime
+	if maxEnd := auction.StartTime.Add(24 * time.Hour); cappedEnd.After(maxEnd) {
+		cappedEnd = maxEnd
+	}
+
 	return OK(c, fiber.Map{
-		"auction": auction,
-		"images":  images,
+		"auction": fiber.Map{
+			"id":               auction.ID,
+			"seller_id":        auction.SellerID,
+			"category_id":      auction.CategoryID,
+			"sub_category_id":  auction.SubCategoryID,
+			"location_id":      auction.LocationID,
+			"title_ar":         auction.TitleAr,
+			"title_fr":         auction.TitleFr,
+			"title_en":         auction.TitleEn,
+			"description_ar":   auction.DescriptionAr,
+			"description_fr":   auction.DescriptionFr,
+			"description_en":   auction.DescriptionEn,
+			"start_price":      auction.StartPrice,
+			"current_price":    auction.CurrentPrice,
+			"min_increment":    auction.MinIncrement,
+			"insurance_amount": auction.InsuranceAmount,
+			"reserve_price":    auction.ReservePrice,
+			"start_time":       auction.StartTime,
+			"end_time":         cappedEnd,
+			"status":           auction.Status,
+			"lot_number":       auction.LotNumber,
+			"views":            auction.Views,
+			"bidder_count":     auction.BidderCount,
+			"winner_id":        auction.WinnerID,
+			"winning_bid_id":   auction.WinningBidID,
+			"payment_deadline": auction.PaymentDeadline,
+			"is_featured":      auction.IsFeatured,
+			"featured_until":   auction.FeaturedUntil,
+			"rejection_reason": auction.RejectionReason,
+			"item_details":     auction.ItemDetails,
+			"buy_now_price":    auction.BuyNowPrice,
+			"condition":        auction.Condition,
+			"brand":            auction.Brand,
+			"is_verified":      auction.IsVerified,
+			"video_url":        auction.VideoURL,
+			"quantity":         auction.Quantity,
+			"category":         auction.CategoryNameAr,
+			"city":             auction.CityNameAr,
+			"image_urls":       auction.GetImagesArray(),
+		},
+		"images": images,
 	})
 }
 
@@ -240,6 +291,17 @@ func (h *AuctionHandler) Create(c *fiber.Ctx) error {
 			}
 		}
 		startTimePtr = &st
+	}
+
+	// enforce max 24-hour auction duration
+	effectiveStart := time.Now()
+	if startTimePtr != nil {
+		effectiveStart = *startTimePtr
+	}
+	maxEnd := effectiveStart.Add(24 * time.Hour)
+	if endTime.After(maxEnd) {
+		endTime = maxEnd
+		h.logger.Info("[Create Auction] end_time capped to 24h", zap.Time("capped_end_time", endTime))
 	}
 
 	// auto-compute min_increment if zero

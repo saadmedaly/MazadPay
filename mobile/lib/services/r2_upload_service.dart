@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:path/path.dart' as path;
 import 'api_service.dart';
 
@@ -199,6 +200,75 @@ class R2UploadService {
     }
 
     return uploadedUrls;
+  }
+
+  /// Upload auction images using XFile (works on web + mobile)
+  Future<List<String>> uploadAuctionXFiles({
+    required String auctionId,
+    required List<XFile> images,
+    Function(double progress)? onProgress,
+  }) async {
+    final List<String> uploadedUrls = [];
+
+    for (int i = 0; i < images.length; i++) {
+      try {
+        final xfile = images[i];
+        final bytes = await xfile.readAsBytes();
+        final fileName = path.basename(xfile.path).isNotEmpty
+            ? path.basename(xfile.path)
+            : 'image_$i.jpg';
+
+        debugPrint('[Upload] image $i: $fileName (${bytes.length} bytes) → /auctions/$auctionId/images');
+
+        final formData = FormData.fromMap({
+          'images': MultipartFile.fromBytes(
+            bytes,
+            filename: fileName,
+            contentType: DioMediaType('image', _extensionToSubtype(fileName)),
+          ),
+        });
+
+        final response = await _apiService.upload<Map<String, dynamic>>(
+          '/auctions/$auctionId/images',
+          data: formData,
+        );
+
+        debugPrint('[Upload] image $i status: success=${response?['success']} data=${response?['data']}');
+
+        if (response != null && response['success'] == true) {
+          final data = response['data'];
+          if (data is Map) {
+            final urls = data['urls'] as List<dynamic>?;
+            if (urls != null && urls.isNotEmpty) {
+              uploadedUrls.add(urls.first.toString());
+            } else if (data['url'] != null) {
+              uploadedUrls.add(data['url'].toString());
+            }
+          }
+        }
+
+        onProgress?.call((i + 1) / images.length);
+      } catch (e) {
+        debugPrint('[Upload] error image $i: $e');
+      }
+    }
+
+    return uploadedUrls;
+  }
+
+  String _extensionToSubtype(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'jpeg';
+      case 'png':
+        return 'png';
+      case 'webp':
+        return 'webp';
+      default:
+        return 'jpeg';
+    }
   }
 
   /// Upload une image de profil utilisateur vers R2
