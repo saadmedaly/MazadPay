@@ -110,7 +110,12 @@ class Auction {
       startPrice: double.tryParse(json['starting_price']?.toString() ?? json['start_price']?.toString() ?? '0') ?? 0,
       currentPrice: double.tryParse(json['current_price']?.toString() ?? json['current_bid']?.toString() ?? '0') ?? 0,
       minIncrement: double.tryParse(json['min_increment']?.toString() ?? '500') ?? 500,
-      endTime: json['end_time'] != null ? DateTime.parse(json['end_time']) : DateTime.now(),
+      endTime: () {
+        final raw = json['end_time'] != null ? DateTime.parse(json['end_time']) : DateTime.now();
+        final startRaw = json['start_time'] != null ? DateTime.parse(json['start_time']) : DateTime.now();
+        final maxEnd = startRaw.add(const Duration(hours: 24));
+        return raw.isAfter(maxEnd) ? maxEnd : raw;
+      }(),
       bidderCount: json['bidder_count'] ?? json['bid_count'] ?? 0,
       views: json['views'] ?? json['view_count'] ?? 0,
       lotNumber: json['lot_number']?.toString() ?? 'N/A',
