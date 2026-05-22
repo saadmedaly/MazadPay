@@ -242,6 +242,17 @@ func (h *AuctionHandler) Create(c *fiber.Ctx) error {
 		startTimePtr = &st
 	}
 
+	// enforce max 24-hour auction duration
+	effectiveStart := time.Now()
+	if startTimePtr != nil {
+		effectiveStart = *startTimePtr
+	}
+	maxEnd := effectiveStart.Add(24 * time.Hour)
+	if endTime.After(maxEnd) {
+		endTime = maxEnd
+		h.logger.Info("[Create Auction] end_time capped to 24h", zap.Time("capped_end_time", endTime))
+	}
+
 	// auto-compute min_increment if zero
 	minIncrement := req.MinIncrement
 	if minIncrement <= 0 {

@@ -327,15 +327,19 @@ func (r *auctionRepo) DeleteCategory(ctx context.Context, id int) error {
 
 func (r *auctionRepo) GetLocations(ctx context.Context) ([]models.Location, error) {
 	var locs []models.Location
-	err := r.db.SelectContext(ctx, &locs, `SELECT * FROM locations ORDER BY city_name_ar, area_name_ar`)
+	err := r.db.SelectContext(ctx, &locs, `
+		SELECT DISTINCT ON (city_name_ar) *
+		FROM locations
+		ORDER BY city_name_ar, area_name_ar`)
 	return locs, err
 }
 
 func (r *auctionRepo) GetLocationsByCountry(ctx context.Context, countryID int) ([]models.Location, error) {
-	// Pour l'instant, comme country_id n'existe pas dans la table locations,
-	// nous retournons toutes les locations triées par ville
 	var locs []models.Location
-	err := r.db.SelectContext(ctx, &locs, `SELECT * FROM locations ORDER BY city_name_ar, area_name_ar`)
+	err := r.db.SelectContext(ctx, &locs, `
+		SELECT DISTINCT ON (city_name_ar) *
+		FROM locations
+		ORDER BY city_name_ar, area_name_ar`)
 	return locs, err
 }
 
