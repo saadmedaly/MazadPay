@@ -161,6 +161,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       height: 48,
                       child: ElevatedButton(
                         onPressed: () {
+                          SharedPreferences.getInstance().then((prefs) {
+                            prefs.setBool('onboarding_seen', true);
+                          });
                           Navigator.of(context).pushReplacement(
                             MaterialPageRoute(
                               builder: (_) => StartBiddingPage(),
