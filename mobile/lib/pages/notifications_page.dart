@@ -86,8 +86,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       switch (_selectedFilter) {
         case 'auctions':
           return ['auction_pending', 'auction_approved', 'auction_rejected', 'auction_ended', 'auction_won', 'auction_ending_soon'].contains(type);
-        case 'messages':
-          return type == 'new_message';
+
         case 'payments':
           return ['payment_received', 'withdrawal_processed'].contains(type);
         default:
@@ -159,7 +158,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final filters = [
       {'key': 'all', 'label': locale == 'ar' ? 'الكل' : (locale == 'fr' ? 'Tous' : 'All')},
       {'key': 'auctions', 'label': locale == 'ar' ? 'المزادات' : (locale == 'fr' ? 'Enchères' : 'Auctions')},
-      {'key': 'messages', 'label': locale == 'ar' ? 'الرسائل' : (locale == 'fr' ? 'Messages' : 'Messages')},
       {'key': 'payments', 'label': locale == 'ar' ? 'المدفوعات' : (locale == 'fr' ? 'Paiements' : 'Payments')},
     ];
 
@@ -246,10 +244,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         icon = Icons.payment_outlined;
         color = const Color(0xFF00C58D);
         break;
-      case 'new_message':
-        icon = Icons.message_outlined;
-        color = Colors.orange;
-        break;
+
       case 'auction_reported':
       case 'auction_suspended':
         icon = Icons.report_problem_outlined;
@@ -375,7 +370,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   void _onNotificationTap(Map<String, dynamic> notification) {
     final String? type = notification['type'];
     final String? auctionId = notification['auction_id']?.toString() ?? notification['auctionId']?.toString();
-    final String? conversationId = notification['conversation_id']?.toString() ?? notification['conversationId']?.toString();
+
     
     // Marquer comme lu
     _markAsRead(notification['id']?.toString());

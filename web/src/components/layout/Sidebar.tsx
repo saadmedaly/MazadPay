@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Gavel, CreditCard, Users,
   Flag, Image, LogOut, Hammer, ShieldCheck, HelpCircle, Video, Bell, User, Settings, PhoneOff,
-  Wallet, MessageSquare, Handshake, Star, LifeBuoy, Grid2x2, MapPin, X
+  Wallet, Handshake, Star, LifeBuoy, Grid2x2, MapPin, X
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
@@ -31,7 +31,7 @@ const NAV_SECTIONS = [
       { label: 'لوحة التحكم',    icon: LayoutDashboard, to: '/',              badgeKey: null },
       { label: 'الملف الشخصي',  icon: User,             to: '/profile',       badgeKey: null },
       { label: 'الإشعارات',     icon: Bell,             to: '/notifications', badgeKey: null },
-      { label: 'الرسائل',       icon: MessageSquare,    to: '/messages',      badgeKey: 'unreadMessages' },
+
     ]
   },
   {

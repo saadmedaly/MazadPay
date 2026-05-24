@@ -7,8 +7,7 @@ export 'auth_api.dart';
 export 'auth_service.dart';
 export 'bid_api.dart';
 export 'category_api.dart';
-export 'chat_service.dart';
-export 'chat_file_service.dart';
+
 export 'favorites_api.dart';
 export 'favorites_service.dart';
 export 'fcm_service.dart';

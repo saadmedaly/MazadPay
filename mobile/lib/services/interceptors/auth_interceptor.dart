@@ -1,5 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:mezadpay/services/auth_service.dart';
+import 'package:mezadpay/widgets/notification_handler.dart' show navigatorKey;
+import 'package:mezadpay/pages/login_page.dart';
 
 /// Interceptor pour ajouter automatiquement le JWT token à toutes les requêtes
 class AuthInterceptor extends Interceptor {
@@ -27,15 +30,22 @@ class AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     // Gérer les erreurs 401 (Unauthorized) - Token expiré
     if (err.response?.statusCode == 401) {
+      // Ignorer si l'URL est /auth/login pour éviter une boucle de redirection infinie
+      if (err.requestOptions.path.contains('/auth/login')) {
+        return handler.next(err);
+      }
+
       // Token expiré ou invalide
-      // Optionnel: Essayer de rafraîchir le token
       // Pour l'instant, on déconnecte l'utilisateur
       await _authService.logout();
       
-      // Note: Dans une implémentation complète, vous pourriez:
-      // 1. Essayer de rafraîchir le token avec refresh_token
-      // 2. Si réussi, réessayer la requête originale
-      // 3. Si échec, déconnecter et rediriger vers login
+      // Rediriger vers la page de login pour arrêter la boucle
+      if (navigatorKey.currentState != null) {
+        navigatorKey.currentState!.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      }
     }
     
     return handler.next(err);

@@ -12,6 +12,7 @@ import 'package:mezadpay/pages/all_auctions_page.dart';
 import 'package:mezadpay/pages/privacy_policy_page.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
 import 'package:mezadpay/services/user_api.dart';
+import 'package:mezadpay/pages/account_shell_page.dart';
 import 'package:mezadpay/pages/requests_page.dart';
 import 'package:mezadpay/pages/settings_page.dart';
 
@@ -246,6 +247,11 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
                   ),
                   _buildMenuItem(
                     context,
+                    title: AppLocalizations.of(context)!.text_23,
+                    icon: Icons.account_balance_wallet,
+                  ),
+                  _buildMenuItem(
+                    context,
                     title: AppLocalizations.of(context)!.text_401,
                     icon: Icons.request_quote_outlined,
                   ),
@@ -436,6 +442,8 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ServicesPage()));
           } else if (title == AppLocalizations.of(context)!.text_19 || title == AppLocalizations.of(context)!.text_381) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AccountPage()));
+          } else if (title == AppLocalizations.of(context)!.text_23) {
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => AccountShellPage()));
           } else if (title == AppLocalizations.of(context)!.text_27) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const MyAuctionsPage()));
           } else if (title == AppLocalizations.of(context)!.text_2) {

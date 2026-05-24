@@ -1135,7 +1135,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_173.
   ///
   /// In ar, this message translates to:
-  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر بنكلي'**
+  /// **'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر '**
   String get text_173;
 
   /// No description provided for @text_174.

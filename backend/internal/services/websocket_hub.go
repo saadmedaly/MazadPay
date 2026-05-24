@@ -18,29 +18,4 @@ type AdminHub interface {
 	BroadcastRequestUpdated(payload models.RequestUpdatedPayload)
 }
 
-// WebSocketHub définit l'interface pour la gestion WebSocket (général)
-type WebSocketHub interface {
-	// Gestion des clients
-	RegisterClient(userID uuid.UUID, client ChatClient)
-	UnregisterClient(userID uuid.UUID, client ChatClient)
-	
-	// Diffusion
-	BroadcastToUser(userID uuid.UUID, event string, data interface{})
-	BroadcastToConversation(conversationID uuid.UUID, event string, data interface{})
-	BroadcastToAll(event string, data interface{})
-	
-	// Gestion des rooms
-	JoinConversation(userID, conversationID uuid.UUID, client ChatClient)
-	LeaveConversation(userID, conversationID uuid.UUID, client ChatClient)
-	
-	// Présence
-	IsUserOnline(userID uuid.UUID) bool
-	GetOnlineUsers() []uuid.UUID
-}
 
-// ChatClient représente un client WebSocket connecté
-type ChatClient interface {
-	GetUserID() uuid.UUID
-	Send(message models.WebSocketMessage) error
-	GetConversations() []uuid.UUID
-}

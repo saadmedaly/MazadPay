@@ -885,7 +885,7 @@ func (h *AdminHandler) CreatePaymentMethod(c *fiber.Ctx) error {
 	}
 
 	if err := h.svc.CreatePaymentMethod(c.Context(), req.Code, req.NameAr, req.NameFr, req.NameEn, req.LogoURL, req.IsActive, req.CountryID); err != nil {
-		return InternalError(c, "Failed to create payment method")
+		return InternalError(c, "Failed to create payment method: "+err.Error())
 	}
 
 	return OK(c, fiber.Map{"message": "Payment method created successfully"})

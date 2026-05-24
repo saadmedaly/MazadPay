@@ -2,16 +2,25 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/pages/payment_details_page.dart';
 import '../services/wallet_api.dart';
+import '../services/payment_methods_service.dart';
+import '../models/payment_method.dart';
 
-class PaymentMethod {
-  final String id;
-  final String title;
-  final String subtitle;
-  final String logoUrl;
-  final Color highlightColor;
-
-  PaymentMethod(this.id, this.title, this.subtitle, this.logoUrl, this.highlightColor);
+// Helper to get the name according to the app's current locale
+String _localizedMethodName(PaymentMethod method, BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  switch (locale.languageCode) {
+    case 'ar':
+      return method.nameAr;
+    case 'fr':
+      return method.nameFr;
+    case 'en':
+      return method.nameEn ?? method.nameFr;
+    default:
+      // Fallback to French if unknown locale
+      return method.nameFr;
+  }
 }
+
 
 class DepositPage extends StatefulWidget {
   const DepositPage({super.key});
@@ -26,53 +35,37 @@ class _DepositPageState extends State<DepositPage> {
   final WalletApi _walletApi = WalletApi();
   bool _isLoading = false;
 
-  late List<PaymentMethod> _methods;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final l10n = AppLocalizations.of(context)!;
-    _methods = [
-      PaymentMethod(
-        'masrvi',
-        l10n.text_170,
-        l10n.text_171,
-        'assets/Masrivi.png',
-        const Color(0xFF00A99D),
-      ),
-      PaymentMethod(
-        'bankily',
-        l10n.text_172,
-        l10n.text_173,
-        'assets/Bankily.png',
-        const Color(0xFF0084FF),
-      ),
-      PaymentMethod(
-        'sedad',
-        l10n.text_174,
-        l10n.text_175,
-        'assets/Sedad.png',
-        const Color(0xFF33CC33),
-      ),
-      PaymentMethod(
-        'click',
-        l10n.text_176,
-        l10n.text_177,
-        'assets/Click.png',
-        Colors.black,
-      ),
-    ];
-  }
+  List<PaymentMethod> _methods = [];
 
   @override
   void initState() {
     super.initState();
+    _loadMethods();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_hasShownModal) {
         _showTermsBottomSheet();
         _hasShownModal = true;
       }
     });
+  }
+
+  Future<void> _loadMethods() async {
+    try {
+      final service = PaymentMethodsService();
+      final fetched = await service.getPaymentMethods();
+      setState(() {
+        _methods = fetched;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _methods = [];
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load payment methods')),
+      );
+    }
   }
 
   Future<void> _makeDeposit() async {
@@ -89,12 +82,12 @@ class _DepositPageState extends State<DepositPage> {
       setState(() => _isLoading = false);
 
       if (response.success) {
-        final selectedMethod = _methods.firstWhere((m) => m.id == _selectedMethodId);
+        final selectedMethod = _methods.firstWhere((m) => m.code == _selectedMethodId);
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => PaymentDetailsPage(
-              methodName: selectedMethod.title,
+              methodName: _localizedMethodName(selectedMethod, context),
             ),
           ),
         );
@@ -284,7 +277,13 @@ class _DepositPageState extends State<DepositPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    ..._methods.map((method) => _buildPaymentMethodTile(method, isDarkMode)),
+                    _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: _methods
+                    .map((method) => _buildPaymentMethodTile(method, isDarkMode))
+                    .toList(),
+              ),
                   ],
                 ),
               ),
@@ -322,7 +321,7 @@ class _DepositPageState extends State<DepositPage> {
                                 const Icon(Icons.arrow_back, color: Colors.white, size: 20),
                                 const SizedBox(width: 12),
                                 Text(
-                                  'ادفع عبر ${_methods.firstWhere((m) => m.id == _selectedMethodId).title}',
+                                  'ادفع عبر ${_localizedMethodName(_methods.firstWhere((m) => m.code == _selectedMethodId), context)}',
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
                                 ),
                               ],
@@ -337,72 +336,35 @@ class _DepositPageState extends State<DepositPage> {
   }
 
   Widget _buildPaymentMethodTile(PaymentMethod method, bool isDarkMode) {
-    bool isSelected = _selectedMethodId == method.id;
-    
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedMethodId = method.id;
-        });
-      },
-      child: Container(
-        margin: const EdgeInsetsDirectional.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? Colors.green : Colors.transparent,
-            width: 2,
-          ),
-          boxShadow: [
-            if (!isDarkMode && !isSelected)
-              BoxShadow(
-                color: Colors.black.withOpacity(0.02),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-          ],
+    bool isSelected = _selectedMethodId == method.code;
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isSelected ? const Color(0xFF0084FF) : Colors.grey.withOpacity(0.2),
+          width: isSelected ? 2 : 1,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-             Image.asset(
-              method.logoUrl,
-              height: 40,
-              width: 80,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => Text(
-                method.title,
-                style: TextStyle(color: method.highlightColor, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(width: 16),
-            
-            // Text Content in the Middle
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    method.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    method.subtitle,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12, height: 1.3),
-                  ),
-                ],
-              ),
-            ),
-
-            // Checkmark on the Left (End in RTL)
-            if (isSelected)
-              const Icon(Icons.check_circle, color: Colors.green, size: 24),
-          ],
+      ),
+      color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+      child: ListTile(
+        onTap: () => setState(() => _selectedMethodId = method.code),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: method.logoUrl != null && method.logoUrl!.isNotEmpty
+            ? Image.network(method.logoUrl!, height: 40, width: 40, fit: BoxFit.contain)
+            : const Icon(Icons.payment, size: 40, color: Colors.grey),
+        title: Text(
+          _localizedMethodName(method, context),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
+        subtitle: Text(
+          '${AppLocalizations.of(context)!.text_173} ${_localizedMethodName(method, context)}',
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+        trailing: isSelected
+            ? const Icon(Icons.radio_button_checked, color: Color(0xFF0084FF))
+            : const Icon(Icons.radio_button_unchecked, color: Colors.grey),
       ),
     );
   }

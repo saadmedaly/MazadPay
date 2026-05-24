@@ -82,8 +82,8 @@ export function UsersPage() {
             role === 'admin'
               ? 'bg-mazad-primary/20 text-mazad-primary border border-mazad-primary/20'
               : role === 'driver'
-              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20'
-              : 'bg-surface-border/40 text-surface-muted'
+              ? 'bg-purple-500/50 text-black border border-purple-500/20'
+              : 'bg-surface-border/40  text-black border border-surface-border/20'
           }`}>
             {role === 'admin' ? 'مدير' : role === 'driver' ? 'سائق' : 'مزايد'}
           </span>
@@ -100,30 +100,8 @@ export function UsersPage() {
       accessorKey: 'country_code',
       cell: ({ getValue }) => <span className="text-xs text-surface-muted font-medium">{getValue<string>() || '-'}</span>
     },
-    {
-      header: 'KYC',
-      accessorKey: 'kyc_status',
-      cell: ({ getValue }) => {
-        const status = getValue<string>()
-        const statusColors: Record<string, string> = {
-          pending: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/20',
-          approved: 'bg-green-500/20 text-green-400 border border-green-500/20',
-          rejected: 'bg-red-500/20 text-red-400 border border-red-500/20',
-        }
-        return (
-          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider ${statusColors[status] || 'bg-surface-border/40 text-surface-muted'}`}>
-            {status || 'N/A'}
-          </span>
-        )
-      }
-    },
-    {
-      header: 'الملف',
-      accessorKey: 'profile_completed',
-      cell: ({ getValue }) => (
-        <StatusBadge status={getValue<boolean>() ? 'completed' : 'incomplete'} />
-      )
-    },
+ 
+
     {
       header: 'تاريخ التسجيل',
       accessorKey: 'created_at',

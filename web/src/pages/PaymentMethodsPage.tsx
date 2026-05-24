@@ -1,8 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import {
   Plus, Search, Pencil, Trash2, CreditCard,
-  ToggleLeft, ToggleRight,
+  ToggleLeft, ToggleRight, Loader2, Upload
 } from 'lucide-react'
+import { toast } from 'sonner'
+import client from '@/api/client'
 import { type ColumnDef } from '@tanstack/react-table'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataTable } from '@/components/shared/DataTable'
@@ -43,6 +45,8 @@ export function PaymentMethodsPage() {
     country_id: null as number | null,
     is_active: true
   })
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: paymentMethods = [], isLoading } = usePaymentMethods()
   const createMutation = useCreatePaymentMethod()
@@ -63,13 +67,49 @@ export function PaymentMethodsPage() {
     setIsModalOpen(true)
   }
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('يرجى اختيار ملف صورة فقط (jpg, png, webp, gif)')
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('حجم الصورة كبير جداً (الحد الأقصى 10 ميجابايت)')
+      return
+    }
+
+    setUploadingFile(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await client.post('/v1/api/admin/banners/upload', formData, {
+        timeout: 30_000,
+        headers: { 'Content-Type': undefined },
+      })
+
+      const uploadedUrl = res.data.data.url
+      setForm({ ...form, logo_url: uploadedUrl })
+      toast.success('تم رفع الصورة بنجاح')
+    } catch (err: any) {
+      const message = err.response?.data?.message || err.message || 'فشل رفع الصورة'
+      toast.error(message)
+    } finally {
+      setUploadingFile(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   const openEdit = (method: PaymentMethod) => {
     setEditingMethod(method)
     setForm({
       code: method.code,
       name_ar: method.name_ar,
       name_fr: method.name_fr,
-      name_en: method.name_en || '',
+      name_en: method.name_fr,
       logo_url: method.logo_url || '',
       country_id: method.country_id || null,
       is_active: method.is_active
@@ -80,21 +120,26 @@ export function PaymentMethodsPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const data = {
-      code: form.code,
+      code: form.name_fr.toLowerCase().replace(/\s+/g, '_').substring(0, 20),
       name_ar: form.name_ar,
       name_fr: form.name_fr,
-      name_en: form.name_en || undefined,
+      name_en: form.name_fr,
       logo_url: form.logo_url || undefined,
       country_id: form.country_id || undefined,
       is_active: form.is_active
     }
 
     if (editingMethod) {
-      updateMutation.mutate({ id: editingMethod.id, data })
+      updateMutation.mutate(
+        { id: editingMethod.id, data },
+        { onSuccess: () => setIsModalOpen(false) }
+      )
     } else {
-      createMutation.mutate(data as Omit<PaymentMethod, 'id' | 'created_at'>)
+      createMutation.mutate(
+        data as Omit<PaymentMethod, 'id' | 'created_at'>,
+        { onSuccess: () => setIsModalOpen(false) }
+      )
     }
-    setIsModalOpen(false)
   }
 
   const toggleStatus = (method: PaymentMethod) => {
@@ -113,25 +158,30 @@ export function PaymentMethodsPage() {
       accessorKey: 'id',
       cell: ({ getValue }) => <span className="font-mono text-xs text-surface-muted">#{getValue<number>()}</span>
     },
+      {
+      header: 'الشعار',
+      accessorKey: 'logo_url',
+      cell: ({ getValue, row }) => {
+        const url = getValue<string>()
+        return url ? (
+          <img src={url} alt={row.original.name_ar} className="w-10 h-10 object-contain rounded-md bg-white p-1" />
+        ) : (
+          <div className="w-10 h-10 bg-surface-muted rounded-md flex items-center justify-center">
+            <span className="text-xs text-white/50">بدون</span>
+          </div>
+        )
+      }
+    },
     {
       header: 'Code',
       accessorKey: 'code',
       cell: ({ getValue }) => <span className="font-mono text-sm">{getValue<string>()}</span>
     },
+  
     {
       header: 'الاسم (عربي)',
       accessorKey: 'name_ar',
       cell: ({ getValue }) => <span className="font-bold text-white">{getValue<string>()}</span>
-    },
-    {
-      header: 'Nom (Français)',
-      accessorKey: 'name_fr',
-      cell: ({ getValue }) => <span className="text-surface-muted">{getValue<string>()}</span>
-    },
-    {
-      header: 'Name (English)',
-      accessorKey: 'name_en',
-      cell: ({ getValue }) => <span className="text-surface-muted">{getValue<string>() || '-'}</span>
     },
     {
       header: 'Statut',
@@ -203,24 +253,14 @@ export function PaymentMethodsPage() {
 
       <Modal isOpen={isModalOpen} onOpenChange={setIsModalOpen} title={editingMethod ? 'تعديل طريقة الدفع' : 'طريقة دفع جديدة'}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="code">الرمز *</Label>
-            <Input
-              id="code"
-              value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-              placeholder="مثال: masrvi"
-              required
-            />
-          </div>
-
+        
           <div>
             <Label htmlFor="name_ar">الاسم بالعربية *</Label>
             <Input
               id="name_ar"
               value={form.name_ar}
               onChange={(e) => setForm({ ...form, name_ar: e.target.value })}
-              placeholder="مصروفي"
+              placeholder="مثال: بنكيلي"
               required
               dir="rtl"
             />
@@ -232,28 +272,41 @@ export function PaymentMethodsPage() {
               id="name_fr"
               value={form.name_fr}
               onChange={(e) => setForm({ ...form, name_fr: e.target.value })}
-              placeholder="Masrivi"
+              placeholder="مثال: Bankily"
               required
             />
           </div>
 
-          <div>
-            <Label htmlFor="name_en">الاسم بالإنجليزية</Label>
-            <Input
-              id="name_en"
-              value={form.name_en}
-              onChange={(e) => setForm({ ...form, name_en: e.target.value })}
-              placeholder="Masrivi"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="logo_url">رابط الشعار</Label>
-            <Input
-              id="logo_url"
-              value={form.logo_url}
-              onChange={(e) => setForm({ ...form, logo_url: e.target.value })}
-              placeholder="https://..."
+          <div className="mb-4">
+            <Label className="mb-2 block">رابط الشعار</Label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingFile}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-surface-border/50 hover:bg-surface-border border border-surface-border text-white transition-all disabled:opacity-50"
+              >
+                {uploadingFile ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> جاري الرفع...</>
+                ) : (
+                  <><Upload className="w-4 h-4" /> رفع صورة</>
+                )}
+              </button>
+              <Input
+                id="logo_url"
+                value={form.logo_url}
+                onChange={(e) => setForm({ ...form, logo_url: e.target.value })}
+                placeholder="https://..."
+                dir="ltr"
+                className="flex-1 text-left"
+              />
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleFileUpload}
+              className="hidden"
             />
           </div>
 

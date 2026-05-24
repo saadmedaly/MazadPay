@@ -34,10 +34,6 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	sponsorRepo := repository.NewSponsorRepository(db)
 	ratingRepo := repository.NewRatingRepository(db)
 
-	// Chat repositories
-	convRepo := repository.NewConversationRepository(db)
-	msgRepo := repository.NewMessageRepository(db)
-
 	// Hub
 	hub := ws.NewHub(logger)
 	adminHub := ws.NewAdminHub(logger)
@@ -58,13 +54,6 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, auditRepo, notifSvc)
 	reportSvc := services.NewReportService(txRepo)
 
-	// Chat Hub & Service
-	chatHub := ws.NewChatHub(logger, nil) // Service will be set after creation
-	chatSvc := services.NewChatService(convRepo, msgRepo, userRepo, notifSvc, logger, chatHub)
-	chatHub.SetChatService(chatSvc) // Set the service reference
-
-	// Start chat hub
-	go chatHub.Run()
 
 	// Create and start auction scheduler for notifications
 	auctionScheduler := services.NewAuctionScheduler(auctionRepo, notifSvc, userRepo, rdb, logger)
@@ -109,7 +98,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 	// Routes registration
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
-	setupAuctionRoutes(api, auctionSvc, chatSvc, bidHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
+	setupAuctionRoutes(api, auctionSvc, bidHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupUserRoutes(api, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupAdminRoutes(api, adminHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupBannerRoutes(api, bannerHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
@@ -124,8 +113,6 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	setupSponsorRoutes(api, sponsorHandler, cfg.JWT.Secret, logger, rdb)
 	setupRatingRoutes(api, ratingHandler, cfg.JWT.Secret, logger, rdb)
 
-	// Chat routes
-	setupChatRoutes(api, chatSvc, chatHub, mediaSvc, cfg.JWT.Secret, logger, rdb)
 
 	// Serve locally uploaded files (fallback when R2 is not configured)
 	app.Use("/uploads", func(c *fiber.Ctx) error {
@@ -160,9 +147,9 @@ func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, adminHandle
 	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
 }
 
-func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, chatSvc services.ChatService, bidHandler *handlers.BidHandler, userHandler *handlers.UserHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bidHandler *handlers.BidHandler, userHandler *handlers.UserHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
-	h := handlers.NewAuctionHandler(auctionSvc, chatSvc, logger)
+	h := handlers.NewAuctionHandler(auctionSvc, logger)
 
 	// Public routes
 	api.Get("/categories", h.GetCategories)
@@ -193,7 +180,7 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, ch
 	auctions.Post("/:id/extend", h.Extend)
 	auctions.Get("/:id/bid-status", h.GetBidStatus) // Statut de ma bid
 	auctions.Get("/:id/winner", h.GetWinner)        // Détails du gagnant
-	auctions.Post("/:id/contact", h.ContactSeller)  // Contacter vendeur
+
 
 	// Consolidation endpoints /my/*
 	my := api.Group("/my", jwtMiddleware)

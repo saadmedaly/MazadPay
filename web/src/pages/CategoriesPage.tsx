@@ -360,13 +360,13 @@ export function CategoriesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-surface-muted font-bold block">الفئة الأب (اختياري)</label>
+                  <label className="text-xs text-surface-muted  font-bold block">الفئة الأب (اختياري)</label>
                   <select
                     value={form.parent_id || ''}
                     onChange={e => setForm(f => ({ ...f, parent_id: e.target.value ? parseInt(e.target.value) : null }))}
-                    className="input-base w-full rounded-xl p-3 text-sm"
+                className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white focus:border-mazad-primary/60 outline-none appearance-none"
                   >
-                    <option value="">فئة رئيسية (بدون أب)</option>
+                    <option value="" className='bg-[#ffffff12]'>فئة رئيسية (بدون أب)</option>
                     {parentCategories.map(parent => (
                       <option key={parent.id} value={parent.id}>
                         {parent.name_ar} (ID: {parent.id})

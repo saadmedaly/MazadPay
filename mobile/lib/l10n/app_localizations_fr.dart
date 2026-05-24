@@ -533,8 +533,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_172 => 'Bankily';
 
   @override
-  String get text_173 =>
-      'Utilisez notre code marchand pour finaliser via Bankily';
+  String get text_173 => 'Utilisez notre code marchand pour finaliser via  ';
 
   @override
   String get text_174 => 'Sedad';

@@ -528,7 +528,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get text_172 => 'Bankily';
 
   @override
-  String get text_173 => 'Use our merchant code to complete via Bankily';
+  String get text_173 => 'Use our merchant code to complete via ';
 
   @override
   String get text_174 => 'Sedad';

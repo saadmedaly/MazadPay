@@ -65,10 +65,6 @@ class FCMService {
   static const String _transactionChannelName = 'Transactions';
   static const String _transactionChannelDesc = 'Notifications de paiements et retraits';
 
-  /// Canal pour les messages
-  static const String _messageChannelId = 'messages';
-  static const String _messageChannelName = 'Messages';
-  static const String _messageChannelDesc = 'Notifications de messages reçus';
 
   /// Canal pour les promotions
   static const String _promoChannelId = 'promotions';
@@ -181,16 +177,7 @@ class FCMService {
       ),
     );
 
-    // Canal des messages
-    await androidPlugin.createNotificationChannel(
-      AndroidNotificationChannel(
-        _messageChannelId,
-        _messageChannelName,
-        description: _messageChannelDesc,
-        importance: Importance.defaultImportance,
-        playSound: true,
-      ),
-    );
+
 
     // Canal des promotions (basse priorité)
     await androidPlugin.createNotificationChannel(
@@ -347,8 +334,7 @@ class FCMService {
       case 'payment_received':
       case 'withdrawal_processed':
         return _transactionChannelId;
-      case 'new_message':
-        return _messageChannelId;
+
       case 'promotion':
         return _promoChannelId;
       default:
@@ -364,8 +350,7 @@ class FCMService {
         return _moderationChannelName;
       case _transactionChannelId:
         return _transactionChannelName;
-      case _messageChannelId:
-        return _messageChannelName;
+
       case _promoChannelId:
         return _promoChannelName;
       default:
@@ -381,8 +366,7 @@ class FCMService {
         return _moderationChannelDesc;
       case _transactionChannelId:
         return _transactionChannelDesc;
-      case _messageChannelId:
-        return _messageChannelDesc;
+
       case _promoChannelId:
         return _promoChannelDesc;
       default:
@@ -396,8 +380,7 @@ class FCMService {
       case _moderationChannelId:
         return Importance.high;
       case _transactionChannelId:
-      case _messageChannelId:
-        return Importance.defaultImportance;
+
       case _promoChannelId:
         return Importance.low;
       default:
@@ -616,20 +599,7 @@ class FCMService {
         'body': '{amount} MRU for "{auctionTitle}"',
       },
     },
-    'new_message': {
-      'ar': {
-        'title': 'رسالة جديدة من {senderName}',
-        'body': '{messagePreview}...',
-      },
-      'fr': {
-        'title': 'Nouveau message de {senderName}',
-        'body': '{messagePreview}...',
-      },
-      'en': {
-        'title': 'New message from {senderName}',
-        'body': '{messagePreview}...',
-      },
-    },
+
     'auction_reported': {
       'ar': {
         'title': '🚨 مزاد مُبلّغ عنه',
@@ -672,7 +642,6 @@ extension DeepLinkExtension on FCMService {
   String? extractRoute(Map<String, dynamic> data) {
     final String? type = data['type'];
     final String? auctionId = data['auctionId'];
-    final String? conversationId = data['conversationId'];
 
     switch (type) {
       case 'auction_pending':
@@ -685,11 +654,7 @@ extension DeepLinkExtension on FCMService {
           return '/auction/$auctionId';
         }
         break;
-      case 'new_message':
-        if (conversationId != null) {
-          return '/messages/$conversationId';
-        }
-        return '/messages';
+
       case 'payment_received':
       case 'withdrawal_processed':
         return '/wallet';

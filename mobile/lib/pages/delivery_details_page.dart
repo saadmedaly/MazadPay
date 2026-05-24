@@ -214,10 +214,6 @@ class DeliveryDetailsPage extends StatelessWidget {
             icon: const Icon(Icons.phone, color: Color(0xFF00C58D)),
             onPressed: () {},
           ),
-          IconButton(
-            icon: const Icon(Icons.chat_bubble, color: Color(0xFF0081FF)),
-            onPressed: () {},
-          ),
         ],
       ),
     );

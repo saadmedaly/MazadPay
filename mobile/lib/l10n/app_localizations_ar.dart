@@ -539,7 +539,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_173 =>
-      'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر بنكلي';
+      'استخدموا رمز التاجر الخاص بنا لإتمام عملية الدفع عبر ';
 
   @override
   String get text_174 => 'سداد';

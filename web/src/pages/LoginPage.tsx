@@ -36,7 +36,17 @@ export function LoginPage() {
       toast.success('تم تسجيل الدخول بنجاح')
       navigate('/', { replace: true })
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      let msg = err.message
+      if (msg === 'Authentication required' || msg === 'Invalid PIN code' || msg.includes('401')) {
+        msg = 'رقم الهاتف أو الرمز السري غير صحيح'
+      } else if (msg === 'Account is temporarily blocked') {
+        msg = 'الحساب محظور مؤقتاً'
+      } else if (msg === 'Network Error' || msg.includes('timeout') || msg === 'Network Error') {
+        msg = 'تأكد من اتصالك بالإنترنت أو الخادم لا يستجيب'
+      }
+      toast.error(msg)
+    },
   })
 
   return (

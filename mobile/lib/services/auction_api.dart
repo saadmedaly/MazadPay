@@ -484,17 +484,6 @@ class AuctionApi {
     }
   }
 
-  /// Contacter le vendeur (Initier la conversation)
-  Future<ApiResponse<Map<String, dynamic>>> contactSeller(String auctionId) async {
-    try {
-      final response = await _apiService.post<Map<String, dynamic>>(
-        '/auctions/$auctionId/contact',
-      );
-      return ApiResponse<Map<String, dynamic>>.fromJson(response);
-    } catch (e) {
-      return ApiResponse.error(e.toString());
-    }
-  }
 
   /// Obtenir le statut d'une offre personnelle
   Future<ApiResponse<Map<String, dynamic>>> getBidStatus(String auctionId) async {

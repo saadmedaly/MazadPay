@@ -22,7 +22,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { BlockedPhonesPage } from './pages/BlockedPhonesPage'
 import { PaymentMethodsPage } from './pages/PaymentMethodsPage'
 import { DeliveryDriversPage } from './pages/DeliveryDriversPage'
-import { MessagesPage } from './pages/MessagesPage'
+
 import { SponsorsPage } from './pages/SponsorsPage'
 import { RatingsPage } from './pages/RatingsPage'
 import { ComplaintsPage } from './pages/ComplaintsPage'
@@ -71,7 +71,7 @@ export default function App() {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="payment-methods" element={<PaymentMethodsPage />} />
         <Route path="delivery-drivers" element={<DeliveryDriversPage />} />
-        <Route path="messages" element={<MessagesPage />} />
+
         <Route path="sponsors" element={<SponsorsPage />} />
         <Route path="ratings" element={<RatingsPage />} />
         <Route path="complaints" element={<ComplaintsPage />} />

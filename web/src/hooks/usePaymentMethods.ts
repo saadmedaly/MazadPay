@@ -18,8 +18,8 @@ export const usePaymentMethods = () => {
   return useQuery({
     queryKey: ['payment-methods'],
     queryFn: async () => {
-      const response = await client.get<{ payment_methods: PaymentMethod[] }>('/v1/api/admin/payment-methods')
-      return response.data.payment_methods || []
+      const response = await client.get<{ data: PaymentMethod[] }>('/v1/api/admin/payment-methods')
+      return response.data.data || []
     }
   })
 }

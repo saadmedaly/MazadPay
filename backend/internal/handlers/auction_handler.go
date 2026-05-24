@@ -20,15 +20,13 @@ import (
 
 type AuctionHandler struct {
 	service  services.AuctionService
-	chatSvc  services.ChatService
 	logger   *zap.Logger
 	validate *validator.Validate
 }
 
-func NewAuctionHandler(svc services.AuctionService, chatSvc services.ChatService, logger *zap.Logger) *AuctionHandler {
+func NewAuctionHandler(svc services.AuctionService, logger *zap.Logger) *AuctionHandler {
 	return &AuctionHandler{
 		service:  svc,
-		chatSvc:  chatSvc,
 		logger:   logger,
 		validate: validator.New(),
 	}
@@ -1024,62 +1022,3 @@ func maskPhone(phone string) string {
 	return phone[:2] + "****" + phone[len(phone)-2:]
 }
 
-// ContactSeller - POST /api/v1/auctions/:id/contact - Envoyer message au vendeur
-func (h *AuctionHandler) ContactSeller(c *fiber.Ctx) error {
-	type ContactRequest struct {
-		Message string `json:"message" validate:"required"`
-	}
-	var req ContactRequest
-	if err := c.BodyParser(&req); err != nil {
-		return BadRequest(c, "Invalid request body")
-	}
-
-	id, err := uuid.Parse(c.Params("id"))
-	if err != nil {
-		return BadRequest(c, "Invalid auction ID")
-	}
-
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		return Unauthorized(c)
-	}
-
-	// Get auction to find seller
-	auction, _, err := h.service.GetByID(c.Context(), id)
-	if err != nil {
-		return NotFound(c, "Auction")
-	}
-
-	// Don't allow contacting yourself
-	if auction.SellerID == userID {
-		return BadRequest(c, "Cannot contact yourself")
-	}
-
-	// 1. Get or create direct conversation
-	conv, err := h.chatSvc.GetOrCreateDirectConversation(c.Context(), userID, auction.SellerID)
-	if err != nil {
-		return MapError(c, h.logger, err)
-	}
-
-	// 2. Send the message
-	msgReq := &models.SendMessageRequest{
-		Type:    "text",
-		Content: &req.Message,
-	}
-	_, err = h.chatSvc.SendMessage(c.Context(), conv.ID, userID, msgReq)
-	if err != nil {
-		return MapError(c, h.logger, err)
-	}
-
-	h.logger.Info("[Contact Seller] Success",
-		zap.String("auction_id", id.String()),
-		zap.String("conversation_id", conv.ID.String()),
-		zap.String("from_user", userID.String()),
-		zap.String("to_seller", auction.SellerID.String()),
-	)
-
-	return OK(c, fiber.Map{
-		"message":         "Message sent to seller",
-		"conversation_id": conv.ID,
-	})
-}

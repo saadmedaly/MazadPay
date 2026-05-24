@@ -13,10 +13,7 @@ import '../services/auction_api.dart';
 import 'home_page.dart';
 import '../services/bid_api.dart';
 import '../services/cache_service.dart';
-import '../services/chat_service.dart';
 import '../services/auth_service.dart';
-import '../models/message.dart';
-import '../pages/chat/chat_room_page.dart';
 import '../pages/how_to_bid_page.dart';
 import '../widgets/app_modals.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -156,106 +153,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   }
   // ────────────────────────────────────────────────────────────────────────
 
-  Future<void> _contactSeller(Auction auction) async {
-    final sellerId = auction.sellerId; 
-    if (sellerId.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.error_loading_auction)), // Fallback generic error or you can create a specific one
-        );
-      }
-      return;
-    }
 
-    final isLoggedIn = await AuthService().isLoggedIn();
-    if (!isLoggedIn) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.error_login_failed)),
-        );
-      }
-      return;
-    }
-
-    try {
-      final chatService = ChatService();
-      
-      // Ensure chat service is connected
-      if (chatService.currentUserId == null) {
-        debugPrint('ChatService not connected, attempting to connect...');
-        final authService = AuthService();
-        final userId = await authService.getUserId();
-        final token = await authService.getToken();
-        if (userId != null && token != null) {
-          await chatService.connect(userId, token);
-          debugPrint('ChatService connected successfully');
-        } else {
-          debugPrint('Could not connect ChatService: userId or token is null');
-        }
-      }
-      
-      // Check for existing direct conversation
-      // Note: This logic assumes sellerId is the actual user ID. 
-      // If it's a phone number, you might need to resolve it to a user ID first.
-      var conversation = await chatService.getDirectConversation(sellerId);
-      
-      if (conversation == null) {
-        debugPrint('Creating new conversation with seller: $sellerId');
-        conversation = await chatService.createConversation(
-          CreateConversationRequest(
-            type: 'direct',
-            userIds: [sellerId],
-            initialMessage: 'Interessé par l\'enchère: ${auction.title}',
-            metadata: {
-              'auction_id': auction.id,
-              'auction_title': auction.title,
-              'auction_image': (auction.imageUrls != null && auction.imageUrls!.isNotEmpty)
-                  ? auction.imageUrls![0]
-                  : null,
-              'auction_description': auction.description ?? '',
-            },
-          ),
-        );
-      } else {
-        // If the conversation exists, update its metadata on the server so other participants see the auction context
-        debugPrint('Updating conversation metadata for existing conversation...');
-        await chatService.updateConversationMetadata(
-          conversation.id,
-          {
-            'auction_id': auction.id,
-            'auction_title': auction.title,
-            'auction_image': (auction.imageUrls != null && auction.imageUrls!.isNotEmpty)
-                ? auction.imageUrls![0]
-                : null,
-            'auction_description': auction.description ?? '',
-          },
-        );
-      }
-
-      if (mounted && conversation != null) {
-        // If it's not a new conversation, we might want to send a message anyway 
-        // if we want the seller to see the context. 
-        // But for now, let's just navigate.
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatRoomPage(
-              conversationId: conversation!.id,
-              title: auction.title,
-              linkedAuction: auction,
-              initialMessage: 'Interessé par l\'enchère: ${auction.title}',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
-        );
-      }
-    }
-  }
 
   Future<void> _loadBidHistory() async {
     try {
