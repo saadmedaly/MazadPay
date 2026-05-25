@@ -1,5 +1,6 @@
 /// Export de tous les services API de l'application
 /// Usage: import 'package:mezadpay/services/services.dart';
+library;
 
 export 'api_service.dart';
 export 'auction_api.dart';

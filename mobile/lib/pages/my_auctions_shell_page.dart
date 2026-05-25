@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/l10n/app_localizations.dart';
-import 'package:mezadpay/pages/account_page.dart';
+import 'package:mezadpay/pages/my_auctions_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/create_ad_start_page.dart';
 import 'package:mezadpay/pages/services_shell_page.dart';
-import 'package:mezadpay/pages/my_auctions_shell_page.dart';
+import 'package:mezadpay/pages/account_shell_page.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 
-class AccountShellPage extends StatelessWidget {
-  const AccountShellPage({super.key});
+class MyAuctionsShellPage extends StatelessWidget {
+  const MyAuctionsShellPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -40,10 +40,10 @@ class AccountShellPage extends StatelessWidget {
           ],
         ),
       ),
-      body: const AccountPage(),
+      body: const MyAuctionsPage(),
       floatingActionButton: _buildFab(context),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: _AccountShellBottomNav(),
+      bottomNavigationBar: _ShellBottomNav(),
     );
   }
 
@@ -68,8 +68,8 @@ class AccountShellPage extends StatelessWidget {
   }
 }
 
-class _AccountShellBottomNav extends StatelessWidget {
-  const _AccountShellBottomNav();
+class _ShellBottomNav extends StatelessWidget {
+  const _ShellBottomNav();
 
   @override
   Widget build(BuildContext context) {
@@ -84,41 +84,39 @@ class _AccountShellBottomNav extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildItem(context, Icons.home_outlined, AppLocalizations.of(context)!.text_1, 0),
-            _buildItem(context, Icons.local_shipping_outlined, AppLocalizations.of(context)!.text_32, 1),
+            _buildItem(context, Icons.home_outlined, Icons.home, AppLocalizations.of(context)!.text_1, 0),
+            _buildItem(context, Icons.local_shipping_outlined, Icons.local_shipping, AppLocalizations.of(context)!.text_32, 1),
             const SizedBox(width: 48),
-            _buildItem(context, Icons.gavel_outlined, AppLocalizations.of(context)!.text_27, 2),
-            _buildItem(context, Icons.person, AppLocalizations.of(context)!.text_19, 3, active: true),
+            _buildItem(context, Icons.gavel, Icons.gavel, AppLocalizations.of(context)!.text_27, 2),
+            _buildItem(context, Icons.person_outline, Icons.person, AppLocalizations.of(context)!.text_19, 3),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildItem(BuildContext context, IconData icon, String label, int index, {bool active = false}) {
+  Widget _buildItem(BuildContext context, IconData icon, IconData activeIcon, String label, int index) {
+    bool isSelected = index == 2;
     const Color primaryBlue = Color(0xFF0084FF);
 
     return InkWell(
       onTap: () {
-        if (index == 2) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAuctionsShellPage()));
-        } else if (index == 3) {
-          return; // Already on account page
+        if (index == 2) return; // Already on my auctions
+        if (index == 3) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => AccountShellPage()));
+        } else if (index == 1) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ServicesShellPage()));
         } else {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) {
-            if (index == 0) return const HomePage();
-            if (index == 1) return ServicesShellPage();
-            return const HomePage();
-          }));
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
         }
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: active ? primaryBlue : Colors.grey[600]),
+          Icon(isSelected ? activeIcon : icon, color: isSelected ? primaryBlue : Colors.grey[600]),
           const SizedBox(height: 4),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: active ? FontWeight.bold : FontWeight.normal, color: active ? primaryBlue : Colors.grey[600])),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? primaryBlue : Colors.grey[600])),
         ],
       ),
     );

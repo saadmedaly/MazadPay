@@ -1,5 +1,6 @@
 /// Export de tous les providers de l'application
 /// Usage: import 'package:mezadpay/providers/providers.dart';
+library;
 
 export 'auth_provider.dart';
 export 'auction_provider.dart';

@@ -92,7 +92,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       final catResponse = await _categoryApi.getCategories();
       if (catResponse.success && catResponse.data != null) {
         // API returns List directly
-        final categoriesData = catResponse.data! as List<dynamic>;
+        final categoriesData = catResponse.data!;
         final categories = categoriesData
             .map((c) => Category.fromJson(c as Map<String, dynamic>))
             .toList();
@@ -112,7 +112,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       final locResponse = await _categoryApi.getLocations();
       if (locResponse.success && locResponse.data != null) {
         // API returns List directly
-        final locationsData = locResponse.data! as List<dynamic>;
+        final locationsData = locResponse.data!;
         final locations = locationsData
             .map((l) => Location.fromJson(l as Map<String, dynamic>))
             .toList();
@@ -589,7 +589,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   /// Pick images from gallery
   Future<void> _pickImages() async {
     try {
-      final List<XFile>? pickedFiles = await _imagePicker.pickMultiImage(
+      final List<XFile> pickedFiles = await _imagePicker.pickMultiImage(
         maxWidth: 1920,
         maxHeight: 1080,
         imageQuality: 85,

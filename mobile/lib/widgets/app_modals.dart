@@ -557,7 +557,7 @@ class AppModals {
                         const Center(child: CircularProgressIndicator())
                       else
                         DropdownButtonFormField<String>(
-                          value: selectedReasonId,
+                          initialValue: selectedReasonId,
                           decoration: _inputDecoration(context, 'Raison du signalement', isDarkMode),
                           items: reasons.map((r) {
                             final locale = Localizations.localeOf(context).languageCode;

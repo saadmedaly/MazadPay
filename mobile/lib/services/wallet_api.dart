@@ -54,8 +54,8 @@ class WalletApi {
         '/users/wallet/withdraw',
         data: {
           'amount': amount,
-          if (bankDetails != null) 'bank_details': bankDetails,
-          if (method != null) 'method': method,
+          'bank_details': ?bankDetails,
+          'method': ?method,
         },
       );
       

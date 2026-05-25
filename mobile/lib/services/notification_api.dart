@@ -62,8 +62,8 @@ class NotificationApi {
         '/notifications/token',
         data: {
           'fcm_token': fcmToken,
-          if (deviceId != null) 'device_id': deviceId,
-          if (platform != null) 'platform': platform,
+          'device_id': ?deviceId,
+          'platform': ?platform,
         },
       );
       

@@ -10,6 +10,7 @@ import 'home_page.dart';
 import '../widgets/success_dialog.dart';
 import 'phone_password_page.dart';
 import '../services/category_api.dart';
+import '../utils/error_mapper.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   final bool showSuccessDialog;
@@ -86,35 +87,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     super.dispose();
   }
 
-  String _getLocalizedError(BuildContext context, String? code, String defaultMessage) {
-    final l10n = AppLocalizations.of(context)!;
-    
-    switch (code) {
-      case 'invalid_pin':
-        return l10n.error_invalid_pin;
-      case 'unauthorized':
-      case 'not_found':
-      case 'invalid_credentials':
-      case 'user_not_found':
-        return l10n.error_invalid_credentials;
-      case 'connection_error':
-        return l10n.error_connection;
-      case 'too_many_requests':
-      case 'otp_rate_limited':
-        return l10n.error_too_many_requests;
-      case 'account_blocked':
-      case 'account_disabled':
-        return l10n.error_account_blocked;
-      case 'phone_already_registered':
-        return l10n.error_phone_already_registered;
-      default:
-        if (defaultMessage.toLowerCase().contains('connexion') || 
-            defaultMessage.toLowerCase().contains('connection')) {
-          return l10n.error_connection;
-        }
-        return l10n.error_login_failed;
-    }
+  bool get _isMauritania => _selectedCountry?['country_code'] == '+222';
+  bool get _isPhoneValid {
+    final phone = _phoneController.text.trim();
+    if (phone.length != 8) return false;
+    if (_isMauritania && !RegExp(r'^[234]').hasMatch(phone)) return false;
+    return true;
   }
+  bool get _isPasswordValid => _passwordController.text.trim().length == 4;
+  bool get _areFieldsValid => _isPhoneValid && _isPasswordValid;
 
   @override
   Widget build(BuildContext context) {
@@ -185,6 +166,31 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   counter: '${_phoneController.text.length}/8',
                   maxLength: 8,
                 ),
+                // Phone inline validation
+                if (_phoneController.text.isNotEmpty) ...[
+                  if (_phoneController.text.trim().length != 8)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, right: 8),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          AppLocalizations.of(context)!.error_phone_length,
+                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  if (_isMauritania && _phoneController.text.trim().length == 8 && !RegExp(r'^[234]').hasMatch(_phoneController.text.trim()))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, right: 8),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          AppLocalizations.of(context)!.error_phone_start_digit,
+                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ),
+                    ),
+                ],
                 const SizedBox(height: 8),
                 _buildInputField(
                   controller: _passwordController,
@@ -200,8 +206,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   counter: '${_passwordController.text.length}/4',
                   maxLength: 4,
                   keyboardType: TextInputType.number,
-                  letterSpacing: 24, // High spacing for digits as in screenshot
+                  letterSpacing: 24,
                 ),
+                // Password inline validation
+                if (_passwordController.text.isNotEmpty && _passwordController.text.trim().length != 4)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, right: 8),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        AppLocalizations.of(context)!.error_password_length,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ),
+                  ),
 
                 // Affichage des erreurs
                 Consumer(
@@ -223,7 +241,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              _getLocalizedError(context, loginState.errorCode, loginState.error!),
+                              mapError(context, loginState.errorCode, loginState.error!),
                               style: const TextStyle(color: Colors.red, fontSize: 14),
                             ),
                           ),
@@ -283,7 +301,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: ref.watch(loginControllerProvider).isLoading
+                    onPressed: ref.watch(loginControllerProvider).isLoading || !_areFieldsValid
                       ? null
                       : () async {
                           final countryCode = _selectedCountry?['country_code'] ?? '+222';
@@ -535,7 +553,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       },
                     ),
                   );
-                }).toList(),
+                }),
               const SizedBox(height: 40),
             ],
           ),

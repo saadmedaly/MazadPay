@@ -33,7 +33,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
   // Pagination
   int _currentPage = 1;
   final int _limit = 20;
-  int _totalAuctions = 0;
+  final int _totalAuctions = 0;
   bool _hasMore = true;
   
   // Filtres

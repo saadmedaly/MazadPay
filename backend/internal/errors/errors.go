@@ -4,8 +4,9 @@ import "errors"
 
 var (
 	// Général
-	ErrNotFound     = errors.New("resource_not_found")
-	ErrUnauthorized = errors.New("unauthorized")
+	ErrNotFound        = errors.New("resource_not_found")
+	ErrUserNotFound    = errors.New("user_not_found")
+	ErrUnauthorized    = errors.New("unauthorized")
 	ErrForbidden    = errors.New("forbidden")
 	ErrConflict     = errors.New("conflict")
 	ErrBadRequest   = errors.New("bad_request")

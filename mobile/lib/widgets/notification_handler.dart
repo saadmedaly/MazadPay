@@ -19,9 +19,9 @@ class NotificationHandler extends ConsumerStatefulWidget {
   final Widget child;
 
   const NotificationHandler({
-    Key? key,
+    super.key,
     required this.child,
-  }) : super(key: key);
+  });
 
   @override
   ConsumerState<NotificationHandler> createState() => _NotificationHandlerState();

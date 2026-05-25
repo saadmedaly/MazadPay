@@ -170,7 +170,7 @@ class _SettingsPageState extends State<SettingsPage> {
       subtitle: Text(subtitle, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
       value: _settings[key] ?? false,
       onChanged: (val) => _updateSetting(key, val),
-      activeColor: const Color(0xFF0081FF),
+      activeThumbColor: const Color(0xFF0081FF),
     );
   }
 }

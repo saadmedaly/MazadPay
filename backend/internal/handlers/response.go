@@ -152,6 +152,9 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "resource_not_found", "auction_not_found":
 		logger.Warn("Resource not found", logFields...)
 		return NotFound(c, "Resource")
+	case "user_not_found":
+		logger.Info("Login attempt with unregistered phone", logFields...)
+		return Fail(c, 401, "user_not_found", "Phone number not registered")
 	case "unauthorized":
 		logger.Warn("Unauthorized access attempt", logFields...)
 		return Unauthorized(c)

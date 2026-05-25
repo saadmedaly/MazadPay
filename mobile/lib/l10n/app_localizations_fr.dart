@@ -1255,6 +1255,24 @@ class AppLocalizationsFr extends AppLocalizations {
       'Veuillez remplir tous les champs obligatoires';
 
   @override
+  String get error_user_not_registered => 'Utilisateur non enregistré';
+
+  @override
+  String get error_phone_length =>
+      'Le numéro de téléphone doit contenir 8 chiffres';
+
+  @override
+  String get error_password_length =>
+      'Le mot de passe doit contenir 4 chiffres';
+
+  @override
+  String get error_country_required => 'Veuillez sélectionner un pays';
+
+  @override
+  String get error_phone_start_digit =>
+      'Le numéro mauritanien doit commencer par 2, 3 ou 4';
+
+  @override
   String get error_add_image => 'Veuillez ajouter au moins une image';
 
   @override

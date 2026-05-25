@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/account_page.dart';
-import 'package:mezadpay/pages/services_page.dart';
+import 'package:mezadpay/pages/services_shell_page.dart';
 import 'package:mezadpay/pages/about_mazad_pay_page.dart';
 import 'package:mezadpay/pages/how_to_bid_page.dart';
-import 'package:mezadpay/pages/my_auctions_page.dart';
+import 'package:mezadpay/pages/my_auctions_shell_page.dart';
 import 'package:mezadpay/pages/favorites_page.dart';
 import 'package:mezadpay/pages/all_auctions_page.dart';
 import 'package:mezadpay/pages/privacy_policy_page.dart';
@@ -125,7 +125,7 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
                             ? NetworkImage(_userAvatarUrl!)
                             : const AssetImage('assets/defualtprofile.png') as ImageProvider,
                         onBackgroundImageError: _userAvatarUrl != null
-                            ? (_, __) => null
+                            ? (_, __) {}
                             : null,
                         child: _userAvatarUrl == null && _isLoading
                             ? const CircularProgressIndicator(strokeWidth: 2)
@@ -145,7 +145,7 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
                   Navigator.pop(context); // Close drawer
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const AccountPage()),
+                    MaterialPageRoute(builder: (context) => AccountShellPage()),
                   );
                 },
                 borderRadius: BorderRadius.circular(16),
@@ -439,13 +439,13 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
           if (title == AppLocalizations.of(context)!.text_1) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
           } else if (title == AppLocalizations.of(context)!.text_32) {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ServicesPage()));
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ServicesShellPage()));
           } else if (title == AppLocalizations.of(context)!.text_19 || title == AppLocalizations.of(context)!.text_381) {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AccountPage()));
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => AccountShellPage()));
           } else if (title == AppLocalizations.of(context)!.text_23) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => AccountShellPage()));
           } else if (title == AppLocalizations.of(context)!.text_27) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const MyAuctionsPage()));
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAuctionsShellPage()));
           } else if (title == AppLocalizations.of(context)!.text_2) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const AllAuctionsPage()));
           } else if (title == AppLocalizations.of(context)!.text_380) {

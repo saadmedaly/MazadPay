@@ -167,14 +167,9 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
         final data = response.data!;
         List<Bid> bids = [];
         
-        if (data is Map<String, dynamic>) {
-          final bidsList = data['bids'] as List<dynamic>? ?? [];
-          bids = bidsList.map((e) => Bid.fromJson(e as Map<String, dynamic>)).toList();
-        } else if (data is List) {
-          final listData = data as List<dynamic>;
-          bids = listData.map((e) => Bid.fromJson(e as Map<String, dynamic>)).toList();
-        }
-        
+        final bidsList = data['bids'] as List<dynamic>? ?? [];
+        bids = bidsList.map((e) => Bid.fromJson(e as Map<String, dynamic>)).toList();
+              
         debugPrint('Loaded ${bids.length} bids');
         
         if (mounted) {
@@ -475,7 +470,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 Text(AppLocalizations.of(context)!.text_58, style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 14)),
                 const SizedBox(height: 4),
                 Text('${auction.minIncrement.toStringAsFixed(0)} MRU', 
-                    style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: const Color(0xFF0081FF), fontSize: 20, fontWeight: FontWeight.bold)),
+                    style: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: Color(0xFF0081FF), fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -821,16 +816,21 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   Widget _buildItemPropertiesSection(BuildContext context, Auction auction, bool isDarkMode) {
     final Map<String, String> props = {};
 
-    if (auction.condition != null && auction.condition!.isNotEmpty)
+    if (auction.condition != null && auction.condition!.isNotEmpty) {
       props['الحالة'] = _localizeCondition(auction.condition!);
-    if (auction.brand != null && auction.brand!.isNotEmpty)
+    }
+    if (auction.brand != null && auction.brand!.isNotEmpty) {
       props['الماركة'] = auction.brand!;
-    if (auction.category != null && auction.category!.isNotEmpty)
+    }
+    if (auction.category != null && auction.category!.isNotEmpty) {
       props['الفئة'] = auction.category!;
-    if (auction.city != null && auction.city!.isNotEmpty)
+    }
+    if (auction.city != null && auction.city!.isNotEmpty) {
       props['المدينة'] = auction.city!;
-    if (auction.lotNumber.isNotEmpty && auction.lotNumber != 'N/A')
+    }
+    if (auction.lotNumber.isNotEmpty && auction.lotNumber != 'N/A') {
       props['رقم LOT'] = auction.lotNumber;
+    }
 
     // Flatten item_details map
     if (auction.itemDetails != null) {

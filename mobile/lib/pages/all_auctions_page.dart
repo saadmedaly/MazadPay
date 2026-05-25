@@ -4,11 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
-import 'package:mezadpay/pages/create_ad_start_page.dart';
 import 'package:mezadpay/pages/auction_details_page.dart';
 import '../services/auction_api.dart';
 import '../services/category_api.dart';
-import 'my_auctions_page.dart';
 
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
@@ -29,7 +27,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   List<Map<String, dynamic>> _categories = [];
   List<Map<String, dynamic>> _subCategories = [];
   Map<String, List<Map<String, dynamic>>> _subCategoriesMap = {};
-  int _activeTabIndex = 0;
   int _selectedCategoryIndex = 0;
   int _selectedSubCategoryIndex = -1;
   bool _isLoading = true;
@@ -178,7 +175,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       final response = await _auctionApi.getAuctions(
         page: _currentPage,
         limit: 20,
-        status: _activeTabIndex == 0 ? 'active' : 'completed',
+        status: 'active',
         categoryId: _selectedCategoryId,
         minPrice: _minPrice > 0 ? _minPrice.toInt() : null,
         maxPrice: _maxPrice < 1000000 ? _maxPrice.toInt() : null,
@@ -246,7 +243,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       _filteredAuctions = _allAuctions.where((auction) {
         final title = auction['title_ar'] ?? auction['title'] ?? '';
         final matchesSearch = title.toLowerCase().contains(_searchController.text.toLowerCase());
-        final matchesStatus = _activeTabIndex == 0 ? auction['status'] == 'active' : auction['status'] == 'finished';
 
         bool matchesCategory = true;
         if (_selectedCategoryIndex != 0 && _categories.isNotEmpty) {
@@ -288,7 +284,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
           }
         }
 
-        return matchesSearch && matchesStatus && matchesCategory && matchesSubCategory && matchesPrice && matchesDate;
+        return matchesSearch && matchesCategory && matchesSubCategory && matchesPrice && matchesDate;
       }).toList();
     });
   }
@@ -552,7 +548,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         toolbarHeight: 60,
         centerTitle: true,
         title: Text(
-          _getAuctionTypesTitle(context),
+          _getActiveAuctionsTitle(context),
           style: GoogleFonts.plusJakartaSans(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -844,54 +840,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                   );
                 }),
 
-                // Custom Tabs — dynamic count
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Builder(builder: (context) {
-                    // Count active vs finished from all auctions (matching category filter)
-                    int activeCount = _allAuctions.where((a) {
-                      if (a['status'] != 'active') return false;
-                      if (_selectedCategoryIndex != 0) {
-                        return a['category'] == _categories[_selectedCategoryIndex]['key'];
-                      }
-                      return true;
-                    }).length;
-                    int finishedCount = _allAuctions.where((a) {
-                      if (a['status'] != 'finished') return false;
-                      if (_selectedCategoryIndex != 0) {
-                        return a['category'] == _categories[_selectedCategoryIndex]['key'];
-                      }
-                      return true;
-                    }).length;
-                    // Labels dynamiques selon la langue
-                    final locale = Localizations.localeOf(context).languageCode;
-                    String activeLabel, finishedLabel;
-                    switch (locale) {
-                      case 'ar':
-                        activeLabel = 'مزايدات نشطة';
-                        finishedLabel = 'مزايدات منتهية';
-                        break;
-                      case 'fr':
-                        activeLabel = 'Enchères actives';
-                        finishedLabel = 'Enchères terminées';
-                        break;
-                      case 'en':
-                      default:
-                        activeLabel = 'Active Auctions';
-                        finishedLabel = 'Finished Auctions';
-                        break;
-                    }
-                    
-                    return Row(
-                      children: [
-                        _buildStitchTab(1, finishedLabel, finishedCount.toString().padLeft(2, '0'), const Color(0xFFFFEDED), const Color(0xFFFF3B30)),
-                        const SizedBox(width: 12),
-                        _buildStitchTab(0, activeLabel, activeCount.toString().padLeft(2, '0'), const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
-                      ],
-                    );
-                  }),
-                ),
                 const SizedBox(height: 16),
               ],
             ),
@@ -959,87 +907,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         ],
       ),
 
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const CreateAdStartPage())),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        highlightElevation: 0,
-        child: Image.asset('assets/botum_bar.png', fit: BoxFit.contain),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-        elevation: 0,
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 6,
-        child: SizedBox(
-          height: 60,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildSimpleNavItem(Icons.home_outlined, l10n.text_1, 0),
-              _buildSimpleNavItem(Icons.local_shipping_outlined, l10n.text_32, 1),
-              const SizedBox(width: 48),
-              _buildSimpleNavItem(Icons.gavel_outlined, l10n.text_27, 2),
-              _buildSimpleNavItem(Icons.person_outline, l10n.text_19, 3),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStitchTab(int index, String label, String count, Color bgColor, Color textColor) {
-    bool isSelected = _activeTabIndex == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _activeTabIndex = index;
-          });
-          // Recharger les enchères depuis le serveur avec le nouveau statut
-          _loadAuctions();
-        },
-        child: Container(
-          height: 45,
-          decoration: BoxDecoration(
-            color: isSelected ? bgColor : Colors.grey.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: isSelected ? Border.all(color: textColor.withValues(alpha: 0.3)) : null,
-          ),
-          child: Center(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                      color: isSelected ? textColor : Colors.grey,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isSelected ? textColor : Colors.grey.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    count,
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -1310,30 +1177,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     );
   }
 
-  Widget _buildSimpleNavItem(IconData icon, String label, int index) {
-    return InkWell(
-      onTap: () {
-        if (index == 0 || index == 1 || index == 3) {
-          Navigator.of(context).popUntil((route) => route.isFirst);
-        } else if (index == 2) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const MyAuctionsPage()),
-          );
-        }
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: Colors.grey[600], size: 24),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAuctionImage(String? imageUrl) {
     if (imageUrl == null || imageUrl.isEmpty) {
       return Container(
@@ -1385,16 +1228,16 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     }
   }
 
-  String _getAuctionTypesTitle(BuildContext context) {
+  String _getActiveAuctionsTitle(BuildContext context) {
     final locale = Localizations.localeOf(context).languageCode;
     switch (locale) {
       case 'ar':
-        return 'أنواع المزادات';
+        return 'المزادات النشطة';
       case 'fr':
-        return 'Types d\'enchères';
+        return 'Enchères actives';
       case 'en':
       default:
-        return 'Auction Types';
+        return 'Active Auctions';
     }
   }
 

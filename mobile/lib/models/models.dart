@@ -1,5 +1,6 @@
 /// Export de tous les modèles de l'application
 /// Usage: import 'package:mezadpay/models/models.dart';
+library;
 
 export 'api_response.dart';
 export 'auction.dart';

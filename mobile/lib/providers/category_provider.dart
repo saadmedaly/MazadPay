@@ -11,11 +11,9 @@ final categoriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) asyn
   if (response.success && response.data != null) {
     final data = response.data!;
     // La réponse est maintenant directement une liste
-    if (data is List) {
-      final list = data as List;
-      return list.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+    final list = data as List;
+    return list.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
     }
-  }
   return [];
 });
 
@@ -29,12 +27,11 @@ final subCategoriesProvider = FutureProvider.family<List<Map<String, dynamic>>, 
     if (data is List) {
       final list = data as List;
       return list.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
-    } else if (data is Map) {
-      final subCategories = data['sub_categories'] ?? data['subCategories'] ?? data['data'] ?? [];
-      if (subCategories is List) {
-        return (subCategories as List).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
-      }
+    } else    final subCategories = data['sub_categories'] ?? data['subCategories'] ?? data['data'] ?? [];
+    if (subCategories is List) {
+      return (subCategories as List).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
     }
+  
   }
   return [];
 });

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:mezadpay/l10n/app_localizations.dart';
 
 class TimeUtils {
   static String formatDuration(BuildContext context, Duration duration) {

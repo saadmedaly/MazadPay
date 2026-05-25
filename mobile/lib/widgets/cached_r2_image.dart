@@ -13,13 +13,13 @@ class CachedR2Image extends StatelessWidget {
   final bool forceThumbnailOnly;
 
   const CachedR2Image({
-    Key? key,
+    super.key,
     required this.imageUrl,
     this.width,
     this.height,
     this.fit = BoxFit.cover,
     this.forceThumbnailOnly = false,
-  }) : super(key: key);
+  });
 
   /// Génère l'URL de la miniature en remplaçant l'extension par "-thumb.jpg" ou "-thumb.webp"
   /// Fonctionne si le backend respecte la convention de nommage {key}-thumb.ext

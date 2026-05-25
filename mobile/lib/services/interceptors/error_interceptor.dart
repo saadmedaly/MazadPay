@@ -72,7 +72,7 @@ class ErrorInterceptor extends Interceptor {
       case 400:
         return message;
       case 401:
-        return 'Session expirée. Veuillez vous reconnecter.';
+        return message;
       case 403:
         return 'Accès refusé. Vous n\'avez pas les permissions nécessaires.';
       case 404:

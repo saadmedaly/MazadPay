@@ -47,20 +47,16 @@ class AuctionNotifierApi extends _$AuctionNotifierApi {
       final responseData = response.data!;
       Map<String, dynamic> auctionData;
       
-      if (responseData is Map<String, dynamic>) {
-        final dynamic auctionRaw = responseData['auction'] ?? responseData;
-        if (auctionRaw is Map<String, dynamic>) {
-          auctionData = Map<String, dynamic>.from(auctionRaw);
-          if (responseData['images'] != null) {
-            auctionData['images'] = responseData['images'];
-          }
-        } else {
-          auctionData = responseData;
+      final dynamic auctionRaw = responseData['auction'] ?? responseData;
+      if (auctionRaw is Map<String, dynamic>) {
+        auctionData = Map<String, dynamic>.from(auctionRaw);
+        if (responseData['images'] != null) {
+          auctionData['images'] = responseData['images'];
         }
       } else {
-        return _getDefaultAuction(id);
+        auctionData = responseData;
       }
-
+    
       // Mettre en cache pour la prochaine fois
       await CacheService.instance.cacheAuctionDetail(id, auctionData);
       
@@ -195,7 +191,7 @@ class AuctionHistoryApi extends _$AuctionHistoryApi {
       
       if (response.success && response.data != null) {
         // API now returns List<dynamic> directly
-        final bidsList = response.data! as List<dynamic>;
+        final bidsList = response.data!;
         debugPrint('=== PROVIDER: Extracted ${bidsList.length} bids ===');
         final result = bidsList.map((bid) => _mapToBidEntry(bid as Map<String, dynamic>)).toList();
         debugPrint('=== PROVIDER: Mapped to ${result.length} BidEntry objects ===');
@@ -238,7 +234,7 @@ class AuctionHistoryApi extends _$AuctionHistoryApi {
     try {
       final response = await _auctionApi.getBidHistory(auctionId);
       if (response.success && response.data != null) {
-        final bidsList = response.data! as List<dynamic>;
+        final bidsList = response.data!;
         final bidList = bidsList.map((bid) => _mapToBidEntry(bid as Map<String, dynamic>)).toList();
         state = AsyncValue.data(bidList);
       } else {

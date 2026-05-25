@@ -35,7 +35,8 @@ class AuthApi {
       
       return apiResponse;
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
+      return ApiResponse.error(e.toString(), code: 'connection_error');
     }
   }
   
@@ -46,6 +47,7 @@ class AuthApi {
     required String fullName,
     String? email,
     String? city,
+    String? countryCode,
   }) async {
     try {
       final response = await _apiService.post<Map<String, dynamic>>(
@@ -54,14 +56,16 @@ class AuthApi {
           'phone': phone,
           'pin': pin,
           'full_name': fullName,
-          if (email != null) 'email': email,
-          if (city != null) 'city': city,
+          'email': ?email,
+          'city': ?city,
+          'country_code': ?countryCode,
         },
       );
       
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
+      return ApiResponse.error(e.toString(), code: 'connection_error');
     }
   }
   
@@ -81,7 +85,8 @@ class AuthApi {
       
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
+      return ApiResponse.error(e.toString(), code: 'connection_error');
     }
   }
   
@@ -103,7 +108,8 @@ class AuthApi {
       
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
+      return ApiResponse.error(e.toString(), code: 'connection_error');
     }
   }
   
@@ -125,7 +131,8 @@ class AuthApi {
       
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
+      return ApiResponse.error(e.toString(), code: 'connection_error');
     }
   }
   
@@ -145,7 +152,8 @@ class AuthApi {
       
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
+      return ApiResponse.error(e.toString(), code: 'connection_error');
     }
   }
   

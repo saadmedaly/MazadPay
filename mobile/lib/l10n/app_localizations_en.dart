@@ -1233,6 +1233,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get error_fill_required_fields => 'Please fill all required fields';
 
   @override
+  String get error_user_not_registered => 'User not registered';
+
+  @override
+  String get error_phone_length => 'Phone number must be 8 digits';
+
+  @override
+  String get error_password_length => 'Password must be 4 digits';
+
+  @override
+  String get error_country_required => 'Please select a country';
+
+  @override
+  String get error_phone_start_digit =>
+      'Mauritanian number must start with 2, 3, or 4';
+
+  @override
   String get error_add_image => 'Please add at least one image';
 
   @override

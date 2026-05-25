@@ -173,7 +173,7 @@ class _SupportPageState extends State<SupportPage> {
       ),
       child: ExpansionTile(
         title: Text(question, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.w600)),
-        trailing: const Icon(Icons.keyboard_arrow_down, size: 20, color: const Color(0xFF0081FF)),
+        trailing: const Icon(Icons.keyboard_arrow_down, size: 20, color: Color(0xFF0081FF)),
         childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         expandedAlignment: Alignment.centerLeft,
         children: [

@@ -1226,7 +1226,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get error_login_failed => 'فشل تسجيل الدخول';
 
   @override
-  String get error_invalid_credentials => 'بيانات الاعتماد غير صالحة';
+  String get error_invalid_credentials => 'رقم الهاتف أو كلمة المرور غير صحيحة';
 
   @override
   String get error_phone_required => 'رقم الهاتف مطلوب';
@@ -1269,6 +1269,22 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get error_fill_required_fields => 'يرجى ملء جميع الحقول المطلوبة';
+
+  @override
+  String get error_user_not_registered => 'المستخدم غير مسجل';
+
+  @override
+  String get error_phone_length => 'رقم الهاتف يجب أن يتكون من 8 أرقام';
+
+  @override
+  String get error_password_length => 'كلمة المرور يجب أن تتكون من 4 أرقام';
+
+  @override
+  String get error_country_required => 'يرجى اختيار الدولة';
+
+  @override
+  String get error_phone_start_digit =>
+      'يجب أن يبدأ رقم الموريتاني بـ 2 أو 3 أو 4';
 
   @override
   String get error_add_image => 'يرجى إضافة صورة واحدة على الأقل';

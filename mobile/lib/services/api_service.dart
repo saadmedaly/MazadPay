@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:dio/dio.dart';
-import 'package:mezadpay/services/auth_service.dart';
 import 'package:mezadpay/services/interceptors/auth_interceptor.dart';
 import 'package:mezadpay/services/interceptors/error_interceptor.dart';
 
@@ -160,39 +159,59 @@ class ApiService {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return const ApiException('Délai de connexion dépassé');
+        return const ApiException('Délai de connexion dépassé', code: 'connection_error');
       
       case DioExceptionType.badResponse:
         final statusCode = error.response?.statusCode;
-        final message = error.response?.data?['error']?['message'] ?? 
+        final errorData = error.response?.data?['error'];
+        final code = errorData?['code'] as String? ?? _codeForStatus(statusCode);
+        final message = errorData?['message'] ?? 
                        error.response?.data?['message'] ?? 
                        'Erreur serveur';
         
         switch (statusCode) {
           case 400:
-            return ApiException(message);
+            return ApiException(message, code: code);
           case 401:
-            return UnauthorizedException('Non autorisé');
+            return UnauthorizedException(message, code: code);
           case 403:
-            return ForbiddenException('Accès refusé');
+            return ForbiddenException(message, code: code);
           case 404:
-            return NotFoundException('Ressource non trouvée');
+            return NotFoundException(message, code: code);
+          case 409:
+            return ApiException(message, code: code);
+          case 422:
+            return ApiException(message, code: code);
           case 429:
-            return RateLimitException('Trop de requêtes. Veuillez réessayer plus tard.');
+            return RateLimitException(message, code: code);
           case 500:
-            return ServerException('Erreur serveur interne');
+            return ServerException(message, code: code);
           default:
-            return ApiException(message);
+            return ApiException(message, code: code);
         }
       
       case DioExceptionType.cancel:
-        return const ApiException('Requête annulée');
+        return const ApiException('Requête annulée', code: 'cancelled');
       
       case DioExceptionType.unknown:
-        return ApiException('Erreur de connexion: ${error.message}');
+        return ApiException('Erreur de connexion: ${error.message}', code: 'connection_error');
       
       default:
-        return ApiException('Erreur inconnue: ${error.message}');
+        return ApiException('Erreur inconnue: ${error.message}', code: 'unknown_error');
+    }
+  }
+  
+  String _codeForStatus(int? statusCode) {
+    switch (statusCode) {
+      case 400: return 'bad_request';
+      case 401: return 'unauthorized';
+      case 403: return 'forbidden';
+      case 404: return 'not_found';
+      case 409: return 'conflict';
+      case 422: return 'validation_error';
+      case 429: return 'too_many_requests';
+      case 500: return 'server_error';
+      default:  return 'error';
     }
   }
 }
@@ -200,28 +219,29 @@ class ApiService {
 /// Exceptions personnalisées pour l'API
 class ApiException implements Exception {
   final String message;
-  const ApiException(this.message);
+  final String? code;
+  const ApiException(this.message, {this.code});
   
   @override
   String toString() => message;
 }
 
 class UnauthorizedException extends ApiException {
-  const UnauthorizedException(String message) : super(message);
+  const UnauthorizedException(super.message, {super.code});
 }
 
 class ForbiddenException extends ApiException {
-  const ForbiddenException(String message) : super(message);
+  const ForbiddenException(super.message, {super.code});
 }
 
 class NotFoundException extends ApiException {
-  const NotFoundException(String message) : super(message);
+  const NotFoundException(super.message, {super.code});
 }
 
 class RateLimitException extends ApiException {
-  const RateLimitException(String message) : super(message);
+  const RateLimitException(super.message, {super.code});
 }
 
 class ServerException extends ApiException {
-  const ServerException(String message) : super(message);
+  const ServerException(super.message, {super.code});
 }

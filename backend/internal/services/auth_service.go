@@ -111,7 +111,7 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 func (s *authService) Login(ctx context.Context, phone, pin string) (string, *models.User, error) {
 	user, err := s.userRepo.FindByPhone(ctx, phone)
 	if err != nil {
-		return "", nil, apperr.ErrUnauthorized
+		return "", nil, apperr.ErrUserNotFound
 	}
 
 	// Vérifier si le compte est actif

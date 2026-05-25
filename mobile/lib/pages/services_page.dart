@@ -119,29 +119,32 @@ class ServicesPage extends StatelessWidget {
   }
 
   Widget _buildServiceCard(BuildContext context, _ServiceItem svc, {VoidCallback? onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: svc.bgColor,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(svc.icon, size: 40, color: svc.iconColor),
-            const SizedBox(height: 10),
-            Text(
-              svc.title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'Plus Jakarta Sans',
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: svc.bgColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(svc.icon, size: 40, color: svc.iconColor),
+              const SizedBox(height: 10),
+              Text(
+                svc.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

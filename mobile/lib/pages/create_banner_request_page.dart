@@ -3,11 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:mezadpay/services/request_api.dart';
-import 'package:mezadpay/services/r2_upload_service.dart';
 import 'package:mezadpay/services/api_service.dart';
-import 'package:path/path.dart' as path;
 import 'package:dio/dio.dart';
 
 class CreateBannerRequestPage extends StatefulWidget {

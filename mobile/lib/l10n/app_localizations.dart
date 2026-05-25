@@ -2455,7 +2455,7 @@ abstract class AppLocalizations {
   /// No description provided for @error_invalid_credentials.
   ///
   /// In ar, this message translates to:
-  /// **'بيانات الاعتماد غير صالحة'**
+  /// **'رقم الهاتف أو كلمة المرور غير صحيحة'**
   String get error_invalid_credentials;
 
   /// No description provided for @error_phone_required.
@@ -2541,6 +2541,36 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'يرجى ملء جميع الحقول المطلوبة'**
   String get error_fill_required_fields;
+
+  /// No description provided for @error_user_not_registered.
+  ///
+  /// In ar, this message translates to:
+  /// **'المستخدم غير مسجل'**
+  String get error_user_not_registered;
+
+  /// No description provided for @error_phone_length.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم الهاتف يجب أن يتكون من 8 أرقام'**
+  String get error_phone_length;
+
+  /// No description provided for @error_password_length.
+  ///
+  /// In ar, this message translates to:
+  /// **'كلمة المرور يجب أن تتكون من 4 أرقام'**
+  String get error_password_length;
+
+  /// No description provided for @error_country_required.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى اختيار الدولة'**
+  String get error_country_required;
+
+  /// No description provided for @error_phone_start_digit.
+  ///
+  /// In ar, this message translates to:
+  /// **'يجب أن يبدأ رقم الموريتاني بـ 2 أو 3 أو 4'**
+  String get error_phone_start_digit;
 
   /// No description provided for @error_add_image.
   ///

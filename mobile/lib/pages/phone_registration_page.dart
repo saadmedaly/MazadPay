@@ -5,6 +5,7 @@ import 'login_page.dart';
 import 'otp_entry_page.dart';
 import '../services/auth_api.dart';
 import '../services/category_api.dart';
+import '../utils/error_mapper.dart';
 
 class PhoneRegistrationPage extends ConsumerStatefulWidget {
   const PhoneRegistrationPage({super.key});
@@ -51,35 +52,28 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
     }
   }
 
+  @override
   void dispose() {
     _phoneController.dispose();
     super.dispose();
   }
 
-  String _getLocalizedError(BuildContext context, String? code, String defaultMessage) {
-    final l10n = AppLocalizations.of(context)!;
-    
-    switch (code) {
-      case 'phone_already_registered':
-        return l10n.error_phone_already_registered;
-      case 'otp_rate_limited':
-      case 'too_many_requests':
-        return l10n.error_too_many_requests;
-      case 'connection_error':
-        return l10n.error_connection;
-      default:
-        if (defaultMessage.toLowerCase().contains('connexion') || 
-            defaultMessage.toLowerCase().contains('connection')) {
-          return l10n.error_connection;
-        }
-        return l10n.error_generic.replaceFirst('{error}', defaultMessage);
-    }
-  }
+  bool get _isMauritania => _selectedCountry?['country_code'] == '+222';
 
   Future<void> _sendOTP() async {
-    if (_phoneController.text.length != 8) {
+    final l10n = AppLocalizations.of(context)!;
+    final phone = _phoneController.text.trim();
+
+    if (phone.length != 8) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.text_213)),
+        SnackBar(content: Text(l10n.error_phone_length), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    if (_isMauritania && !RegExp(r'^[234]').hasMatch(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.error_phone_start_digit), backgroundColor: Colors.red),
       );
       return;
     }
@@ -89,7 +83,7 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
     try {
       final countryCode = _selectedCountry?['country_code'] ?? '+222';
       final response = await _authApi.sendOTP(
-        phone: '$countryCode ${_phoneController.text}',
+        phone: '$countryCode${_phoneController.text}',
         purpose: 'register',
       );
 
@@ -106,7 +100,7 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_getLocalizedError(context, response.error?.code, response.error?.message ?? ''))),
+          SnackBar(content: Text(mapError(context, response.error?.code, response.error?.message ?? ''))),
         );
       }
     } catch (e) {
@@ -469,7 +463,7 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
                       },
                     ),
                   );
-                }).toList(),
+                }),
               const SizedBox(height: 40),
             ],
           ),

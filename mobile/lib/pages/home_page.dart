@@ -30,7 +30,7 @@ import '../services/cache_service.dart';
 import '../services/banner_api.dart';
 import '../services/sponsor_api.dart';
 import 'notifications_page.dart';
-import 'my_auctions_page.dart';
+import 'my_auctions_shell_page.dart';
 import 'services_page.dart';
 import 'account_page.dart';
 
@@ -62,7 +62,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   int _currentIndex = 0;
 
-  bool _showLocationModal = true;
+  final bool _showLocationModal = true;
 
   int _selectedCityIndex = 0;
 
@@ -325,7 +325,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
         
 
-        if (allLocations is List && allLocations.isNotEmpty) {
+        if (allLocations.isNotEmpty) {
 
           final allCities = allLocations.map((item) => item as Map<String, dynamic>).toList();
 
@@ -1488,7 +1488,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         if (index == 2) {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const MyAuctionsPage()),
+            MaterialPageRoute(builder: (context) => MyAuctionsShellPage()),
           );
         } else {
           setState(() => _currentIndex = index);
