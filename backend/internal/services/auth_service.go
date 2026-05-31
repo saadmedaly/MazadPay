@@ -39,6 +39,7 @@ type authService struct {
 	env            string
 	developmentOTP string // Code OTP de développement
 	smsService     SMSService
+	smsEnabled     bool // true only when SMS credentials are configured
 	otpLength      int
 }
 
@@ -50,6 +51,8 @@ func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExp
 	if otpLength == 0 {
 		otpLength = 4 // Default 4 digits
 	}
+	// Detect if SMS credentials are actually configured
+	smsEnabled := sms != nil && sms.IsConfigured()
 	return &authService{
 		userRepo:       userRepo,
 		jwtSecret:      jwtSecret,
@@ -57,6 +60,7 @@ func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExp
 		env:            env,
 		developmentOTP: devOTP,
 		smsService:     sms,
+		smsEnabled:     smsEnabled,
 		otpLength:      otpLength,
 	}
 }
@@ -89,6 +93,10 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 		return err
 	}
 
+	// Auto-verify user when SMS is not configured so login works immediately.
+	// When Wablas credentials are set, user must verify via OTP first.
+	isVerified := !s.smsEnabled
+
 	user := &models.User{
 		ID:           uuid.New(),
 		Phone:        phone,
@@ -100,7 +108,7 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 		LanguagePref: "ar",
 		Role:         "user",
 		IsActive:     true,
-		IsVerified:   false,
+		IsVerified:   isVerified,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}

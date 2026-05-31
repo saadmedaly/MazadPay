@@ -18,6 +18,7 @@ const wablasSendPath = "/api/send-message"
 
 type SMSService interface {
 	SendOTP(phone, code string) error
+	IsConfigured() bool
 }
 
 type smsService struct {
@@ -34,6 +35,10 @@ func NewSMSService(token, secretKey, serverURL string, logger *zap.Logger) SMSSe
 		serverURL: serverURL,
 		logger:    logger,
 	}
+}
+
+func (s *smsService) IsConfigured() bool {
+	return s.token != "" && s.secretKey != ""
 }
 
 func (s *smsService) SendOTP(phone, code string) error {
