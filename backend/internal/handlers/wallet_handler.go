@@ -12,12 +12,17 @@ import (
 )
 
 type WalletHandler struct {
-	svc    services.WalletService
-	logger *zap.Logger
+	svc      services.WalletService
+	mediaSvc services.MediaService
+	logger   *zap.Logger
 }
 
-func NewWalletHandler(svc services.WalletService, logger *zap.Logger) *WalletHandler {
-	return &WalletHandler{svc: svc, logger: logger}
+func NewWalletHandler(svc services.WalletService, logger *zap.Logger, mediaSvc ...services.MediaService) *WalletHandler {
+	h := &WalletHandler{svc: svc, logger: logger}
+	if len(mediaSvc) > 0 {
+		h.mediaSvc = mediaSvc[0]
+	}
+	return h
 }
 
 func (h *WalletHandler) GetMe(c *fiber.Ctx) error {
@@ -57,21 +62,42 @@ func (h *WalletHandler) Deposit(c *fiber.Ctx) error {
 }
 
 func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
-	type Request struct {
-		ReceiptURL string `json:"receipt_url"`
-	}
-	var req Request
-	if err := c.BodyParser(&req); err != nil {
-		return BadRequest(c, "Invalid request body")
-	}
-
 	txID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return BadRequest(c, "Invalid transaction ID")
 	}
 
-	if err := h.svc.UploadReceipt(c.Context(), txID, req.ReceiptURL); err != nil {
-		return InternalError(c, "Failed to upload receipt")
+	var receiptURL string
+
+	// Accept multipart file upload
+	fileHeader, err := c.FormFile("receipt")
+	if err == nil && fileHeader != nil {
+		if h.mediaSvc == nil {
+			return InternalError(c, "Media service not available")
+		}
+		file, err := fileHeader.Open()
+		if err != nil {
+			return InternalError(c, "Failed to open receipt file")
+		}
+		defer file.Close()
+		receiptURL, err = h.mediaSvc.UploadFile(c.Context(), file, fileHeader, "receipts")
+		if err != nil {
+			return InternalError(c, "Failed to upload receipt image")
+		}
+	} else {
+		// Fallback: JSON body with receipt_url
+		type Request struct {
+			ReceiptURL string `json:"receipt_url"`
+		}
+		var req Request
+		if err := c.BodyParser(&req); err != nil || req.ReceiptURL == "" {
+			return BadRequest(c, "Receipt file or receipt_url required")
+		}
+		receiptURL = req.ReceiptURL
+	}
+
+	if err := h.svc.UploadReceipt(c.Context(), txID, receiptURL); err != nil {
+		return InternalError(c, "Failed to update receipt")
 	}
 
 	return OK(c, fiber.Map{"message": "Receipt uploaded successfully"})
@@ -145,46 +171,9 @@ func (h *WalletHandler) GetPaymentMethods(c *fiber.Ctx) error {
 		return Unauthorized(c)
 	}
 
-	// Return list of available payment methods
-	// For now, return a static list - in production this would be dynamic
-	paymentMethods := []map[string]interface{}{
-		{
-			"code":       "masrvi",
-			"name_ar":    "مصروفي",
-			"name_fr":    "Masrivi",
-			"name_en":    "Masrivi",
-			"logo_url":   "",
-			"is_active":  true,
-			"country_id": nil,
-		},
-		{
-			"code":       "bankily",
-			"name_ar":    "بنكيلي",
-			"name_fr":    "Bankily",
-			"name_en":    "Bankily",
-			"logo_url":   "",
-			"is_active":  true,
-			"country_id": nil,
-		},
-		{
-			"code":       "sedad",
-			"name_ar":    "سداد",
-			"name_fr":    "Sedad",
-			"name_en":    "Sedad",
-			"logo_url":   "",
-			"is_active":  true,
-			"country_id": nil,
-		},
-		{
-			"code":       "click",
-			"name_ar":    "كليك",
-			"name_fr":    "Click",
-			"name_en":    "Click",
-			"logo_url":   "",
-			"is_active":  true,
-			"country_id": nil,
-		},
+	methods, err := h.svc.GetPaymentMethods(c.Context())
+	if err != nil {
+		return InternalError(c, "Failed to get payment methods")
 	}
-
-	return OK(c, paymentMethods)
+	return OK(c, methods)
 }

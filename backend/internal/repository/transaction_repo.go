@@ -96,11 +96,34 @@ func (r *transactionRepo) UpdateReceipt(ctx context.Context, id uuid.UUID, url s
 }
 
 func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE transactions 
-		SET status = $1, admin_notes = $2, reviewed_by = $3, reviewed_at = now() 
-		WHERE id = $4`, status, notes, adminID, id)
-	return err
+	dbtx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer dbtx.Rollback()
+
+	var tx models.Transaction
+	if err := dbtx.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1 FOR UPDATE", id); err != nil {
+		return err
+	}
+
+	if _, err := dbtx.ExecContext(ctx, `
+		UPDATE transactions
+		SET status = $1, admin_notes = $2, reviewed_by = $3, reviewed_at = now()
+		WHERE id = $4`, status, notes, adminID, id); err != nil {
+		return err
+	}
+
+	// Credit wallet on deposit approval — only if not already completed (prevents double-credit)
+	if status == "completed" && tx.Type == "deposit" && tx.Status != "completed" {
+		if _, err := dbtx.ExecContext(ctx,
+			`UPDATE wallets SET balance = balance + $1, version = version + 1 WHERE user_id = $2`,
+			tx.Amount, tx.UserID); err != nil {
+			return err
+		}
+	}
+
+	return dbtx.Commit()
 }
 
 func (r *transactionRepo) GetStats(ctx context.Context) (float64, float64, error) {

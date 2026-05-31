@@ -16,12 +16,21 @@ type WalletRepository interface {
     FindActiveHold(ctx context.Context, tx *sqlx.Tx, userID, auctionID uuid.UUID) (*models.WalletHold, error)
     CreateHold(ctx context.Context, tx *sqlx.Tx, userID, auctionID uuid.UUID, amount decimal.Decimal) error
     DebitFreezeBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal, version int) error
+    GetPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error)
 }
 
 type walletRepo struct{ db *sqlx.DB }
 
 func NewWalletRepository(db *sqlx.DB) WalletRepository {
     return &walletRepo{db: db}
+}
+
+func (r *walletRepo) GetPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error) {
+    var methods []models.PaymentMethod
+    err := r.db.SelectContext(ctx, &methods,
+        `SELECT id, code, name_ar, name_fr, name_en, logo_url, is_active, country_id, created_at
+         FROM payment_methods WHERE is_active = true ORDER BY id`)
+    return methods, err
 }
 
 func (r *walletRepo) GetByUserID(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {

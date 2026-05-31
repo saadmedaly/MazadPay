@@ -17,6 +17,7 @@ type WalletService interface {
 	RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error)
 	GetTransactions(ctx context.Context, userID uuid.UUID, page, perPage int) ([]models.Transaction, int, error)
 	GetTransaction(ctx context.Context, userID uuid.UUID, txID uuid.UUID) (*models.Transaction, error)
+	GetPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error)
 }
 
 type walletService struct {
@@ -31,6 +32,10 @@ func NewWalletService(walletRepo repository.WalletRepository, txRepo repository.
 
 func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
 	return s.walletRepo.GetByUserID(ctx, userID)
+}
+
+func (s *walletService) GetPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error) {
+	return s.walletRepo.GetPaymentMethods(ctx)
 }
 
 func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string) (*models.Transaction, error) {

@@ -6,7 +6,7 @@ class PaymentMethodsService {
 
   Future<List<PaymentMethod>> getPaymentMethods() async {
     // The backend returns a JSON object, typically with a `data` field containing the list.
-    final response = await _api.get<Map<String, dynamic>>('/admin/payment-methods');
+    final response = await _api.get<Map<String, dynamic>>('/users/wallet/payment-methods');
     if (response == null) return [];
     // Support both direct list response and wrapped `{ data: [...] }` structure.
     final List<dynamic> list =

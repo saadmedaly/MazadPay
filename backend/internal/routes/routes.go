@@ -76,7 +76,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	userHandler := handlers.NewUserHandler(userSvc, logger)
 	adminHandler := handlers.NewAdminHandler(adminSvc, reportSvc, logger, rdb)
 	bannerHandler := handlers.NewBannerHandler(contentSvc, logger)
-	walletHandler := handlers.NewWalletHandler(walletSvc, logger)
+	walletHandler := handlers.NewWalletHandler(walletSvc, logger, mediaSvc)
 	reqHandler := handlers.NewRequestHandler(reqSvc, logger)
 	contentHandler := handlers.NewContentHandler(contentSvc, logger)
 	notifHandler := handlers.NewNotificationHandler(notifSvc, logger)

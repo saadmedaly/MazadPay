@@ -25,11 +25,12 @@ final subCategoriesProvider = FutureProvider.family<List<Map<String, dynamic>>, 
   if (response.success && response.data != null) {
     final data = response.data!;
     if (data is List) {
-      final list = data as List;
-      return list.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
-    } else    final subCategories = data['sub_categories'] ?? data['subCategories'] ?? data['data'] ?? [];
-    if (subCategories is List) {
-      return (subCategories as List).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      return (data as List).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+    } else {
+      final subCategories = data['sub_categories'] ?? data['subCategories'] ?? data['data'] ?? [];
+      if (subCategories is List) {
+        return subCategories.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      }
     }
   
   }
