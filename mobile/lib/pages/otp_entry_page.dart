@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,9 +22,18 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
   final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
   final AuthApi _authApi = AuthApi();
   bool _isLoading = false;
+  int _countdown = 120;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdown();
+  }
 
   @override
   void dispose() {
+    _timer?.cancel();
     for (var controller in _controllers) {
       controller.dispose();
     }
@@ -31,6 +41,57 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
       node.dispose();
     }
     super.dispose();
+  }
+
+  String get _formattedTime {
+    final min = (_countdown ~/ 60).toString().padLeft(2, '0');
+    final sec = (_countdown % 60).toString().padLeft(2, '0');
+    return '$min:$sec';
+  }
+
+  void _startCountdown() {
+    _timer?.cancel();
+    setState(() => _countdown = 120);
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_countdown <= 1) {
+        t.cancel();
+        setState(() => _countdown = 0);
+      } else {
+        setState(() => _countdown--);
+      }
+    });
+  }
+
+  Future<void> _resendOTP() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await _authApi.sendOTP(
+        phone: widget.phoneNumber,
+        purpose: 'register',
+      );
+      setState(() => _isLoading = false);
+      if (response.success) {
+        _startCountdown();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(AppLocalizations.of(context)!.text_261)),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(_getLocalizedError(context, response.error?.code, response.error?.message ?? ''))),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.error_connection)),
+        );
+      }
+    }
   }
 
   String _getLocalizedError(BuildContext context, String? code, String defaultMessage) {
@@ -193,29 +254,39 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              RichText(
-                textAlign: TextAlign.right,
-                text: TextSpan(
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.5,
-                    color: isDarkMode ? Colors.grey[400] : Colors.grey[500],
-                    fontFamily: 'Tajawal',
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(top: 2, end: 8),
+                    child: Icon(Icons.chat_outlined, size: 18, color: const Color(0xFF25D366)),
                   ),
-                  children: [
-                    TextSpan(
-                      text:
-                          AppLocalizations.of(context)!.text_261,
-                    ),
-                    TextSpan(
-                      text: widget.phoneNumber,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.grey[200] : Colors.grey[800],
+                  Expanded(
+                    child: RichText(
+                      textAlign: TextAlign.right,
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: isDarkMode ? Colors.grey[400] : Colors.grey[500],
+                          fontFamily: 'Tajawal',
+                        ),
+                        children: [
+                          TextSpan(
+                            text: AppLocalizations.of(context)!.text_261,
+                          ),
+                          TextSpan(
+                            text: widget.phoneNumber,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.grey[200] : Colors.grey[800],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               Directionality(
@@ -274,7 +345,7 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
                     children: [
                       TextSpan(text: AppLocalizations.of(context)!.text_262),
                       TextSpan(
-                        text: '4:24',
+                        text: _formattedTime,
                         style: TextStyle(
                           fontWeight: FontWeight.w500,
                           color: isDarkMode
@@ -318,7 +389,7 @@ class _OtpEntryPageState extends ConsumerState<OtpEntryPage> {
               const Spacer(),
               Center(
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: _countdown > 0 ? null : () => _resendOTP(),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     minimumSize: Size.zero,

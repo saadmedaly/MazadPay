@@ -94,7 +94,7 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
           context,
           MaterialPageRoute(
             builder: (context) => OtpEntryPage(
-              phoneNumber: '${_selectedCountry?['country_code'] ?? '+222'} ${_phoneController.text}',
+              phoneNumber: '$countryCode${_phoneController.text}',
             ),
           ),
         );
@@ -313,7 +313,22 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.chat_outlined, size: 16, color: const Color(0xFF25D366)),
+                  const SizedBox(width: 6),
+                  Text(
+                    AppLocalizations.of(context)!.text_261,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDarkMode ? Colors.grey[400] : Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 height: 48,

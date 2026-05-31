@@ -24,6 +24,8 @@ type bidService struct {
 	auctionRepo repository.AuctionRepository
 	bidRepo     repository.BidRepository
 	walletRepo  repository.WalletRepository
+	userRepo    repository.UserRepository
+	notifSvc    NotificationService
 	hub         AuctionHub
 }
 
@@ -32,15 +34,20 @@ func NewBidService(
 	auctionRepo repository.AuctionRepository,
 	bidRepo repository.BidRepository,
 	walletRepo repository.WalletRepository,
+	userRepo repository.UserRepository,
+	notifSvc NotificationService,
 	hub AuctionHub,
 ) BidService {
-	return &bidService{db: db, auctionRepo: auctionRepo, bidRepo: bidRepo, walletRepo: walletRepo, hub: hub}
+	return &bidService{db: db, auctionRepo: auctionRepo, bidRepo: bidRepo, walletRepo: walletRepo, userRepo: userRepo, notifSvc: notifSvc, hub: hub}
 }
 
 // PlaceBid — LOGIQUE CRITIQUE avec verrouillage optimiste
 // Ordre : SELECT FOR UPDATE wallet → vérifications → UPDATE auctions (version) → INSERT bid → COMMIT → Broadcast
 func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, amount decimal.Decimal) (*models.Bid, error) {
 	var createdBid *models.Bid
+
+	// Trouver l'ancien meilleur enchérisseur avant la transaction
+	prevTopBid, _ := s.bidRepo.FindTopBid(ctx, auctionID)
 
 	err := database.WithTransaction(s.db, func(tx *sqlx.Tx) error {
 		// 1. Charger l'enchère avec la transaction pour garantir la cohérence
@@ -67,8 +74,6 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 		}
 
 		// 3. [SUPPRIMÉ] Pas de vérification wallet/caution lors du bid
-		// Les utilisateurs peuvent enchérir librement sans bloquer de fonds
-		// Le paiement se fera après la fin de l'enchère uniquement pour le gagnant
 
 		// 4. Marquer les anciens bids comme non-gagnants
 		if err := s.bidRepo.SetAllNotWinning(ctx, tx, auctionID); err != nil {
@@ -99,13 +104,11 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 
 		// 7. Broadcast WebSocket en temps réel
 		go func() {
-			// Récupérer les infos utilisateur pour le masquage
 			var userPhone string
 			err := s.db.QueryRowContext(ctx, "SELECT phone FROM users WHERE id = $1", userID).Scan(&userPhone)
 			if err != nil {
 				return
 			}
-			// Masquer le numéro (garder 4 derniers chiffres)
 			if len(userPhone) >= 4 {
 				userPhone = "####" + userPhone[len(userPhone)-4:]
 			}
@@ -116,12 +119,11 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 					AuctionID:    auctionID.String(),
 					NewPrice:     amount.InexactFloat64(),
 					BidderMasked: userPhone,
-					BidCount:     0, // À calculer depuis la base
+					BidCount:     0,
 					SecondsLeft:  int64(auction.EndTime.Sub(time.Now()).Seconds()),
 				},
 			}
 
-			// Envoyer à tous les clients de l'enchère
 			s.hub.Broadcast(auctionID, payload)
 		}()
 
@@ -132,6 +134,38 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 	if err != nil {
 		return nil, err
 	}
+
+	// 8. Notifier l'ancien enchérisseur qu'il a été dépassé
+	go func() {
+		if prevTopBid == nil || prevTopBid.UserID == userID {
+			return
+		}
+		auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+		if err != nil {
+			return
+		}
+		previousBidder, err := s.userRepo.FindByID(ctx, prevTopBid.UserID)
+		if err != nil {
+			return
+		}
+		language := "ar"
+		if previousBidder.LanguagePref != "" {
+			language = previousBidder.LanguagePref
+		}
+		title := auction.TitleAr
+		if language == "fr" && auction.TitleFr != nil && *auction.TitleFr != "" {
+			title = *auction.TitleFr
+		} else if language == "en" && auction.TitleEn != nil && *auction.TitleEn != "" {
+			title = *auction.TitleEn
+		}
+		_ = s.notifSvc.SendLocalizedPush(ctx, prevTopBid.UserID, "bid_outbid", language, map[string]string{
+			"auctionTitle": title,
+			"newPrice":     amount.String(),
+		}, map[string]string{
+			"type":      "bid_outbid",
+			"auctionId": auctionID.String(),
+		})
+	}()
 
  	auction, _ := s.auctionRepo.FindByID(ctx, auctionID)
 	secsLeft := int64(0)

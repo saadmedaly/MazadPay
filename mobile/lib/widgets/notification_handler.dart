@@ -80,10 +80,8 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
 
   /// Handler pour les notifications reçues
   void _handleNotification(Map<String, dynamic> data) {
-    // Optionnel: Afficher un badge ou une alerte
     final String? type = data['type'];
-    if (type == 'auction_ending_soon' || type == 'auction_reported') {
-      // Ces notifications sont urgentes
+    if (type == 'auction_reported') {
       _navigateFromNotification(data);
     }
   }
@@ -95,7 +93,7 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
       if (!mounted) return;
       
       final String? type = data['type'];
-      final String? auctionId = data['auctionId'];
+      final String? auctionId = data['auctionId'] ?? data['auction_id'];
 
       switch (type) {
         case 'auction_pending':
@@ -103,16 +101,17 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
         case 'auction_rejected':
         case 'auction_ended':
         case 'auction_won':
-        case 'auction_ending_soon':
+        case 'bid_outbid':
           if (auctionId != null) {
             _navigateToAuction(auctionId);
           }
           break;
         case 'new_message':
-          // TODO: Navigate to messages page when available
           _navigateToHome();
           break;
         case 'payment_received':
+        case 'deposit_confirmed':
+        case 'deposit_rejected':
         case 'withdrawal_processed':
           _navigateToWallet();
           break;

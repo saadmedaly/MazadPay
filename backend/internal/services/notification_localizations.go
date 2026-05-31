@@ -8,20 +8,6 @@ type NotificationLocalization struct {
 
 // NotificationLocalizations maps notification types to language-specific messages
 var NotificationLocalizations = map[string]map[string]NotificationLocalization{
-	"auction_pending": {
-		"ar": {
-			Title: "مزاد جديد في الانتظار",
-			Body:  "{userName} أنشأ مزاد: {auctionTitle}",
-		},
-		"fr": {
-			Title: "Nouvelle enchère en attente",
-			Body:  "{userName} a créé une enchère: {auctionTitle}",
-		},
-		"en": {
-			Title: "New auction pending",
-			Body:  "{userName} created an auction: {auctionTitle}",
-		},
-	},
 	"auction_approved": {
 		"ar": {
 			Title: "تمت الموافقة على المزاد!",
@@ -48,20 +34,6 @@ var NotificationLocalizations = map[string]map[string]NotificationLocalization{
 		"en": {
 			Title: "Auction rejected",
 			Body:  "Reason: {reason}",
-		},
-	},
-	"auction_ending_soon": {
-		"ar": {
-			Title: "⚡ الفرصة الأخيرة!",
-			Body:  "\"{auctionTitle}\" ينتهي في 5 دقائق",
-		},
-		"fr": {
-			Title: "⚡ Dernière chance !",
-			Body:  "\"{auctionTitle}\" se termine dans 5 minutes",
-		},
-		"en": {
-			Title: "⚡ Last chance!",
-			Body:  "\"{auctionTitle}\" ends in 5 minutes",
 		},
 	},
 	"auction_won": {
@@ -122,16 +94,16 @@ var NotificationLocalizations = map[string]map[string]NotificationLocalization{
 	},
 	"auction_reported": {
 		"ar": {
-			Title: "🚨 مزاد مُبلّغ عنه",
-			Body:  "إبلاغ من {reporter} على \"{auctionTitle}\"",
+			Title: "🚨 بلاغ جديد",
+			Body:  "تم الإبلاغ عن \"{auctionTitle}\". السبب: {reason}",
 		},
 		"fr": {
-			Title: "🚨 Enchère signalée",
-			Body:  "Signalement de {reporter} sur \"{auctionTitle}\"",
+			Title: "🚨 Nouveau signalement",
+			Body:  "Signalement de \"{auctionTitle}\". Raison: {reason}",
 		},
 		"en": {
-			Title: "🚨 Auction reported",
-			Body:  "Report from {reporter} on \"{auctionTitle}\"",
+			Title: "🚨 New report",
+			Body:  "Report on \"{auctionTitle}\". Reason: {reason}",
 		},
 	},
 	"banner_approved": {
@@ -162,18 +134,74 @@ var NotificationLocalizations = map[string]map[string]NotificationLocalization{
 			Body:  "Your banner request {bannerTitle} has been rejected",
 		},
 	},
-	"auction_sold": {
+	"bid_outbid": {
 		"ar": {
-			Title: "تم بيع المزاد!",
-			Body:  "تم شراء مزاد {auctionTitle} بسعر نهائي",
+			Title: "تم تجاوز مزايدتك!",
+			Body:  "تم تجاوز مزايدتك في مزاد \"{auctionTitle}\" بسعر {newPrice} MRU",
 		},
 		"fr": {
-			Title: "Enchère vendue !",
-			Body:  "Votre enchère {auctionTitle} a été achetée au prix final",
+			Title: "Enchère dépassée !",
+			Body:  "Votre enchère sur \"{auctionTitle}\" a été dépassée à {newPrice} MRU",
 		},
 		"en": {
-			Title: "Auction sold!",
-			Body:  "Your auction {auctionTitle} has been bought at the final price",
+			Title: "You've been outbid!",
+			Body:  "Your bid on \"{auctionTitle}\" has been outbid at {newPrice} MRU",
+		},
+	},
+	"auction_lost": {
+		"ar": {
+			Title: "لم تفز بالمزاد",
+			Body:  "للأسف، لم تفز بمزاد \"{auctionTitle}\". السعر النهائي: {finalPrice} MRU",
+		},
+		"fr": {
+			Title: "Enchère perdue",
+			Body:  "Désolé, vous n'avez pas remporté l'enchère \"{auctionTitle}\". Prix final: {finalPrice} MRU",
+		},
+		"en": {
+			Title: "Auction lost",
+			Body:  "Sorry, you didn't win auction \"{auctionTitle}\". Final price: {finalPrice} MRU",
+		},
+	},
+	"banner_request": {
+		"ar": {
+			Title: "💰 طلب إعلان جديد",
+			Body:  "طلب جديد لإعلان: {bannerTitle}",
+		},
+		"fr": {
+			Title: "💰 Nouvelle demande de publicité",
+			Body:  "Nouvelle demande de publicité: {bannerTitle}",
+		},
+		"en": {
+			Title: "💰 New banner request",
+			Body:  "New banner request: {bannerTitle}",
+		},
+	},
+	"deposit_confirmed": {
+		"ar": {
+			Title: "✅ تم تأكيد الإيداع",
+			Body:  "تم تأكيد إيداع {amount} MRU في محفظتك",
+		},
+		"fr": {
+			Title: "✅ Dépôt confirmé",
+			Body:  "Votre dépôt de {amount} MRU a été confirmé",
+		},
+		"en": {
+			Title: "✅ Deposit confirmed",
+			Body:  "Your deposit of {amount} MRU has been confirmed",
+		},
+	},
+	"deposit_rejected": {
+		"ar": {
+			Title: "❌ تم رفض الإيداع",
+			Body:  "تم رفض إيداع {amount} MRU. السبب: {reason}",
+		},
+		"fr": {
+			Title: "❌ Dépôt refusé",
+			Body:  "Votre dépôt de {amount} MRU a été refusé. Raison: {reason}",
+		},
+		"en": {
+			Title: "❌ Deposit rejected",
+			Body:  "Your deposit of {amount} MRU was rejected. Reason: {reason}",
 		},
 	},
 }

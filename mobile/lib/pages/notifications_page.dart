@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/fcm_service.dart';
+import '../services/notification_api.dart';
 import '../services/notifications_api.dart';
 import 'auction_details_page.dart';
+import 'deposit_page.dart';
 
 
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -16,6 +18,7 @@ class NotificationsPage extends ConsumerStatefulWidget {
 }
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
+  final NotificationApi _notificationApi = NotificationApi();
   final NotificationsApi _notificationsApi = NotificationsApi();
   final FCMService _fcmService = FCMService();
   List<Map<String, dynamic>> _notifications = [];
@@ -66,7 +69,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       await _notificationsApi.markAllAsRead();
       setState(() {
         for (var notification in _notifications) {
-          notification['read'] = true;
+          notification['is_read'] = true;
         }
       });
     } catch (e) {
@@ -85,10 +88,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       final type = n['type']?.toString() ?? 'system';
       switch (_selectedFilter) {
         case 'auctions':
-          return ['auction_pending', 'auction_approved', 'auction_rejected', 'auction_ended', 'auction_won', 'auction_ending_soon'].contains(type);
+          return ['auction_pending', 'auction_approved', 'auction_rejected', 'auction_ended', 'auction_won'].contains(type);
 
         case 'payments':
-          return ['payment_received', 'withdrawal_processed'].contains(type);
+          return ['payment_received', 'deposit_confirmed', 'deposit_rejected', 'withdrawal_processed'].contains(type);
         default:
           return true;
       }
@@ -220,12 +223,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   Widget _buildNotificationItem(BuildContext context, Map<String, dynamic> notification, bool isDarkMode, String locale) {
     final type = notification['type']?.toString() ?? 'system';
-    final isRead = notification['read'] == true;
+    final isRead = notification['is_read'] == true;
     
     IconData icon;
     Color color;
     String title = notification['title']?.toString() ?? '';
-    String description = notification['message']?.toString() ?? notification['description']?.toString() ?? '';
+    String description = notification['body']?.toString() ?? '';
     String time = _formatTime(notification['created_at']?.toString() ?? '');
 
     // Icônes et couleurs selon le type FCM
@@ -235,11 +238,13 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       case 'auction_rejected':
       case 'auction_ended':
       case 'auction_won':
-      case 'auction_ending_soon':
+      case 'bid_outbid':
         icon = Icons.gavel_outlined;
         color = const Color(0xFF0081FF);
         break;
       case 'payment_received':
+      case 'deposit_confirmed':
+      case 'deposit_rejected':
       case 'withdrawal_processed':
         icon = Icons.payment_outlined;
         color = const Color(0xFF00C58D);
@@ -369,7 +374,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   void _onNotificationTap(Map<String, dynamic> notification) {
     final String? type = notification['type'];
-    final String? auctionId = notification['auction_id']?.toString() ?? notification['auctionId']?.toString();
+    final String? auctionId = notification['auction_id']?.toString()
+        ?? notification['auctionId']?.toString()
+        ?? (notification['data'] is Map ? (notification['data'] as Map)['auctionId']?.toString() : null)
+        ?? (notification['data'] is Map ? (notification['data'] as Map)['auction_id']?.toString() : null);
 
     
     // Marquer comme lu
@@ -381,7 +389,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       case 'auction_rejected':
       case 'auction_ended':
       case 'auction_won':
-      case 'auction_ending_soon':
+      case 'bid_outbid':
         if (auctionId != null) {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -390,7 +398,16 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           );
         }
         break;
-      // TODO: Add other navigation cases
+      case 'payment_received':
+      case 'deposit_confirmed':
+      case 'deposit_rejected':
+      case 'withdrawal_processed':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const DepositPage(),
+          ),
+        );
+        break;
       default:
         break;
     }
@@ -399,11 +416,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   Future<void> _markAsRead(String? notificationId) async {
     if (notificationId == null) return;
     try {
-      // TODO: Call API to mark as read
+      await _notificationApi.markNotificationAsRead(notificationId);
       setState(() {
         final index = _notifications.indexWhere((n) => n['id']?.toString() == notificationId);
         if (index != -1) {
-          _notifications[index]['read'] = true;
+          _notifications[index]['is_read'] = true;
         }
       });
     } catch (e) {

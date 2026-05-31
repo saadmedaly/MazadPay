@@ -746,7 +746,15 @@ class _HomePageState extends ConsumerState<HomePage> {
 
           // response.data est maintenant directement une List<dynamic>
 
-          _auctions = response.data!.map((item) => item as Map<String, dynamic>).toList();
+          _auctions = response.data!
+              .map((item) => item as Map<String, dynamic>)
+              .where((a) {
+                final endTimeStr = a['end_time']?.toString();
+                if (endTimeStr == null) return true;
+                final endTime = DateTime.tryParse(endTimeStr);
+                return endTime == null || endTime.isAfter(DateTime.now());
+              })
+              .toList();
 
         }
 

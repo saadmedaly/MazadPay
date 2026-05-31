@@ -43,13 +43,13 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 	// Services
 	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath, cfg.Firebase.ServiceAccountJSON, logger, adminHub)
-	smsSvc := services.NewSMSService(cfg.Twilio.AccountSID, cfg.Twilio.AuthToken, cfg.Twilio.PhoneNumber, logger)
+	smsSvc := services.NewSMSService(cfg.Wablas.Token, cfg.Wablas.SecretKey, cfg.Wablas.ServerURL, logger)
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4)
 	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb)
-	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, hub)
+	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
-	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc)
-	walletSvc := services.NewWalletService(walletRepo, txRepo)
+	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc)
+	walletSvc := services.NewWalletService(walletRepo, txRepo, notifSvc)
 	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc)
 	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, auditRepo, notifSvc)
 	reportSvc := services.NewReportService(txRepo)

@@ -112,17 +112,15 @@ func (s *contentService) RequestBanner(ctx context.Context, banner *models.Banne
 		return err
 	}
 
-	// Notifier les admins
+	// Notifier les admins (localized)
 	if s.notifSvc != nil {
 		go func() {
-			_ = s.notifSvc.NotifyAdmins(context.Background(),
-				"💰 طلب إعلان جديد (Banner Request)",
-				"إليك طلب جديد لإضافة إعلان على المنصة.",
-				map[string]string{
-					"type":  "banner_request",
-					"title": banner.TitleAr,
-				},
-			)
+			_ = s.notifSvc.NotifyAdminsLocalized(context.Background(), "banner_request", map[string]string{
+				"bannerTitle": banner.TitleAr,
+			}, map[string]string{
+				"type":  "banner_request",
+				"title": banner.TitleAr,
+			})
 		}()
 	}
 

@@ -125,7 +125,7 @@ class AuthApi {
         data: {
           'phone': phone,
           'new_pin': newPin,
-          'otp_code': otpCode,
+          'code': otpCode,
         },
       );
       

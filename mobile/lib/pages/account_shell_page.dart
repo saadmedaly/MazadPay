@@ -5,6 +5,7 @@ import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/create_ad_start_page.dart';
 import 'package:mezadpay/pages/services_shell_page.dart';
 import 'package:mezadpay/pages/my_auctions_shell_page.dart';
+import 'package:mezadpay/pages/notifications_page.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 
 class AccountShellPage extends StatelessWidget {
@@ -35,7 +36,7 @@ class AccountShellPage extends StatelessWidget {
             ),
             IconButton(
               icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 28),
-              onPressed: () {},
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsPage())),
             ),
           ],
         ),

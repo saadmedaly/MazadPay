@@ -324,15 +324,16 @@ class FCMService {
       case 'auction_rejected':
       case 'auction_ended':
       case 'auction_won':
-      case 'auction_ending_soon':
+      case 'bid_outbid':
         return _auctionChannelId;
       case 'auction_reported':
       case 'auction_suspended':
         return _moderationChannelId;
       case 'payment_received':
+      case 'deposit_confirmed':
+      case 'deposit_rejected':
       case 'withdrawal_processed':
         return _transactionChannelId;
-
       case 'promotion':
         return _promoChannelId;
       default:
@@ -541,20 +542,6 @@ class FCMService {
         'body': 'Reason: {reason}',
       },
     },
-    'auction_ending_soon': {
-      'ar': {
-        'title': '⚡ الفرصة الأخيرة!',
-        'body': '"{auctionTitle}" ينتهي في 5 دقائق',
-      },
-      'fr': {
-        'title': '⚡ Dernière chance !',
-        'body': '"{auctionTitle}" se termine dans 5 minutes',
-      },
-      'en': {
-        'title': '⚡ Last chance!',
-        'body': '"{auctionTitle}" ends in 5 minutes',
-      },
-    },
     'auction_won': {
       'ar': {
         'title': 'تهانينا! لقد فزت',
@@ -581,6 +568,48 @@ class FCMService {
       'en': {
         'title': 'Auction ended',
         'body': '"{auctionTitle}" sold for {finalPrice} MRU',
+      },
+    },
+    'bid_outbid': {
+      'ar': {
+        'title': 'تم تجاوز مزايدتك!',
+        'body': 'تم تجاوز مزايدتك في مزاد "{auctionTitle}" بسعر {newPrice} MRU',
+      },
+      'fr': {
+        'title': 'Enchère dépassée !',
+        'body': 'Votre enchère sur "{auctionTitle}" a été dépassée à {newPrice} MRU',
+      },
+      'en': {
+        'title': "You've been outbid!",
+        'body': 'Your bid on "{auctionTitle}" has been outbid at {newPrice} MRU',
+      },
+    },
+    'deposit_confirmed': {
+      'ar': {
+        'title': '✅ تم تأكيد الإيداع',
+        'body': 'تم تأكيد إيداع {amount} MRU في محفظتك',
+      },
+      'fr': {
+        'title': '✅ Dépôt confirmé',
+        'body': 'Votre dépôt de {amount} MRU a été confirmé',
+      },
+      'en': {
+        'title': '✅ Deposit confirmed',
+        'body': 'Your deposit of {amount} MRU has been confirmed',
+      },
+    },
+    'deposit_rejected': {
+      'ar': {
+        'title': '❌ تم رفض الإيداع',
+        'body': 'تم رفض إيداع {amount} MRU. السبب: {reason}',
+      },
+      'fr': {
+        'title': '❌ Dépôt refusé',
+        'body': 'Votre dépôt de {amount} MRU a été refusé. Raison: {reason}',
+      },
+      'en': {
+        'title': '❌ Deposit rejected',
+        'body': 'Your deposit of {amount} MRU was rejected. Reason: {reason}',
       },
     },
     'payment_received': {
@@ -639,7 +668,7 @@ extension DeepLinkExtension on FCMService {
   /// Extraire la route de navigation depuis les données de notification
   String? extractRoute(Map<String, dynamic> data) {
     final String? type = data['type'];
-    final String? auctionId = data['auctionId'];
+    final String? auctionId = data['auctionId'] ?? data['auction_id'];
 
     switch (type) {
       case 'auction_pending':
@@ -647,13 +676,15 @@ extension DeepLinkExtension on FCMService {
       case 'auction_rejected':
       case 'auction_ended':
       case 'auction_won':
-      case 'auction_ending_soon':
+      case 'bid_outbid':
         if (auctionId != null) {
           return '/auction/$auctionId';
         }
         break;
 
       case 'payment_received':
+      case 'deposit_confirmed':
+      case 'deposit_rejected':
       case 'withdrawal_processed':
         return '/wallet';
       case 'auction_reported':

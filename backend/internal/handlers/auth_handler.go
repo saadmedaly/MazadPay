@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/redis/go-redis/v9"
@@ -84,14 +86,13 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return MapError(c, h.logger, err)
 	}
 
-	/*
+	ip := c.IP()
 	// Automatically send OTP after registration
 	if err := h.service.SendOTP(c.Context(), req.Phone, "register", ip); err != nil {
 		return MapError(c, h.logger, err)
 	}
-	*/
 
-	return OK(c, fiber.Map{"message": "Registration successful. You can now login."})
+	return OK(c, fiber.Map{"message": "Registration successful. Please verify your phone with the code sent via WhatsApp."})
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
@@ -102,6 +103,12 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	token, user, err := h.service.Login(c.Context(), req.Phone, req.Pin)
 	if err != nil {
+		if errors.Is(err, apperr.ErrInvalidPin) {
+			return FailWithData(c, fiber.StatusUnauthorized, "invalid_pin", "Invalid PIN", fiber.Map{"can_reset_password": true})
+		}
+		if errors.Is(err, apperr.ErrUserNotFound) {
+			return FailWithData(c, fiber.StatusUnauthorized, "phone_not_registered", "Phone number not registered", fiber.Map{"can_register": true})
+		}
 		return MapError(c, h.logger, err)
 	}
 

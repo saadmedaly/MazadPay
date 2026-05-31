@@ -258,7 +258,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const NewPasswordPage(),
+                          builder: (context) => NewPasswordPage(
+                            initialPhone: _phoneController.text,
+                            initialCountryCode: _selectedCountry?['country_code'] ?? '+222',
+                          ),
                         ),
                       );
                     },

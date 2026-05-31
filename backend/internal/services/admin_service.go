@@ -141,6 +141,7 @@ type adminService struct {
 	reqRepo      repository.RequestRepository
 	settingsRepo repository.SettingsRepository
 	mediaSvc     MediaService
+	notifSvc     NotificationService
 }
 
 func NewAdminService(
@@ -156,6 +157,7 @@ func NewAdminService(
 	reqRepo repository.RequestRepository,
 	settingsRepo repository.SettingsRepository,
 	mediaSvc MediaService,
+	notifSvc NotificationService,
 ) AdminService {
 	return &adminService{
 		db:           db,
@@ -170,6 +172,7 @@ func NewAdminService(
 		reqRepo:      reqRepo,
 		settingsRepo: settingsRepo,
 		mediaSvc:     mediaSvc,
+		notifSvc:     notifSvc,
 	}
 }
 
@@ -295,7 +298,45 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 	if approve {
 		status = "active"
 	}
-	return s.auctionRepo.UpdateStatus(ctx, id, status)
+	if err := s.auctionRepo.UpdateStatus(ctx, id, status); err != nil {
+		return err
+	}
+
+	// Send notification to seller
+	auction, err := s.auctionRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil
+	}
+	seller, err := s.userRepo.FindByID(ctx, auction.SellerID)
+	if err != nil {
+		return nil
+	}
+	language := "ar"
+	if seller.LanguagePref != "" {
+		language = seller.LanguagePref
+	}
+	notifType := "auction_approved"
+	if !approve {
+		notifType = "auction_rejected"
+	}
+	title := auction.TitleAr
+	if language == "fr" && auction.TitleFr != nil && *auction.TitleFr != "" {
+		title = *auction.TitleFr
+	} else if language == "en" && auction.TitleEn != nil && *auction.TitleEn != "" {
+		title = *auction.TitleEn
+	}
+	params := map[string]string{
+		"auctionTitle": title,
+	}
+	if !approve {
+		params["reason"] = reason
+	}
+	data := map[string]string{
+		"type":      notifType,
+		"auctionId": id.String(),
+	}
+	_ = s.notifSvc.SendLocalizedPush(ctx, auction.SellerID, notifType, language, params, data)
+	return nil
 }
 
 func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input UpdateAuctionInput) error {
@@ -463,7 +504,39 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	if approve {
 		status = "completed"
 	}
-	return s.txRepo.UpdateStatus(ctx, id, status, notes, adminID)
+	if err := s.txRepo.UpdateStatus(ctx, id, status, notes, adminID); err != nil {
+		return err
+	}
+
+	// Send notification to user
+	tx, err := s.txRepo.FindByID(ctx, id, nil)
+	if err != nil {
+		return nil
+	}
+	user, err := s.userRepo.FindByID(ctx, tx.UserID)
+	if err != nil {
+		return nil
+	}
+	language := "ar"
+	if user.LanguagePref != "" {
+		language = user.LanguagePref
+	}
+	notifType := "deposit_confirmed"
+	if !approve {
+		notifType = "deposit_rejected"
+	}
+	params := map[string]string{
+		"amount": tx.Amount.String(),
+	}
+	if !approve {
+		params["reason"] = notes
+	}
+	data := map[string]string{
+		"type":           notifType,
+		"transaction_id": id.String(),
+	}
+	_ = s.notifSvc.SendLocalizedPush(ctx, tx.UserID, notifType, language, params, data)
+	return nil
 }
 
 func (s *adminService) ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error) {
