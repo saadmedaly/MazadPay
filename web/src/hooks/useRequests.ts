@@ -136,9 +136,8 @@ export const useAuctionRequests = (
 export const useReviewAuctionRequest = () => {
   return useMutation({
     mutationFn: ({ id, status, notes }: { id: string; status: 'approved' | 'rejected'; notes?: string }) => {
-      // Convertir 'approved'/'rejected' en statut backend
-      const auctionStatus = status === 'approved' ? 'active' : 'rejected'
-      return client.put(`/v1/api/auctions/${id}/status`, { status: auctionStatus, notes })
+      const approve = status === 'approved'
+      return client.put(`/v1/api/admin/auctions/${id}/validate`, { approve, reason: notes ?? '' })
     },
     onSuccess: () => {
       toast.success('تمت مراجعة طلب المزاد بنجاح')
