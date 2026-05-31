@@ -20,7 +20,7 @@ var (
 	ErrInvalidPin               = errors.New("invalid_pin")
 	ErrWeakPin                  = errors.New("weak_pin")
 	ErrAccountBlocked           = errors.New("account_blocked")
-	ErrTwilioNotConfigured      = errors.New("twilio_not_configured")
+	ErrWablasNotConfigured      = errors.New("wablas_not_configured")
 	ErrResetPasswordRateLimited = errors.New("reset_password_rate_limited")
 
 	// Enchères

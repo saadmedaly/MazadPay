@@ -45,7 +45,7 @@ type User struct {
 type OTPVerification struct {
 	ID          uuid.UUID  `db:"id"`
 	Phone       string     `db:"phone"`
-	TwilioSid   string     `db:"twilio_sid"`
+	Code        string     `db:"otp_code"`
 	Purpose     string     `db:"purpose"`
 	Attempts    int        `db:"attempts"`
 	MaxAttempts int        `db:"max_attempts"`

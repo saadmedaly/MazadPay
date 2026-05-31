@@ -19,14 +19,11 @@ import 'package:mezadpay/widgets/notification_handler.dart' show NotificationHan
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-   await Firebase.initializeApp();
-  
+  await Firebase.initializeApp();
   developer.log('📨 Background message received: ${message.messageId}');
   developer.log('Title: ${message.notification?.title}');
   developer.log('Body: ${message.notification?.body}');
   developer.log('Data: ${message.data}');
-  
-  // TODO: Enregistrer la notification localement pour affichage ultérieur
 }
 
 void main() async {
@@ -42,14 +39,6 @@ void main() async {
   }
   
    await CacheService.instance.init();
-  
-   try {
-    final fcmService = FCMService();
-    await fcmService.initialize();
-    developer.log('✅ FCM Service initialized successfully');
-  } catch (e) {
-    developer.log('⚠️ FCM Service initialization skipped: $e');
-  }
   
    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   
@@ -71,8 +60,14 @@ class _MazadAppState extends ConsumerState<MazadApp> {
   @override
   void initState() {
     super.initState();
-    // Démarrer la détection de localisation en arrière-plan
-    Future.microtask(() {
+    Future.microtask(() async {
+      try {
+        final fcmService = FCMService();
+        await fcmService.initialize();
+        developer.log('✅ FCM Service initialized successfully');
+      } catch (e) {
+        developer.log('⚠️ FCM Service initialization skipped: $e');
+      }
       ref.read(locationProvider.notifier).detectLocation();
     });
   }

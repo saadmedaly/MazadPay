@@ -10,3 +10,11 @@ docs/*
 .idea/*
 .windsurf/*
 .cursor/*
+.DS_Store
+*.log
+*.tmp
+*.bak
+*.swp
+.claude/
+.claude/*
+/.claude/*

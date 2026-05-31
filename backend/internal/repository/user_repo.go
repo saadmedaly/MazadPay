@@ -101,9 +101,9 @@ func (r *userRepo) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
 func (r *userRepo) CreateOTP(ctx context.Context, otp *models.OTPVerification) error {
 	_, err := r.db.NamedExecContext(ctx, `
 		INSERT INTO otp_verifications 
-			(id, phone, twilio_sid, purpose, attempts, max_attempts, expires_at, ip_address)
+			(id, phone, otp_code, purpose, attempts, max_attempts, expires_at, ip_address)
 		VALUES 
-			(:id, :phone, :twilio_sid, :purpose, :attempts, :max_attempts, :expires_at, :ip_address)
+			(:id, :phone, :otp_code, :purpose, :attempts, :max_attempts, :expires_at, :ip_address)
 	`, otp)
 	return err
 }

@@ -100,7 +100,7 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 		LanguagePref: "ar",
 		Role:         "user",
 		IsActive:     true,
-		IsVerified:   true,
+		IsVerified:   false,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -158,7 +158,7 @@ func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) er
 	otp := &models.OTPVerification{
 		ID:          uuid.New(),
 		Phone:       phone,
-		TwilioSid:   code,
+		Code:   code,
 		Purpose:     purpose,
 		Attempts:    0,
 		MaxAttempts: 3,
@@ -170,18 +170,16 @@ func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) er
 		return err
 	}
 
-	// Send SMS via Twilio (COMMENTED FOR NOW)
-	/*
-		if s.smsService != nil {
-			if err := s.smsService.SendOTP(phone, code); err != nil {
-				if s.env == "development" {
-					fmt.Printf("DEBUG: SMS sending failed in development (%v). Continuing registration flow because development OTP is allowed.\n", err)
-					return nil
-				}
-				return err
+	// Send OTP via WhatsApp (Wablas)
+	if s.smsService != nil {
+		if err := s.smsService.SendOTP(phone, code); err != nil {
+			if s.env == "development" {
+				fmt.Printf("DEBUG: WhatsApp OTP sending failed in development (%v). Continuing because development OTP is allowed.\n", err)
+				return nil
 			}
+			return err
 		}
-	*/
+	}
 
 	return nil
 }
@@ -205,7 +203,7 @@ func (s *authService) VerifyOTP(ctx context.Context, phone, code, purpose string
 	// En production, rejeter les codes de développement
 	if s.env == "development" && s.developmentOTP != "" && code == s.developmentOTP {
 		// OK - Mode développement avec code autorisé
-	} else if code != otp.TwilioSid {
+	} else if code != otp.Code {
 		// En production ou si code incorrect, incrémenter les tentatives
 		if err := s.userRepo.IncrementOTPAttempts(ctx, otp.ID); err != nil {
 			return err

@@ -240,29 +240,6 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	// Notifier les admins via FCM avec support multi-langues
-	if s.notifSvc != nil {
-		go func() {
-			// Récupérer le nom du vendeur
-			seller, err := s.userRepo.FindByID(context.Background(), sellerID)
-			userName := "Un utilisateur"
-			if err == nil && seller != nil && seller.FullName != nil {
-				userName = *seller.FullName
-			}
-
-			params := map[string]string{
-				"userName":     userName,
-				"auctionTitle": auction.TitleAr,
-			}
-			data := map[string]string{
-				"type":      "auction_pending",
-				"auctionId": auction.ID.String(),
-				"sellerId":  sellerID.String(),
-			}
-			_ = s.notifSvc.NotifyAdminsLocalized(context.Background(), "new_auction", params, data)
-		}()
-	}
-
 	return auction, nil
 }
 
@@ -421,16 +398,30 @@ func (s *auctionService) ReportAuction(ctx context.Context, auctionID, reporterI
 		return err
 	}
 
-	// Notifier les admins
+	// Notifier les admins (localized)
 	if s.notifSvc != nil {
 		go func() {
-			title := " بلاغ جديد (Signalement)"
-			body := fmt.Sprintf("تم الإبلاغ عن المزاد رقم %s. السبب: %s", auctionID.String()[:8], reason)
-			_ = s.notifSvc.NotifyAdmins(context.Background(), title, body, map[string]string{
+			auction, err := s.auctionRepo.FindByID(context.Background(), auctionID)
+			if err != nil {
+				return
+			}
+			title := auction.TitleAr
+			if auction.TitleFr != nil && *auction.TitleFr != "" {
+				title = *auction.TitleFr
+			}
+			if auction.TitleEn != nil && *auction.TitleEn != "" {
+				title = *auction.TitleEn
+			}
+			params := map[string]string{
+				"auctionTitle": title,
+				"reason":       reason,
+			}
+			data := map[string]string{
 				"type":         "report",
 				"auction_id":   auctionID.String(),
 				"reference_id": report.ID.String(),
-			})
+			}
+			_ = s.notifSvc.NotifyAdminsLocalized(context.Background(), "auction_reported", params, data)
 		}()
 	}
 
@@ -721,26 +712,6 @@ func (s *auctionService) BuyNow(ctx context.Context, auctionID, buyerID uuid.UUI
 
 	if err := s.auctionRepo.Update(ctx, auction); err != nil {
 		return nil, err
-	}
-
-	// Notify seller
-	if s.notifSvc != nil {
-		go func() {
-			language := "ar"
-			// Get seller language pref if possible
-			seller, _ := s.userRepo.FindByID(ctx, auction.SellerID)
-			if seller != nil && seller.LanguagePref != "" {
-				language = seller.LanguagePref
-			}
-			params := map[string]string{
-				"auctionTitle": auction.TitleAr,
-			}
-			data := map[string]string{
-				"type": "auction_sold",
-				"id":   auction.ID.String(),
-			}
-			_ = s.notifSvc.SendLocalizedPush(context.Background(), auction.SellerID, "auction_sold", language, params, data)
-		}()
 	}
 
 	return auction, nil

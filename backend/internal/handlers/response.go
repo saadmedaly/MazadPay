@@ -99,6 +99,17 @@ func Fail(c *fiber.Ctx, status int, code, message string) error {
 	})
 }
 
+func FailWithData(c *fiber.Ctx, status int, code, message string, data fiber.Map) error {
+	resp := fiber.Map{
+		"success": false,
+		"error":   fiber.Map{"code": code, "message": message},
+	}
+	for k, v := range data {
+		resp[k] = v
+	}
+	return c.Status(status).JSON(resp)
+}
+
 func BadRequest(c *fiber.Ctx, message string) error {
 	return Fail(c, 400, "bad_request", message)
 }
@@ -194,8 +205,8 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "account_blocked":
 		logger.Warn("Account blocked", logFields...)
 		return Fail(c, 403, "account_blocked", "Account is temporarily blocked")
-	case "twilio_not_configured":
-		logger.Error("Twilio SMS service not configured", logFields...)
+	case "wablas_not_configured":
+		logger.Error("Wablas WhatsApp service not configured", logFields...)
 		return Fail(c, 503, "sms_service_unavailable", "SMS service is temporarily unavailable. Please try again later")
 	case "reset_password_rate_limited":
 		logger.Warn("Password reset rate limited", logFields...)
@@ -245,9 +256,9 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 			return Fail(c, 500, "schema_error", "Database schema error: please run migrations")
 		}
 
-		if strings.Contains(errStr, "failed to send SMS") {
-			logger.Warn("SMS delivery failed", logFields...)
-			return Fail(c, 503, "sms_delivery_failed", "Failed to send SMS. If you are in development, check if the number is verified in Twilio or use the development OTP.")
+		if strings.Contains(errStr, "failed to send WhatsApp") {
+			logger.Warn("WhatsApp OTP delivery failed", logFields...)
+			return Fail(c, 503, "sms_delivery_failed", "Failed to send OTP via WhatsApp. Please try again later.")
 		}
 
 		// Erreur interne imprévue : Log au niveau ERROR

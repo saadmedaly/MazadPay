@@ -21,6 +21,7 @@ type AuctionFilters struct {
 	Query      string
 	SellerID   *uuid.UUID
 	WinnerID   *uuid.UUID
+	UserID     *uuid.UUID
 }
 
 type AuctionRepository interface {
@@ -132,6 +133,8 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 		args = append(args, f.CategoryID)
 		i++
 	}
+	// Always hide expired auctions from general listing
+	where += " AND end_time > NOW()"
 
 	rows, err := r.db.QueryxContext(ctx,
 		fmt.Sprintf(`

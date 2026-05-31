@@ -22,10 +22,11 @@ type WalletService interface {
 type walletService struct {
 	walletRepo repository.WalletRepository
 	txRepo     repository.TransactionRepository
+	notifSvc   NotificationService
 }
 
-func NewWalletService(walletRepo repository.WalletRepository, txRepo repository.TransactionRepository) WalletService {
-	return &walletService{walletRepo: walletRepo, txRepo: txRepo}
+func NewWalletService(walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, notifSvc NotificationService) WalletService {
+	return &walletService{walletRepo: walletRepo, txRepo: txRepo, notifSvc: notifSvc}
 }
 
 func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
@@ -50,7 +51,6 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 }
 
 func (s *walletService) UploadReceipt(ctx context.Context, txID uuid.UUID, receiptURL string) error {
-	// Status becomes pending_review after upload
 	return s.txRepo.UpdateReceipt(ctx, txID, receiptURL, "pending_review")
 }
 

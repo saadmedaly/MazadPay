@@ -2,60 +2,91 @@ package services
 
 import (
 	"fmt"
+	"io"
 	"math/rand"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	apperr "github.com/mazadpay/backend/internal/errors"
-	"github.com/twilio/twilio-go"
-	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 	"go.uber.org/zap"
 )
+
+// Wablas API endpoint path used for sending OTP messages.
+const wablasSendPath = "/api/send-message"
 
 type SMSService interface {
 	SendOTP(phone, code string) error
 }
 
 type smsService struct {
-	accountSID string
-	authToken  string
-	fromNumber string
-	logger     *zap.Logger
+	token     string
+	secretKey string
+	serverURL string
+	logger    *zap.Logger
 }
 
-func NewSMSService(accountSID, authToken, fromNumber string, logger *zap.Logger) SMSService {
+func NewSMSService(token, secretKey, serverURL string, logger *zap.Logger) SMSService {
 	return &smsService{
-		accountSID: accountSID,
-		authToken:  authToken,
-		fromNumber: fromNumber,
-		logger:     logger,
+		token:     token,
+		secretKey: secretKey,
+		serverURL: serverURL,
+		logger:    logger,
 	}
 }
 
 func (s *smsService) SendOTP(phone, code string) error {
-	if s.accountSID == "" || s.authToken == "" || s.fromNumber == "" {
-		s.logger.Error("Twilio is not configured")
-		return apperr.ErrTwilioNotConfigured
+	if s.token == "" || s.secretKey == "" {
+		s.logger.Error("Wablas is not configured: missing token or secret key")
+		return apperr.ErrWablasNotConfigured
 	}
 
-	client := twilio.NewRestClientWithParams(twilio.ClientParams{
-		Username: s.accountSID,
-		Password: s.authToken,
-	})
-
+	cleanPhone := strings.TrimPrefix(phone, "+")
 	message := fmt.Sprintf("رمز التحقق الخاص بك هو: %s", code)
 
-	params := &twilioApi.CreateMessageParams{}
-	params.SetTo(phone)
-	params.SetFrom(s.fromNumber)
-	params.SetBody(message)
-
-	resp, err := client.Api.CreateMessage(params)
-	if err != nil {
-		s.logger.Error("failed to send SMS", zap.Error(err), zap.String("phone", phone))
-		return fmt.Errorf("failed to send SMS: %w", err)
+	apiURL := s.serverURL + wablasSendPath
+	formData := url.Values{
+		"phone":   {cleanPhone},
+		"message": {message},
+		"flag":    {"instant"},
 	}
 
-	s.logger.Info("SMS sent successfully", zap.String("sid", *resp.Sid), zap.String("phone", phone))
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(formData.Encode()))
+	if err != nil {
+		s.logger.Error("failed to create Wablas request", zap.Error(err))
+		return fmt.Errorf("failed to send WhatsApp OTP: %w", err)
+	}
+
+	auth := fmt.Sprintf("%s.%s", s.token, s.secretKey)
+	req.Header.Set("Authorization", auth)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		s.logger.Error("failed to send WhatsApp OTP", zap.Error(err), zap.String("phone", phone))
+		return fmt.Errorf("failed to send WhatsApp OTP: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		s.logger.Error("failed to read Wablas response body", zap.Error(readErr))
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		s.logger.Error("Wablas API returned non-2xx status",
+			zap.Int("status", resp.StatusCode),
+			zap.String("body", string(body)),
+		)
+		return fmt.Errorf("failed to send WhatsApp OTP: status %d", resp.StatusCode)
+	}
+
+	s.logger.Info("WhatsApp OTP sent successfully",
+		zap.String("phone", phone),
+		zap.Int("http_status", resp.StatusCode),
+	)
 	return nil
 }
 

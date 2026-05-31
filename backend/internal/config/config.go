@@ -16,7 +16,7 @@ type Config struct {
 	Redis    RedisConfig
 	JWT      JWTConfig
 	R2       R2Config
-	Twilio  TwilioConfig
+	Wablas  WablasConfig
 	Business BusinessConfig
 	Firebase FirebaseConfig
 }
@@ -63,10 +63,10 @@ type R2Config struct {
 	PublicURL   string
 }
 
-type TwilioConfig struct {
-	AccountSID   string
-	AuthToken   string
-	PhoneNumber string
+type WablasConfig struct {
+	Token     string
+	SecretKey string
+	ServerURL string
 }
 
 type BusinessConfig struct {
@@ -123,10 +123,10 @@ func Load() *Config {
 			BucketMedia: getEnv("R2_BUCKET_MEDIA", "mazad-mwdia"),
 			PublicURL:   getEnv("R2_PUBLIC_URL", "https://pub-xxxxxx.r2.dev"),
 		},
-		Twilio: TwilioConfig{
-			AccountSID:   getEnv("TWILIO_ACCOUNT_SID", ""),
-			AuthToken:   getEnv("TWILIO_AUTH_TOKEN", ""),
-			PhoneNumber: getEnv("TWILIO_PHONE_NUMBER", ""),
+		Wablas: WablasConfig{
+			Token:     getEnv("WABLAS_TOKEN", ""),
+			SecretKey: getEnv("WABLAS_SECRET_KEY", ""),
+			ServerURL: getEnv("WABLAS_SERVER_URL", "https://wablas.com"),
 		},
 		Business: BusinessConfig{
 			BidMinIncrement:      getEnvFloat("BID_MIN_INCREMENT", 100),

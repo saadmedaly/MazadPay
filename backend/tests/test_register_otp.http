@@ -1,17 +1,17 @@
 # ===========================================
-# TESTS API AUTHENTIFICATION AVEC SMS OTP - MAZADPAY
+# TESTS API AUTHENTIFICATION OTP WHATSAPP - MAZADPAY
 # ===========================================
 #
-# FLOW COMPLET SMS:
-# 1. Register -> Envoi automatique OTP via Twilio
+# FLOW COMPLET OTP:
+# 1. Register -> Envoi OTP via WhatsApp (Wablas)
 # 2. Send OTP -> Relance si expiré/rate limit
-# 3. Verify OTP -> Validation code SMS reçu
+# 3. Verify OTP -> Validation code WhatsApp reçu
 # 4. Login -> Accès avec PIN (seulement après OTP vérifié)
 #
-# CONFIGURATION TWILIO REQUISE:
-# - TWILIO_ACCOUNT_SID
-# - TWILIO_AUTH_TOKEN  
-# - TWILIO_PHONE_NUMBER
+# CONFIGURATION WABLAS REQUISE:
+# - WABLAS_TOKEN
+# - WABLAS_SECRET_KEY
+# - WABLAS_SERVER_URL
 #
 # VALIDATIONS PIN:
 # - Valide: 1957, 2468, 9753 (mélangés)
@@ -19,7 +19,7 @@
 #
 # CODES OTP:
 # - Développement: 123456 (fixe via DEV_OTP_CODE)
-# - Production: Aléatoire 4-6 chiffres envoyé par SMS
+# - Production: Aléatoire 4-6 chiffres envoyé par WhatsApp
 #
 # ===========================================
 
@@ -178,10 +178,10 @@ Content-Type: application/json
 }
 
 ### ========================
-### TESTS SPÉCIFIQUES SMS OTP
+### TESTS SPÉCIFIQUES WHATSAPP OTP
 ### ========================
 
-### Test: SMS OTP - Envoi et validation complète
+### Test: WhatsApp OTP - Envoi et validation complète
 # @name smsOTPFULL
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
@@ -194,8 +194,8 @@ Content-Type: application/json
     "city": "Nouakchott"
 }
 
-### Test: Vérifier que SMS a été envoyé (OTP envoyé automatiquement après register)
-# @name checkSMSOTP
+### Test: Vérifier que WhatsApp OTP a été envoyé
+# @name checkWhatsAppOTP
 POST {{baseUrl}}/auth/otp/send
 Content-Type: application/json
 
@@ -204,8 +204,8 @@ Content-Type: application/json
     "purpose": "register"
 }
 
-### Test: Valider OTP SMS reçu
-# @name validateSMSOTP
+### Test: Valider OTP WhatsApp reçu
+# @name validateWhatsAppOTP
 POST {{baseUrl}}/auth/otp/verify
 Content-Type: application/json
 
@@ -215,8 +215,8 @@ Content-Type: application/json
     "purpose": "register"
 }
 
-### Test: Login après validation SMS OTP
-# @name loginAfterSMS
+### Test: Login après validation WhatsApp OTP
+# @name loginAfterWhatsApp
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
@@ -226,7 +226,7 @@ Content-Type: application/json
 }
 
 ### ========================
-### TESTS DE SÉCURITÉ SMS
+### TESTS DE SÉCURITÉ OTP
 ### ========================
 
 ### Test: Login sans vérification OTP - DOIT ÉCHOUER
@@ -346,11 +346,11 @@ Content-Type: application/json
 }
 
 ### ========================
-### TESTS TWILIO CONFIGURATION
+### TESTS WABLAS CONFIGURATION
 ### ========================
 
-### Test: Vérifier configuration Twilio (si non configuré, erreur attendue)
-# @name checkTwilioConfig
+### Test: Vérifier configuration Wablas (si non configuré, erreur attendue)
+# @name checkWablasConfig
 POST {{baseUrl}}/auth/otp/send
 Content-Type: application/json
 
@@ -359,8 +359,8 @@ Content-Type: application/json
     "purpose": "register"
 }
 
-### Test: SMS avec numéro invalide - DOIT ÉCHOUER
-# @name invalidPhoneSMS
+### Test: WhatsApp avec numéro invalide - DOIT ÉCHOUER
+# @name invalidPhoneWA
 POST {{baseUrl}}/auth/otp/send
 Content-Type: application/json
 
@@ -369,8 +369,8 @@ Content-Type: application/json
     "purpose": "register"
 }
 
-### Test: SMS avec format incorrect - DOIT ÉCHOUER
-# @name wrongFormatSMS
+### Test: WhatsApp avec format incorrect - DOIT ÉCHOUER
+# @name wrongFormatWA
 POST {{baseUrl}}/auth/otp/send
 Content-Type: application/json
 
@@ -380,24 +380,24 @@ Content-Type: application/json
 }
 
 ### ========================
-### TESTS FLOW COMPLET AVEC SMS RÉEL
+### TESTS FLOW COMPLET AVEC WHATSAPP RÉEL
 ### ========================
 
-### Test: Flow complet avec simulation SMS réel
-# @name realSMSFlow
+### Test: Flow complet avec WhatsApp réel
+# @name realWAFlow
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 {
     "phone": "+22237141088",
     "pin": "2468",
-    "full_name": "Real SMS Flow Test",
-    "email": "real_sms_flow{{$randomInt}}@example.com",
+    "full_name": "Real WhatsApp Flow Test",
+    "email": "real_wa_flow{{$randomInt}}@example.com",
     "city": "Nouakchott"
 }
 
-### Test: Envoyer OTP pour flow SMS réel
-# @name realSMSOTP
+### Test: Envoyer OTP pour flow WhatsApp réel
+# @name realWAOTP
 POST {{baseUrl}}/auth/otp/send
 Content-Type: application/json
 
@@ -406,8 +406,8 @@ Content-Type: application/json
     "purpose": "register"
 }
 
-### Test: Vérifier OTP SMS réel
-# @name realSMSVerify
+### Test: Vérifier OTP WhatsApp réel
+# @name realWAVerify
 POST {{baseUrl}}/auth/otp/verify
 Content-Type: application/json
 
@@ -417,8 +417,8 @@ Content-Type: application/json
     "purpose": "register"
 }
 
-### Test: Login final après SMS
-# @name realSMSLogin
+### Test: Login final après WhatsApp
+# @name realWALogin
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
@@ -428,7 +428,7 @@ Content-Type: application/json
 }
 
 ### ========================
-### TESTS EDGE CASES SMS
+### TESTS EDGE CASES OTP
 ### ========================
 
 ### Test: Double envoi OTP (rate limit)

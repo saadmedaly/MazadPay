@@ -199,7 +199,15 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
             totalCount = responseData['total'] ?? responseData['count'];
           }
 
-          final newAuctions = auctionList.map((item) => item as Map<String, dynamic>).toList();
+          final newAuctions = auctionList
+              .map((item) => item as Map<String, dynamic>)
+              .where((a) {
+                final endTimeStr = a['end_time']?.toString();
+                if (endTimeStr == null) return true;
+                final endTime = DateTime.tryParse(endTimeStr);
+                return endTime == null || endTime.isAfter(DateTime.now());
+              })
+              .toList();
 
           if (reset) {
             _allAuctions = newAuctions;

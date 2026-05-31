@@ -40,6 +40,10 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 	if catID := c.QueryInt("category_id", 0); catID > 0 {
 		f.CategoryID = catID
 	}
+	// Pass user ID so expired auctions are hidden from non-owners
+	if userID, err := middleware.GetUserID(c); err == nil {
+		f.UserID = &userID
+	}
 
 	auctions, err := h.service.List(c.Context(), f)
 	if err != nil {

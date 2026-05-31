@@ -35,8 +35,6 @@ type NotificationService interface {
 	NotifyNewBannerRequest(requestID, userID, userName, title string)
 	NotifyRequestReviewed(requestID, requestType, status, updatedBy string)
 
-	// Auction ending soon notification
-	NotifyAuctionEndingSoon(ctx context.Context, auctionID uuid.UUID, sellerID uuid.UUID, auctionTitle string, language string) error
 }
 
 type notificationService struct {
@@ -298,15 +296,4 @@ func (s *notificationService) NotifyAdminsLocalized(ctx context.Context, notific
 	return nil
 }
 
-// NotifyAuctionEndingSoon sends a notification when an auction is ending soon
-func (s *notificationService) NotifyAuctionEndingSoon(ctx context.Context, auctionID uuid.UUID, sellerID uuid.UUID, auctionTitle string, language string) error {
-	params := map[string]string{
-		"auctionTitle": auctionTitle,
-	}
-	data := map[string]string{
-		"type":      "auction_ending_soon",
-		"auctionId": auctionID.String(),
-	}
 
-	return s.SendLocalizedPush(ctx, sellerID, "auction_ending_soon", language, params, data)
-}
