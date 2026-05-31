@@ -87,9 +87,14 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	}
 
 	ip := c.IP()
-	// Automatically send OTP after registration
+	// Automatically send OTP after registration.
+	// If SMS/WhatsApp service is unavailable, registration still succeeds.
+	// User will be marked verified automatically when SMS is disabled.
 	if err := h.service.SendOTP(c.Context(), req.Phone, "register", ip); err != nil {
-		return MapError(c, h.logger, err)
+		h.logger.Warn("[Register] OTP sending failed — registration still succeeds (SMS may be disabled)",
+			zap.String("phone", req.Phone),
+			zap.Error(err),
+		)
 	}
 
 	return OK(c, fiber.Map{"message": "Registration successful. Please verify your phone with the code sent via WhatsApp."})
