@@ -116,6 +116,14 @@ func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status
 
 	// Credit wallet on deposit approval — only if not already completed (prevents double-credit)
 	if status == "completed" && tx.Type == "deposit" && tx.Status != "completed" {
+		// Ensure wallet row exists (users created before wallet auto-creation had no row)
+		if _, err := dbtx.ExecContext(ctx,
+			`INSERT INTO wallets (user_id, balance, frozen_amount, version, updated_at)
+			 VALUES ($1, 0, 0, 1, now())
+			 ON CONFLICT (user_id) DO NOTHING`,
+			tx.UserID); err != nil {
+			return err
+		}
 		if _, err := dbtx.ExecContext(ctx,
 			`UPDATE wallets SET balance = balance + $1, version = version + 1 WHERE user_id = $2`,
 			tx.Amount, tx.UserID); err != nil {
