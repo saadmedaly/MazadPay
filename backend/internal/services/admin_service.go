@@ -30,6 +30,7 @@ type AdminService interface {
 	UpdateAuction(ctx context.Context, id uuid.UUID, input UpdateAuctionInput) error
 	DeleteAuction(ctx context.Context, id uuid.UUID) error
 	ListTransactions(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error)
+	GetTransactionByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error)
 	ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error
 	ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error)
 	ReviewReport(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
@@ -497,6 +498,10 @@ func (s *adminService) DeleteAuction(ctx context.Context, id uuid.UUID) error {
 
 func (s *adminService) ListTransactions(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error) {
 	return s.txRepo.ListPaginated(ctx, page, perPage, status, userID)
+}
+
+func (s *adminService) GetTransactionByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error) {
+	return s.txRepo.FindByID(ctx, id, nil)
 }
 
 func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error {

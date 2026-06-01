@@ -16,7 +16,7 @@ export async function fetchTransactions(filters: TxnFilters) {
 }
 
 export async function fetchTransaction(id: string): Promise<Transaction> {
-  const { data } = await client.get<APIResponse<Transaction>>(`/v1/api/transactions/${id}`)
+  const { data } = await client.get<APIResponse<Transaction>>(`/v1/api/admin/transactions/${id}`)
   return data.data
 }
 

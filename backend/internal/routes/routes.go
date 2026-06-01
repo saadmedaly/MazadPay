@@ -276,6 +276,7 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 
 	// Additional management routes
 	admin.Get("/transactions", adminHandler.ListTransactions)
+	admin.Get("/transactions/:id", adminHandler.GetTransaction)
 	admin.Put("/transactions/:id/validate", adminHandler.ValidateTransaction)
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)

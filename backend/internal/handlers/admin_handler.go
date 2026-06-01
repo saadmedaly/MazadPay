@@ -526,6 +526,19 @@ func (h *AdminHandler) ListReports(c *fiber.Ctx) error {
 	})
 }
 
+// GetTransaction - GET /admin/transactions/:id
+func (h *AdminHandler) GetTransaction(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid transaction ID")
+	}
+	txn, err := h.svc.GetTransactionByID(c.Context(), id)
+	if err != nil {
+		return NotFound(c, "Transaction")
+	}
+	return OK(c, txn)
+}
+
 // Validate/Approve transaction (Admin view)
 func (h *AdminHandler) ValidateTransaction(c *fiber.Ctx) error {
 	type ValidateRequest struct {
