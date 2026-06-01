@@ -229,7 +229,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
 
                     _buildField(
                       controller: _passwordController,
-                      hint: l10n.text_5,
+                      hint: 'أدخل كلمة السر',
                       icon: Icons.lock_outline,
                       isPassword: true,
                       obscureText: _obscurePassword,
@@ -240,7 +240,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
 
                     _buildField(
                       controller: _confirmPasswordController,
-                      hint: l10n.text_7,
+                      hint: 'أكد كلمة السر',
                       icon: Icons.lock_outline,
                       isPassword: true,
                       obscureText: _obscureConfirmPassword,
@@ -273,8 +273,8 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                         Flexible(
                           child: TextButton(
                             onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginPage())),
-                            child: Text(l10n.text_11, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Color(0xFF135BEC), fontWeight: FontWeight.bold, fontSize: 14)),
+                            child: const Text('احجز مزادك بسرعة', textAlign: TextAlign.center,
+                              style: TextStyle(color: Color(0xFF135BEC), fontWeight: FontWeight.bold, fontSize: 14)),
                           ),
                         ),
                       ],
