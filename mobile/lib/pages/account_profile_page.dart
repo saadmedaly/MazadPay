@@ -133,11 +133,11 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
     // Générer les initiales pour l'avatar fallback
     String initials = 'U';
     if (fullName.isNotEmpty && fullName != AppLocalizations.of(context)!.text_37) {
-      final parts = fullName.split(' ');
+      final parts = fullName.trim().split(' ').where((p) => p.isNotEmpty).toList();
       if (parts.length > 1) {
         initials = '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-      } else {
-        initials = fullName[0].toUpperCase();
+      } else if (parts.isNotEmpty) {
+        initials = parts[0][0].toUpperCase();
       }
     }
 
