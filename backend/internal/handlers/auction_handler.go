@@ -381,7 +381,11 @@ func (h *AuctionHandler) IncrementView(c *fiber.Ctx) error {
 	if err != nil {
 		return BadRequest(c, "Invalid auction ID")
 	}
-	_ = h.service.IncrementViews(c.Context(), id)
+	var userID *uuid.UUID
+	if uid, err := middleware.GetUserID(c); err == nil {
+		userID = &uid
+	}
+	_ = h.service.IncrementViews(c.Context(), id, userID)
 	return OK(c, fiber.Map{"message": "View counted"})
 }
 

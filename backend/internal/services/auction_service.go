@@ -53,7 +53,7 @@ type AuctionService interface {
 	DeleteAuction(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 	GetBidStatus(ctx context.Context, auctionID, userID uuid.UUID) (map[string]interface{}, error)
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*models.User, error)
-	IncrementViews(ctx context.Context, id uuid.UUID) error
+	IncrementViews(ctx context.Context, id uuid.UUID, userID *uuid.UUID) error
 	AddImages(ctx context.Context, auctionID, sellerID uuid.UUID, urls []string) error
 	BuyNow(ctx context.Context, auctionID, buyerID uuid.UUID) (*models.Auction, error)
 	CancelAuction(ctx context.Context, auctionID, sellerID uuid.UUID, reason string) error
@@ -657,8 +657,8 @@ func (s *auctionService) GetBidStatus(ctx context.Context, auctionID, userID uui
 	return status, nil
 }
 
-func (s *auctionService) IncrementViews(ctx context.Context, id uuid.UUID) error {
-	return s.auctionRepo.IncrementViews(ctx, id)
+func (s *auctionService) IncrementViews(ctx context.Context, id uuid.UUID, userID *uuid.UUID) error {
+	return s.auctionRepo.IncrementViews(ctx, id, userID)
 }
 
 func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid.UUID, urls []string) error {

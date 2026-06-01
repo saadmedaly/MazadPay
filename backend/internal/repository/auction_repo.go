@@ -33,7 +33,7 @@ type AuctionRepository interface {
 	UpdatePrice(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, newPrice decimal.Decimal, version int) (bool, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
 	SetWinner(ctx context.Context, tx *sqlx.Tx, id, winnerID, winningBidID uuid.UUID) error
-	IncrementViews(ctx context.Context, id uuid.UUID) error
+	IncrementViews(ctx context.Context, id uuid.UUID, userID *uuid.UUID) error
 	IncrementBidderCount(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error
 	FindExpiredActive(ctx context.Context) ([]models.Auction, error)
 	GetUserHighestBid(ctx context.Context, auctionID, userID uuid.UUID) (*models.Bid, error)
@@ -201,8 +201,24 @@ func (r *auctionRepo) UpdatePrice(ctx context.Context, tx *sqlx.Tx, id uuid.UUID
 	return n == 1, nil
 }
 
-func (r *auctionRepo) IncrementViews(ctx context.Context, id uuid.UUID) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE auctions SET views = views + 1 WHERE id = $1`, id)
+func (r *auctionRepo) IncrementViews(ctx context.Context, id uuid.UUID, userID *uuid.UUID) error {
+	if userID == nil {
+		// Anonymous: always increment (no dedup possible)
+		_, err := r.db.ExecContext(ctx, `UPDATE auctions SET views = views + 1 WHERE id = $1`, id)
+		return err
+	}
+	// Insert into auction_views — ON CONFLICT means this user already viewed, skip
+	result, err := r.db.ExecContext(ctx,
+		`INSERT INTO auction_views (auction_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		id, *userID)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 1 {
+		// New unique view — increment counter
+		_, err = r.db.ExecContext(ctx, `UPDATE auctions SET views = views + 1 WHERE id = $1`, id)
+	}
 	return err
 }
 
