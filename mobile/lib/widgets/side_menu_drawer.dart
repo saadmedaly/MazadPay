@@ -251,11 +251,6 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
                   ),
                   _buildMenuItem(
                     context,
-                    title: AppLocalizations.of(context)!.text_23,
-                    icon: Icons.account_balance_wallet,
-                  ),
-                  _buildMenuItem(
-                    context,
                     title: AppLocalizations.of(context)!.text_401,
                     icon: Icons.request_quote_outlined,
                   ),

@@ -26,6 +26,112 @@ class _AccountPageState extends State<AccountPage> {
     _loadBalance();
   }
 
+  void _showDepositTerms(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Icon
+              Center(
+                child: Container(
+                  width: 72, height: 72,
+                  decoration: BoxDecoration(color: const Color(0xFFE8F4FF), shape: BoxShape.circle),
+                  child: const Icon(Icons.qr_code_scanner, color: Color(0xFF0084FF), size: 36),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Center(
+                child: Text(
+                  'دفع من خلال تطبيقات البنكية',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Center(
+                child: Text(
+                  'يرجى قراءة الشروط والأحكام التالية لاسترداد المعاملات بعناية',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Row(
+                textDirection: TextDirection.rtl,
+                children: [
+                  Icon(Icons.article_outlined, color: Color(0xFF0084FF), size: 20),
+                  SizedBox(width: 8),
+                  Text('شروط الدفع والتأمين', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...[
+                'ا. تقبل التطبيق وسائل الدفع: بنكي، مصرفي، السداد.',
+                '٢. يتطلب بعض المزادات دفع مبلغ تأمين لضمان جدية المزايدة.',
+                '٣. يُسترجع مبلغ التأمين تلقائيًا في حال عدم الفوز بالمزاد خلال ساعة حسب مزود الدفع.',
+                '٤. لا يُسترجع التأمين في حال الفوز وعدم إتمام الدفع أو مخالفة شروط التطبيق.',
+                '٥. يحق لإدارة التطبيق إلغاء أي مزاد عند وجود خطأ تقني أو شبهة احتيال، مع إعادة التأمين عند الإلغاء.',
+              ].map((t) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(t, textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, height: 1.5)),
+              )),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('إلغاء', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const DepositPage()));
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0084FF),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: const Text('اوافق على شروط', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _loadBalance() async {
     try {
       final response = await _walletApi.getBalance();
@@ -162,14 +268,7 @@ class _AccountPageState extends State<AccountPage> {
 
               // Deposit Now Button (Red)
               InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const DepositPage(),
-                    ),
-                  );
-                },
+                onTap: () => _showDepositTerms(context),
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   width: double.infinity,
