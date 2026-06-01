@@ -127,61 +127,61 @@ abstract class AppLocalizations {
   /// No description provided for @text_5.
   ///
   /// In ar, this message translates to:
-  /// **'مزاد باي هو أول تطبيق للمزادات الرقمية في موريتانيا، والمنصة الرائدة التي تنقل مفهوم المزايدة التقليدية إلى تجربة تقنية حديثة، آمنة، وشفافة. نحن فخورون لكوننا أول من أطلق هذا النظام المتكامل في السوق الموريتاني، لنجمع لك بين إثارة المزايدة وتلبية احتياجاتك اليومية في تطبيق واحد وبسواعد وطنية.'**
+  /// **'مزاد باي هو أول تطبيق للمزادات الرقمية في موريتانيا، يربط بين البائعين والمشترين عبر منصة حديثة وآمنة وشفافة، ويوفر خدمات مزادات وتوصيل متكاملة تلبي احتياجات الأفراد والشركات.'**
   String get text_5;
 
   /// No description provided for @text_6.
   ///
   /// In ar, this message translates to:
-  /// **'خدماتنا الرائدة:'**
+  /// **'خدماتنا'**
   String get text_6;
 
   /// No description provided for @text_7.
   ///
   /// In ar, this message translates to:
-  /// **'من خلال تطبيقنا، نضع بين يديك باقة متنوعة من الخدمات المصممة خصيصاً لمجتمعنا:'**
+  /// **''**
   String get text_7;
 
   /// No description provided for @text_8.
   ///
   /// In ar, this message translates to:
-  /// **'المزادات الرقمية (الأولى في موريتانيا): نظام مزايدة علني وشفاف على السيارات، العقارات، والإلكترونيات، يضمن حقوق الجميع بكل موثوقية.'**
+  /// **'المزادات الرقمية: مزايدة على السيارات والعقارات والإلكترونيات ومختلف المنتجات بكل موثوقية.'**
   String get text_8;
 
   /// No description provided for @text_9.
   ///
   /// In ar, this message translates to:
-  /// **'التجارة الإلكترونية العالمية: منصة تسوق ذكية تربطك بأفضل المواقع العالمية مثل (Amazon, AliExpress, Shein) لتصلك منتجاتك المفضلة أينما كنت.'**
+  /// **'خدمات التوصيل: توصيل الطعام، المياه، خدمات المجاري، نقل الأشخاص، شحن البضائع، الشحن من الخارج إلى موريتانيا، ونقل السيارات والشاحنات.'**
   String get text_9;
 
   /// No description provided for @text_10.
   ///
   /// In ar, this message translates to:
-  /// **'خدمات التوصيل والنقل الشاملة: حلول متكاملة تشمل نقل الأشخاص، شحن البضائع، وخدمات سحب ونقل السيارات (الحاملات).'**
+  /// **''**
   String get text_10;
 
   /// No description provided for @text_11.
   ///
   /// In ar, this message translates to:
-  /// **'حجز الأنشطة الرياضية: إمكانية حجز مختلف أنواع الرياضات؛ بما في ذلك صالات اللياقة البدنية، الملاعب، وحصص السباحة.'**
+  /// **''**
   String get text_11;
 
   /// No description provided for @text_12.
   ///
   /// In ar, this message translates to:
-  /// **'طلب الطعام: استمتع بطلب وجباتك من أشهر المطاعم ومقاهي بضغطة زر.'**
+  /// **''**
   String get text_12;
 
   /// No description provided for @text_13.
   ///
   /// In ar, this message translates to:
-  /// **'حجز الفنادق والإقامات: خطط لرحلاتك داخل وخارج موريتانيا بأسعار تنافسية.'**
+  /// **''**
   String get text_13;
 
   /// No description provided for @text_14.
   ///
   /// In ar, this message translates to:
-  /// **'المواعيد الطبية: تنظيم وتسهيل حجز المواعيد في كبرى المصحات والعيادات لضمان راحتك وصحتك.'**
+  /// **''**
   String get text_14;
 
   /// No description provided for @text_15.
@@ -193,7 +193,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_16.
   ///
   /// In ar, this message translates to:
-  /// **'الريادة المطلقة كأول وجهة رقمية للمزادات في موريتانيا، وتقديم حلول شاملة تدمج بين التجارة الإلكترونية، مختلف أنواع توصيل، وخدمات، لتعزيز نمط حياة المواطن الموريتاني وتسهيل معاملاته.'**
+  /// **'أن نكون المنصة الرقمية الأولى للمزادات وخدمات التوصيل في موريتانيا.'**
   String get text_16;
 
   /// No description provided for @text_17.
@@ -205,7 +205,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_18.
   ///
   /// In ar, this message translates to:
-  /// **'بصفتنا أول مزاد رقمي في البلاد، يلتزم فريق مزاد باي بتوفير بيئة رقمية آمنة كلياً، تلتزم بأعلى معايير المصداقية والشفافية، وتدعم التحول الرقمي في موريتانيا.'**
+  /// **'تقديم خدمات آمنة وموثوقة وفق أعلى معايير الجودة والشفافية.'**
   String get text_18;
 
   /// No description provided for @text_19.

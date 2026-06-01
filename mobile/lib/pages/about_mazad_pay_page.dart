@@ -49,39 +49,24 @@ class AboutMazadPayPage extends StatelessWidget {
               
               _buildSectionTitle(AppLocalizations.of(context)!.text_6, isDarkMode),
               const SizedBox(height: 12),
-              _buildParagraph(
-                AppLocalizations.of(context)!.text_7,
-                isDarkMode,
-              ),
-              const SizedBox(height: 12),
-              _buildBulletPoint(
-                AppLocalizations.of(context)!.text_8,
-                isDarkMode,
-              ),
-              _buildBulletPoint(
-                AppLocalizations.of(context)!.text_9,
-                isDarkMode,
-              ),
-              _buildBulletPoint(
-                AppLocalizations.of(context)!.text_10,
-                isDarkMode,
-              ),
-              _buildBulletPoint(
-                AppLocalizations.of(context)!.text_11,
-                isDarkMode,
-              ),
-              _buildBulletPoint(
-                AppLocalizations.of(context)!.text_12,
-                isDarkMode,
-              ),
-              _buildBulletPoint(
-                AppLocalizations.of(context)!.text_13,
-                isDarkMode,
-              ),
-              _buildBulletPoint(
-                AppLocalizations.of(context)!.text_14,
-                isDarkMode,
-              ),
+              if (AppLocalizations.of(context)!.text_7.isNotEmpty)
+                _buildParagraph(AppLocalizations.of(context)!.text_7, isDarkMode),
+              if (AppLocalizations.of(context)!.text_7.isNotEmpty)
+                const SizedBox(height: 12),
+              if (AppLocalizations.of(context)!.text_8.isNotEmpty)
+                _buildBulletPoint(AppLocalizations.of(context)!.text_8, isDarkMode),
+              if (AppLocalizations.of(context)!.text_9.isNotEmpty)
+                _buildBulletPoint(AppLocalizations.of(context)!.text_9, isDarkMode),
+              if (AppLocalizations.of(context)!.text_10.isNotEmpty)
+                _buildBulletPoint(AppLocalizations.of(context)!.text_10, isDarkMode),
+              if (AppLocalizations.of(context)!.text_11.isNotEmpty)
+                _buildBulletPoint(AppLocalizations.of(context)!.text_11, isDarkMode),
+              if (AppLocalizations.of(context)!.text_12.isNotEmpty)
+                _buildBulletPoint(AppLocalizations.of(context)!.text_12, isDarkMode),
+              if (AppLocalizations.of(context)!.text_13.isNotEmpty)
+                _buildBulletPoint(AppLocalizations.of(context)!.text_13, isDarkMode),
+              if (AppLocalizations.of(context)!.text_14.isNotEmpty)
+                _buildBulletPoint(AppLocalizations.of(context)!.text_14, isDarkMode),
               
               const SizedBox(height: 32),
               _buildSectionTitle(AppLocalizations.of(context)!.text_15, isDarkMode),
