@@ -158,7 +158,7 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	api.Get("/locations/:countryId", h.GetLocationsByCountry)
 	api.Get("/auctions", h.List)
 	api.Get("/auctions/:id", h.GetByID)
-	api.Post("/auctions/:id/view", h.IncrementView)
+	api.Post("/auctions/:id/view", middleware.OptionalJWT(jwtSecret, rdb), h.IncrementView)
 	api.Get("/report-reasons", h.GetReportReasons)
 
 	// Bids (Public history)

@@ -78,6 +78,45 @@ func JWT(jwtSecret string, logger *zap.Logger, rdb *redis.Client) fiber.Handler 
 	}
 }
 
+// OptionalJWT decodes the JWT if present and sets user_id in Locals, but never rejects the request.
+// Use for endpoints that are public but benefit from knowing the authenticated user.
+func OptionalJWT(jwtSecret string, rdb *redis.Client) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		authHeader := c.Get("Authorization")
+		tokenStr := ""
+		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+			tokenStr = strings.TrimPrefix(authHeader, "Bearer ")
+		} else {
+			tokenStr = c.Query("token")
+		}
+		if tokenStr == "" {
+			return c.Next()
+		}
+		if rdb != nil {
+			blacklisted, _ := rdb.Exists(c.Context(), fmt.Sprintf("blacklist:%s", tokenStr)).Result()
+			if blacklisted > 0 {
+				return c.Next()
+			}
+		}
+		token, err := jwt.ParseWithClaims(tokenStr, &services.JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, errors.New("unexpected signing method")
+			}
+			return []byte(jwtSecret), nil
+		})
+		if err != nil || !token.Valid {
+			return c.Next()
+		}
+		if claims, ok := token.Claims.(*services.JWTClaims); ok {
+			if uid, err := uuid.Parse(claims.UserID); err == nil {
+				c.Locals("user_id", uid)
+				c.Locals("user_role", claims.Role)
+			}
+		}
+		return c.Next()
+	}
+}
+
 func AdminOnly(logger *zap.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		role, ok := c.Locals("user_role").(string)
