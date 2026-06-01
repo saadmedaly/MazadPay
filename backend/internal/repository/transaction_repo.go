@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 )
 
@@ -128,6 +129,21 @@ func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status
 			`UPDATE wallets SET balance = balance + $1, version = version + 1 WHERE user_id = $2`,
 			tx.Amount, tx.UserID); err != nil {
 			return err
+		}
+	}
+
+	// Debit wallet on withdrawal approval — only if not already completed (prevents double-debit)
+	if status == "completed" && tx.Type == "withdraw" && tx.Status != "completed" {
+		result, err := dbtx.ExecContext(ctx,
+			`UPDATE wallets SET balance = balance - $1, version = version + 1
+			 WHERE user_id = $2 AND balance >= $1`,
+			tx.Amount, tx.UserID)
+		if err != nil {
+			return err
+		}
+		n, _ := result.RowsAffected()
+		if n == 0 {
+			return apperr.ErrInsufficientBalance
 		}
 	}
 

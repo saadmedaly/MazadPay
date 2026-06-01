@@ -28,7 +28,14 @@ class _WithdrawPageState extends State<WithdrawPage> {
       final response = await _walletApi.getBalance();
       if (response.success && response.data != null) {
         setState(() {
-          _balance = (response.data!['balance'] ?? 0).toDouble();
+          final raw = response.data!['balance'];
+          if (raw is num) {
+            _balance = raw.toDouble();
+          } else if (raw is String) {
+            _balance = double.tryParse(raw) ?? 0.0;
+          } else {
+            _balance = 0.0;
+          }
         });
       }
     } catch (e) {
