@@ -122,7 +122,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_36 => 'P';
 
   @override
-  String get text_37 => 'Bedal Sidiya';
+  String get text_37 => 'Utilisateur';
 
   @override
   String get text_38 => 'Mes informations';

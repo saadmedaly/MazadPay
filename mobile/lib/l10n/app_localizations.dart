@@ -319,7 +319,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_37.
   ///
   /// In ar, this message translates to:
-  /// **'بدال سيديا'**
+  /// **'المستخدم'**
   String get text_37;
 
   /// No description provided for @text_38.

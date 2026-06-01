@@ -128,7 +128,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get text_36 => 'ب';
 
   @override
-  String get text_37 => 'بدال سيديا';
+  String get text_37 => 'المستخدم';
 
   @override
   String get text_38 => 'معلوماتي';

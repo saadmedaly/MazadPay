@@ -56,10 +56,14 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
 
   String get _userFullName {
     if (_userData == null) return '';
-    return _userData!['full_name']?.toString() ??
-           _userData!['fullname']?.toString() ??
-           _userData!['name']?.toString() ??
-           '';
+    final name = _userData!['full_name']?.toString() ??
+                 _userData!['fullname']?.toString() ??
+                 _userData!['name']?.toString() ??
+                 '';
+    if (name.isNotEmpty) return name;
+    // Fallback to masked phone if available
+    final phone = _userData!['phone']?.toString() ?? '';
+    return phone.isNotEmpty ? phone : '';
   }
 
   String? get _userAvatarUrl {

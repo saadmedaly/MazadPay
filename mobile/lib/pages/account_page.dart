@@ -33,7 +33,14 @@ class _AccountPageState extends State<AccountPage> {
       if (!mounted) return;
       setState(() {
         if (response.success && response.data != null) {
-          _balance = (response.data!['balance'] ?? 0).toDouble();
+          final raw = response.data!['balance'];
+          if (raw is num) {
+            _balance = raw.toDouble();
+          } else if (raw is String) {
+            _balance = double.tryParse(raw) ?? 0.0;
+          } else {
+            _balance = 0.0;
+          }
         }
       });
     } catch (e) {

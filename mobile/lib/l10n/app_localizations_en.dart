@@ -119,7 +119,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get text_36 => 'B';
 
   @override
-  String get text_37 => 'Bedal Sidiya';
+  String get text_37 => 'User';
 
   @override
   String get text_38 => 'My Info';
