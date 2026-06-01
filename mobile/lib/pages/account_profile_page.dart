@@ -89,8 +89,8 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
     try {
       final ApiResponse<Map<String, dynamic>> response = await _userApi.updateProfile(
         fullName: _fullNameController.text,
-        phone: _phoneController.text,
         email: _emailController.text,
+        city: _cityController.text,
       );
       
       if (response.success && mounted) {
@@ -302,7 +302,7 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
                     ),
                     const SizedBox(height: 16),
                     _buildEditableField(context, AppLocalizations.of(context)!.text_39, _fullNameController, Icons.person_outline, isDarkMode),
-                    _buildEditableField(context, AppLocalizations.of(context)!.text_40, _phoneController, Icons.phone_outlined, isDarkMode),
+                    _buildEditableField(context, AppLocalizations.of(context)!.text_40, _phoneController, Icons.phone_outlined, isDarkMode, readOnly: true),
                     _buildEditableField(context, AppLocalizations.of(context)!.text_41, _emailController, Icons.email_outlined, isDarkMode),
                     _buildEditableField(context, AppLocalizations.of(context)!.text_42, _cityController, Icons.location_city_outlined, isDarkMode),
 
@@ -374,23 +374,26 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
       );
   }
 
-  Widget _buildEditableField(BuildContext context, String label, TextEditingController controller, IconData icon, bool isDarkMode) {
+  Widget _buildEditableField(BuildContext context, String label, TextEditingController controller, IconData icon, bool isDarkMode, {bool readOnly = false}) {
     return Container(
       margin: const EdgeInsetsDirectional.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+        color: readOnly
+            ? (isDarkMode ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5))
+            : (isDarkMode ? const Color(0xFF1D1D1D) : Colors.white),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF0084FF), size: 20),
+          Icon(icon, color: readOnly ? Colors.grey : const Color(0xFF0084FF), size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: TextField(
               controller: controller,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              readOnly: readOnly,
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: readOnly ? Colors.grey[500] : null),
               decoration: InputDecoration(
                 labelText: label,
                 labelStyle: TextStyle(color: Colors.grey[500], fontSize: 11),
@@ -400,7 +403,8 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
               ),
             ),
           ),
-          Icon(Icons.edit_outlined, color: Colors.grey[400], size: 16),
+          if (!readOnly) Icon(Icons.edit_outlined, color: Colors.grey[400], size: 16)
+          else Icon(Icons.lock_outline, color: Colors.grey[400], size: 16),
         ],
       ),
     );

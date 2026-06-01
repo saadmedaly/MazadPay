@@ -53,7 +53,7 @@ func MaskUserPhone(user *models.User) *ResponseUser {
 
 	return &ResponseUser{
 		ID:                   user.ID.String(),
-		Phone:                user.MaskPhone(),
+		Phone:                user.Phone,
 		FullName:             user.FullName,
 		Email:                user.Email,
 		ProfilePicURL:        user.ProfilePicURL,

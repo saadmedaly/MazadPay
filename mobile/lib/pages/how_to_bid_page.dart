@@ -1,5 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:mezadpay/services/tutorial_api.dart';
 
@@ -77,6 +78,26 @@ class _HowToBidPageState extends State<HowToBidPage> {
   void dispose() {
     _videoController?.dispose();
     super.dispose();
+  }
+
+  void _openFullscreen() {
+    if (!_isInitialized || _videoController == null) return;
+    // Switch to landscape
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _FullscreenVideoPage(controller: _videoController!),
+      ),
+    ).then((_) {
+      // Restore portrait on return
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    });
   }
 
   void _onTutorialSelected(int index) {
@@ -319,7 +340,10 @@ class _HowToBidPageState extends State<HowToBidPage> {
                         ),
                       ),
                     ),
-                    const Icon(Icons.more_horiz, color: Colors.white, size: 24),
+                    GestureDetector(
+                      onTap: _openFullscreen,
+                      child: const Icon(Icons.fullscreen, color: Colors.white, size: 24),
+                    ),
                   ],
                 ),
               ),
@@ -420,6 +444,93 @@ class _HowToBidPageState extends State<HowToBidPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _FullscreenVideoPage extends StatefulWidget {
+  final VideoPlayerController controller;
+  const _FullscreenVideoPage({required this.controller});
+
+  @override
+  State<_FullscreenVideoPage> createState() => _FullscreenVideoPageState();
+}
+
+class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    if (!widget.controller.value.isPlaying) {
+      widget.controller.play();
+    }
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(
+            child: AspectRatio(
+              aspectRatio: widget.controller.value.aspectRatio,
+              child: VideoPlayer(widget.controller),
+            ),
+          ),
+          Positioned(
+            top: 16, left: 16,
+            child: SafeArea(
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  child: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 28),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 24,
+            left: 0, right: 0,
+            child: Center(
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  widget.controller.value.isPlaying
+                      ? widget.controller.pause()
+                      : widget.controller.play();
+                }),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(
+                    widget.controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                    color: Colors.white, size: 36,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
