@@ -36,6 +36,19 @@ func (r *walletRepo) GetPaymentMethods(ctx context.Context) ([]models.PaymentMet
 func (r *walletRepo) GetByUserID(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
     var w models.Wallet
     err := r.db.GetContext(ctx, &w, `SELECT * FROM wallets WHERE user_id = $1`, userID)
+    if err == nil {
+        return &w, nil
+    }
+    // No wallet row yet — create one with zero balance then return it
+    _, err = r.db.ExecContext(ctx,
+        `INSERT INTO wallets (user_id, balance, frozen_amount, version, updated_at)
+         VALUES ($1, 0, 0, 1, now())
+         ON CONFLICT (user_id) DO NOTHING`,
+        userID)
+    if err != nil {
+        return nil, err
+    }
+    err = r.db.GetContext(ctx, &w, `SELECT * FROM wallets WHERE user_id = $1`, userID)
     if err != nil {
         return nil, err
     }
