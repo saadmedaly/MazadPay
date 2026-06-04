@@ -96,7 +96,7 @@ func main() {
 		Format: "[${time}] ${status} - ${latency} ${method} ${path}\n",
 	}))
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
+		AllowOrigins: "https://mazadpay-admin.onrender.com,https://admin.mazadpay.com,http://localhost:5173,http://localhost:3000",
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-User-ID",
 		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
 	}))
