@@ -16,6 +16,7 @@ type TransactionRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error)
 	FindByID(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*models.Transaction, error)
 	Create(ctx context.Context, tx *models.Transaction) error
+	CreateTx(ctx context.Context, dbtx *sqlx.Tx, tx *models.Transaction) error
 	UpdateReceipt(ctx context.Context, id uuid.UUID, userID uuid.UUID, url string, status string) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
 	GetStats(ctx context.Context) (float64, float64, error) // Total, Today
@@ -25,11 +26,12 @@ type TransactionRepository interface {
 }
 
 type transactionRepo struct {
-	db *sqlx.DB
+	db         *sqlx.DB
+	walletRepo WalletRepository
 }
 
-func NewTransactionRepository(db *sqlx.DB) TransactionRepository {
-	return &transactionRepo{db: db}
+func NewTransactionRepository(db *sqlx.DB, walletRepo WalletRepository) TransactionRepository {
+	return &transactionRepo{db: db, walletRepo: walletRepo}
 }
 
 func (r *transactionRepo) ListPaginated(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error) {
@@ -80,10 +82,25 @@ func (r *transactionRepo) FindByID(ctx context.Context, id uuid.UUID, userID *uu
 
 func (r *transactionRepo) Create(ctx context.Context, tx *models.Transaction) error {
 	_, err := r.db.NamedExecContext(ctx, `
-		INSERT INTO transactions 
-			(id, user_id, auction_id, type, amount, gateway, status, reference, 
+		INSERT INTO transactions
+			(id, user_id, auction_id, type, amount, gateway, status, reference,
 			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id)
-		VALUES 
+		VALUES
+			(:id, :user_id, :auction_id, :type, :amount, :gateway, :status, :reference,
+			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id)
+	`, tx)
+	return err
+}
+
+// CreateTx est identique à Create mais s'exécute dans une transaction SQL existante
+// (utilisé par RequestWithdraw pour que le gel du solde et la création de la
+// transaction soient atomiques — audit de sécurité V09).
+func (r *transactionRepo) CreateTx(ctx context.Context, dbtx *sqlx.Tx, tx *models.Transaction) error {
+	_, err := dbtx.NamedExecContext(ctx, `
+		INSERT INTO transactions
+			(id, user_id, auction_id, type, amount, gateway, status, reference,
+			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id)
+		VALUES
 			(:id, :user_id, :auction_id, :type, :amount, :gateway, :status, :reference,
 			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id)
 	`, tx)
@@ -153,18 +170,21 @@ func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status
 		}
 	}
 
-	// Debit wallet on withdrawal approval — only if not already completed (prevents double-debit)
+	// Withdrawal approval — le montant a déjà été gelé (balance -> frozen_amount) lors de
+	// la demande via RequestWithdraw/FreezeForWithdraw (audit V09). On finalise ici en
+	// retirant uniquement de frozen_amount, jamais de balance une seconde fois.
 	if status == "completed" && tx.Type == "withdraw" && tx.Status != "completed" {
-		result, err := dbtx.ExecContext(ctx,
-			`UPDATE wallets SET balance = balance - $1, version = version + 1
-			 WHERE user_id = $2 AND balance >= $1`,
-			tx.Amount, tx.UserID)
-		if err != nil {
+		if err := r.walletRepo.CaptureFrozenForWithdraw(ctx, dbtx, tx.UserID, tx.Amount); err != nil {
 			return err
 		}
-		n, _ := result.RowsAffected()
-		if n == 0 {
-			return apperr.ErrInsufficientBalance
+	}
+
+	// Withdrawal rejection — libère le montant gelé : il retourne dans balance et sort
+	// de frozen_amount (audit V09). Ne s'applique que si le montant avait bien été gelé
+	// (c'est-à-dire que la transaction était encore pending_review/pending).
+	if status == "rejected" && tx.Type == "withdraw" && tx.Status != "completed" && tx.Status != "rejected" {
+		if err := r.walletRepo.ReleaseFrozenForWithdraw(ctx, dbtx, tx.UserID, tx.Amount); err != nil {
+			return err
 		}
 	}
 

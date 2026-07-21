@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -73,7 +74,29 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 			return apperr.ErrBidTooLow
 		}
 
-		// 3. [SUPPRIMÉ] Pas de vérification wallet/caution lors du bid
+		// 3. Vérification et gel de la caution (insurance_amount) — audit de sécurité V03.
+		// Seule la première mise de l'utilisateur sur cet auction déclenche un gel : si un
+		// hold actif existe déjà pour ce (user_id, auction_id), on ne gèle pas une seconde
+		// fois. Si insurance_amount est 0 ou absent, on ne gèle rien (compatibilité avec les
+		// auctions existants créés avant ce correctif).
+		if auction.InsuranceAmount.GreaterThan(decimal.Zero) {
+			existingHold, err := s.walletRepo.FindActiveHold(ctx, tx, userID, auctionID)
+			if err != nil && err != sql.ErrNoRows {
+				return err
+			}
+			if existingHold == nil {
+				wallet, err := s.walletRepo.FindForUpdate(ctx, tx, userID)
+				if err != nil {
+					return err
+				}
+				if err := s.walletRepo.DebitFreezeBalance(ctx, tx, userID, auction.InsuranceAmount, wallet.Version); err != nil {
+					return err
+				}
+				if err := s.walletRepo.CreateHold(ctx, tx, userID, auctionID, auction.InsuranceAmount); err != nil {
+					return err
+				}
+			}
+		}
 
 		// 4. Marquer les anciens bids comme non-gagnants
 		if err := s.bidRepo.SetAllNotWinning(ctx, tx, auctionID); err != nil {

@@ -74,9 +74,10 @@ type auctionService struct {
 	userRepo    repository.UserRepository
 	mediaSvc    MediaService
 	rdb         *redis.Client
+	walletRepo  repository.WalletRepository
 }
 
-func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client) AuctionService {
+func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client, walletRepo repository.WalletRepository) AuctionService {
 	return &auctionService{
 		db:          db,
 		auctionRepo: auctionRepo,
@@ -85,6 +86,7 @@ func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, re
 		userRepo:    userRepo,
 		mediaSvc:    mediaSvc,
 		rdb:         rdb,
+		walletRepo:  walletRepo,
 	}
 }
 
@@ -731,7 +733,22 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 
 	auction.Status = "canceled"
 	auction.RejectionReason = &reason
-	return s.auctionRepo.Update(ctx, auction)
+	if err := s.auctionRepo.Update(ctx, auction); err != nil {
+		return err
+	}
+
+	// Libère la caution (insurance_amount) de tous les enchérisseurs — l'auction est
+	// annulé, personne ne doit rester avec des fonds gelés (audit de sécurité V03/V09).
+	dbtx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil // l'annulation de l'auction a réussi ; on log mais ne bloque pas dessus
+	}
+	defer dbtx.Rollback()
+	if err := s.walletRepo.ReleaseHoldsForAuction(ctx, dbtx, auctionID); err != nil {
+		return nil
+	}
+	_ = dbtx.Commit()
+	return nil
 }
 
 func (s *auctionService) RelistAuction(ctx context.Context, auctionID, sellerID uuid.UUID, newEndTime time.Time) error {
@@ -778,6 +795,23 @@ func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 	}
 	for _, a := range auctions {
 		_ = s.auctionRepo.UpdateStatus(ctx, a.ID, "ended")
+
+		// Libère la caution des enchérisseurs non-gagnants (audit de sécurité V03/V09).
+		// Le hold du gagnant (s'il y en a un) reste actif : il n'existe pas encore de
+		// flow de capture/remboursement final après la clôture d'un auction dans ce
+		// projet — le laisser actif évite de rendre les fonds prématurément avant
+		// qu'une décision de paiement/livraison ne soit prise (voir rapport).
+		var winnerID *uuid.UUID
+		if wID, err := s.auctionRepo.GetHighestBidder(ctx, a.ID); err == nil && wID != uuid.Nil {
+			winnerID = &wID
+		}
+		if dbtx, err := s.db.BeginTxx(ctx, nil); err == nil {
+			if err := s.walletRepo.ReleaseHoldsForNonWinners(ctx, dbtx, a.ID, winnerID); err == nil {
+				dbtx.Commit()
+			} else {
+				dbtx.Rollback()
+			}
+		}
 
 		// Notifier le vendeur que l'enchère est terminée
 		seller, err := s.userRepo.FindByID(ctx, a.SellerID)

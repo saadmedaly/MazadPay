@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+	"github.com/mazadpay/backend/internal/database"
 	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
@@ -21,13 +23,14 @@ type WalletService interface {
 }
 
 type walletService struct {
+	db         *sqlx.DB
 	walletRepo repository.WalletRepository
 	txRepo     repository.TransactionRepository
 	notifSvc   NotificationService
 }
 
-func NewWalletService(walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, notifSvc NotificationService) WalletService {
-	return &walletService{walletRepo: walletRepo, txRepo: txRepo, notifSvc: notifSvc}
+func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, notifSvc NotificationService) WalletService {
+	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, notifSvc: notifSvc}
 }
 
 func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
@@ -64,24 +67,21 @@ func (s *walletService) UploadReceipt(ctx context.Context, txID uuid.UUID, userI
 	return s.txRepo.UpdateReceipt(ctx, txID, userID, receiptURL, "pending_review")
 }
 
+// RequestWithdraw crée une demande de retrait et gèle immédiatement le montant
+// (balance -> frozen_amount) dans la même transaction SQL, avec row locking via
+// FreezeForWithdraw (compare-and-set atomique). Ceci empêche qu'un utilisateur ne
+// soumette plusieurs demandes de retrait concurrentes dont la somme dépasse son
+// solde réel (audit de sécurité V09).
 func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error) {
 	// Vérification défensive indépendante du handler (audit de sécurité V08) : un montant
-	// négatif ou nul contournait le contrôle de solde ci-dessous (balance >= montant négatif
-	// est toujours vrai) et pouvait, une fois approuvé côté admin, augmenter le solde au lieu
-	// de le débiter (voir transaction_repo.go: balance = balance - amount).
+	// négatif ou nul contournait le contrôle de solde (balance >= montant négatif est
+	// toujours vrai) et pouvait, une fois approuvé côté admin, augmenter le solde au lieu
+	// de le débiter.
 	if amount.LessThanOrEqual(decimal.Zero) {
 		return nil, apperr.ErrBadRequest
 	}
-	// Check if balance enough
-	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if wallet.Balance.LessThan(amount) {
-		return nil, apperr.ErrInsufficientBalance
-	}
 
-	tx := &models.Transaction{
+	txModel := &models.Transaction{
 		ID:      uuid.New(),
 		UserID:  userID,
 		Type:    "withdraw",
@@ -89,10 +89,22 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 		Gateway: &gateway,
 		Status:  "pending_review",
 	}
-	if err := s.txRepo.Create(ctx, tx); err != nil {
+
+	err := database.WithTransaction(s.db, func(tx *sqlx.Tx) error {
+		// Gèle le montant : balance -= amount, frozen_amount += amount (atomique,
+		// échoue avec ErrInsufficientBalance si balance < amount).
+		if err := s.walletRepo.FreezeForWithdraw(ctx, tx, userID, amount); err != nil {
+			return err
+		}
+		if err := s.txRepo.CreateTx(ctx, tx, txModel); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	return tx, nil
+	return txModel, nil
 }
 
 func (s *walletService) GetTransactions(ctx context.Context, userID uuid.UUID, page, perPage int) ([]models.Transaction, int, error) {
