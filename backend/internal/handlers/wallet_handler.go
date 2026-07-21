@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/shopspring/decimal"
@@ -48,6 +49,15 @@ func (h *WalletHandler) Deposit(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+	// Vérification explicite : les tags `validate` sur ce struct ne sont pas exécutés
+	// (aucun validator.Validate n'est instancié dans WalletHandler), donc on vérifie
+	// manuellement ici plutôt que de compter sur des tags décoratifs (audit V05-bis/V11).
+	if req.Amount <= 0 {
+		return BadRequest(c, "Amount must be greater than 0")
+	}
+	if req.Gateway == "" {
+		return BadRequest(c, "Gateway is required")
+	}
 
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -65,6 +75,11 @@ func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
 	txID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return BadRequest(c, "Invalid transaction ID")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
 	}
 
 	var receiptURL string
@@ -96,7 +111,10 @@ func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
 		receiptURL = req.ReceiptURL
 	}
 
-	if err := h.svc.UploadReceipt(c.Context(), txID, receiptURL); err != nil {
+	if err := h.svc.UploadReceipt(c.Context(), txID, userID, receiptURL); err != nil {
+		if err == apperr.ErrNotFound {
+			return NotFound(c, "Transaction")
+		}
 		return InternalError(c, "Failed to update receipt")
 	}
 
@@ -111,6 +129,12 @@ func (h *WalletHandler) Withdraw(c *fiber.Ctx) error {
 	var req Request
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
+	}
+	if req.Amount <= 0 {
+		return BadRequest(c, "Amount must be greater than 0")
+	}
+	if req.Gateway == "" {
+		return BadRequest(c, "Gateway is required")
 	}
 
 	userID, err := middleware.GetUserID(c)

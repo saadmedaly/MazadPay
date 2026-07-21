@@ -91,8 +91,11 @@ func Load() *Config {
 			Port:       getEnv("APP_PORT", "8082"),
 			Name:       getEnv("APP_NAME", "MazadPay"),
 			DevOTPCode: getEnv("DEV_OTP_CODE", ""),
-			DefaultSuperAdminPhone: getEnv("DEFAULT_SUPER_ADMIN_PHONE", "+22212121212"),
-			DefaultSuperAdminPin:   getEnv("DEFAULT_SUPER_ADMIN_PIN", "1234"),
+			// Pas de fallback : si ces variables ne sont pas définies explicitement,
+			// aucun super admin par défaut ne doit être créé (voir audit de sécurité V02 -
+			// un PIN par défaut connu dans le code source est une porte dérobée).
+			DefaultSuperAdminPhone: getEnv("DEFAULT_SUPER_ADMIN_PHONE", ""),
+			DefaultSuperAdminPin:   getEnv("DEFAULT_SUPER_ADMIN_PIN", ""),
 		},
 		DB: DBConfig{
 			Host:            getEnv("DB_HOST", "localhost"),

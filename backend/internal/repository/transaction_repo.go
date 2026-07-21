@@ -8,6 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
+	"github.com/shopspring/decimal"
 )
 
 type TransactionRepository interface {
@@ -15,7 +16,7 @@ type TransactionRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error)
 	FindByID(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*models.Transaction, error)
 	Create(ctx context.Context, tx *models.Transaction) error
-	UpdateReceipt(ctx context.Context, id uuid.UUID, url string, status string) error
+	UpdateReceipt(ctx context.Context, id uuid.UUID, userID uuid.UUID, url string, status string) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
 	GetStats(ctx context.Context) (float64, float64, error) // Total, Today
 	GetPendingCount(ctx context.Context) (int, error)
@@ -89,11 +90,24 @@ func (r *transactionRepo) Create(ctx context.Context, tx *models.Transaction) er
 	return err
 }
 
-func (r *transactionRepo) UpdateReceipt(ctx context.Context, id uuid.UUID, url string, status string) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE transactions SET receipt_url = $1, status = $2 
-		WHERE id = $3`, url, status, id)
-	return err
+// UpdateReceipt met à jour le reçu d'une transaction. userID est requis et vérifié dans
+// la clause WHERE pour empêcher un utilisateur de modifier le reçu d'une transaction
+// qui ne lui appartient pas (voir audit de sécurité V05 - IDOR).
+func (r *transactionRepo) UpdateReceipt(ctx context.Context, id uuid.UUID, userID uuid.UUID, url string, status string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE transactions SET receipt_url = $1, status = $2
+		WHERE id = $3 AND user_id = $4`, url, status, id, userID)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return apperr.ErrNotFound
+	}
+	return nil
 }
 
 func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error {
@@ -106,6 +120,13 @@ func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status
 	var tx models.Transaction
 	if err := dbtx.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1 FOR UPDATE", id); err != nil {
 		return err
+	}
+
+	// Dernier filet de sécurité avant tout mouvement de solde (audit V08) : un montant
+	// nul ou négatif ne doit jamais créditer/débiter le portefeuille, même si une
+	// transaction invalide existait déjà en base avant ce correctif.
+	if status == "completed" && (tx.Type == "deposit" || tx.Type == "withdraw") && !tx.Amount.GreaterThan(decimal.Zero) {
+		return apperr.ErrBadRequest
 	}
 
 	if _, err := dbtx.ExecContext(ctx, `

@@ -115,17 +115,26 @@ func main() {
 	go auctionScheduler.Start()
 
 	// --- Seed Default Super Admin ---
+	// N'exécute le seed que si les deux variables sont explicitement définies (pas de
+	// fallback par défaut, voir config.go). Refuse en plus les PIN faibles/connus pour
+	// éviter qu'un opérateur ne réintroduise la même faille via l'environnement
+	// (audit de sécurité V02).
+	weakDefaultPins := map[string]bool{"1234": true, "0000": true, "1111": true, "0001": true}
 	if cfg.App.DefaultSuperAdminPhone != "" && cfg.App.DefaultSuperAdminPin != "" {
-		userRepo := repository.NewUserRepository(db)
-		if err := userRepo.SeedDefaultSuperAdmin(context.Background(),
-			cfg.App.DefaultSuperAdminPhone,
-			cfg.App.DefaultSuperAdminPin,
-			"mazadpay superadmin",
-			"admin@mazadpay.com",
-		); err != nil {
-			logger.Error("Failed to seed default super admin", zap.Error(err))
+		if weakDefaultPins[cfg.App.DefaultSuperAdminPin] {
+			logger.Error("DEFAULT_SUPER_ADMIN_PIN is a known weak value; refusing to seed super admin. Set a strong PIN.")
 		} else {
-			logger.Info("Default super admin seeded successfully")
+			userRepo := repository.NewUserRepository(db)
+			if err := userRepo.SeedDefaultSuperAdmin(context.Background(),
+				cfg.App.DefaultSuperAdminPhone,
+				cfg.App.DefaultSuperAdminPin,
+				"mazadpay superadmin",
+				"admin@mazadpay.com",
+			); err != nil {
+				logger.Error("Failed to seed default super admin", zap.Error(err))
+			} else {
+				logger.Info("Default super admin seeded successfully")
+			}
 		}
 	}
 
