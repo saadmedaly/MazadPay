@@ -57,7 +57,7 @@ type AuctionService interface {
 	AddImages(ctx context.Context, auctionID, sellerID uuid.UUID, urls []string) error
 	BuyNow(ctx context.Context, auctionID, buyerID uuid.UUID) (*models.Auction, error)
 	CancelAuction(ctx context.Context, auctionID, sellerID uuid.UUID, reason string) error
-	RelistAuction(ctx context.Context, auctionID uuid.UUID, newEndTime time.Time) error
+	RelistAuction(ctx context.Context, auctionID, sellerID uuid.UUID, newEndTime time.Time) error
 	ExtendAuction(ctx context.Context, auctionID uuid.UUID, sellerID uuid.UUID, hours int) error
 	CloseExpiredAuctions(ctx context.Context) error
 	GetCategories(ctx context.Context) ([]models.Category, error)
@@ -734,10 +734,13 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 	return s.auctionRepo.Update(ctx, auction)
 }
 
-func (s *auctionService) RelistAuction(ctx context.Context, auctionID uuid.UUID, newEndTime time.Time) error {
+func (s *auctionService) RelistAuction(ctx context.Context, auctionID, sellerID uuid.UUID, newEndTime time.Time) error {
 	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
 	if err != nil {
 		return apperr.ErrNotFound
+	}
+	if auction.SellerID != sellerID {
+		return apperr.ErrUnauthorized
 	}
 	if auction.Status != "canceled" && auction.Status != "ended" {
 		return fmt.Errorf("can only relist canceled or ended auctions")

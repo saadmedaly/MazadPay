@@ -778,7 +778,12 @@ func (h *AuctionHandler) Relist(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid end_time format (use RFC3339)")
 	}
 
-	if err := h.service.RelistAuction(c.Context(), id, newEndTime); err != nil {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	if err := h.service.RelistAuction(c.Context(), id, userID, newEndTime); err != nil {
 		return BadRequest(c, err.Error())
 	}
 

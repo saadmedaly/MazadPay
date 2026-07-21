@@ -416,6 +416,7 @@ func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, mediaSvc s
 
 func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.NotificationHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
+	adminMiddleware := middleware.AdminOnly(logger)
 
 	notifications := api.Group("/notifications", jwtMiddleware)
 	notifications.Post("/token", notifHandler.SaveToken)
@@ -424,8 +425,9 @@ func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.Notificati
 	notifications.Put("/:id/read", notifHandler.MarkAsRead)
 	notifications.Put("/read-all", notifHandler.MarkAllAsRead)
 
-	// Admin notification management
-	admin := api.Group("/admin/notifications", jwtMiddleware)
+	// Admin notification management — protected by AdminOnly (was previously JWT-only: any
+	// authenticated user could broadcast/delete notifications, see security audit V04)
+	admin := api.Group("/admin/notifications", jwtMiddleware, adminMiddleware)
 	admin.Get("", notifHandler.AdminList)
 	admin.Post("/send", notifHandler.SendNotification)
 	admin.Post("/broadcast", notifHandler.SendNotification)
