@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Service de gestion du JWT token
@@ -64,10 +65,33 @@ class AuthService {
     return await _storage.read(key: _userIdKey);
   }
   
-  /// Vérifier si l'utilisateur est connecté
+  /// Vérifier si l'utilisateur est connecté (présence du token uniquement)
   Future<bool> isLoggedIn() async {
     final token = await getToken();
     return token != null && token.isNotEmpty;
+  }
+
+  /// Vérifier si le token existe ET n'est pas expiré (lecture locale du payload JWT,
+  /// aucun appel réseau). Retourne false si le token est absent, malformé ou expiré.
+  Future<bool> hasValidSession() async {
+    final token = await getToken();
+    if (token == null || token.isEmpty) return false;
+
+    final parts = token.split('.');
+    if (parts.length != 3) return true; // format inattendu: laisser passer, l'API tranchera
+
+    try {
+      final normalized = base64Url.normalize(parts[1]);
+      final payload = jsonDecode(utf8.decode(base64Url.decode(normalized)));
+      final exp = payload['exp'];
+      if (exp is int) {
+        final expiry = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
+        return expiry.isAfter(DateTime.now());
+      }
+      return true;
+    } catch (_) {
+      return true; // décodage impossible: laisser passer, l'API tranchera
+    }
   }
   
   /// Déconnexion - Supprimer tous les tokens

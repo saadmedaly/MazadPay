@@ -1075,7 +1075,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ],
                   ),
                 )
-              : SingleChildScrollView(
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    await Future.wait([
+                      _loadCitiesWithAuctions(),
+                      _loadBanners(),
+                      _loadSponsors(),
+                      _loadAuctions(),
+                    ]);
+                  },
+                  child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
 
           child: Column(
 
@@ -1358,6 +1368,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
 
         ),
+                ),
 
             // Tab 1: توصيل
             const ServicesPage(),

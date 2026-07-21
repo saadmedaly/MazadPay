@@ -108,6 +108,8 @@ class AuctionApi {
     required List<String> images,
     required String phone,
     DateTime? endTime,
+    String? condition,
+    String? brand,
   }) async {
     try {
       // Calculer la date de fin par défaut (7 jours à partir de maintenant)
@@ -123,9 +125,17 @@ class AuctionApi {
         'start_price': startingPrice,
         'location': location,
         'images': images,
-        'phone': phone,
+        // Le backend attend "phone_contact" (voir CreateAuctionRequest)
+        'phone_contact': phone,
         'end_time': '${endDateTime.toIso8601String()}Z',
       };
+
+      if (condition != null && condition.isNotEmpty) {
+        body['condition'] = condition;
+      }
+      if (brand != null && brand.isNotEmpty) {
+        body['brand'] = brand;
+      }
 
       // Prefer integer IDs; fall back to name strings for legacy compatibility
       if (categoryId != null) {

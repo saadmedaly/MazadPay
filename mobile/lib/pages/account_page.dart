@@ -167,7 +167,10 @@ class _AccountPageState extends State<AccountPage> {
 
     return Scaffold(
       backgroundColor: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-      body: SingleChildScrollView(
+      body: RefreshIndicator(
+        onRefresh: _loadBalance,
+        child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20.0),
           child: Column(
@@ -514,6 +517,7 @@ class _AccountPageState extends State<AccountPage> {
               const SizedBox(height: 80), // Space for bottom nav
             ],
           ),
+        ),
         ),
       ),
     );

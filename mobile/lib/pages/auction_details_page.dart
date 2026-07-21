@@ -262,7 +262,12 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
           body: Column(
             children: [
               Expanded(
-                child: CustomScrollView(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    ref.invalidate(auctionNotifierApiProvider(widget.auctionId));
+                    await ref.read(auctionNotifierApiProvider(widget.auctionId).future);
+                  },
+                  child: CustomScrollView(
                   slivers: [
                     _buildSliverAppBar(context, auction, isDarkMode),
                     SliverToBoxAdapter(
@@ -287,6 +292,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                       ),
                     ),
                   ],
+                  ),
                 ),
               ),
               _buildBottomAction(context, auction, isDarkMode),

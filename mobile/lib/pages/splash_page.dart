@@ -21,7 +21,7 @@ class _SplashPageState extends State<SplashPage> {
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
       final seen = prefs.getBool('onboarding_seen') ?? false;
-      final isLoggedIn = await AuthService().isLoggedIn();
+      final isLoggedIn = await AuthService().hasValidSession();
       if (!mounted) return;
 
       Widget destination;

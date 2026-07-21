@@ -29,6 +29,15 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   int?    _selectedSubCategoryId;    // actual ID sent to API
   String? _selectedCity;
   DateTime? _endTime;
+  final _brandController = TextEditingController();
+  // Backend accepte: new, used, refurbished, damaged
+  String? _selectedCondition;
+  static const List<Map<String, String>> _conditionOptions = [
+    {'value': 'new', 'label': 'جديد'},
+    {'value': 'used', 'label': 'مستعمل'},
+    {'value': 'refurbished', 'label': 'مجدد'},
+    {'value': 'damaged', 'label': 'تالف'},
+  ];
   final List<XFile> _selectedImageFiles = []; // XFile works on web + mobile
   final AuctionApi _auctionApi = AuctionApi();
   final R2UploadService _r2UploadService = R2UploadService();
@@ -50,9 +59,8 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   // Charger depuis le cache d'abord (rapide), puis fetch en arrière-plan
   Future<void> _loadFromCache() async {
     try {
-      // Clear stale categories cache to ensure fresh data from API
-      await CacheService.instance.clearCategoriesCache();
-      // Charger catégories depuis cache
+      // Charger catégories depuis cache (le fetch en arrière-plan ci-dessous
+      // rafraîchira le cache si les données sont périmées ou absentes)
       final cachedCategories = await CacheService.instance.getCachedCategories();
       if (cachedCategories != null && cachedCategories.isNotEmpty) {
         setState(() {
@@ -168,6 +176,8 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         location: _selectedCity ?? '',
         images: [], // Créer d'abord sans images
         phone: phone,
+        condition: _selectedCondition,
+        brand: _brandController.text.trim().isEmpty ? null : _brandController.text.trim(),
         endTime: _endTime,
       );
 
@@ -308,6 +318,14 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               _buildLabel(context, AppLocalizations.of(context)!.text_100),
               _buildCategorySelector(context, value: _selectedCity, icon: Icons.location_on_outlined, onTap: () => _showCitySheet(context)),
               
+              const SizedBox(height: 24),
+              _buildLabel(context, 'حالة المنتج'),
+              _buildConditionSelector(context),
+
+              const SizedBox(height: 24),
+              _buildLabel(context, 'الماركة (اختياري)'),
+              _buildTextField(context, controller: _brandController, hint: 'مثال: Samsung، Toyota...', icon: Icons.local_offer_outlined),
+
               const SizedBox(height: 24),
               _buildLabel(context, 'تاريخ انتهاء المزاد'),
               _buildDateSelector(context),
@@ -466,6 +484,30 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildConditionSelector(BuildContext context) {
+    bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _conditionOptions.map((opt) {
+        final selected = _selectedCondition == opt['value'];
+        return ChoiceChip(
+          label: Text(opt['label']!),
+          selected: selected,
+          onSelected: (_) => setState(() => _selectedCondition = opt['value']),
+          selectedColor: const Color(0xFF0081FF),
+          labelStyle: TextStyle(
+            fontFamily: 'Plus Jakarta Sans',
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87),
+          ),
+          backgroundColor: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+          side: BorderSide(color: const Color(0xFF0081FF).withOpacity(selected ? 0 : 0.2)),
+        );
+      }).toList(),
     );
   }
 
