@@ -634,7 +634,17 @@ export function AuctionsPage() {
 
             {auction.status === 'pending' && (<>
               <button
-                onClick={() => setApproveId(auction.id)}
+                onClick={() => {
+                  // Le backend refuse désormais toute activation sans caution définie
+                  // (voir bid_service.go / admin_service.go — audit de sécurité V03).
+                  // On vérifie ici pour un retour immédiat, la vraie protection reste
+                  // côté serveur.
+                  if (!auction.insurance_amount || parseFloat(String(auction.insurance_amount)) <= 0) {
+                    toast.error('لا يمكن الموافقة على هذا المزاد لأن مبلغ التأمين غير محدد. عدّل المزاد أولاً وأدخل مبلغ تأمين أكبر من صفر.')
+                    return
+                  }
+                  setApproveId(auction.id)
+                }}
                 className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/10 transition-all"
                 title="الموافقة"
               ><Check className="w-4 h-4" /></button>

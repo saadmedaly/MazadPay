@@ -110,6 +110,7 @@ class AuctionApi {
     DateTime? endTime,
     String? condition,
     String? brand,
+    double? insuranceAmount,
   }) async {
     try {
       // Calculer la date de fin par défaut (7 jours à partir de maintenant)
@@ -135,6 +136,9 @@ class AuctionApi {
       }
       if (brand != null && brand.isNotEmpty) {
         body['brand'] = brand;
+      }
+      if (insuranceAmount != null) {
+        body['insurance_amount'] = insuranceAmount;
       }
 
       // Prefer integer IDs; fall back to name strings for legacy compatibility

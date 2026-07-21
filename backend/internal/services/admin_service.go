@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/shopspring/decimal"
@@ -298,6 +299,15 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 	status := "rejected"
 	if approve {
 		status = "active"
+		// Un auction ne peut jamais devenir "active" sans caution définie (audit V03) :
+		// c'est cette valeur qui protège les enchérisseurs contre les mises sans fonds.
+		existing, err := s.auctionRepo.FindByID(ctx, id)
+		if err != nil {
+			return apperr.ErrNotFound
+		}
+		if !existing.InsuranceAmount.GreaterThan(decimal.Zero) {
+			return apperr.ErrInsuranceNotSet
+		}
 	}
 	if err := s.auctionRepo.UpdateStatus(ctx, id, status); err != nil {
 		return err

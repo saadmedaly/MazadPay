@@ -24,11 +24,13 @@ var (
 	ErrResetPasswordRateLimited = errors.New("reset_password_rate_limited")
 
 	// Enchères
-	ErrAuctionNotActive = errors.New("auction_not_active")
-	ErrAuctionEnded     = errors.New("auction_ended")
-	ErrBidTooLow        = errors.New("bid_too_low")
-	ErrBidConflict      = errors.New("bid_conflict") // Optimistic lock → le client retry
-	ErrSelfBid          = errors.New("cannot_bid_own_auction")
+	ErrAuctionNotActive       = errors.New("auction_not_active")
+	ErrAuctionEnded           = errors.New("auction_ended")
+	ErrBidTooLow              = errors.New("bid_too_low")
+	ErrBidConflict            = errors.New("bid_conflict") // Optimistic lock → le client retry
+	ErrSelfBid                = errors.New("cannot_bid_own_auction")
+	ErrInsuranceNotSet        = errors.New("insurance_not_set")        // audit V03 : insurance_amount <= 0
+	ErrInsufficientForInsurance = errors.New("insufficient_for_insurance") // audit V03 : balance < insurance_amount
 
 	// Finance
 	ErrInsufficientBalance = errors.New("insufficient_balance")

@@ -184,6 +184,12 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "bid_too_low":
 		logger.Info("Bid too low", logFields...)
 		return Fail(c, 422, "bid_too_low", "Bid amount is too low")
+	case "insurance_not_set":
+		logger.Warn("Bid rejected: auction has no insurance_amount set", logFields...)
+		return Fail(c, 422, "insurance_not_set", "لا يمكن المزايدة على هذا المزاد لأن مبلغ التأمين غير محدد")
+	case "insufficient_for_insurance":
+		logger.Info("Bid rejected: balance below insurance_amount", logFields...)
+		return Fail(c, 422, "insufficient_for_insurance", "رصيدك غير كافٍ لتغطية مبلغ التأمين")
 	case "otp_expired":
 		logger.Info("OTP expired", logFields...)
 		return Fail(c, 422, "otp_expired", "OTP has expired")

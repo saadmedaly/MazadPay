@@ -295,7 +295,7 @@ func (h *AdminHandler) ValidateAuction(c *fiber.Ctx) error {
 	}
 
 	if err := h.svc.ValidateAuction(c.Context(), id, req.Approve, req.Reason); err != nil {
-		return InternalError(c, "Failed to validate auction")
+		return MapError(c, h.logger, err)
 	}
 
 	status := "rejected"

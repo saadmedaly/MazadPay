@@ -22,6 +22,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   final _descriptionController = TextEditingController();
   final _phoneController = TextEditingController();
   final _priceController = TextEditingController();
+  final _insuranceController = TextEditingController();
   
   String? _selectedMainCategory;     // display name (nameAr)
   int?    _selectedMainCategoryId;   // actual ID sent to API
@@ -146,10 +147,21 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     final description = _descriptionController.text.trim();
     final phone = _phoneController.text.trim();
     final price = double.tryParse(_priceController.text);
+    final insuranceAmount = double.tryParse(_insuranceController.text);
 
     if (name.isEmpty || description.isEmpty || phone.isEmpty || price == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppLocalizations.of(context)!.error_fill_required_fields)),
+      );
+      return;
+    }
+
+    // Le backend rejette désormais toute mise sur un auction sans caution définie
+    // (insurance_amount <= 0) — voir bid_service.go. On valide donc ici aussi côté
+    // client pour un retour immédiat, mais la vraie protection reste côté serveur.
+    if (insuranceAmount == null || insuranceAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب إدخال مبلغ تأمين أكبر من صفر')),
       );
       return;
     }
@@ -178,6 +190,7 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         phone: phone,
         condition: _selectedCondition,
         brand: _brandController.text.trim().isEmpty ? null : _brandController.text.trim(),
+        insuranceAmount: insuranceAmount,
         endTime: _endTime,
       );
 
@@ -305,7 +318,11 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               const SizedBox(height: 24),
               _buildLabel(context, AppLocalizations.of(context)!.text_96),
               _buildTextField(context, controller: _priceController, hint: AppLocalizations.of(context)!.text_97, icon: Icons.attach_money_outlined, keyboardType: TextInputType.number, suffixText: 'MRU'),
-              
+
+              const SizedBox(height: 24),
+              _buildLabel(context, 'مبلغ التأمين'),
+              _buildTextField(context, controller: _insuranceController, hint: 'أدخل مبلغ التأمين المطلوب', icon: Icons.shield_outlined, keyboardType: TextInputType.number, suffixText: 'MRU'),
+
               const SizedBox(height: 24),
               _buildLabel(context, AppLocalizations.of(context)!.text_98),
               _buildCategorySelector(context, value: _selectedMainCategory, icon: Icons.category_outlined, onTap: () => _showCategorySheet(context, true)),
