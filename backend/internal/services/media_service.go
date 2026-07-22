@@ -58,21 +58,32 @@ type MediaService interface {
 	// publique directement (audit de sécurité).
 	ExtractKey(url string) string
 	// GetPresignedURL génère une URL R2 temporaire (valable `expiry`, max recommandé
-	// 5 minutes) pour accéder à un objet sans passer par l'URL publique du bucket.
-	// N'est utile que si le bucket R2 sous-jacent n'est pas rendu public au niveau de
-	// Cloudflare — sinon l'URL publique reste accessible en parallèle.
+	// 5 minutes) pour accéder à un objet du bucket privé des reçus (audit de sécurité —
+	// Private Receipts Bucket Separation).
 	GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error)
+	// GetReceiptURL génère une URL présignée pour un reçu de paiement, quel que soit son
+	// format de stockage : un object key (nouveaux reçus → bucket privé R2_BUCKET_RECEIPTS)
+	// ou une ancienne URL publique complète (reçus créés avant la séparation des buckets
+	// → bucket média public R2_BUCKET_MEDIA, en lecture seule, temporaire jusqu'à la
+	// migration effective des anciens reçus). Ne renvoie jamais l'URL publique brute.
+	GetReceiptURL(ctx context.Context, storedValue string, expiry time.Duration) (string, error)
+	// UploadPrivateFile upload un fichier vers le bucket R2 privé des reçus de paiement
+	// (R2_BUCKET_RECEIPTS) et retourne uniquement l'object key (ex: "receipts/<uuid>.jpg"),
+	// jamais une URL publique — le bucket n'a pas d'accès public configuré (audit de
+	// sécurité — Private Receipts Bucket Separation).
+	UploadPrivateFile(ctx context.Context, file multipart.File, header *multipart.FileHeader, folder string) (string, error)
 }
 
 type mediaService struct {
-	client        *s3.Client
-	presignClient *s3.PresignClient
-	bucket        string
-	publicURL     string
-	appPort       string
-	appEnv        string
-	useLocal      bool // true when R2 is not configured
-	logger        *zap.Logger
+	client         *s3.Client
+	presignClient  *s3.PresignClient
+	bucket         string
+	bucketReceipts string
+	publicURL      string
+	appPort        string
+	appEnv         string
+	useLocal       bool // true when R2 is not configured
+	logger         *zap.Logger
 }
 
 // isR2Configured returns true only when real R2 credentials are present
@@ -125,31 +136,46 @@ func NewMediaService(cfg *config.Config, logger *zap.Logger) MediaService {
 	})
 	presignClient := s3.NewPresignClient(client)
 
+	if cfg.R2.BucketReceipts == "" {
+		if cfg.App.Env == "production" {
+			logger.Error("[MediaService] R2_BUCKET_RECEIPTS not set in production — receipt uploads will be rejected (no fallback to the public media bucket).")
+		} else {
+			logger.Warn("[MediaService] R2_BUCKET_RECEIPTS not set — falling back to the public media bucket for receipts (development only).")
+		}
+	}
+
 	return &mediaService{
-		client:        client,
-		presignClient: presignClient,
-		bucket:        cfg.R2.BucketMedia,
-		publicURL:     cfg.R2.PublicURL,
-		appPort:       cfg.App.Port,
-		appEnv:        cfg.App.Env,
-		useLocal:      false,
-		logger:        logger,
+		client:         client,
+		presignClient:  presignClient,
+		bucket:         cfg.R2.BucketMedia,
+		bucketReceipts: cfg.R2.BucketReceipts,
+		publicURL:      cfg.R2.PublicURL,
+		appPort:        cfg.App.Port,
+		appEnv:         cfg.App.Env,
+		useLocal:       false,
+		logger:         logger,
 	}
 }
 
-func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, header *multipart.FileHeader, folder string) (string, error) {
-	defer file.Close()
+// validatedUpload contient le résultat de la validation d'un fichier uploadé (liste
+// blanche d'extension + magic bytes réels), prêt à être écrit sur disque ou R2.
+type validatedUpload struct {
+	filename    string
+	content     []byte
+	contentType string
+}
 
+// validateUpload applique la liste blanche centrale d'extensions et vérifie les vrais
+// magic bytes du contenu (et non le Content-Type déclaré par le client, falsifiable) —
+// dernier filet de sécurité partagé par UploadFile et UploadPrivateFile.
+func (s *mediaService) validateUpload(file multipart.File, header *multipart.FileHeader) (*validatedUpload, error) {
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	if ext == "" {
 		ext = ".jpg"
 	}
 
-	// Liste blanche centrale d'extensions — dernier filet de sécurité pour tout
-	// handler appelant, notamment ceux qui n'appliquent aucune validation propre
-	// (audit de sécurité : UploadReceipt, UploadBannerRequestImage).
 	if !allowedUploadExtensions[ext] {
-		return "", fmt.Errorf("file type not allowed")
+		return nil, fmt.Errorf("file type not allowed")
 	}
 
 	maxSize := int64(maxUploadSizeBytes)
@@ -157,18 +183,15 @@ func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, head
 		maxSize = maxVideoUploadSizeBytes
 	}
 	if header.Size > maxSize {
-		return "", fmt.Errorf("file too large (max %d bytes)", maxSize)
+		return nil, fmt.Errorf("file too large (max %d bytes)", maxSize)
 	}
 
-	// Lire tout le contenu une seule fois (nécessaire de toute façon pour R2, et permet
-	// de vérifier les vrais magic bytes plutôt que le Content-Type déclaré par le client,
-	// qui est falsifiable — audit de sécurité).
 	content, err := io.ReadAll(file)
 	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 	if int64(len(content)) > maxSize {
-		return "", fmt.Errorf("file too large (max %d bytes)", maxSize)
+		return nil, fmt.Errorf("file too large (max %d bytes)", maxSize)
 	}
 
 	detectHeader := content
@@ -176,7 +199,6 @@ func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, head
 		detectHeader = detectHeader[:512]
 	}
 	detectedType := http.DetectContentType(detectHeader)
-	// Normaliser (DetectContentType peut retourner des paramètres, ex: "text/plain; charset=...")
 	if idx := strings.Index(detectedType, ";"); idx != -1 {
 		detectedType = detectedType[:idx]
 	}
@@ -185,10 +207,23 @@ func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, head
 			zap.String("filename", header.Filename),
 			zap.String("extension", ext),
 			zap.String("detected_type", detectedType))
-		return "", fmt.Errorf("file content does not match a valid %s file", ext)
+		return nil, fmt.Errorf("file content does not match a valid %s file", ext)
 	}
 
-	filename := uuid.New().String() + ext
+	return &validatedUpload{
+		filename:    uuid.New().String() + ext,
+		content:     content,
+		contentType: detectedType,
+	}, nil
+}
+
+func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, header *multipart.FileHeader, folder string) (string, error) {
+	defer file.Close()
+
+	v, err := s.validateUpload(file, header)
+	if err != nil {
+		return "", err
+	}
 
 	// --- Local storage fallback ---
 	if s.useLocal {
@@ -199,65 +234,91 @@ func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, head
 		if err := os.MkdirAll(localDir, 0755); err != nil {
 			return "", fmt.Errorf("failed to create upload dir: %w", err)
 		}
-		localPath := filepath.Join(localDir, filename)
+		localPath := filepath.Join(localDir, v.filename)
 		dst, err := os.Create(localPath)
 		if err != nil {
 			return "", fmt.Errorf("failed to create file: %w", err)
 		}
 		defer dst.Close()
-		if _, err := dst.Write(content); err != nil {
+		if _, err := dst.Write(v.content); err != nil {
 			return "", fmt.Errorf("failed to save file: %w", err)
 		}
 		port := s.appPort
 		if port == "" {
 			port = "8082"
 		}
-		publicURL := fmt.Sprintf("http://localhost:%s/uploads/%s/%s", port, folder, filename)
+		publicURL := fmt.Sprintf("http://localhost:%s/uploads/%s/%s", port, folder, v.filename)
 		s.logger.Info("[LocalStorage] File saved", zap.String("path", localPath), zap.String("url", publicURL))
 		return publicURL, nil
 	}
 
-	// --- R2 upload ---
-	key := fmt.Sprintf("%s/%s", folder, filename)
-
-	// Content-Type basé sur le type réel détecté (magic bytes), pas sur le header
-	// déclaré par le client.
-	contentType := detectedType
-
-	s.logger.Info("[R2 Upload] Starting upload",
-		zap.String("bucket", s.bucket),
-		zap.String("key", key),
-		zap.String("content_type", contentType),
-		zap.Int("content_length", len(content)))
-
-	// Upload to R2
-	output, err := s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(s.bucket),
-		Key:         aws.String(key),
-		Body:        bytes.NewReader(content),
-		ContentType: aws.String(contentType),
-	})
-
-	if err != nil {
-		// Detailed Cloudflare R2 error logging
-		s.logger.Error("[R2 Upload] Cloudflare R2 upload failed",
-			zap.Error(err),
-			zap.String("bucket", s.bucket),
-			zap.String("key", key),
-			zap.String("endpoint", s.getEndpoint()),
-			zap.String("error_type", "R2_UPLOAD_ERROR"),
-			zap.String("filename", header.Filename),
-			zap.Int64("file_size", header.Size))
-		return "", fmt.Errorf("failed to upload file to Cloudflare R2: %w", err)
+	key := fmt.Sprintf("%s/%s", folder, v.filename)
+	if err := s.putObject(ctx, s.bucket, key, v); err != nil {
+		return "", err
 	}
 
 	publicURL := s.GetPublicURL(key)
 	s.logger.Info("[R2 Upload] File uploaded successfully",
-		zap.String("key", key),
-		zap.String("url", publicURL),
-		zap.String("etag", aws.ToString(output.ETag)),
-		zap.String("bucket", s.bucket))
+		zap.String("key", key), zap.String("url", publicURL), zap.String("bucket", s.bucket))
 	return publicURL, nil
+}
+
+// UploadPrivateFile upload vers le bucket R2 privé des reçus (jamais le bucket média
+// public) et retourne uniquement l'object key, jamais une URL — audit de sécurité,
+// Private Receipts Bucket Separation.
+func (s *mediaService) UploadPrivateFile(ctx context.Context, file multipart.File, header *multipart.FileHeader, folder string) (string, error) {
+	defer file.Close()
+
+	if s.useLocal {
+		return "", fmt.Errorf("private uploads unavailable: R2 not configured")
+	}
+
+	bucket := s.bucketReceipts
+	if bucket == "" {
+		if s.appEnv == "production" {
+			// Aucun fallback silencieux vers le bucket public en production — un reçu de
+			// paiement ne doit jamais atterrir dans un bucket accessible publiquement.
+			return "", fmt.Errorf("receipt uploads unavailable: R2_BUCKET_RECEIPTS not configured")
+		}
+		s.logger.Warn("[UploadPrivateFile] R2_BUCKET_RECEIPTS not set, falling back to public media bucket (development only)")
+		bucket = s.bucket
+	}
+
+	v, err := s.validateUpload(file, header)
+	if err != nil {
+		return "", err
+	}
+
+	key := fmt.Sprintf("%s/%s", folder, v.filename)
+	if err := s.putObject(ctx, bucket, key, v); err != nil {
+		return "", err
+	}
+
+	s.logger.Info("[R2 Upload] Private file uploaded successfully",
+		zap.String("key", key), zap.String("bucket", bucket))
+	return key, nil
+}
+
+// putObject écrit le contenu validé dans le bucket R2 spécifié.
+func (s *mediaService) putObject(ctx context.Context, bucket, key string, v *validatedUpload) error {
+	s.logger.Info("[R2 Upload] Starting upload",
+		zap.String("bucket", bucket),
+		zap.String("key", key),
+		zap.String("content_type", v.contentType),
+		zap.Int("content_length", len(v.content)))
+
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(v.content),
+		ContentType: aws.String(v.contentType),
+	})
+	if err != nil {
+		s.logger.Error("[R2 Upload] Cloudflare R2 upload failed",
+			zap.Error(err), zap.String("bucket", bucket), zap.String("key", key))
+		return fmt.Errorf("failed to upload file to Cloudflare R2: %w", err)
+	}
+	return nil
 }
 
 // getEndpoint returns the R2 endpoint for logging (without credentials)
@@ -359,27 +420,77 @@ func (s *mediaService) extractKeyFromURL(url string) string {
 	return url
 }
 
-// ExtractKey expose extractKeyFromURL via l'interface publique (audit de sécurité —
-// nécessaire pour convertir une ancienne receipt_url publique déjà stockée en DB vers
-// sa clé objet, afin de générer une URL présignée sans jamais renvoyer l'URL publique).
-func (s *mediaService) ExtractKey(url string) string {
-	return s.extractKeyFromURL(url)
+// ExtractKey retourne l'object key à partir d'une valeur stockée dans receipt_url.
+// Compatible avec les deux formats possibles : les nouveaux reçus stockent directement
+// l'object key (ex: "receipts/<uuid>.jpg", voir UploadPrivateFile), tandis que les
+// anciens reçus (avant Private Receipts Bucket Separation) stockent encore l'URL
+// publique complète de l'ancien bucket média — dans ce cas on l'extrait comme avant.
+func (s *mediaService) ExtractKey(value string) string {
+	if !strings.HasPrefix(value, "http") {
+		return value // déjà un object key
+	}
+	return s.extractKeyFromURL(value)
 }
 
-// GetPresignedURL génère une URL R2 temporaire valable `expiry`. Ne fonctionne comme
-// mesure de protection que si le bucket R2 n'est PAS configuré en accès public au
-// niveau de Cloudflare — sinon l'URL publique (R2_PUBLIC_URL) reste accessible en
-// parallèle indépendamment de cette fonction (voir audit de sécurité).
-func (s *mediaService) GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
-	if s.useLocal {
-		return "", fmt.Errorf("presigned URLs unavailable: R2 not configured, local storage in use")
-	}
+// presignInBucket est l'implémentation partagée de génération d'URL présignée pour un
+// bucket donné.
+func (s *mediaService) presignInBucket(ctx context.Context, bucket, key string, expiry time.Duration) (string, error) {
 	req, err := s.presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
+		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	}, s3.WithPresignExpires(expiry))
 	if err != nil {
 		return "", fmt.Errorf("failed to generate presigned URL: %w", err)
 	}
 	return req.URL, nil
+}
+
+// GetPresignedURL génère une URL R2 temporaire valable `expiry` pour un objet du bucket
+// privé des reçus (R2_BUCKET_RECEIPTS). En développement, si ce bucket n'est pas
+// configuré, retombe sur le bucket média (pour ne pas casser les tests locaux) — jamais
+// en production, où ce fallback créerait une confusion sur ce qui est réellement privé.
+func (s *mediaService) GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	if s.useLocal {
+		return "", fmt.Errorf("presigned URLs unavailable: R2 not configured, local storage in use")
+	}
+	bucket := s.bucketReceipts
+	if bucket == "" {
+		if s.appEnv == "production" {
+			return "", fmt.Errorf("receipt access unavailable: R2_BUCKET_RECEIPTS not configured")
+		}
+		bucket = s.bucket
+	}
+	return s.presignInBucket(ctx, bucket, key, expiry)
+}
+
+// GetReceiptURL choisit automatiquement le bon bucket selon le format de storedValue :
+//   - une URL publique complète (legacy, ancien reçu créé avant la séparation des
+//     buckets) → on extrait la clé et on présigne depuis le bucket média public
+//     (R2_BUCKET_MEDIA), où le fichier existe réellement encore. Solution temporaire
+//     jusqu'à la migration effective des anciens reçus.
+//   - un object key simple (nouveau reçu, ex: "receipts/<uuid>.jpg") → on présigne
+//     depuis le bucket privé des reçus (R2_BUCKET_RECEIPTS).
+//
+// Ne renvoie jamais l'URL publique brute au client, dans les deux cas.
+func (s *mediaService) GetReceiptURL(ctx context.Context, storedValue string, expiry time.Duration) (string, error) {
+	if s.useLocal {
+		return "", fmt.Errorf("presigned URLs unavailable: R2 not configured, local storage in use")
+	}
+
+	if strings.HasPrefix(storedValue, "http") {
+		// Legacy : ancien reçu avec URL publique complète stockée avant la séparation
+		// des buckets. Le fichier existe encore dans l'ancien bucket média public.
+		key := s.extractKeyFromURL(storedValue)
+		return s.presignInBucket(ctx, s.bucket, key, expiry)
+	}
+
+	// Nouveau reçu : storedValue est déjà un object key, dans le bucket privé.
+	bucket := s.bucketReceipts
+	if bucket == "" {
+		if s.appEnv == "production" {
+			return "", fmt.Errorf("receipt access unavailable: R2_BUCKET_RECEIPTS not configured")
+		}
+		bucket = s.bucket
+	}
+	return s.presignInBucket(ctx, bucket, storedValue, expiry)
 }

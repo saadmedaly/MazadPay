@@ -113,7 +113,10 @@ func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
 			return InternalError(c, "Failed to open receipt file")
 		}
 		defer file.Close()
-		receiptURL, err = h.mediaSvc.UploadFile(c.Context(), file, fileHeader, "receipts")
+		// Upload vers le bucket R2 privé des reçus — receiptURL ne contient plus qu'un
+		// object key (ex: "receipts/<uuid>.jpg"), jamais une URL publique (audit de
+		// sécurité — Private Receipts Bucket Separation).
+		receiptURL, err = h.mediaSvc.UploadPrivateFile(c.Context(), file, fileHeader, "receipts")
 		if err != nil {
 			return BadRequest(c, "Invalid receipt file")
 		}
@@ -176,8 +179,10 @@ func (h *WalletHandler) GetReceiptURL(c *fiber.Ctx) error {
 		return InternalError(c, "Media service not available")
 	}
 
-	key := h.mediaSvc.ExtractKey(*tx.ReceiptURL)
-	url, err := h.mediaSvc.GetPresignedURL(c.Context(), key, receiptURLExpiry)
+	// GetReceiptURL choisit automatiquement le bon bucket : privé pour les nouveaux
+	// reçus (object key), ou le bucket média public (en lecture seule, temporaire) pour
+	// les anciens reçus stockés avant la séparation des buckets (audit de sécurité).
+	url, err := h.mediaSvc.GetReceiptURL(c.Context(), *tx.ReceiptURL, receiptURLExpiry)
 	if err != nil {
 		return InternalError(c, "Failed to generate receipt URL")
 	}

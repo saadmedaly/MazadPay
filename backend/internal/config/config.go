@@ -61,6 +61,11 @@ type R2Config struct {
 	SecretKey   string
 	BucketMedia string
 	PublicURL   string
+	// BucketReceipts est un bucket R2 privé (sans accès public) dédié aux reçus de
+	// paiement, séparé du bucket média public (audit de sécurité — voir Private
+	// Receipts Bucket Separation). Vide par défaut : aucun fallback silencieux vers le
+	// bucket public en production (voir media_service.go).
+	BucketReceipts string
 }
 
 type WablasConfig struct {
@@ -120,11 +125,12 @@ func Load() *Config {
 			RefreshExpiryDays: getEnvInt("JWT_REFRESH_EXPIRY_DAYS", 30),
 		},
 		R2: R2Config{
-			Endpoint:    getEnv("R2_ENDPOINT", "xxxxxxxx.r2.cloudflarestorage.com"),
-			AccessKey:   getEnv("R2_ACCESS_KEY", "your_r2_access_key"),
-			SecretKey:   getEnv("R2_SECRET_KEY", "your_r2_secret_key"),
-			BucketMedia: getEnv("R2_BUCKET_MEDIA", "mazad-mwdia"),
-			PublicURL:   getEnv("R2_PUBLIC_URL", "https://pub-xxxxxx.r2.dev"),
+			Endpoint:       getEnv("R2_ENDPOINT", "xxxxxxxx.r2.cloudflarestorage.com"),
+			AccessKey:      getEnv("R2_ACCESS_KEY", "your_r2_access_key"),
+			SecretKey:      getEnv("R2_SECRET_KEY", "your_r2_secret_key"),
+			BucketMedia:    getEnv("R2_BUCKET_MEDIA", "mazad-mwdia"),
+			PublicURL:      getEnv("R2_PUBLIC_URL", "https://pub-xxxxxx.r2.dev"),
+			BucketReceipts: getEnv("R2_BUCKET_RECEIPTS", ""),
 		},
 		Wablas: WablasConfig{
 			Token:     getEnv("WABLAS_TOKEN", ""),
