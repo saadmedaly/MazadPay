@@ -71,6 +71,10 @@ func (h *WalletHandler) Deposit(c *fiber.Ctx) error {
 	return OK(c, tx)
 }
 
+// receiptMaxSizeBytes limite la taille d'un reçu de paiement uploadé (audit de sécurité —
+// ce endpoint n'avait auparavant aucune limite propre, seulement le BodyLimit global).
+const receiptMaxSizeBytes = 5 * 1024 * 1024
+
 func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
 	txID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -82,6 +86,14 @@ func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
 		return Unauthorized(c)
 	}
 
+	// Vérifie que la transaction appartient bien à l'utilisateur AVANT tout upload
+	// physique vers le stockage (audit de sécurité) : auparavant le fichier était
+	// uploadé vers R2/local puis seule la mise à jour SQL vérifiait l'appartenance,
+	// laissant un fichier orphelin en cas de rejet.
+	if _, err := h.svc.GetTransaction(c.Context(), userID, txID); err != nil {
+		return NotFound(c, "Transaction")
+	}
+
 	var receiptURL string
 
 	// Accept multipart file upload
@@ -90,6 +102,9 @@ func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
 		if h.mediaSvc == nil {
 			return InternalError(c, "Media service not available")
 		}
+		if fileHeader.Size > receiptMaxSizeBytes {
+			return BadRequest(c, "Receipt file too large (max 5MB)")
+		}
 		file, err := fileHeader.Open()
 		if err != nil {
 			return InternalError(c, "Failed to open receipt file")
@@ -97,7 +112,7 @@ func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
 		defer file.Close()
 		receiptURL, err = h.mediaSvc.UploadFile(c.Context(), file, fileHeader, "receipts")
 		if err != nil {
-			return InternalError(c, "Failed to upload receipt image")
+			return BadRequest(c, "Invalid receipt file")
 		}
 	} else {
 		// Fallback: JSON body with receipt_url

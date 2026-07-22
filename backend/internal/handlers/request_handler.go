@@ -95,6 +95,9 @@ func (h *RequestHandler) UploadBannerRequestImage(c *fiber.Ctx) error {
 	if err != nil {
 		return BadRequest(c, "Image is required")
 	}
+	if fileHeader.Size > 5*1024*1024 {
+		return BadRequest(c, "Image too large (max 5MB)")
+	}
 
 	file, err := fileHeader.Open()
 	if err != nil {

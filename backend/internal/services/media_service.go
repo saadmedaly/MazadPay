@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,34 @@ import (
 	"github.com/mazadpay/backend/internal/config"
 	"go.uber.org/zap"
 )
+
+// allowedUploadExtensions et allowedUploadMimeTypes forment une liste blanche centrale
+// appliquée à TOUT upload passant par MediaService, quel que soit le handler appelant
+// (audit de sécurité — certains handlers comme UploadReceipt ou UploadBannerRequestImage
+// n'avaient historiquement aucune validation propre). Ceci est un dernier filet de
+// sécurité ; les handlers peuvent en plus appliquer des règles plus strictes.
+var allowedUploadExtensions = map[string]bool{
+	".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".pdf": true, ".mp4": true,
+}
+
+// allowedUploadMimeTypes associe chaque extension autorisée aux magic bytes / types MIME
+// réels qu'elle doit avoir (détectés via http.DetectContentType sur le contenu, pas le
+// header Content-Type envoyé par le client qui est falsifiable).
+var allowedUploadMimeTypes = map[string]map[string]bool{
+	".jpg":  {"image/jpeg": true},
+	".jpeg": {"image/jpeg": true},
+	".png":  {"image/png": true},
+	".webp": {"image/webp": true},
+	".pdf":  {"application/pdf": true},
+	".mp4":  {"video/mp4": true, "application/octet-stream": true}, // certains encodeurs mp4 sont détectés comme octet-stream
+}
+
+// maxUploadSizeBytes est un plafond de dernier recours (dernier filet de sécurité) pour
+// les images/PDF passant par MediaService, indépendamment de la limite propre à chaque
+// handler. Les vidéos (.mp4) ont une limite plus large car elles passent par des chemins
+// (tutoriels admin) déjà limités à 100MB au niveau du handler appelant.
+const maxUploadSizeBytes = 20 * 1024 * 1024
+const maxVideoUploadSizeBytes = 100 * 1024 * 1024
 
 type MediaService interface {
 	UploadFile(ctx context.Context, file multipart.File, header *multipart.FileHeader, folder string) (string, error)
@@ -98,10 +127,54 @@ func NewMediaService(cfg *config.Config, logger *zap.Logger) MediaService {
 func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, header *multipart.FileHeader, folder string) (string, error) {
 	defer file.Close()
 
-	ext := filepath.Ext(header.Filename)
+	ext := strings.ToLower(filepath.Ext(header.Filename))
 	if ext == "" {
 		ext = ".jpg"
 	}
+
+	// Liste blanche centrale d'extensions — dernier filet de sécurité pour tout
+	// handler appelant, notamment ceux qui n'appliquent aucune validation propre
+	// (audit de sécurité : UploadReceipt, UploadBannerRequestImage).
+	if !allowedUploadExtensions[ext] {
+		return "", fmt.Errorf("file type not allowed")
+	}
+
+	maxSize := int64(maxUploadSizeBytes)
+	if ext == ".mp4" {
+		maxSize = maxVideoUploadSizeBytes
+	}
+	if header.Size > maxSize {
+		return "", fmt.Errorf("file too large (max %d bytes)", maxSize)
+	}
+
+	// Lire tout le contenu une seule fois (nécessaire de toute façon pour R2, et permet
+	// de vérifier les vrais magic bytes plutôt que le Content-Type déclaré par le client,
+	// qui est falsifiable — audit de sécurité).
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+	if int64(len(content)) > maxSize {
+		return "", fmt.Errorf("file too large (max %d bytes)", maxSize)
+	}
+
+	detectHeader := content
+	if len(detectHeader) > 512 {
+		detectHeader = detectHeader[:512]
+	}
+	detectedType := http.DetectContentType(detectHeader)
+	// Normaliser (DetectContentType peut retourner des paramètres, ex: "text/plain; charset=...")
+	if idx := strings.Index(detectedType, ";"); idx != -1 {
+		detectedType = detectedType[:idx]
+	}
+	if !allowedUploadMimeTypes[ext][detectedType] {
+		s.logger.Warn("[Upload] Rejected: content does not match declared extension",
+			zap.String("filename", header.Filename),
+			zap.String("extension", ext),
+			zap.String("detected_type", detectedType))
+		return "", fmt.Errorf("file content does not match a valid %s file", ext)
+	}
+
 	filename := uuid.New().String() + ext
 
 	// --- Local storage fallback ---
@@ -119,7 +192,7 @@ func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, head
 			return "", fmt.Errorf("failed to create file: %w", err)
 		}
 		defer dst.Close()
-		if _, err := io.Copy(dst, file); err != nil {
+		if _, err := dst.Write(content); err != nil {
 			return "", fmt.Errorf("failed to save file: %w", err)
 		}
 		port := s.appPort
@@ -134,21 +207,9 @@ func (s *mediaService) UploadFile(ctx context.Context, file multipart.File, head
 	// --- R2 upload ---
 	key := fmt.Sprintf("%s/%s", folder, filename)
 
-	// Read file content
-	content, err := io.ReadAll(file)
-	if err != nil {
-		s.logger.Error("[R2 Upload] Failed to read file content",
-			zap.Error(err),
-			zap.String("filename", header.Filename),
-			zap.Int64("size", header.Size))
-		return "", fmt.Errorf("failed to read file: %w", err)
-	}
-
-	// Determine content type
-	contentType := header.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
+	// Content-Type basé sur le type réel détecté (magic bytes), pas sur le header
+	// déclaré par le client.
+	contentType := detectedType
 
 	s.logger.Info("[R2 Upload] Starting upload",
 		zap.String("bucket", s.bucket),
