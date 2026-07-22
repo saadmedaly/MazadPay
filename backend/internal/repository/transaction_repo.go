@@ -63,38 +63,55 @@ func (r *transactionRepo) ListPaginated(ctx context.Context, page, perPage int, 
 	return txs, total, err
 }
 
-// GetByID est utilisé par la vue admin "détail de transaction" — inclut un LEFT JOIN
-// vers users pour afficher le vrai nom/téléphone de l'utilisateur au lieu de son UUID
-// (voir web/TransactionDetailPage.tsx). Les autres méthodes (ListPaginated, FindByID)
-// ne font pas ce JOIN et gardent leur comportement inchangé.
-func (r *transactionRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error) {
+// explicitTxJoinQuery énumère explicitement chaque colonne de transactions (plutôt que
+// t.*) suivie du LEFT JOIN vers users — évite toute ambiguïté de scan sqlx liée à
+// SELECT * combiné à des colonnes supplémentaires (audit : user_full_name/user_phone
+// n'apparaissaient jamais dans la réponse API malgré des données correctes en base et un
+// code source identique sur le remote ; cette requête explicite + scan manuel sert de
+// garantie supplémentaire, indépendante de tout comportement implicite de StructScan).
+const explicitTxJoinQuery = `
+	SELECT
+		t.id, t.user_id, t.auction_id, t.type, t.amount, t.gateway, t.status,
+		t.reference, t.receipt_url, t.admin_notes, t.reviewed_by, t.reviewed_at,
+		t.wallet_hold_id, t.receipt_image_temp, t.payment_method, t.fee_amount,
+		t.net_amount, t.description, t.failure_reason, t.created_at,
+		u.full_name AS user_full_name, u.phone AS user_phone
+	FROM transactions t
+	LEFT JOIN users u ON u.id = t.user_id
+	WHERE t.id = $1`
+
+// scanTxJoinRow scanne manuellement une ligne du résultat de explicitTxJoinQuery dans
+// un models.Transaction — indépendant de StructScan pour garantir que user_full_name et
+// user_phone sont bien assignés.
+func scanTxJoinRow(row *sqlx.Row) (*models.Transaction, error) {
 	var tx models.Transaction
-	err := r.db.GetContext(ctx, &tx, `
-		SELECT t.*, u.full_name AS user_full_name, u.phone AS user_phone
-		FROM transactions t
-		LEFT JOIN users u ON u.id = t.user_id
-		WHERE t.id = $1`, id)
+	err := row.Scan(
+		&tx.ID, &tx.UserID, &tx.AuctionID, &tx.Type, &tx.Amount, &tx.Gateway, &tx.Status,
+		&tx.Reference, &tx.ReceiptURL, &tx.AdminNotes, &tx.ReviewedBy, &tx.ReviewedAt,
+		&tx.WalletHoldID, &tx.ReceiptImageTemp, &tx.PaymentMethod, &tx.FeeAmount,
+		&tx.NetAmount, &tx.Description, &tx.FailureReason, &tx.CreatedAt,
+		&tx.UserFullName, &tx.UserPhone,
+	)
 	return &tx, err
 }
 
-// FindByID inclut un LEFT JOIN vers users pour exposer le vrai nom/téléphone de
-// l'utilisateur (voir web/TransactionDetailPage.tsx, admin GetTransactionByID et user
-// GetTransactionAny en dépendent tous les deux) — le fallback identifiant tronqué
-// n'est plus nécessaire quand full_name ou phone sont disponibles.
+// GetByID est utilisé par la vue admin "détail de transaction" — LEFT JOIN vers users
+// avec scan manuel explicite (voir explicitTxJoinQuery/scanTxJoinRow ci-dessus) pour
+// garantir que user_full_name/user_phone sont bien renvoyés à l'API.
+func (r *transactionRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error) {
+	row := r.db.QueryRowxContext(ctx, explicitTxJoinQuery, id)
+	return scanTxJoinRow(row)
+}
+
+// FindByID inclut le même LEFT JOIN explicite que GetByID (voir explicitTxJoinQuery) —
+// utilisé par l'admin (GetTransactionByID) et l'utilisateur (GetTransaction/GetTransactionAny).
 func (r *transactionRepo) FindByID(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*models.Transaction, error) {
-	var tx models.Transaction
-	var err error
-	const baseQuery = `
-		SELECT t.*, u.full_name AS user_full_name, u.phone AS user_phone
-		FROM transactions t
-		LEFT JOIN users u ON u.id = t.user_id
-		WHERE t.id = $1`
 	if userID != nil {
-		err = r.db.GetContext(ctx, &tx, baseQuery+" AND t.user_id = $2", id, userID)
-	} else {
-		err = r.db.GetContext(ctx, &tx, baseQuery, id)
+		row := r.db.QueryRowxContext(ctx, explicitTxJoinQuery+" AND t.user_id = $2", id, userID)
+		return scanTxJoinRow(row)
 	}
-	return &tx, err
+	row := r.db.QueryRowxContext(ctx, explicitTxJoinQuery, id)
+	return scanTxJoinRow(row)
 }
 
 func (r *transactionRepo) Create(ctx context.Context, tx *models.Transaction) error {

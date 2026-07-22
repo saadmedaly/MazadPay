@@ -111,7 +111,7 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
           <div style={{ textAlign: 'right', borderTop: '1px dashed #d1d5db', paddingTop: '20px' }}>
             {[
               ['اسم المستخدم', txn.user_full_name || txn.user_phone || shortID(txn.user_id)],
-              ['رقم الهاتف', txn.user_phone || shortID(txn.user_id)],
+              ['رقم الهاتف', txn.user_phone || 'غير متوفر'],
               ...(beneficiary ? [['المستفيد', beneficiary]] : []),
               ['بوابة/طريقة الدفع', txn.gateway ? (GATEWAY_LABELS[txn.gateway] ?? txn.gateway) : '—'],
               ['معرف المعاملة', shortID(txn.id)],
