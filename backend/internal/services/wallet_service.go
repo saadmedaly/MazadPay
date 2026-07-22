@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -31,10 +32,11 @@ type walletService struct {
 	walletRepo repository.WalletRepository
 	txRepo     repository.TransactionRepository
 	notifSvc   NotificationService
+	auditSvc   AuditService
 }
 
-func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, notifSvc NotificationService) WalletService {
-	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, notifSvc: notifSvc}
+func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, notifSvc NotificationService, auditSvc AuditService) WalletService {
+	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, notifSvc: notifSvc, auditSvc: auditSvc}
 }
 
 func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
@@ -68,7 +70,15 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 }
 
 func (s *walletService) UploadReceipt(ctx context.Context, txID uuid.UUID, userID uuid.UUID, receiptURL string) error {
-	return s.txRepo.UpdateReceipt(ctx, txID, userID, receiptURL, "pending_review")
+	if err := s.txRepo.UpdateReceipt(ctx, txID, userID, receiptURL, "pending_review"); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		// Ne jamais journaliser l'URL du reçu elle-même (audit de sécurité — voir
+		// models.Transaction.ReceiptURL) : uniquement le fait qu'un reçu a été déposé.
+		s.auditSvc.Log(ctx, userID, "receipt_uploaded", "transaction", &txID, "Receipt uploaded by user")
+	}
+	return nil
 }
 
 // RequestWithdraw crée une demande de retrait et gèle immédiatement le montant
@@ -107,6 +117,10 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 	})
 	if err != nil {
 		return nil, err
+	}
+	if s.auditSvc != nil {
+		details := fmt.Sprintf("user_id=%s amount=%s status=%s (balance frozen)", userID, amount.String(), txModel.Status)
+		s.auditSvc.Log(ctx, userID, "withdraw_requested_funds_frozen", "transaction", &txModel.ID, details)
 	}
 	return txModel, nil
 }

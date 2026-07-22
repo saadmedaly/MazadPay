@@ -18,6 +18,7 @@ import (
 type WalletHandler struct {
 	svc      services.WalletService
 	mediaSvc services.MediaService
+	auditSvc services.AuditService
 	logger   *zap.Logger
 }
 
@@ -27,6 +28,13 @@ func NewWalletHandler(svc services.WalletService, logger *zap.Logger, mediaSvc .
 		h.mediaSvc = mediaSvc[0]
 	}
 	return h
+}
+
+// SetAuditService injecte le service d'audit après construction pour ne pas modifier
+// la signature variadique de NewWalletHandler ailleurs dans le code (Financial audit
+// logs — journalise uniquement la consultation d'un reçu par un admin).
+func (h *WalletHandler) SetAuditService(auditSvc services.AuditService) {
+	h.auditSvc = auditSvc
 }
 
 func (h *WalletHandler) GetMe(c *fiber.Ctx) error {
@@ -171,6 +179,13 @@ func (h *WalletHandler) GetReceiptURL(c *fiber.Ctx) error {
 	}
 	if err != nil || tx == nil {
 		return NotFound(c, "Transaction")
+	}
+
+	// Journaliser uniquement la consultation par un admin du reçu d'un autre
+	// utilisateur (Financial audit logs) — jamais l'URL elle-même, jamais quand
+	// l'utilisateur consulte son propre reçu (bruit inutile, pas un accès privilégié).
+	if isAdmin && h.auditSvc != nil {
+		h.auditSvc.Log(c.Context(), userID, "receipt_viewed_by_admin", "transaction", &txID, "Admin viewed payment receipt")
 	}
 	if tx.ReceiptURL == nil || *tx.ReceiptURL == "" {
 		return NotFound(c, "Receipt")

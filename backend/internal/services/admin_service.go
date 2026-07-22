@@ -144,6 +144,7 @@ type adminService struct {
 	settingsRepo repository.SettingsRepository
 	mediaSvc     MediaService
 	notifSvc     NotificationService
+	auditSvc     AuditService
 }
 
 func NewAdminService(
@@ -160,6 +161,7 @@ func NewAdminService(
 	settingsRepo repository.SettingsRepository,
 	mediaSvc MediaService,
 	notifSvc NotificationService,
+	auditSvc AuditService,
 ) AdminService {
 	return &adminService{
 		db:           db,
@@ -175,6 +177,7 @@ func NewAdminService(
 		settingsRepo: settingsRepo,
 		mediaSvc:     mediaSvc,
 		notifSvc:     notifSvc,
+		auditSvc:     auditSvc,
 	}
 }
 
@@ -519,8 +522,25 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	if approve {
 		status = "completed"
 	}
+
+	// Récupérer la transaction avant modification pour connaître old_status (audit
+	// financier — Financial audit logs, ne bloque jamais l'opération si l'audit échoue).
+	txBefore, findErr := s.txRepo.FindByID(ctx, id, nil)
+
 	if err := s.txRepo.UpdateStatus(ctx, id, status, notes, adminID); err != nil {
 		return err
+	}
+
+	if findErr == nil && s.auditSvc != nil {
+		action := "transaction_rejected"
+		if approve {
+			action = "transaction_approved"
+		}
+		details := fmt.Sprintf(
+			"user_id=%s type=%s amount=%s old_status=%s new_status=%s notes=%s",
+			txBefore.UserID, txBefore.Type, txBefore.Amount.String(), txBefore.Status, status, notes,
+		)
+		s.auditSvc.Log(ctx, adminID, action, "transaction", &id, details)
 	}
 
 	// Send notification to user
