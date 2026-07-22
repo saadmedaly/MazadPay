@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ZoomIn, Check, X, AlertTriangle, User, Calendar, CreditCard, AlertCircle } from 'lucide-react'
+import { ArrowLeft, ZoomIn, Check, X, AlertTriangle, User, Calendar, CreditCard, AlertCircle, FileDown } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
  import { ImagePreview } from '@/components/shared/ImagePreview'
@@ -9,6 +9,9 @@ import { useTransaction, useValidateTransaction, useReceiptURL } from '@/hooks/u
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { GATEWAY_LABELS } from '@/lib/constants'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { ReceiptTemplate } from '@/components/shared/ReceiptTemplate'
+import { downloadReceiptPdf } from '@/lib/receiptPdf'
+import { toast } from 'sonner'
 
 export function TransactionDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -19,6 +22,20 @@ export function TransactionDetailPage() {
   const { data: txn, isLoading, isError } = useTransaction(id!)
   const validate = useValidateTransaction()
   const { data: receiptData } = useReceiptURL(id!)
+  const receiptRef = useRef<HTMLDivElement>(null)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+
+  const handleDownloadPdf = async () => {
+    if (!receiptRef.current || !txn) return
+    setIsExportingPdf(true)
+    try {
+      await downloadReceiptPdf(receiptRef.current, `receipt-${shortID(txn.id)}.pdf`)
+    } catch {
+      toast.error('فشل إنشاء ملف PDF، يرجى المحاولة مرة أخرى')
+    } finally {
+      setIsExportingPdf(false)
+    }
+  }
 
   const handleValidate = (approve: boolean) => {
     validate.mutate(
@@ -61,7 +78,7 @@ export function TransactionDetailPage() {
           <div className="space-y-4">
             {[
               { label: 'رقم المعاملة',  value: <span className="font-mono font-bold">{shortID(txn.id)}</span>,    icon: null },
-              { label: 'المستخدم',    value: <span className="font-mono font-bold cursor-pointer hover:text-mazad-primary transition-colors" onClick={() => navigate(`/users/${txn.user_id}`)}>{shortID(txn.user_id)}</span>, icon: User },
+              { label: 'المستخدم',    value: <span className="font-bold cursor-pointer hover:text-mazad-primary transition-colors" onClick={() => navigate(`/users/${txn.user_id}`)}>{txn.user_full_name || txn.user_phone || shortID(txn.user_id)}</span>, icon: User },
               { label: 'المبلغ',      value: <span className="font-bold text-mazad-accent text-2xl">{formatPrice(parseFloat(txn.amount))}</span>, icon: CreditCard },
               { label: 'بوابة الدفع',   value: txn.gateway ? (GATEWAY_LABELS[txn.gateway] ?? txn.gateway) : '—', icon: null },
               { label: 'التاريخ',      value: <span className="font-medium">{formatDate(txn.created_at)}</span>, icon: Calendar },
@@ -96,7 +113,21 @@ export function TransactionDetailPage() {
             alt="إيصال الدفع"
             className="aspect-square bg-black/20"
           />
+          <button
+            onClick={handleDownloadPdf}
+            disabled={isExportingPdf}
+            className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl bg-mazad-primary/10 hover:bg-mazad-primary/20 text-mazad-primary font-bold py-3 transition-colors disabled:opacity-50"
+          >
+            <FileDown className="w-4 h-4" />
+            {isExportingPdf ? 'جاري إنشاء الملف...' : 'تحميل الإيصال PDF'}
+          </button>
         </div>
+      </div>
+
+      {/* Gabarit du reçu, capturé en image puis converti en PDF — jamais affiché à
+          l'écran (positionné hors du viewport visible). */}
+      <div style={{ position: 'fixed', top: 0, left: '-9999px' }}>
+        <ReceiptTemplate ref={receiptRef} txn={txn} />
       </div>
 
       {/* Validation Panel */}

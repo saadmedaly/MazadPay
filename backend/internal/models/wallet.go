@@ -37,6 +37,12 @@ type Transaction struct {
 	PaymentMethod    *string          `db:"payment_method"     json:"payment_method"`
 	FeeAmount        *decimal.Decimal `db:"fee_amount"         json:"fee_amount"`
 	NetAmount        *decimal.Decimal `db:"net_amount"         json:"net_amount"`
+	// UserFullName et UserPhone sont remplis via JOIN uniquement par GetByID (vue admin
+	// détaillée) — permet à la web admin d'afficher le vrai nom de l'utilisateur au lieu
+	// de son UUID tronqué. Absents (nil) pour les autres requêtes (ListPaginated,
+	// FindByID) qui ne font pas ce JOIN.
+	UserFullName     *string          `db:"user_full_name"     json:"user_full_name,omitempty"`
+	UserPhone        *string          `db:"user_phone"         json:"user_phone,omitempty"`
 	Description      *string          `db:"description"        json:"description"`
 	FailureReason    *string          `db:"failure_reason"     json:"failure_reason"`
 	CreatedAt        time.Time        `db:"created_at"         json:"created_at"`

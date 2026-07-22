@@ -82,6 +82,10 @@ export interface Transaction {
   reviewed_by: string | null
   reviewed_at: string | null
   created_at: string
+  // Ajoutés via LEFT JOIN côté backend (voir transaction_repo.go: FindByID) — permet
+  // d'afficher le vrai nom de l'utilisateur au lieu de son UUID tronqué.
+  user_full_name?: string | null
+  user_phone?: string | null
 }
 
 export interface Bid {

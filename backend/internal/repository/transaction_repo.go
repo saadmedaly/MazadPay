@@ -63,19 +63,36 @@ func (r *transactionRepo) ListPaginated(ctx context.Context, page, perPage int, 
 	return txs, total, err
 }
 
+// GetByID est utilisé par la vue admin "détail de transaction" — inclut un LEFT JOIN
+// vers users pour afficher le vrai nom/téléphone de l'utilisateur au lieu de son UUID
+// (voir web/TransactionDetailPage.tsx). Les autres méthodes (ListPaginated, FindByID)
+// ne font pas ce JOIN et gardent leur comportement inchangé.
 func (r *transactionRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error) {
 	var tx models.Transaction
-	err := r.db.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1", id)
+	err := r.db.GetContext(ctx, &tx, `
+		SELECT t.*, u.full_name AS user_full_name, u.phone AS user_phone
+		FROM transactions t
+		LEFT JOIN users u ON u.id = t.user_id
+		WHERE t.id = $1`, id)
 	return &tx, err
 }
 
+// FindByID inclut un LEFT JOIN vers users pour exposer le vrai nom/téléphone de
+// l'utilisateur (voir web/TransactionDetailPage.tsx, admin GetTransactionByID et user
+// GetTransactionAny en dépendent tous les deux) — le fallback identifiant tronqué
+// n'est plus nécessaire quand full_name ou phone sont disponibles.
 func (r *transactionRepo) FindByID(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*models.Transaction, error) {
 	var tx models.Transaction
 	var err error
+	const baseQuery = `
+		SELECT t.*, u.full_name AS user_full_name, u.phone AS user_phone
+		FROM transactions t
+		LEFT JOIN users u ON u.id = t.user_id
+		WHERE t.id = $1`
 	if userID != nil {
-		err = r.db.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1 AND user_id = $2", id, userID)
+		err = r.db.GetContext(ctx, &tx, baseQuery+" AND t.user_id = $2", id, userID)
 	} else {
-		err = r.db.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1", id)
+		err = r.db.GetContext(ctx, &tx, baseQuery, id)
 	}
 	return &tx, err
 }
