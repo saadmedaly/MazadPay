@@ -42,6 +42,10 @@ register_test_sms/
 register_test_sms/*
 configs/*
 test_user_interface/
-.env 
+.env
 .env.*
 *.env
+
+# Backups locaux générés par cmd/migrate_receipts --execute (contiennent d'anciennes
+# receipt_url — jamais commités).
+migrate_receipts_backup_*.txt
