@@ -125,8 +125,10 @@ export function TransactionDetailPage() {
       </div>
 
       {/* Gabarit du reçu, capturé en image puis converti en PDF — jamais affiché à
-          l'écran (positionné hors du viewport visible). */}
-      <div style={{ position: 'fixed', top: 0, left: '-9999px' }}>
+          l'écran (positionné hors du viewport visible). `absolute` plutôt que `fixed` :
+          html2canvas capture parfois mal les éléments en position fixed (bug connu),
+          ce qui pouvait couper le haut de la carte lors de l'export PDF. */}
+      <div style={{ position: 'absolute', top: 0, left: '-9999px' }}>
         <ReceiptTemplate ref={receiptRef} txn={txn} />
       </div>
 

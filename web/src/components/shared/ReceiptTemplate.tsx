@@ -1,7 +1,17 @@
 import { forwardRef } from 'react'
 import type { Transaction } from '@/types/api'
-import { GATEWAY_LABELS } from '@/lib/constants'
 import { formatPrice, shortID } from '@/lib/formatters'
+
+// Libellés spécifiques au reçu PDF pour les valeurs `gateway` réellement envoyées par
+// l'app mobile (minuscules : bankily, masrvi, mobile_money, bank_transfer) — distinctes
+// de GATEWAY_LABELS (constants.ts) qui utilise des clés capitalisées pour d'autres
+// écrans de l'admin, non modifié pour ne pas affecter le reste de l'UI.
+const RECEIPT_GATEWAY_LABELS: Record<string, string> = {
+  bankily: 'بانكيلي',
+  masrvi: 'مصرفي',
+  mobile_money: 'خدمة موبايل (Bankily/Masrvi)',
+  bank_transfer: 'حوالة بنكية',
+}
 
 interface ReceiptTemplateProps {
   txn: Transaction
@@ -51,7 +61,7 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
         dir="rtl"
         style={{
           width: '600px',
-          padding: '40px',
+          padding: '48px 40px 40px', // marge haute renforcée pour éviter tout rognage à l'export PDF
           backgroundColor: '#ffffff',
           fontFamily: 'Tajawal, Cairo, Arial, sans-serif',
           color: '#111827',
@@ -110,13 +120,13 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
               jamais de "—" tant que user_id existe (audit correction affichage nom). */}
           <div style={{ textAlign: 'right', borderTop: '1px dashed #d1d5db', paddingTop: '20px' }}>
             {[
-              ['اسم المستخدم', txn.user_full_name || txn.user_phone || shortID(txn.user_id)],
-              ['رقم الهاتف', txn.user_phone || 'غير متوفر'],
-              ...(beneficiary ? [['المستفيد', beneficiary]] : []),
-              ['بوابة/طريقة الدفع', txn.gateway ? (GATEWAY_LABELS[txn.gateway] ?? txn.gateway) : '—'],
-              ['معرف المعاملة', shortID(txn.id)],
-              ['التاريخ والوقت', formatReceiptDate(txn.created_at)],
-            ].map(([label, value]) => (
+              { label: 'اسم المستخدم', value: txn.user_full_name || txn.user_phone || shortID(txn.user_id), ltr: false },
+              { label: 'رقم الهاتف', value: txn.user_phone || 'غير متوفر', ltr: !!txn.user_phone },
+              ...(beneficiary ? [{ label: 'المستفيد', value: beneficiary, ltr: false }] : []),
+              { label: 'بوابة/طريقة الدفع', value: txn.gateway ? (RECEIPT_GATEWAY_LABELS[txn.gateway] ?? txn.gateway) : 'غير متوفر', ltr: false },
+              { label: 'معرف المعاملة', value: shortID(txn.id), ltr: false },
+              { label: 'التاريخ والوقت', value: formatReceiptDate(txn.created_at), ltr: false },
+            ].map(({ label, value, ltr }) => (
               <div
                 key={label}
                 style={{
@@ -128,7 +138,17 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
                 }}
               >
                 <span style={{ color: '#6b7280' }}>{label}</span>
-                <span style={{ fontWeight: 700 }}>{value}</span>
+                {ltr ? (
+                  // Isole le numéro de téléphone du contexte RTL environnant — sans ça,
+                  // le "+" initial se retrouve visuellement à la fin du numéro (le
+                  // moteur de rendu RTL du navigateur inverse l'ordre d'affichage des
+                  // caractères d'un nombre "faible" comme "+" au sein d'un bloc RTL).
+                  <span style={{ fontWeight: 700, direction: 'ltr', unicodeBidi: 'isolate', textAlign: 'left' }}>
+                    {value}
+                  </span>
+                ) : (
+                  <span style={{ fontWeight: 700 }}>{value}</span>
+                )}
               </div>
             ))}
           </div>

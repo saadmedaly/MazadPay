@@ -11,6 +11,13 @@ export async function downloadReceiptPdf(element: HTMLElement, filename: string)
     scale: 2, // meilleure résolution pour l'impression
     backgroundColor: '#ffffff',
     useCORS: true,
+    // Hauteur/largeur explicites basées sur le contenu réel de l'élément — sans ça,
+    // html2canvas peut se baser sur la taille du viewport visible et rogner le haut de
+    // la carte (le gabarit est rendu hors écran en position absolute).
+    width: element.scrollWidth,
+    height: element.scrollHeight,
+    windowWidth: element.scrollWidth,
+    windowHeight: element.scrollHeight,
   })
 
   const imgData = canvas.toDataURL('image/png')
