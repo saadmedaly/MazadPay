@@ -244,8 +244,6 @@ export function AuctionsPage() {
   }
 
   const handleCreate = async () => {
-    console.log('[AuctionsPage] Creating auction...')
-
     // Validate at least 1 image before creating
     const totalImages = imageFiles.length + existingImageUrls.length
     if (totalImages === 0) {
@@ -257,15 +255,11 @@ export function AuctionsPage() {
 
     const payload = buildPayload()
     if (!payload) {
-      console.log('[AuctionsPage] Validation failed, payload is null')
       return
     }
 
-    console.log('[AuctionsPage] Payload ready:', payload)
-
     createMut.mutate(payload, {
       onSuccess: async (data) => {
-        console.log('[AuctionsPage] Auction created successfully:', data)
         const auctionId = data?.id
 
         // Upload images if auction created and images exist

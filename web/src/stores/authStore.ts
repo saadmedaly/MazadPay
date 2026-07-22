@@ -10,6 +10,21 @@ interface AuthStore {
   isAuthenticated: () => boolean
 }
 
+// Décode le payload d'un JWT et vérifie sa date d'expiration localement, sans appel
+// réseau (durcissement sécurité — évite qu'un token expiré reste "valide" côté client
+// jusqu'au prochain appel API qui échouerait avec 401).
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return false // format inattendu : laisser l'API trancher
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
+    if (typeof decoded.exp !== 'number') return false
+    return Date.now() >= decoded.exp * 1000
+  } catch {
+    return false // décodage impossible : laisser l'API trancher
+  }
+}
+
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
@@ -19,7 +34,8 @@ export const useAuthStore = create<AuthStore>()(
       logout: () => set({ token: null, user: null }),
       isAuthenticated: () => {
         const { token, user } = get()
-        return !!token && (user?.role === 'admin' || user?.role === 'super_admin')
+        if (!token || isTokenExpired(token)) return false
+        return user?.role === 'admin' || user?.role === 'super_admin'
       },
     }),
     {

@@ -12,22 +12,19 @@ client.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
-  console.log(
-    `%c[API Request] ${config.method?.toUpperCase()} ${config.url}`,
-    'color: #60a5fa; font-weight: bold',
-    config.data ? '\nPayload:' : '',
-    config.data ?? ''
-  )
+  // Ne jamais logger le payload complet des requêtes (peut contenir des données
+  // sensibles : mots de passe, montants, reçus...) — durcissement sécurité.
+  if (import.meta.env.DEV) {
+    console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`)
+  }
   return config
 })
 
 client.interceptors.response.use(
   (res) => {
-    console.log(
-      `%c[API Response] ${res.status} ${res.config.method?.toUpperCase()} ${res.config.url}`,
-      'color: #34d399; font-weight: bold',
-      '\nData:', res.data
-    )
+    if (import.meta.env.DEV) {
+      console.log(`[API] ${res.status} ${res.config.method?.toUpperCase()} ${res.config.url}`)
+    }
     return res
   },
   (err) => {
@@ -42,15 +39,14 @@ client.interceptors.response.use(
       message = serverData.message
     }
 
-    console.error(
-      `%c[API Error] ${status} ${err.config?.method?.toUpperCase()} ${err.config?.url}`,
-      'color: #f87171; font-weight: bold',
-      '\nMessage:', message,
-      '\nServer response:', serverData,
-      '\nFull error:', err
-    )
+    // Ne jamais logger le corps de la réponse serveur ni l'objet erreur complet — peut
+    // contenir des jetons, des détails internes ou des données utilisateur sensibles.
+    if (import.meta.env.DEV) {
+      console.error(`[API Error] ${status} ${err.config?.method?.toUpperCase()} ${err.config?.url}: ${message}`)
+    }
 
-    if (err.response?.status === 401) {
+    // Session invalide ou accès refusé : déconnexion automatique et retour au login.
+    if (err.response?.status === 401 || err.response?.status === 403) {
       useAuthStore.getState().logout()
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'

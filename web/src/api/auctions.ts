@@ -59,14 +59,11 @@ export async function validateAuction(payload: {
 }
 
 export async function createAuction(payload: AuctionPayload): Promise<Auction> {
-  console.log('%c[createAuction] Sending payload:', 'color: #fbbf24; font-weight: bold', JSON.parse(JSON.stringify(payload)))
   const { data } = await client.post<APIResponse<Auction>>('/v1/api/auctions', payload)
-  console.log('%c[createAuction] Response:', 'color: #34d399; font-weight: bold', data)
   return data.data
 }
 
 export async function updateAuction(id: string, payload: AuctionPayload): Promise<void> {
-  console.log('%c[updateAuction] Sending payload for', 'color: #fbbf24; font-weight: bold', id, JSON.parse(JSON.stringify(payload)))
   await client.put(`/v1/api/admin/auctions/${id}`, payload)
 }
 
