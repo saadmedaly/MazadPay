@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -54,6 +55,64 @@ func RateLimit(rdb *redis.Client, windowSeconds, maxAttempts int, logger *zap.Lo
 		if count > int64(maxAttempts) {
 			logger.Warn("Rate limit exceeded",
 				zap.String("ip", ip),
+				zap.String("path", path),
+				zap.Int64("attempts", count),
+			)
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"success": false,
+				"error": fiber.Map{
+					"code":    "rate_limited",
+					"message": "محاولات كثيرة جداً، يرجى المحاولة لاحقاً",
+				},
+			})
+		}
+
+		return c.Next()
+	}
+}
+
+// RateLimitByUser crée un rate limit basé sur l'utilisateur authentifié (user_id posé
+// dans c.Locals par JWT()), pour protéger les routes wallet/bids sensibles (Wallet +
+// Bids Rate Limiting). extraParam, si non vide, est le nom d'un paramètre de route
+// (ex: "id" pour l'auction_id ou le transaction_id) dont la valeur est ajoutée à la clé
+// — permet un compteur par (user_id, auction_id) plutôt qu'un compteur global par
+// utilisateur. failClosed=true : erreur Redis ou utilisateur non authentifié (ne
+// devrait pas arriver après jwtMiddleware, mais défense en profondeur) => 503, jamais
+// un passage sans contrôle sur ces routes financières/sensibles.
+func RateLimitByUser(rdb *redis.Client, windowSeconds, maxAttempts int, logger *zap.Logger, failClosed bool, extraParam string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		uid, ok := c.Locals("user_id").(uuid.UUID)
+		if !ok {
+			if failClosed {
+				return failClosedResponse(c)
+			}
+			return c.Next()
+		}
+
+		path := c.Path()
+		key := fmt.Sprintf("ratelimit:user:%s:%s", uid.String(), path)
+		if extraParam != "" {
+			if extraVal := c.Params(extraParam); extraVal != "" {
+				key = fmt.Sprintf("%s:%s", key, extraVal)
+			}
+		}
+
+		count, err := rdb.Incr(c.Context(), key).Result()
+		if err != nil {
+			logger.Error("RateLimitByUser Redis error", zap.Error(err))
+			if failClosed {
+				return failClosedResponse(c)
+			}
+			return c.Next()
+		}
+
+		if count == 1 {
+			rdb.Expire(c.Context(), key, time.Duration(windowSeconds)*time.Second)
+		}
+
+		if count > int64(maxAttempts) {
+			logger.Warn("Rate limit exceeded for user",
+				zap.String("user_id", uid.String()),
 				zap.String("path", path),
 				zap.Int64("attempts", count),
 			)

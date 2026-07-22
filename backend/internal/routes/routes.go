@@ -202,7 +202,14 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	my.Get("/watchlist", userHandler.ListFavorites) // Enchères suivies
 
 	// Bids (Protected place)
-	api.Post("/auctions/:id/bids", jwtMiddleware, bidHandler.Place)
+	// Rate limiting anti-spam/bot (Wallet + Bids Rate Limiting) : 10 mises/30s par
+	// (user_id, auction_id) — laisse passer une mise humaine rapide/compétitive tout
+	// en bloquant un bot qui spamme le même mazad — plus 20 req/min par IP en défense
+	// supplémentaire contre un bot utilisant plusieurs comptes depuis la même IP.
+	// fail-closed : ces routes déplacent de l'argent/impactent une enchère réelle.
+	bidRateLimitByUser := middleware.RateLimitByUser(rdb, 30, 10, logger, true, "id")
+	bidRateLimitByIP := middleware.RateLimit(rdb, 60, 20, logger, true)
+	api.Post("/auctions/:id/bids", jwtMiddleware, bidRateLimitByIP, bidRateLimitByUser, bidHandler.Place)
 
 	// Seller Contact (CONCEPTION F3.7)
 	api.Get("/auctions/:id/seller-contact", jwtMiddleware, h.GetSellerContact)
@@ -240,11 +247,18 @@ func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, wallet
 	users.Get("/me/winnings", userHandler.MyWinnings)
 
 	// Wallet
+	// Rate limiting par utilisateur (Wallet + Bids Rate Limiting) : ces routes
+	// déplacent de l'argent réel ou déclenchent une révision admin — fail-closed,
+	// pas de passage sans contrôle si Redis est indisponible.
+	depositRateLimit := middleware.RateLimitByUser(rdb, 3600, 10, logger, true, "")
+	withdrawRateLimit := middleware.RateLimitByUser(rdb, 3600, 5, logger, true, "")
+	receiptRateLimit := middleware.RateLimitByUser(rdb, 3600, 10, logger, true, "")
+
 	users.Get("/wallet", walletHandler.GetMe)
-	users.Post("/wallet/deposit", walletHandler.Deposit)
-	users.Post("/wallet/transactions/:id/receipt", walletHandler.UploadReceipt)
+	users.Post("/wallet/deposit", depositRateLimit, walletHandler.Deposit)
+	users.Post("/wallet/transactions/:id/receipt", receiptRateLimit, walletHandler.UploadReceipt)
 	users.Get("/wallet/transactions/:id/receipt-url", walletHandler.GetReceiptURL)
-	users.Post("/wallet/withdraw", walletHandler.Withdraw)
+	users.Post("/wallet/withdraw", withdrawRateLimit, walletHandler.Withdraw)
 	users.Get("/wallet/transactions", walletHandler.Transactions)
 	users.Get("/wallet/transactions/:id", walletHandler.GetTransaction)
 	users.Get("/wallet/payment-methods", walletHandler.GetPaymentMethods)
