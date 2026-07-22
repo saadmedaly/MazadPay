@@ -12,7 +12,13 @@ class WithdrawPage extends StatefulWidget {
 
 class _WithdrawPageState extends State<WithdrawPage> {
   final TextEditingController _amountController = TextEditingController();
-  String _selectedMethod = 'Bank Transfer';
+  // Valeurs envoyées telles quelles au backend comme `gateway` (aucun enum imposé côté
+  // serveur, mais ces valeurs sont les identifiants stables attendus — fix bug "Gateway
+  // is required" : l'ancien code envoyait le champ sous le nom `method` au lieu de
+  // `gateway`, donc le backend le recevait toujours vide).
+  static const String _gatewayBankTransfer = 'bank_transfer';
+  static const String _gatewayMobileMoney = 'mobile_money';
+  String? _selectedGateway;
   final WalletApi _walletApi = WalletApi();
   bool _isLoading = false;
   double _balance = 0.0;
@@ -49,17 +55,31 @@ class _WithdrawPageState extends State<WithdrawPage> {
   }
 
   Future<void> _makeWithdrawal() async {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final localizations = AppLocalizations.of(context)!;
+
     final amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.error_invalid_amount)),
+      messenger.showSnackBar(
+        const SnackBar(content: Text('يرجى إدخال مبلغ صحيح')),
       );
       return;
     }
 
     if (amount > _balance) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.error_insufficient_balance)),
+      messenger.showSnackBar(
+        SnackBar(content: Text(localizations.error_insufficient_balance)),
+      );
+      return;
+    }
+
+    // Fix bug "Gateway is required" : le backend exige un `gateway` non vide et
+    // aucune valeur par défaut n'était sélectionnée — l'utilisateur devait choisir
+    // explicitement une méthode avant de pouvoir confirmer.
+    if (_selectedGateway == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('يرجى اختيار طريقة الاستلام')),
       );
       return;
     }
@@ -68,10 +88,11 @@ class _WithdrawPageState extends State<WithdrawPage> {
 
     try {
       final response = await _walletApi.withdraw(
-        method: _selectedMethod.toLowerCase().replaceAll(' ', '_'),
+        gateway: _selectedGateway!,
         amount: amount,
       );
 
+      if (!mounted) return;
       setState(() => _isLoading = false);
 
       if (response.success) {
@@ -79,14 +100,15 @@ class _WithdrawPageState extends State<WithdrawPage> {
         _amountController.clear();
         _loadBalance();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.message ?? AppLocalizations.of(context)!.error_withdraw_failed)),
+        messenger.showSnackBar(
+          SnackBar(content: Text(response.message ?? localizations.error_withdraw_failed)),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.error_connection)),
+      messenger.showSnackBar(
+        SnackBar(content: Text(localizations.error_connection)),
       );
     }
   }
@@ -144,9 +166,9 @@ class _WithdrawPageState extends State<WithdrawPage> {
                 style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              _buildMethodSelector('Bank Transfer', AppLocalizations.of(context)!.text_346, Icons.account_balance, isDarkMode),
+              _buildMethodSelector(_gatewayBankTransfer, AppLocalizations.of(context)!.text_346, Icons.account_balance, isDarkMode),
               const SizedBox(height: 12),
-              _buildMethodSelector('Mobile Money', AppLocalizations.of(context)!.text_347, Icons.phone_android, isDarkMode),
+              _buildMethodSelector(_gatewayMobileMoney, AppLocalizations.of(context)!.text_347, Icons.phone_android, isDarkMode),
               const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,
@@ -195,9 +217,9 @@ class _WithdrawPageState extends State<WithdrawPage> {
   }
 
   Widget _buildMethodSelector(String value, String label, IconData icon, bool isDarkMode) {
-    bool isSelected = _selectedMethod == value;
+    bool isSelected = _selectedGateway == value;
     return InkWell(
-      onTap: () => setState(() => _selectedMethod = value),
+      onTap: () => setState(() => _selectedGateway = value),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(

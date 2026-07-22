@@ -44,21 +44,24 @@ class WalletApi {
   }
   
   /// Effectuer un retrait
+  /// Le backend attend le champ `gateway` (voir wallet_handler.go: Request.Gateway,
+  /// validate:"required") — l'ancien code envoyait `method`, que le backend ignore,
+  /// d'où l'erreur "Gateway is required" systématique (fix appliqué ici).
   Future<ApiResponse<Map<String, dynamic>>> withdraw({
     required double amount,
+    required String gateway,
     Map<String, dynamic>? bankDetails,
-    String? method,
   }) async {
     try {
       final response = await _apiService.post<Map<String, dynamic>>(
         '/users/wallet/withdraw',
         data: {
           'amount': amount,
+          'gateway': gateway,
           'bank_details': ?bankDetails,
-          'method': ?method,
         },
       );
-      
+
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
       return ApiResponse.error(e.toString());
