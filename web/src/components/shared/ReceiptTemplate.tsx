@@ -1,11 +1,22 @@
 import { forwardRef } from 'react'
 import type { Transaction } from '@/types/api'
 import { GATEWAY_LABELS } from '@/lib/constants'
-import { formatPrice, formatDate, shortID } from '@/lib/formatters'
+import { formatPrice, shortID } from '@/lib/formatters'
 
 interface ReceiptTemplateProps {
   txn: Transaction
   beneficiary?: string | null
+}
+
+// Format spécifique au reçu PDF : "22 يوليو 2026 - 11:44" (séparateur "-" entre date et
+// heure, plus lisible sur un reçu imprimé que la virgule utilisée par formatDate()
+// ailleurs dans l'admin, qu'on ne modifie pas pour ne pas affecter le reste de l'UI).
+function formatReceiptDate(date: string): string {
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return '—'
+  const datePart = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric' }).format(d)
+  const timePart = new Intl.DateTimeFormat('ar', { hour: '2-digit', minute: '2-digit', hour12: false }).format(d)
+  return `${datePart} - ${timePart}`
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -95,14 +106,16 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
           </div>
 
           {/* Détails */}
+          {/* Priorité d'affichage demandée : full_name, sinon phone, sinon shortID —
+              jamais de "—" tant que user_id existe (audit correction affichage nom). */}
           <div style={{ textAlign: 'right', borderTop: '1px dashed #d1d5db', paddingTop: '20px' }}>
             {[
-              ['اسم المستخدم', txn.user_full_name || '—'],
-              ['رقم الهاتف', txn.user_phone || '—'],
+              ['اسم المستخدم', txn.user_full_name || txn.user_phone || shortID(txn.user_id)],
+              ['رقم الهاتف', txn.user_phone || shortID(txn.user_id)],
               ...(beneficiary ? [['المستفيد', beneficiary]] : []),
               ['بوابة/طريقة الدفع', txn.gateway ? (GATEWAY_LABELS[txn.gateway] ?? txn.gateway) : '—'],
               ['معرف المعاملة', shortID(txn.id)],
-              ['التاريخ والوقت', formatDate(txn.created_at)],
+              ['التاريخ والوقت', formatReceiptDate(txn.created_at)],
             ].map(([label, value]) => (
               <div
                 key={label}
