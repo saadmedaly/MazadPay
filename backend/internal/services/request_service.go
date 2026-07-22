@@ -20,9 +20,9 @@ type RequestService interface {
 	GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (*models.AuctionRequest, error)
 	GetUserAuctionRequests(ctx context.Context, userID uuid.UUID, status string, page, perPage int) ([]models.AuctionRequest, int, error)
 	ReviewAuctionRequest(ctx context.Context, id uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
-	DeleteAuctionRequest(ctx context.Context, id uuid.UUID) error
+	DeleteAuctionRequest(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error
 	BulkReviewAuctionRequests(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
-	BulkDeleteAuctionRequests(ctx context.Context, ids []uuid.UUID) error
+	BulkDeleteAuctionRequests(ctx context.Context, ids []uuid.UUID, deletedBy uuid.UUID) error
 
 	// Banner Requests
 	CreateBannerRequest(ctx context.Context, req *models.BannerRequest) error
@@ -30,25 +30,25 @@ type RequestService interface {
 	GetBannerRequestByID(ctx context.Context, id uuid.UUID) (*models.BannerRequest, error)
 	GetUserBannerRequests(ctx context.Context, userID uuid.UUID, status string, page, perPage int) ([]models.BannerRequest, int, error)
 	ReviewBannerRequest(ctx context.Context, id uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
-	DeleteBannerRequest(ctx context.Context, id uuid.UUID) error
+	DeleteBannerRequest(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error
 	BulkReviewBannerRequests(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
-	BulkDeleteBannerRequests(ctx context.Context, ids []uuid.UUID) error
+	BulkDeleteBannerRequests(ctx context.Context, ids []uuid.UUID, deletedBy uuid.UUID) error
 }
 
 type requestService struct {
 	repo                repository.RequestRepository
 	auctionRepo         repository.AuctionRepository
 	contentRepo         repository.ContentRepository
-	auditRepo           repository.AuditRepository
+	auditSvc            AuditService
 	notificationService NotificationService
 }
 
-func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, auditRepo repository.AuditRepository, notificationService NotificationService) RequestService {
+func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, auditSvc AuditService, notificationService NotificationService) RequestService {
 	return &requestService{
 		repo:                repo,
 		auctionRepo:         auctionRepo,
 		contentRepo:         contentRepo,
-		auditRepo:           auditRepo,
+		auditSvc:            auditSvc,
 		notificationService: notificationService,
 	}
 }
@@ -191,34 +191,19 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 	}
 
 	// Log audit
-	auditLog := &models.AuditLog{
-		ID:         uuid.New(),
-		AdminID:    reviewedBy,
-		Action:     fmt.Sprintf("review_auction_request_%s", status),
-		EntityType: "auction_request",
-		EntityID:   &id,
-		Details:    fmt.Sprintf("Status changed to %s. Notes: %s", status, notes),
-	}
-	s.auditRepo.Create(ctx, auditLog)
+	s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_request_reviewed_%s", status), "auction_request", &id,
+		fmt.Sprintf("Status changed to %s. Notes: %s", status, notes))
 
 	return nil
 }
 
-func (s *requestService) DeleteAuctionRequest(ctx context.Context, id uuid.UUID) error {
+func (s *requestService) DeleteAuctionRequest(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error {
 	if err := s.repo.DeleteAuctionRequest(ctx, id); err != nil {
 		return err
 	}
 
 	// Log audit
-	auditLog := &models.AuditLog{
-		ID:         uuid.New(),
-		AdminID:    uuid.Nil,
-		Action:     "delete_auction_request",
-		EntityType: "auction_request",
-		EntityID:   &id,
-		Details:    "Auction request deleted",
-	}
-	s.auditRepo.Create(ctx, auditLog)
+	s.auditSvc.Log(ctx, deletedBy, "auction_request_deleted", "auction_request", &id, "Auction request deleted")
 
 	return nil
 }
@@ -233,36 +218,21 @@ func (s *requestService) BulkReviewAuctionRequests(ctx context.Context, ids []uu
 
 	// Log audit for each request
 	for _, id := range ids {
-		auditLog := &models.AuditLog{
-			ID:         uuid.New(),
-			AdminID:    reviewedBy,
-			Action:     fmt.Sprintf("bulk_review_auction_request_%s", status),
-			EntityType: "auction_request",
-			EntityID:   &id,
-			Details:    fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes),
-		}
-		s.auditRepo.Create(ctx, auditLog)
+		s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_requests_bulk_reviewed_%s", status), "auction_request", &id,
+			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes))
 	}
 
 	return nil
 }
 
-func (s *requestService) BulkDeleteAuctionRequests(ctx context.Context, ids []uuid.UUID) error {
+func (s *requestService) BulkDeleteAuctionRequests(ctx context.Context, ids []uuid.UUID, deletedBy uuid.UUID) error {
 	if err := s.repo.BulkDeleteAuctionRequests(ctx, ids); err != nil {
 		return err
 	}
 
 	// Log audit for each request
 	for _, id := range ids {
-		auditLog := &models.AuditLog{
-			ID:         uuid.New(),
-			AdminID:    uuid.Nil,
-			Action:     "bulk_delete_auction_request",
-			EntityType: "auction_request",
-			EntityID:   &id,
-			Details:    "Bulk deleted auction request",
-		}
-		s.auditRepo.Create(ctx, auditLog)
+		s.auditSvc.Log(ctx, deletedBy, "auction_requests_bulk_deleted", "auction_request", &id, "Bulk deleted auction request")
 	}
 
 	return nil
@@ -368,15 +338,8 @@ func (s *requestService) ReviewBannerRequest(ctx context.Context, id uuid.UUID, 
 	}
 
 	// Log audit
-	auditLog := &models.AuditLog{
-		ID:         uuid.New(),
-		AdminID:    reviewedBy,
-		Action:     fmt.Sprintf("review_auction_request_%s", status),
-		EntityType: "auction_request",
-		EntityID:   &id,
-		Details:    fmt.Sprintf("Status changed to %s. Notes: %s", status, notes),
-	}
-	s.auditRepo.Create(ctx, auditLog)
+	s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_request_reviewed_%s", status), "banner_request", &id,
+		fmt.Sprintf("Status changed to %s. Notes: %s", status, notes))
 
 	// Send localized notification (outside transaction)
 	if status == "approved" {
@@ -410,21 +373,13 @@ func (s *requestService) ReviewBannerRequest(ctx context.Context, id uuid.UUID, 
 	return nil
 }
 
-func (s *requestService) DeleteBannerRequest(ctx context.Context, id uuid.UUID) error {
+func (s *requestService) DeleteBannerRequest(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error {
 	if err := s.repo.DeleteBannerRequest(ctx, id); err != nil {
 		return err
 	}
 
 	// Log audit
-	auditLog := &models.AuditLog{
-		ID:         uuid.New(),
-		AdminID:    uuid.Nil,
-		Action:     "delete_banner_request",
-		EntityType: "banner_request",
-		EntityID:   &id,
-		Details:    "Banner request deleted",
-	}
-	s.auditRepo.Create(ctx, auditLog)
+	s.auditSvc.Log(ctx, deletedBy, "banner_request_deleted", "banner_request", &id, "Banner request deleted")
 
 	return nil
 }
@@ -439,36 +394,21 @@ func (s *requestService) BulkReviewBannerRequests(ctx context.Context, ids []uui
 
 	// Log audit for each request
 	for _, id := range ids {
-		auditLog := &models.AuditLog{
-			ID:         uuid.New(),
-			AdminID:    reviewedBy,
-			Action:     fmt.Sprintf("bulk_review_banner_request_%s", status),
-			EntityType: "banner_request",
-			EntityID:   &id,
-			Details:    fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes),
-		}
-		s.auditRepo.Create(ctx, auditLog)
+		s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_requests_bulk_reviewed_%s", status), "banner_request", &id,
+			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes))
 	}
 
 	return nil
 }
 
-func (s *requestService) BulkDeleteBannerRequests(ctx context.Context, ids []uuid.UUID) error {
+func (s *requestService) BulkDeleteBannerRequests(ctx context.Context, ids []uuid.UUID, deletedBy uuid.UUID) error {
 	if err := s.repo.BulkDeleteBannerRequests(ctx, ids); err != nil {
 		return err
 	}
 
 	// Log audit for each request
 	for _, id := range ids {
-		auditLog := &models.AuditLog{
-			ID:         uuid.New(),
-			AdminID:    uuid.Nil,
-			Action:     "bulk_delete_banner_request",
-			EntityType: "banner_request",
-			EntityID:   &id,
-			Details:    "Bulk deleted banner request",
-		}
-		s.auditRepo.Create(ctx, auditLog)
+		s.auditSvc.Log(ctx, deletedBy, "banner_requests_bulk_deleted", "banner_request", &id, "Bulk deleted banner request")
 	}
 
 	return nil

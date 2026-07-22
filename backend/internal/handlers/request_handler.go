@@ -246,7 +246,12 @@ func (h *RequestHandler) DeleteAuctionRequest(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request ID")
 	}
 
-	if err := h.svc.DeleteAuctionRequest(c.Context(), id); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.DeleteAuctionRequest(c.Context(), id, adminID); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
@@ -398,7 +403,12 @@ func (h *RequestHandler) DeleteBannerRequest(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request ID")
 	}
 
-	if err := h.svc.DeleteBannerRequest(c.Context(), id); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.DeleteBannerRequest(c.Context(), id, adminID); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
@@ -447,7 +457,12 @@ func (h *RequestHandler) BulkDeleteAuctionRequests(c *fiber.Ctx) error {
 		return BadRequest(c, err.Error())
 	}
 
-	if err := h.svc.BulkDeleteAuctionRequests(c.Context(), req.IDs); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.BulkDeleteAuctionRequests(c.Context(), req.IDs, adminID); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
@@ -498,7 +513,12 @@ func (h *RequestHandler) BulkDeleteBannerRequests(c *fiber.Ctx) error {
 		return BadRequest(c, err.Error())
 	}
 
-	if err := h.svc.BulkDeleteBannerRequests(c.Context(), req.IDs); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.BulkDeleteBannerRequests(c.Context(), req.IDs, adminID); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
