@@ -463,6 +463,7 @@ func (h *UserHandler) Search(c *fiber.Ctx) error {
 
 	page := c.QueryInt("page", 1)
 	perPage := c.QueryInt("per_page", 20)
+	page, perPage = ClampPagination(page, perPage)
 
 	users, _, err := h.service.Search(c.Context(), query, page, perPage)
 	if err != nil {

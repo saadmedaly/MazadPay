@@ -119,6 +119,7 @@ func (h *RequestHandler) GetAuctionRequests(c *fiber.Ctx) error {
 	status := c.Query("status", "")
 	page := c.QueryInt("page", 1)
 	perPage := c.QueryInt("per_page", 20)
+	page, perPage = ClampPagination(page, perPage)
 	sortBy := c.Query("sort_by", "created_at")
 	sortOrder := c.Query("sort_order", "DESC")
 
@@ -254,6 +255,7 @@ func (h *RequestHandler) GetBannerRequests(c *fiber.Ctx) error {
 	status := c.Query("status", "")
 	page := c.QueryInt("page", 1)
 	perPage := c.QueryInt("per_page", 20)
+	page, perPage = ClampPagination(page, perPage)
 	sortBy := c.Query("sort_by", "created_at")
 	sortOrder := c.Query("sort_order", "DESC")
 
@@ -321,6 +323,7 @@ func (h *RequestHandler) GetUserAuctionRequests(c *fiber.Ctx) error {
 	status := c.Query("status", "")
 	page := c.QueryInt("page", 1)
 	perPage := c.QueryInt("per_page", 20)
+	page, perPage = ClampPagination(page, perPage)
 
 	requests, total, err := h.svc.GetUserAuctionRequests(c.Context(), userID, status, page, perPage)
 	if err != nil {
@@ -345,6 +348,7 @@ func (h *RequestHandler) GetUserBannerRequests(c *fiber.Ctx) error {
 	status := c.Query("status", "")
 	page := c.QueryInt("page", 1)
 	perPage := c.QueryInt("per_page", 20)
+	page, perPage = ClampPagination(page, perPage)
 
 	requests, total, err := h.svc.GetUserBannerRequests(c.Context(), userID, status, page, perPage)
 	if err != nil {

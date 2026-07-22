@@ -59,6 +59,7 @@ func (h *RatingHandler) GetAppStats(c *fiber.Ctx) error {
 func (h *RatingHandler) ListAppRatings(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 20)
+	page, limit = ClampPagination(page, limit)
 
 	ratings, total, err := h.service.ListAppRatings(c.Context(), page, limit)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/helmet"
 	fiberLogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/mazadpay/backend/internal/config"
@@ -84,9 +85,19 @@ func main() {
 				)
 			}
 
+			// Ne jamais renvoyer err.Error() brut en production : peut exposer des détails
+			// internes (requêtes SQL, chemins de fichiers, etc.) non destinés au client
+			// (durcissement sécurité). Les erreurs métier connues passent par MapError
+			// (appelé explicitement par les handlers) et ne transitent pas par ce
+			// fallback générique — celui-ci ne traite que les erreurs non gérées/panics.
+			message := err.Error()
+			if cfg.App.Env != "development" {
+				message = "حدث خطأ داخلي في الخادم"
+			}
+
 			return c.Status(code).JSON(fiber.Map{
 				"success": false,
-				"error":   fiber.Map{"code": "error", "message": err.Error()},
+				"error":   fiber.Map{"code": "error", "message": message},
 			})
 		},
 	})
@@ -95,8 +106,19 @@ func main() {
 	app.Use(fiberLogger.New(fiberLogger.Config{
 		Format: "[${time}] ${status} - ${latency} ${method} ${path}\n",
 	}))
+
+	// En-têtes de sécurité HTTP standards (X-Content-Type-Options, X-Frame-Options,
+	// Referrer-Policy, etc.) — n'affecte pas les réponses JSON de l'API ni CORS.
+	app.Use(helmet.New())
+
+	// CORS : origines strictement séparées entre production et développement, pour ne
+	// jamais autoriser localhost à appeler l'API de production (durcissement sécurité).
+	allowedOrigins := "https://mazadpay-admin.onrender.com,https://admin.mazadpay.com,https://mazadpay.com,https://www.mazadpay.com"
+	if cfg.App.Env == "development" {
+		allowedOrigins = "http://localhost:5173,http://localhost:3000"
+	}
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "https://mazadpay-admin.onrender.com,https://admin.mazadpay.com,http://localhost:5173,http://localhost:3000",
+		AllowOrigins: allowedOrigins,
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-User-ID",
 		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
 	}))

@@ -131,12 +131,7 @@ func (h *AdminHandler) ListUsers(c *fiber.Ctx) error {
 	q := c.Query("q")
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	perPage, _ := strconv.Atoi(c.Query("per_page", "25"))
-	if page < 1 {
-		page = 1
-	}
-	if perPage < 1 {
-		perPage = 25
-	}
+	page, perPage = ClampPagination(page, perPage)
 
 	users, total, err := h.svc.ListUsers(c.Context(), page, perPage, q)
 	if err != nil {
@@ -258,12 +253,7 @@ func (h *AdminHandler) ListAuctions(c *fiber.Ctx) error {
 	q := c.Query("q")
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	perPage, _ := strconv.Atoi(c.Query("per_page", "25"))
-	if page < 1 {
-		page = 1
-	}
-	if perPage < 1 {
-		perPage = 25
-	}
+	page, perPage = ClampPagination(page, perPage)
 
 	auctions, total, err := h.svc.ListAuctions(c.Context(), page, perPage, status, q, nil)
 	if err != nil {
@@ -482,12 +472,7 @@ func (h *AdminHandler) ListTransactions(c *fiber.Ctx) error {
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	perPage, _ := strconv.Atoi(c.Query("per_page", "25"))
-	if page < 1 {
-		page = 1
-	}
-	if perPage < 1 {
-		perPage = 25
-	}
+	page, perPage = ClampPagination(page, perPage)
 
 	txs, total, err := h.svc.ListTransactions(c.Context(), page, perPage, status, nil)
 	if err != nil {
@@ -506,12 +491,7 @@ func (h *AdminHandler) ListReports(c *fiber.Ctx) error {
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	perPage, _ := strconv.Atoi(c.Query("per_page", "25"))
-	if page < 1 {
-		page = 1
-	}
-	if perPage < 1 {
-		perPage = 25
-	}
+	page, perPage = ClampPagination(page, perPage)
 
 	reportType := c.Query("type")
 	reports, total, err := h.svc.ListReports(c.Context(), page, perPage, status, reportType)

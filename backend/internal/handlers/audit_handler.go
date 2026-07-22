@@ -19,6 +19,7 @@ func NewAuditHandler(svc services.AuditService, logger *zap.Logger) *AuditHandle
 func (h *AuditHandler) GetAuditLogs(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	perPage := c.QueryInt("per_page", 50)
+	page, perPage = ClampPagination(page, perPage)
 
 	logs, total, err := h.svc.List(c.Context(), page, perPage)
 	if err != nil {

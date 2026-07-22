@@ -156,6 +156,7 @@ func (h *WalletHandler) Transactions(c *fiber.Ctx) error {
 	}
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	perPage, _ := strconv.Atoi(c.Query("per_page", "20"))
+	page, perPage = ClampPagination(page, perPage)
 
 	txs, total, err := h.svc.GetTransactions(c.Context(), userID, page, perPage)
 	if err != nil {

@@ -62,6 +62,7 @@ func (h *NotificationHandler) List(c *fiber.Ctx) error {
 
 	limitStr := c.Query("limit", "20")
 	limit, _ := strconv.Atoi(limitStr)
+	_, limit = ClampPagination(1, limit)
 
 	notifications, err := h.svc.ListNotifications(c.Context(), userID, limit)
 	if err != nil {
@@ -114,6 +115,7 @@ type AdminListNotificationsRequest struct {
 func (h *NotificationHandler) AdminList(c *fiber.Ctx) error {
 	limitStr := c.Query("limit", "20")
 	limit, _ := strconv.Atoi(limitStr)
+	_, limit = ClampPagination(1, limit)
 	status := c.Query("status", "all")
 
 	userID, err := middleware.GetUserID(c)

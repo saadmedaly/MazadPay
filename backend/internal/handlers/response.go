@@ -8,6 +8,22 @@ import (
 	"go.uber.org/zap"
 )
 
+// ClampPagination applique des bornes sûres à page/per_page pour éviter qu'un client
+// ne demande une page négative ou un nombre de résultats excessif (DoS/épuisement de
+// ressources DB, durcissement sécurité). page minimum = 1, per_page entre 1 et 100.
+func ClampPagination(page, perPage int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 25
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+	return page, perPage
+}
+
 type ResponseUser struct {
 	ID                   string  `json:"id"`
 	Phone                string  `json:"phone"`

@@ -23,6 +23,7 @@ func NewSponsorHandler(service services.SponsorService, logger *zap.Logger) *Spo
 func (h *SponsorHandler) ListActive(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 10)
+	page, limit = ClampPagination(page, limit)
 
 	sponsors, total, err := h.service.ListActiveSponsors(c.Context(), page, limit)
 	if err != nil {
@@ -40,6 +41,7 @@ func (h *SponsorHandler) ListActive(c *fiber.Ctx) error {
 func (h *SponsorHandler) ListAll(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 20)
+	page, limit = ClampPagination(page, limit)
 
 	sponsors, total, err := h.service.ListAllSponsors(c.Context(), page, limit)
 	if err != nil {
