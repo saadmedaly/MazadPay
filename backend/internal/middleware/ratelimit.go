@@ -9,10 +9,25 @@ import (
 	"go.uber.org/zap"
 )
 
-// RateLimit crée un middleware de rate limiting basé sur Redis
+// failClosedResponse est renvoyée quand Redis est indisponible sur un chemin
+// sensible (auth/OTP) : on refuse la requête plutôt que de laisser passer sans
+// contrôle (durcissement sécurité — voir Auth/OTP Rate Limiting Hardening).
+func failClosedResponse(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+		"success": false,
+		"error": fiber.Map{
+			"code":    "rate_limit_unavailable",
+			"message": "الخدمة مشغولة حالياً، يرجى المحاولة لاحقاً",
+		},
+	})
+}
+
+// RateLimit crée un middleware de rate limiting basé sur Redis, avec clé IP+path.
 // windowSeconds : durée de la fenêtre en secondes
 // maxAttempts : nombre maximal de tentatives par fenêtre
-func RateLimit(rdb *redis.Client, windowSeconds, maxAttempts int, logger *zap.Logger) fiber.Handler {
+// failClosed : si true, une erreur Redis fait échouer la requête (503) au lieu de
+// la laisser passer — à utiliser uniquement sur les routes auth/OTP sensibles.
+func RateLimit(rdb *redis.Client, windowSeconds, maxAttempts int, logger *zap.Logger, failClosed bool) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Clé basée sur l'IP de l'utilisateur
 		ip := c.IP()
@@ -23,7 +38,10 @@ func RateLimit(rdb *redis.Client, windowSeconds, maxAttempts int, logger *zap.Lo
 		count, err := rdb.Incr(c.Context(), key).Result()
 		if err != nil {
 			logger.Error("RateLimit Redis error", zap.Error(err))
-			// En cas d'erreur Redis, laisser passer mais logger
+			if failClosed {
+				return failClosedResponse(c)
+			}
+			// En cas d'erreur Redis, laisser passer mais logger (routes non sensibles uniquement)
 			return c.Next()
 		}
 
@@ -43,7 +61,7 @@ func RateLimit(rdb *redis.Client, windowSeconds, maxAttempts int, logger *zap.Lo
 				"success": false,
 				"error": fiber.Map{
 					"code":    "rate_limited",
-					"message": "Too many requests, please try again later",
+					"message": "محاولات كثيرة جداً، يرجى المحاولة لاحقاً",
 				},
 			})
 		}
@@ -52,17 +70,26 @@ func RateLimit(rdb *redis.Client, windowSeconds, maxAttempts int, logger *zap.Lo
 	}
 }
 
-// RateLimitByPhone crée un rate limit basé sur le numéro de téléphone (pour OTP/Login)
-func RateLimitByPhone(rdb *redis.Client, windowSeconds, maxAttempts int, logger *zap.Logger) fiber.Handler {
+// RateLimitByPhone crée un rate limit basé sur le numéro de téléphone (pour OTP/Login).
+// failClosed : si true (routes auth/OTP sensibles), une erreur Redis ou un corps de
+// requête illisible fait échouer la requête (503) au lieu de la laisser passer sans
+// contrôle — durcissement sécurité (voir Auth/OTP Rate Limiting Hardening).
+func RateLimitByPhone(rdb *redis.Client, windowSeconds, maxAttempts int, logger *zap.Logger, failClosed bool) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Extraire le téléphone de la requête
 		var reqBody map[string]interface{}
 		if err := c.BodyParser(&reqBody); err != nil {
+			if failClosed {
+				return failClosedResponse(c)
+			}
 			return c.Next()
 		}
 
 		phone, ok := reqBody["phone"].(string)
 		if !ok || phone == "" {
+			if failClosed {
+				return failClosedResponse(c)
+			}
 			return c.Next()
 		}
 
@@ -73,6 +100,9 @@ func RateLimitByPhone(rdb *redis.Client, windowSeconds, maxAttempts int, logger 
 		count, err := rdb.Incr(c.Context(), key).Result()
 		if err != nil {
 			logger.Error("RateLimit Redis error", zap.Error(err))
+			if failClosed {
+				return failClosedResponse(c)
+			}
 			return c.Next()
 		}
 
@@ -92,7 +122,7 @@ func RateLimitByPhone(rdb *redis.Client, windowSeconds, maxAttempts int, logger 
 				"success": false,
 				"error": fiber.Map{
 					"code":    "rate_limited",
-					"message": "Too many requests, please try again later",
+					"message": "محاولات كثيرة جداً، يرجى المحاولة لاحقاً",
 				},
 			})
 		}

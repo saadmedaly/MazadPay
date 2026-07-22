@@ -44,7 +44,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	// Services
 	notifSvc := services.NewNotificationService(notifRepo, userRepo, cfg.Firebase.ServiceAccountPath, cfg.Firebase.ServiceAccountJSON, logger, adminHub)
 	smsSvc := services.NewSMSService(cfg.Wablas.Token, cfg.Wablas.SecretKey, cfg.Wablas.ServerURL, logger)
-	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4)
+	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4, cfg.Redis.OTPTTLMinutes, rdb, logger)
 	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
@@ -129,18 +129,25 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 // setupAuthRoutes enregistre les routes d'authentification avec rate limiting
 func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, adminHandler *handlers.AdminHandler, rdb *redis.Client, cfg *config.Config, logger *zap.Logger) {
 	jwtMiddleware := middleware.JWT(cfg.JWT.Secret, logger, rdb)
-	rateLimitMiddleware := middleware.RateLimitByPhone(rdb, cfg.Redis.RateLimitWindowSeconds, cfg.Redis.RateLimitMaxAttempts, logger)
+	// Double limite sur les routes auth/OTP sensibles : par téléphone ET par IP.
+	// Un attaquant qui change de numéro à chaque requête reste borné par IP ; un
+	// attaquant derrière un proxy/VPN qui change d'IP reste borné par téléphone.
+	// failClosed=true : si Redis est indisponible, la requête est refusée (503) au
+	// lieu de passer sans contrôle (durcissement sécurité — Auth/OTP Rate Limiting
+	// Hardening, remplace le comportement fail-open précédent sur ces routes).
+	rateLimitByPhone := middleware.RateLimitByPhone(rdb, cfg.Redis.RateLimitWindowSeconds, cfg.Redis.RateLimitMaxAttempts, logger, true)
+	rateLimitByIP := middleware.RateLimit(rdb, cfg.Redis.RateLimitWindowSeconds, cfg.Redis.RateLimitMaxAttempts, logger, true)
 	h := handlers.NewAuthHandler(authSvc, logger, rdb)
 
 	auth := api.Group("/auth")
 
-	// Public routes avec rate limiting sur phone
-	auth.Post("/register", rateLimitMiddleware, h.Register)
-	auth.Post("/login", rateLimitMiddleware, h.Login)
-	auth.Post("/otp/send", rateLimitMiddleware, h.SendOTP)
-	auth.Post("/otp/verify", rateLimitMiddleware, h.VerifyOTP)
-	auth.Post("/reset-password", rateLimitMiddleware, h.ResetPassword)
-	auth.Post("/register-admin", rateLimitMiddleware, adminHandler.RegisterWithInvitation)
+	// Public routes avec rate limiting double (téléphone + IP), fail-closed sur erreur Redis
+	auth.Post("/register", rateLimitByIP, rateLimitByPhone, h.Register)
+	auth.Post("/login", rateLimitByIP, rateLimitByPhone, h.Login)
+	auth.Post("/otp/send", rateLimitByIP, rateLimitByPhone, h.SendOTP)
+	auth.Post("/otp/verify", rateLimitByIP, rateLimitByPhone, h.VerifyOTP)
+	auth.Post("/reset-password", rateLimitByIP, rateLimitByPhone, h.ResetPassword)
+	auth.Post("/register-admin", rateLimitByIP, rateLimitByPhone, adminHandler.RegisterWithInvitation)
 
 	// Protected routes
 	auth.Post("/logout", jwtMiddleware, h.Logout)
@@ -444,7 +451,8 @@ func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, j
 	adminMiddleware := middleware.AdminOnly(logger)
 
 	// Rate limiting for request submissions: 5 requests per hour per user
-	rateLimitSubmit := middleware.RateLimit(rdb, 3600, 5, logger)
+	// (route non sensible auth/OTP : fail-open conservé si Redis est indisponible)
+	rateLimitSubmit := middleware.RateLimit(rdb, 3600, 5, logger, false)
 
 	// Public routes for users to submit requests (protected by JWT + rate limiting)
 	user := api.Group("/requests", jwtMiddleware)
