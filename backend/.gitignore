@@ -1,4 +1,5 @@
 # Binaires compilés
+server
 *.exe
 *.exe~
 *.dll
@@ -49,3 +50,4 @@ test_user_interface/
 # Backups locaux générés par cmd/migrate_receipts --execute (contiennent d'anciennes
 # receipt_url — jamais commités).
 migrate_receipts_backup_*.txt
+.env.production.local
