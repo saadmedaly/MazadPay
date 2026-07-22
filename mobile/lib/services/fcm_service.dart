@@ -399,7 +399,9 @@ class FCMService {
     try {
       _fcmToken = await _messagingInstance.getToken();
       if (_fcmToken != null) {
-        debugPrint('📱 FCM Token: $_fcmToken');
+        // Ne jamais logger le token FCM complet, même en debug (durcissement release —
+        // les logs debug peuvent survivre sur certains devices/outils).
+        debugPrint('📱 FCM token obtained');
         await _sendTokenToServer(_fcmToken!);
       }
     } catch (e) {
@@ -428,7 +430,7 @@ class FCMService {
 
   /// Handler pour le refresh du token
   Future<void> _onTokenRefresh(String token) async {
-    debugPrint('🔄 FCM Token refreshed: $token');
+    debugPrint('🔄 FCM token refreshed');
     _fcmToken = token;
     await _sendTokenToServer(token);
   }

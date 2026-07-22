@@ -7,10 +7,10 @@ class ErrorInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) {
     String errorMessage = 'Une erreur est survenue';
     
-    // Log l'erreur pour le debug
+    // Log l'erreur pour le debug — sans le corps brut de la réponse, qui peut contenir
+    // des données sensibles (durcissement release, voir audit de sécurité).
     if (kDebugMode) {
-      debugPrint('API Error: ${err.toString()}');
-      debugPrint('Response: ${err.response?.data}');
+      debugPrint('API Error: ${err.type} status=${err.response?.statusCode} path=${err.requestOptions.path}');
     }
     
     // Personnaliser le message d'erreur selon le type

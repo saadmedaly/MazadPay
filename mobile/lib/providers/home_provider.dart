@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../services/auction_api.dart';
 import '../services/cache_service.dart';
@@ -41,7 +42,7 @@ class HomeAuctions extends _$HomeAuctions {
       state = AsyncValue.data(auctions);
     } catch (e) {
       // Ignorer les erreurs de rafraîchissement silencieux
-      print('Silent refresh failed: $e');
+      debugPrint('Silent refresh failed: $e');
     }
   }
 }

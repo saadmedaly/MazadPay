@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/auth_api.dart';
 import '../services/favorites_service.dart';
@@ -42,7 +43,7 @@ class LoginController extends StateNotifier<LoginState> {
           await favoritesService.migrateLocalFavorites();
         } catch (e) {
           // Ne pas bloquer le login si la sync échoue
-          print('Erreur synchronisation favoris: $e');
+          debugPrint('Erreur synchronisation favoris: $e');
         }
         
         return true;

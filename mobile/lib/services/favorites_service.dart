@@ -57,7 +57,7 @@ class FavoritesService {
         }
       } catch (e) {
         // En cas d'erreur réseau, retourner les favoris locaux
-        print('Erreur récupération favoris serveur: $e');
+        debugPrint('Erreur récupération favoris serveur: $e');
       }
     }
     
@@ -209,7 +209,7 @@ class FavoritesService {
           await _favoritesApi.removeFavorite(item['auctionId']);
         }
       } catch (e) {
-        print('Erreur synchronisation favori: $e');
+        debugPrint('Erreur synchronisation favori: $e');
         // Continuer avec les autres
       }
     }
@@ -225,7 +225,7 @@ class FavoritesService {
         await _saveLocalFavorites(serverFavorites);
       }
     } catch (e) {
-      print('Erreur récupération favoris après sync: $e');
+      debugPrint('Erreur récupération favoris après sync: $e');
     }
   }
   
@@ -246,7 +246,7 @@ class FavoritesService {
         serverFavorites = _extractAuctionIds(response.data!);
       }
     } catch (e) {
-      print('Erreur récupération favoris serveur: $e');
+      debugPrint('Erreur récupération favoris serveur: $e');
     }
     
     // Ajouter chaque favori local qui n'est pas déjà sur le serveur
@@ -255,7 +255,7 @@ class FavoritesService {
         try {
           await _favoritesApi.addFavorite(auctionId);
         } catch (e) {
-          print('Erreur migration favori $auctionId: $e');
+          debugPrint('Erreur migration favori $auctionId: $e');
         }
       }
     }
@@ -338,7 +338,7 @@ class FavoritesService {
       try {
         await _favoritesApi.addFavorite(auctionId);
       } catch (e) {
-        print('Erreur sync ajout favori $auctionId: $e');
+        debugPrint('Erreur sync ajout favori $auctionId: $e');
       }
     }
   }
