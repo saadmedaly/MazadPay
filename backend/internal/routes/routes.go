@@ -100,7 +100,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
 	setupAuctionRoutes(api, auctionSvc, bidHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupUserRoutes(api, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
-	setupAdminRoutes(api, adminHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
+	setupAdminRoutes(api, adminHandler, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupBannerRoutes(api, bannerHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupContentRoutes(api, contentHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupNotificationRoutes(api, notifHandler, cfg.JWT.Secret, logger, rdb)
@@ -236,13 +236,14 @@ func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, wallet
 	users.Get("/wallet", walletHandler.GetMe)
 	users.Post("/wallet/deposit", walletHandler.Deposit)
 	users.Post("/wallet/transactions/:id/receipt", walletHandler.UploadReceipt)
+	users.Get("/wallet/transactions/:id/receipt-url", walletHandler.GetReceiptURL)
 	users.Post("/wallet/withdraw", walletHandler.Withdraw)
 	users.Get("/wallet/transactions", walletHandler.Transactions)
 	users.Get("/wallet/transactions/:id", walletHandler.GetTransaction)
 	users.Get("/wallet/payment-methods", walletHandler.GetPaymentMethods)
 }
 
-func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, userHandler *handlers.UserHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, userHandler *handlers.UserHandler, walletHandler *handlers.WalletHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	adminMiddleware := middleware.AdminOnly(logger)
 
@@ -277,6 +278,7 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	// Additional management routes
 	admin.Get("/transactions", adminHandler.ListTransactions)
 	admin.Get("/transactions/:id", adminHandler.GetTransaction)
+	admin.Get("/transactions/:id/receipt-url", walletHandler.GetReceiptURL)
 	admin.Put("/transactions/:id/validate", adminHandler.ValidateTransaction)
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)

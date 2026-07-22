@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
  import { ImagePreview } from '@/components/shared/ImagePreview'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
-import { useTransaction, useValidateTransaction } from '@/hooks/useTransactions'
+import { useTransaction, useValidateTransaction, useReceiptURL } from '@/hooks/useTransactions'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { GATEWAY_LABELS } from '@/lib/constants'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -18,6 +18,7 @@ export function TransactionDetailPage() {
 
   const { data: txn, isLoading, isError } = useTransaction(id!)
   const validate = useValidateTransaction()
+  const { data: receiptData } = useReceiptURL(id!)
 
   const handleValidate = (approve: boolean) => {
     validate.mutate(
@@ -90,9 +91,9 @@ export function TransactionDetailPage() {
             <ZoomIn className="w-4 h-4 text-mazad-primary" />
              إيصال الدفع
           </h2>
-          <ImagePreview 
-            src={txn.receipt_url} 
-            alt="إيصال الدفع" 
+          <ImagePreview
+            src={receiptData?.url ?? null}
+            alt="إيصال الدفع"
             className="aspect-square bg-black/20"
           />
         </div>

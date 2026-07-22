@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -52,16 +53,26 @@ type MediaService interface {
 	UploadAuctionImages(ctx context.Context, files []multipart.File, headers []*multipart.FileHeader, auctionID uuid.UUID) ([]string, error)
 	DeleteFile(ctx context.Context, key string) error
 	GetPublicURL(key string) string
+	// ExtractKey extrait la clé objet (folder/filename) à partir d'une URL publique
+	// complète — utilisé pour les reçus dont on ne veut plus stocker/exposer l'URL
+	// publique directement (audit de sécurité).
+	ExtractKey(url string) string
+	// GetPresignedURL génère une URL R2 temporaire (valable `expiry`, max recommandé
+	// 5 minutes) pour accéder à un objet sans passer par l'URL publique du bucket.
+	// N'est utile que si le bucket R2 sous-jacent n'est pas rendu public au niveau de
+	// Cloudflare — sinon l'URL publique reste accessible en parallèle.
+	GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error)
 }
 
 type mediaService struct {
-	client    *s3.Client
-	bucket    string
-	publicURL string
-	appPort   string
-	appEnv    string
-	useLocal  bool // true when R2 is not configured
-	logger    *zap.Logger
+	client        *s3.Client
+	presignClient *s3.PresignClient
+	bucket        string
+	publicURL     string
+	appPort       string
+	appEnv        string
+	useLocal      bool // true when R2 is not configured
+	logger        *zap.Logger
 }
 
 // isR2Configured returns true only when real R2 credentials are present
@@ -112,15 +123,17 @@ func NewMediaService(cfg *config.Config, logger *zap.Logger) MediaService {
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		o.UsePathStyle = true
 	})
+	presignClient := s3.NewPresignClient(client)
 
 	return &mediaService{
-		client:    client,
-		bucket:    cfg.R2.BucketMedia,
-		publicURL: cfg.R2.PublicURL,
-		appPort:   cfg.App.Port,
-		appEnv:    cfg.App.Env,
-		useLocal:  false,
-		logger:    logger,
+		client:        client,
+		presignClient: presignClient,
+		bucket:        cfg.R2.BucketMedia,
+		publicURL:     cfg.R2.PublicURL,
+		appPort:       cfg.App.Port,
+		appEnv:        cfg.App.Env,
+		useLocal:      false,
+		logger:        logger,
 	}
 }
 
@@ -344,4 +357,29 @@ func (s *mediaService) extractKeyFromURL(url string) string {
 		return strings.Join(parts[3:], "/")
 	}
 	return url
+}
+
+// ExtractKey expose extractKeyFromURL via l'interface publique (audit de sécurité —
+// nécessaire pour convertir une ancienne receipt_url publique déjà stockée en DB vers
+// sa clé objet, afin de générer une URL présignée sans jamais renvoyer l'URL publique).
+func (s *mediaService) ExtractKey(url string) string {
+	return s.extractKeyFromURL(url)
+}
+
+// GetPresignedURL génère une URL R2 temporaire valable `expiry`. Ne fonctionne comme
+// mesure de protection que si le bucket R2 n'est PAS configuré en accès public au
+// niveau de Cloudflare — sinon l'URL publique (R2_PUBLIC_URL) reste accessible en
+// parallèle indépendamment de cette fonction (voir audit de sécurité).
+func (s *mediaService) GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	if s.useLocal {
+		return "", fmt.Errorf("presigned URLs unavailable: R2 not configured, local storage in use")
+	}
+	req, err := s.presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("failed to generate presigned URL: %w", err)
+	}
+	return req.URL, nil
 }

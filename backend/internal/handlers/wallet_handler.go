@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/middleware"
+	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -134,6 +137,55 @@ func (h *WalletHandler) UploadReceipt(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{"message": "Receipt uploaded successfully"})
+}
+
+// receiptURLExpiry est la durée de validité maximale d'une URL présignée d'un reçu de
+// paiement (audit de sécurité — jamais de lien permanent, jamais stocké en DB).
+const receiptURLExpiry = 5 * time.Minute
+
+// GetReceiptURL génère une URL R2 temporaire pour visualiser le reçu d'une transaction.
+// Accès réservé au propriétaire de la transaction ou à un admin (audit de sécurité —
+// remplace l'exposition directe de receipt_url, une URL publique permanente).
+func (h *WalletHandler) GetReceiptURL(c *fiber.Ctx) error {
+	txID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid transaction ID")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	role, _ := c.Locals("user_role").(string)
+	isAdmin := strings.EqualFold(role, "admin") || strings.EqualFold(role, "super_admin")
+
+	var tx *models.Transaction
+	if isAdmin {
+		tx, err = h.svc.GetTransactionAny(c.Context(), txID)
+	} else {
+		tx, err = h.svc.GetTransaction(c.Context(), userID, txID)
+	}
+	if err != nil || tx == nil {
+		return NotFound(c, "Transaction")
+	}
+	if tx.ReceiptURL == nil || *tx.ReceiptURL == "" {
+		return NotFound(c, "Receipt")
+	}
+	if h.mediaSvc == nil {
+		return InternalError(c, "Media service not available")
+	}
+
+	key := h.mediaSvc.ExtractKey(*tx.ReceiptURL)
+	url, err := h.mediaSvc.GetPresignedURL(c.Context(), key, receiptURLExpiry)
+	if err != nil {
+		return InternalError(c, "Failed to generate receipt URL")
+	}
+
+	return OK(c, fiber.Map{
+		"url":        url,
+		"expires_in": int(receiptURLExpiry.Seconds()),
+	})
 }
 
 func (h *WalletHandler) Withdraw(c *fiber.Ctx) error {

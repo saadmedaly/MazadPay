@@ -19,6 +19,10 @@ type WalletService interface {
 	RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error)
 	GetTransactions(ctx context.Context, userID uuid.UUID, page, perPage int) ([]models.Transaction, int, error)
 	GetTransaction(ctx context.Context, userID uuid.UUID, txID uuid.UUID) (*models.Transaction, error)
+	// GetTransactionAny récupère une transaction sans filtrer par user_id — réservé aux
+	// appelants qui ont déjà vérifié séparément que l'appelant est admin (audit sécurité,
+	// utilisé par l'endpoint receipt-url présigné).
+	GetTransactionAny(ctx context.Context, txID uuid.UUID) (*models.Transaction, error)
 	GetPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error)
 }
 
@@ -113,4 +117,8 @@ func (s *walletService) GetTransactions(ctx context.Context, userID uuid.UUID, p
 
 func (s *walletService) GetTransaction(ctx context.Context, userID uuid.UUID, txID uuid.UUID) (*models.Transaction, error) {
 	return s.txRepo.FindByID(ctx, txID, &userID)
+}
+
+func (s *walletService) GetTransactionAny(ctx context.Context, txID uuid.UUID) (*models.Transaction, error) {
+	return s.txRepo.FindByID(ctx, txID, nil)
 }

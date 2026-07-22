@@ -25,6 +25,19 @@ export function useTransaction(id: string) {
   })
 }
 
+// URL présignée temporaire pour le reçu — non mise en cache longtemps (staleTime 0) et
+// jamais persistée (pas de localStorage), car elle expire après quelques minutes côté
+// serveur (audit de sécurité).
+export function useReceiptURL(id: string) {
+  return useQuery({
+    queryKey: [...txnKeys.byId(id), 'receipt-url'],
+    queryFn:  () => api.fetchReceiptURL(id),
+    enabled:  !!id,
+    staleTime: 0,
+    gcTime: 0,
+  })
+}
+
 export function useValidateTransaction() {
   const qc = useQueryClient()
   return useMutation({

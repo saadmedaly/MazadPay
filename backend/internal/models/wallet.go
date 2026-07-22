@@ -24,7 +24,11 @@ type Transaction struct {
 	Gateway          *string          `db:"gateway"            json:"gateway"`
 	Status           string           `db:"status"             json:"status"`
 	Reference        *string          `db:"reference"          json:"reference"`
-	ReceiptURL       *string          `db:"receipt_url"        json:"receipt_url"`
+	// ReceiptURL n'est jamais exposé directement en JSON (audit de sécurité) : le bucket
+	// R2 est public, donc cette URL fonctionnerait sans authentification pour quiconque
+	// la connaîtrait. Utiliser GET /wallet/transactions/:id/receipt-url pour obtenir une
+	// URL présignée temporaire à la place.
+	ReceiptURL       *string          `db:"receipt_url"        json:"-"`
 	AdminNotes       *string          `db:"admin_notes"        json:"admin_notes"`
 	ReviewedBy       *uuid.UUID       `db:"reviewed_by"        json:"reviewed_by"`
 	ReviewedAt       *time.Time       `db:"reviewed_at"        json:"reviewed_at"`

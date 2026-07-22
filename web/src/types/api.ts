@@ -75,7 +75,9 @@ export interface Transaction {
   amount: string
   gateway: string | null
   status: 'pending' | 'pending_review' | 'completed' | 'failed' | 'refunded'
-  receipt_url: string | null
+  // receipt_url n'est plus renvoyé par l'API (audit de sécurité) — utiliser
+  // GET /admin/transactions/:id/receipt-url (voir useReceiptURL) pour une URL présignée
+  // temporaire à la place.
   admin_notes: string | null
   reviewed_by: string | null
   reviewed_at: string | null

@@ -20,6 +20,17 @@ export async function fetchTransaction(id: string): Promise<Transaction> {
   return data.data
 }
 
+// Le lien public direct du reçu n'est plus exposé par l'API (audit de sécurité — le
+// bucket R2 est public, donc l'ancien receipt_url fonctionnait sans authentification
+// pour quiconque le connaissait). Cette fonction récupère une URL présignée temporaire
+// (valable quelques minutes) générée à la demande côté serveur.
+export async function fetchReceiptURL(id: string): Promise<{ url: string; expires_in: number }> {
+  const { data } = await client.get<APIResponse<{ url: string; expires_in: number }>>(
+    `/v1/api/admin/transactions/${id}/receipt-url`
+  )
+  return data.data
+}
+
 export async function validateTransaction(payload: {
   id: string
   approve: boolean
