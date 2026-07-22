@@ -158,18 +158,28 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	h := handlers.NewAuctionHandler(auctionSvc, logger)
 
-	// Public routes
-	api.Get("/categories", h.GetCategories)
-	api.Get("/locations", h.GetLocations)
-	api.Get("/countries", h.GetCountries)
-	api.Get("/locations/:countryId", h.GetLocationsByCountry)
-	api.Get("/auctions", h.List)
-	api.Get("/auctions/:id", h.GetByID)
-	api.Post("/auctions/:id/view", middleware.OptionalJWT(jwtSecret, rdb), h.IncrementView)
-	api.Get("/report-reasons", h.GetReportReasons)
+	// Rate limiting public endpoints (Public Endpoints / Scraping Protection).
+	// Toutes fail-open (false) : ce ne sont pas des routes financières/auth, un
+	// Redis indisponible ne doit jamais bloquer l'app mobile ou l'admin.
+	publicListLimit := middleware.RateLimit(rdb, 60, 120, logger, false)
+	auctionDetailLimit := middleware.RateLimit(rdb, 60, 120, logger, false)
+	auctionSearchLimit := middleware.RateLimitSearchQuery(rdb, "q", 60, 30, logger)
+	viewLimit := middleware.RateLimit(rdb, 60, 30, logger, false)
+	cache5min := middleware.CacheControl(300)
+
+	// Public routes — catégories/locations peu changeantes : cache 5 min
+	api.Get("/categories", publicListLimit, cache5min, h.GetCategories)
+	api.Get("/locations", publicListLimit, cache5min, h.GetLocations)
+	api.Get("/countries", publicListLimit, cache5min, h.GetCountries)
+	api.Get("/locations/:countryId", publicListLimit, cache5min, h.GetLocationsByCountry)
+	// Pas de cache sur les mazads : les prix/statuts doivent apparaître sans délai
+	api.Get("/auctions", publicListLimit, auctionSearchLimit, h.List)
+	api.Get("/auctions/:id", auctionDetailLimit, h.GetByID)
+	api.Post("/auctions/:id/view", viewLimit, middleware.OptionalJWT(jwtSecret, rdb), h.IncrementView)
+	api.Get("/report-reasons", publicListLimit, cache5min, h.GetReportReasons)
 
 	// Bids (Public history)
-	api.Get("/auctions/:id/bids", bidHandler.History)
+	api.Get("/auctions/:id/bids", auctionDetailLimit, bidHandler.History)
 
 	// Protected routes with media service injection
 	auctions := api.Group("/auctions", jwtMiddleware)
@@ -372,8 +382,8 @@ func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, mediaSvc ser
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	adminMiddleware := middleware.AdminOnly(logger)
 
-	// Public routes
-	api.Get("/banners", h.List)
+	// Public routes (Public Endpoints / Scraping Protection : rate limit + cache 5 min)
+	api.Get("/banners", middleware.RateLimit(rdb, 60, 120, logger, false), middleware.CacheControl(300), h.List)
 
 	// Protected routes
 	api.Post("/banners/request", jwtMiddleware, h.Request) // CONCEPTION Demandes d'annonces
@@ -397,11 +407,13 @@ func setupBannerRoutes(api fiber.Router, h *handlers.BannerHandler, mediaSvc ser
 }
 
 func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
-	// Public routes
-	api.Get("/faq", h.FAQ)
-	api.Get("/tutorials", h.Tutorials)
-	api.Get("/about", h.About)
-	api.Get("/privacy-policy", h.Privacy)
+	// Public routes (Public Endpoints / Scraping Protection : rate limit + cache 5 min)
+	contentListLimit := middleware.RateLimit(rdb, 60, 120, logger, false)
+	cache5min := middleware.CacheControl(300)
+	api.Get("/faq", contentListLimit, cache5min, h.FAQ)
+	api.Get("/tutorials", contentListLimit, cache5min, h.Tutorials)
+	api.Get("/about", contentListLimit, cache5min, h.About)
+	api.Get("/privacy-policy", contentListLimit, cache5min, h.Privacy)
 
 	// Admin routes
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
@@ -510,8 +522,8 @@ func setupPaymentMethodRoutes(api fiber.Router, h *handlers.PaymentMethodHandler
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	adminMiddleware := middleware.AdminOnly(logger)
 
-	// Public routes
-	api.Get("/payment-methods", h.ListPaymentMethods)
+	// Public routes (Public Endpoints / Scraping Protection : rate limit + cache 5 min)
+	api.Get("/payment-methods", middleware.RateLimit(rdb, 60, 120, logger, false), middleware.CacheControl(300), h.ListPaymentMethods)
 
 	// Admin routes
 	admin := api.Group("/admin/payment-methods", jwtMiddleware, adminMiddleware)
@@ -573,8 +585,8 @@ func setupSponsorRoutes(api fiber.Router, h *handlers.SponsorHandler, jwtSecret 
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	adminMiddleware := middleware.AdminOnly(logger)
 
-	// Public routes
-	api.Get("/sponsors", h.ListActive)
+	// Public routes (Public Endpoints / Scraping Protection : rate limit + cache 5 min)
+	api.Get("/sponsors", middleware.RateLimit(rdb, 60, 120, logger, false), middleware.CacheControl(300), h.ListActive)
 
 	// Admin routes
 	admin := api.Group("/admin/sponsors", jwtMiddleware, adminMiddleware)

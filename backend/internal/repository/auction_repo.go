@@ -22,6 +22,11 @@ type AuctionFilters struct {
 	SellerID   *uuid.UUID
 	WinnerID   *uuid.UUID
 	UserID     *uuid.UUID
+	// Page/PerPage : pagination du listing public GET /auctions (Public Endpoints /
+	// Scraping Protection — évite qu'un seul appel ne retourne la table entière).
+	// 0 = valeur non fournie, la couche handler applique les valeurs par défaut/clamp.
+	Page    int
+	PerPage int
 }
 
 type AuctionRepository interface {
@@ -136,6 +141,23 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 	// Always hide expired auctions from general listing
 	where += " AND end_time > NOW()"
 
+	// Pagination : page/per_page par défaut 1/25, plafonné à 100 (Public Endpoints /
+	// Scraping Protection — un appel ne peut plus retourner la table entière).
+	page := f.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := f.PerPage
+	if perPage < 1 {
+		perPage = 25
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+	offset := (page - 1) * perPage
+	args = append(args, perPage, offset)
+	limitOffset := fmt.Sprintf(" LIMIT $%d OFFSET $%d", i, i+1)
+
 	rows, err := r.db.QueryxContext(ctx,
 		fmt.Sprintf(`
             SELECT a.*,
@@ -151,7 +173,7 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
             LEFT JOIN categories c ON a.category_id = c.id
             LEFT JOIN locations l ON a.location_id = l.id
             %s
-            ORDER BY a.is_featured DESC, a.created_at DESC`, where),
+            ORDER BY a.is_featured DESC, a.created_at DESC%s`, where, limitOffset),
 		args...)
 	if err != nil {
 		return nil, err

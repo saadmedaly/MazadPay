@@ -10,6 +10,33 @@ import (
 	"go.uber.org/zap"
 )
 
+// RateLimitSearchQuery applique un rate limit IP plus strict uniquement quand le
+// paramètre de requête donné (ex: "q") est non vide — utilisé pour limiter la
+// recherche sur GET /auctions sans pénaliser le listing simple (Public Endpoints /
+// Scraping Protection). fail-open : ce n'est pas une route sensible (financière/auth).
+func RateLimitSearchQuery(rdb *redis.Client, queryParam string, windowSeconds, maxAttempts int, logger *zap.Logger) fiber.Handler {
+	inner := RateLimit(rdb, windowSeconds, maxAttempts, logger, false)
+	return func(c *fiber.Ctx) error {
+		if c.Query(queryParam) == "" {
+			return c.Next()
+		}
+		return inner(c)
+	}
+}
+
+// CacheControl pose un en-tête Cache-Control public sur des endpoints publics peu
+// changeants (catégories, locations, banners, sponsors, contenu statique) pour réduire
+// la charge Backend — voir Public Endpoints / Scraping Protection. À ne jamais poser
+// sur les mazads/enchères actifs (voir routes.go) pour ne pas retarder l'affichage des
+// mises à jour de prix/statut.
+func CacheControl(maxAgeSeconds int) fiber.Handler {
+	header := fmt.Sprintf("public, max-age=%d", maxAgeSeconds)
+	return func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", header)
+		return c.Next()
+	}
+}
+
 // failClosedResponse est renvoyée quand Redis est indisponible sur un chemin
 // sensible (auth/OTP) : on refuse la requête plutôt que de laisser passer sans
 // contrôle (durcissement sécurité — voir Auth/OTP Rate Limiting Hardening).

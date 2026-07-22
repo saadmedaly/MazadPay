@@ -33,9 +33,21 @@ func NewAuctionHandler(svc services.AuctionService, logger *zap.Logger) *Auction
 }
 
 func (h *AuctionHandler) List(c *fiber.Ctx) error {
+	searchQuery := c.Query("q")
+	// Refuse une recherche anormalement longue plutôt que de la tronquer silencieusement
+	// (Public Endpoints / Scraping Protection — évite un ILIKE '%...%' sur une chaîne
+	// arbitrairement grande).
+	if len(searchQuery) > 100 {
+		return BadRequest(c, "Search query is too long (max 100 characters)")
+	}
+
 	f := repository.AuctionFilters{
 		Status: c.Query("status", "active"),
-		Query:  c.Query("q"),
+		Query:  searchQuery,
+		// L'app mobile envoie déjà page/limit (voir mobile/lib/services/auction_api.dart) ;
+		// on les relaie tels quels, le plafond de 100 est appliqué dans auction_repo.go.
+		Page:    c.QueryInt("page", 1),
+		PerPage: c.QueryInt("limit", 25),
 	}
 	if catID := c.QueryInt("category_id", 0); catID > 0 {
 		f.CategoryID = catID
