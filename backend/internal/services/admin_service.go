@@ -302,7 +302,20 @@ func (s *adminService) BlockUser(ctx context.Context, id uuid.UUID, block bool, 
 			oldStatus = "blocked"
 		}
 		details := fmt.Sprintf("old_status=%s new_status=%s", oldStatus, newStatus)
-		s.auditSvc.Log(ctx, adminID, action, "user", &id, details)
+		// details_json structuré (Audit Schema Phase B - User/Admin only) : jamais
+		// phone/email/password_hash/tokens — uniquement target_user_id et statuts.
+		detailsJSON := models.JSONB{
+			"target_user_id": id.String(),
+			"old_status":     oldStatus,
+			"new_status":     newStatus,
+		}
+		// IP/User-Agent non disponibles ici : BlockUser est une méthode de service
+		// sans *fiber.Ctx — non étendu dans cette phase (même limitation documentée
+		// pour ValidateTransaction/ValidateAuction, Phases B précédentes).
+		s.auditSvc.Log(ctx, adminID, action, "user", &id, details,
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 	return nil
 }
@@ -321,7 +334,16 @@ func (s *adminService) DeleteUser(ctx context.Context, id uuid.UUID, adminID uui
 		if findErr == nil && userBefore != nil {
 			role = userBefore.Role
 		}
-		s.auditSvc.Log(ctx, adminID, "user_deleted", "user", &id, fmt.Sprintf("role=%s", role))
+		// details_json structuré : uniquement target_user_id et role — jamais
+		// phone/email/password_hash (Audit Schema Phase B - User/Admin only).
+		detailsJSON := models.JSONB{
+			"target_user_id": id.String(),
+			"role":           role,
+		}
+		s.auditSvc.Log(ctx, adminID, "user_deleted", "user", &id, fmt.Sprintf("role=%s", role),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 	return nil
 }
