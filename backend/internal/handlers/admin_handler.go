@@ -214,7 +214,12 @@ func (h *AdminHandler) BlockUser(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid user ID")
 	}
 
-	if err := h.svc.BlockUser(c.Context(), id, req.Block); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.BlockUser(c.Context(), id, req.Block, adminID); err != nil {
 		return InternalError(c, "Failed to update user status")
 	}
 
@@ -236,7 +241,12 @@ func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid user ID")
 	}
 
-	if err := h.svc.DeleteUser(c.Context(), id); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.DeleteUser(c.Context(), id, adminID); err != nil {
 		fmt.Printf("Error deleting user %s: %v\n", id, err)
 		return InternalError(c, fmt.Sprintf("Failed to delete user: %v", err))
 	}

@@ -24,8 +24,8 @@ type AdminService interface {
 	GetRecentActivity(ctx context.Context) ([]map[string]interface{}, error)
 	ListUsers(ctx context.Context, page, perPage int, query string) ([]models.User, int, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error)
-	BlockUser(ctx context.Context, id uuid.UUID, block bool) error
-	DeleteUser(ctx context.Context, id uuid.UUID) error
+	BlockUser(ctx context.Context, id uuid.UUID, block bool, adminID uuid.UUID) error
+	DeleteUser(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error
 	ListAuctions(ctx context.Context, page, perPage int, status, query string, sellerID *uuid.UUID) ([]models.Auction, int, error)
 	ValidateAuction(ctx context.Context, id uuid.UUID, approve bool, reason string, adminID uuid.UUID) error
 	UpdateAuction(ctx context.Context, id uuid.UUID, input UpdateAuctionInput) error
@@ -281,12 +281,49 @@ func (s *adminService) GetUserByID(ctx context.Context, id uuid.UUID) (*models.U
 	return s.userRepo.FindByID(ctx, id)
 }
 
-func (s *adminService) BlockUser(ctx context.Context, id uuid.UUID, block bool) error {
-	return s.userRepo.UpdateStatus(ctx, id, !block)
+func (s *adminService) BlockUser(ctx context.Context, id uuid.UUID, block bool, adminID uuid.UUID) error {
+	// isActive est l'inverse logique de "bloqué" : is_active=false veut dire l'utilisateur
+	// est bloqué. On récupère l'état avant modification pour old_status/new_status.
+	userBefore, findErr := s.userRepo.FindByID(ctx, id)
+
+	if err := s.userRepo.UpdateStatus(ctx, id, !block); err != nil {
+		return err
+	}
+
+	if findErr == nil && s.auditSvc != nil {
+		action := "user_unblocked"
+		newStatus := "active"
+		if block {
+			action = "user_blocked"
+			newStatus = "blocked"
+		}
+		oldStatus := "active"
+		if !userBefore.IsActive {
+			oldStatus = "blocked"
+		}
+		details := fmt.Sprintf("old_status=%s new_status=%s", oldStatus, newStatus)
+		s.auditSvc.Log(ctx, adminID, action, "user", &id, details)
+	}
+	return nil
 }
 
-func (s *adminService) DeleteUser(ctx context.Context, id uuid.UUID) error {
-	return s.userRepo.Delete(ctx, id)
+func (s *adminService) DeleteUser(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {
+	// Récupérer le rôle avant suppression pour le journal d'audit (aucune donnée
+	// sensible : uniquement le rôle, jamais phone/email/password_hash).
+	userBefore, findErr := s.userRepo.FindByID(ctx, id)
+
+	if err := s.userRepo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	if s.auditSvc != nil {
+		role := "unknown"
+		if findErr == nil && userBefore != nil {
+			role = userBefore.Role
+		}
+		s.auditSvc.Log(ctx, adminID, "user_deleted", "user", &id, fmt.Sprintf("role=%s", role))
+	}
+	return nil
 }
 
 func (s *adminService) ListAuctions(ctx context.Context, page, perPage int, status, query string, sellerID *uuid.UUID) ([]models.Auction, int, error) {
