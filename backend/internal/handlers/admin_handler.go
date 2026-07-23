@@ -284,7 +284,12 @@ func (h *AdminHandler) ValidateAuction(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid auction ID")
 	}
 
-	if err := h.svc.ValidateAuction(c.Context(), id, req.Approve, req.Reason); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.ValidateAuction(c.Context(), id, req.Approve, req.Reason, adminID); err != nil {
 		return MapError(c, h.logger, err)
 	}
 

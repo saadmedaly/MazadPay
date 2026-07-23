@@ -75,9 +75,10 @@ type auctionService struct {
 	mediaSvc    MediaService
 	rdb         *redis.Client
 	walletRepo  repository.WalletRepository
+	auditSvc    AuditService
 }
 
-func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client, walletRepo repository.WalletRepository) AuctionService {
+func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client, walletRepo repository.WalletRepository, auditSvc AuditService) AuctionService {
 	return &auctionService{
 		db:          db,
 		auctionRepo: auctionRepo,
@@ -87,6 +88,7 @@ func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, re
 		mediaSvc:    mediaSvc,
 		rdb:         rdb,
 		walletRepo:  walletRepo,
+		auditSvc:    auditSvc,
 	}
 }
 
@@ -731,10 +733,16 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 		return fmt.Errorf("cannot cancel auction in current status: %s", auction.Status)
 	}
 
+	oldStatus := auction.Status
 	auction.Status = "canceled"
 	auction.RejectionReason = &reason
 	if err := s.auctionRepo.Update(ctx, auction); err != nil {
 		return err
+	}
+
+	if s.auditSvc != nil {
+		details := fmt.Sprintf("seller_id=%s old_status=%s new_status=canceled reason=%s", sellerID, oldStatus, reason)
+		s.auditSvc.Log(ctx, sellerID, "auction_cancelled", "auction", &auctionID, details)
 	}
 
 	// Libère la caution (insurance_amount) de tous les enchérisseurs — l'auction est
@@ -748,6 +756,10 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 		return nil
 	}
 	_ = dbtx.Commit()
+
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, sellerID, "auction_holds_released", "auction", &auctionID, "reason=cancelled")
+	}
 	return nil
 }
 
@@ -763,11 +775,20 @@ func (s *auctionService) RelistAuction(ctx context.Context, auctionID, sellerID 
 		return fmt.Errorf("can only relist canceled or ended auctions")
 	}
 
+	oldStatus := auction.Status
 	auction.Status = "pending"
 	auction.EndTime = newEndTime
 	auction.WinnerID = nil
 	auction.CurrentPrice = auction.StartPrice
-	return s.auctionRepo.Update(ctx, auction)
+	if err := s.auctionRepo.Update(ctx, auction); err != nil {
+		return err
+	}
+
+	if s.auditSvc != nil {
+		details := fmt.Sprintf("old_status=%s new_status=pending new_end_time=%s", oldStatus, newEndTime.Format(time.RFC3339))
+		s.auditSvc.Log(ctx, sellerID, "auction_relisted", "auction", &auctionID, details)
+	}
+	return nil
 }
 
 func (s *auctionService) ExtendAuction(ctx context.Context, auctionID, sellerID uuid.UUID, hours int) error {
@@ -782,9 +803,18 @@ func (s *auctionService) ExtendAuction(ctx context.Context, auctionID, sellerID 
 		return fmt.Errorf("can only extend active auctions")
 	}
 
+	oldEndTime := auction.EndTime
 	newEndTime := auction.EndTime.Add(time.Duration(hours) * time.Hour)
 	auction.EndTime = newEndTime
-	return s.auctionRepo.Update(ctx, auction)
+	if err := s.auctionRepo.Update(ctx, auction); err != nil {
+		return err
+	}
+
+	if s.auditSvc != nil {
+		details := fmt.Sprintf("old_end_time=%s new_end_time=%s", oldEndTime.Format(time.RFC3339), newEndTime.Format(time.RFC3339))
+		s.auditSvc.Log(ctx, sellerID, "auction_extended", "auction", &auctionID, details)
+	}
+	return nil
 }
 
 // CloseExpiredAuctions — appelé par le Cron toutes les 30 secondes
@@ -808,6 +838,13 @@ func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 		if dbtx, err := s.db.BeginTxx(ctx, nil); err == nil {
 			if err := s.walletRepo.ReleaseHoldsForNonWinners(ctx, dbtx, a.ID, winnerID); err == nil {
 				dbtx.Commit()
+				if s.auditSvc != nil {
+					// Résumé unique par mazad (pas par enchérisseur) — CloseExpiredAuctions
+					// tourne toutes les 30s sur potentiellement plusieurs mazads, éviter le
+					// bruit d'un log par utilisateur (Auction audit logs, exclusion explicite
+					// des events par bid).
+					s.auditSvc.Log(ctx, uuid.Nil, "auction_holds_released", "auction", &a.ID, "reason=expired_non_winners")
+				}
 			} else {
 				dbtx.Rollback()
 			}

@@ -27,7 +27,7 @@ type AdminService interface {
 	BlockUser(ctx context.Context, id uuid.UUID, block bool) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	ListAuctions(ctx context.Context, page, perPage int, status, query string, sellerID *uuid.UUID) ([]models.Auction, int, error)
-	ValidateAuction(ctx context.Context, id uuid.UUID, approve bool, reason string) error
+	ValidateAuction(ctx context.Context, id uuid.UUID, approve bool, reason string, adminID uuid.UUID) error
 	UpdateAuction(ctx context.Context, id uuid.UUID, input UpdateAuctionInput) error
 	DeleteAuction(ctx context.Context, id uuid.UUID) error
 	ListTransactions(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error)
@@ -298,7 +298,11 @@ func (s *adminService) ListAuctions(ctx context.Context, page, perPage int, stat
 	return s.auctionRepo.ListPaginated(ctx, page, perPage, filters)
 }
 
-func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approve bool, reason string) error {
+func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approve bool, reason string, adminID uuid.UUID) error {
+	// Récupérer l'auction avant modification pour connaître old_status et seller_id
+	// (Auction audit logs, ne bloque jamais l'opération si l'audit échoue).
+	auctionBefore, findErr := s.auctionRepo.FindByID(ctx, id)
+
 	status := "rejected"
 	if approve {
 		status = "active"
@@ -314,6 +318,16 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 	}
 	if err := s.auctionRepo.UpdateStatus(ctx, id, status); err != nil {
 		return err
+	}
+
+	if findErr == nil && s.auditSvc != nil {
+		action := "auction_rejected"
+		if approve {
+			action = "auction_approved"
+		}
+		details := fmt.Sprintf("seller_id=%s old_status=%s new_status=%s reason=%s",
+			auctionBefore.SellerID, auctionBefore.Status, status, reason)
+		s.auditSvc.Log(ctx, adminID, action, "auction", &id, details)
 	}
 
 	// Send notification to seller
