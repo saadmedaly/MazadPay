@@ -23,9 +23,21 @@ func NewAuditRepository(db *sqlx.DB) AuditRepository {
 }
 
 func (r *auditRepo) Create(ctx context.Context, log *models.AuditLog) error {
+	// actor_type a un DEFAULT 'unknown' en base (voir 000042_audit_logs_schema_improvement) ;
+	// on l'aligne ici uniquement si l'appelant ne l'a pas renseigné, pour ne pas
+	// dépendre d'un ordre d'exécution particulier entre Log() et Create().
+	if log.ActorType == "" {
+		log.ActorType = "unknown"
+	}
 	_, err := r.db.NamedExecContext(ctx, `
-		INSERT INTO audit_logs (id, admin_id, action, entity_type, entity_id, details)
-		VALUES (:id, :admin_id, :action, :entity_type, :entity_id, :details)
+		INSERT INTO audit_logs (
+			id, admin_id, action, entity_type, entity_id, details,
+			actor_id, actor_type, ip_address, user_agent, details_json, entity_key
+		)
+		VALUES (
+			:id, :admin_id, :action, :entity_type, :entity_id, :details,
+			:actor_id, :actor_type, :ip_address, :user_agent, :details_json, :entity_key
+		)
 	`, log)
 	return err
 }
