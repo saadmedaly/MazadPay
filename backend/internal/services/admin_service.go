@@ -591,7 +591,28 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 			"user_id=%s type=%s amount=%s old_status=%s new_status=%s notes=%s",
 			txBefore.UserID, txBefore.Type, txBefore.Amount.String(), txBefore.Status, status, notes,
 		)
-		s.auditSvc.Log(ctx, adminID, action, "transaction", &id, details)
+		// details_json structuré (Audit Schema Phase B - Financial only) : uniquement
+		// des champs non sensibles, jamais de receipt_url/presigned_url/token.
+		detailsJSON := models.JSONB{
+			"transaction_id": id.String(),
+			"user_id":        txBefore.UserID.String(),
+			"type":           txBefore.Type,
+			"amount":         txBefore.Amount.String(),
+			"old_status":     txBefore.Status,
+			"new_status":     status,
+		}
+		if notes != "" {
+			detailsJSON["notes"] = notes
+		}
+		// IP/User-Agent non disponibles ici : ValidateTransaction est une méthode de
+		// service sans accès à *fiber.Ctx, et le handler appelant (admin_handler.go)
+		// ne les transmet pas actuellement. Étendre cette signature pour les faire
+		// transiter serait un changement plus large que ce que demande cette phase
+		// (voir rapport Phase B) — laissé pour une phase ultérieure si nécessaire.
+		s.auditSvc.Log(ctx, adminID, action, "transaction", &id, details,
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 
 	// Send notification to user

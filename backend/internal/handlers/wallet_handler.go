@@ -185,7 +185,16 @@ func (h *WalletHandler) GetReceiptURL(c *fiber.Ctx) error {
 	// utilisateur (Financial audit logs) — jamais l'URL elle-même, jamais quand
 	// l'utilisateur consulte son propre reçu (bruit inutile, pas un accès privilégié).
 	if isAdmin && h.auditSvc != nil {
-		h.auditSvc.Log(c.Context(), userID, "receipt_viewed_by_admin", "transaction", &txID, "Admin viewed payment receipt")
+		detailsJSON := models.JSONB{
+			"transaction_id": txID.String(),
+			"user_id":        tx.UserID.String(),
+		}
+		h.auditSvc.Log(c.Context(), userID, "receipt_viewed_by_admin", "transaction", &txID, "Admin viewed payment receipt",
+			services.WithActorType("admin"),
+			services.WithDetailsJSON(detailsJSON),
+			services.WithIP(c.IP()),
+			services.WithUserAgent(c.Get("User-Agent")),
+		)
 	}
 	if tx.ReceiptURL == nil || *tx.ReceiptURL == "" {
 		return NotFound(c, "Receipt")

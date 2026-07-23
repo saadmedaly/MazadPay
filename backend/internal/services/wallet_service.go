@@ -75,8 +75,20 @@ func (s *walletService) UploadReceipt(ctx context.Context, txID uuid.UUID, userI
 	}
 	if s.auditSvc != nil {
 		// Ne jamais journaliser l'URL du reçu elle-même (audit de sécurité — voir
-		// models.Transaction.ReceiptURL) : uniquement le fait qu'un reçu a été déposé.
-		s.auditSvc.Log(ctx, userID, "receipt_uploaded", "transaction", &txID, "Receipt uploaded by user")
+		// models.Transaction.ReceiptURL) : uniquement le fait qu'un reçu a été déposé
+		// (has_receipt=true), jamais receiptURL/presigned_url (Audit Schema Phase B).
+		detailsJSON := models.JSONB{
+			"transaction_id": txID.String(),
+			"user_id":        userID.String(),
+			"has_receipt":    true,
+			"status":         "pending_review",
+		}
+		// IP/User-Agent non disponibles ici : UploadReceipt est une méthode de service
+		// sans *fiber.Ctx — non étendu dans cette phase (voir rapport Phase B).
+		s.auditSvc.Log(ctx, userID, "receipt_uploaded", "transaction", &txID, "Receipt uploaded by user",
+			WithActorType("user"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 	return nil
 }
@@ -120,7 +132,22 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 	}
 	if s.auditSvc != nil {
 		details := fmt.Sprintf("user_id=%s amount=%s status=%s (balance frozen)", userID, amount.String(), txModel.Status)
-		s.auditSvc.Log(ctx, userID, "withdraw_requested_funds_frozen", "transaction", &txModel.ID, details)
+		detailsJSON := models.JSONB{
+			"transaction_id": txModel.ID.String(),
+			"user_id":        userID.String(),
+			"type":           "withdraw",
+			"amount":         amount.String(),
+			"status":         txModel.Status,
+		}
+		if gateway != "" {
+			detailsJSON["gateway"] = gateway
+		}
+		// IP/User-Agent non disponibles ici : RequestWithdraw est une méthode de
+		// service sans *fiber.Ctx — non étendu dans cette phase (voir rapport Phase B).
+		s.auditSvc.Log(ctx, userID, "withdraw_requested_funds_frozen", "transaction", &txModel.ID, details,
+			WithActorType("user"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 	return txModel, nil
 }
