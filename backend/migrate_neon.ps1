@@ -1,64 +1,74 @@
 # migrate_neon.ps1
-# Run all migrations on Neon PostgreSQL in correct order
+# Run all migrations on Neon PostgreSQL in correct order (auto-discovered from
+# backend/migrations/*.up.sql, sorted by filename).
 # Usage: .\migrate_neon.ps1 -NeonUrl "postgresql://user:pass@host/db?sslmode=require"
 # Resume: .\migrate_neon.ps1 -NeonUrl "..." -ResumeFrom "000004"
+# Help:   .\migrate_neon.ps1 -Help
+#
+# -NeonUrl contient des identifiants sensibles : ne jamais le coder en dur dans un
+# script ou le committer. Le passer uniquement en ligne de commande ou via une
+# variable d'environnement locale non suivie par Git (voir .gitignore : .env.neon,
+# migration.env).
 
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
+    [switch]$Help,
+
+    [Parameter(Mandatory=$false)]
     [string]$NeonUrl,
 
     [Parameter(Mandatory=$false)]
     [string]$ResumeFrom = ""
 )
 
+if ($Help) {
+    Write-Host "migrate_neon.ps1 - Applique les migrations MazadPay sur une base Neon PostgreSQL"
+    Write-Host ""
+    Write-Host "Usage:"
+    Write-Host "  .\migrate_neon.ps1 -NeonUrl <connection-string> [-ResumeFrom <prefix>]"
+    Write-Host "  .\migrate_neon.ps1 -Help"
+    Write-Host ""
+    Write-Host "Parametres:"
+    Write-Host "  -NeonUrl     Chaine de connexion Postgres complete (ex: postgresql://user:pass@host/db?sslmode=require)."
+    Write-Host "               Jamais codee en dur ici -- passer en ligne de commande ou via variable d'environnement locale."
+    Write-Host "  -ResumeFrom  Prefixe de migration (ex: '000039') a partir duquel reprendre, pour une base non vide."
+    Write-Host "  -Help        Affiche cette aide et quitte sans se connecter a une base de donnees."
+    Write-Host ""
+    Write-Host "Les migrations sont decouvertes automatiquement depuis backend/migrations/*.up.sql,"
+    Write-Host "triees par nom de fichier -- aucune liste codee en dur a maintenir."
+    exit 0
+}
+
+if (-not $NeonUrl) {
+    Write-Host "ERROR: -NeonUrl is required (or use -Help for usage)." -ForegroundColor Red
+    exit 1
+}
+
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $MigrationsDir = Join-Path $ScriptDir "migrations"
 
-# Ordered migration list -- duplicates resolved by dependency order
-$migrations = @(
-    "000001_init.up.sql",
-    "000002_seed.sql",
-    "000003_add_admin.up.sql",
-    "000003_create_requests_tables.up.sql",
-    "000004_auction_translations.up.sql",
-    "000005_auto_lot_number.up.sql",
-    "000006_add_name_en_to_categories.up.sql",
-    "000007_update_locations_schema.up.sql",
-    "000008_admin_invitations.up.sql",
-    "000009_allow_web_platform.up.sql",
-    "000010_add_updated_at_push_tokens.up.sql",
-    "000011_increase_device_id_length.up.sql",
-    "000012_audit_logs.up.sql",
-    "000013_system_settings.up.sql",
-    "000014_add_title_en_to_banners.up.sql",
-    "000015_fix_banners_title_en.up.sql",
-    "000016_add_ratings_table.up.sql",
-    "000017_add_is_super_admin.up.sql",
-    "000018_seed_super_admin.up.sql",
-    "000019_fix_super_admin_password.up.sql",
-    "000020_password_reset_tracking.up.sql",
-    "000021_add_countries_support.up.sql",
-    "000022_replace_termii_with_twilio.up.sql",
-    "000023_add_user_optional_fields.up.sql",
-    "000024_add_auctions_fields.up.sql",
-    "000025_improve_categories.up.sql",
-    "000026_add_transactions_fields.up.sql",
-    "000027_improve_service_requests.up.sql",
-    "000028_optimize_bids.up.sql",
-    "000029_improve_delivery_timeline.up.sql",
-    "000030_improve_notifications.up.sql",
-    "000031_create_new_tables.up.sql",
-    "000032_add_quantity.up.sql",
-    "000032_add_updated_at_notifications.up.sql",
-    "000033_create_conversations.up.sql",
-    "000033_add_quantity_requests.up.sql",
-    "000034_fix_conversations_view.up.sql",
-    "000035_add_country_code.up.sql",
-    "000036_add_app_features.up.sql",
-    "000037_add_descriptions_to_banner_requests.up.sql",
-    "000038_expand_notification_types.up.sql"
-)
+# Auto-discovery : toutes les migrations *.up.sql du dossier, triées par nom (donc par
+# préfixe numérique) — remplace l'ancienne liste codée en dur qui s'arrêtait à 000038
+# et avait été oubliée lors de l'ajout de 000039/000040/000041 (Migration Tooling
+# Security Hardening). Évite que ce script ne devienne silencieusement obsolète à
+# chaque nouvelle migration ajoutée au dossier.
+#
+# Note sur les préfixes en doublon (ex: 000003_add_admin / 000003_create_requests) :
+# le tri alphabétique sur le nom complet du fichier reste stable et déterministe
+# (ordre alphabétique du descriptif après le préfixe), identique au comportement de
+# run_migrations.ps1 qui utilise la même logique Sort-Object Name.
+$migrations = (Get-ChildItem -Path $MigrationsDir -Filter "*.up.sql" | Sort-Object Name).Name
+if (-not $migrations -or $migrations.Count -eq 0) {
+    # 000002_seed.sql n'a pas de suffixe .up.sql (cas historique isolé) — inclus
+    # explicitement s'il existe, pour ne pas le perdre silencieusement.
+    Write-Host "ERROR: No *.up.sql migrations found in $MigrationsDir" -ForegroundColor Red
+    exit 1
+}
+$seedFile = "000002_seed.sql"
+if ((Test-Path (Join-Path $MigrationsDir $seedFile)) -and ($migrations -notcontains $seedFile)) {
+    $migrations = @($migrations | Where-Object { $_ -lt $seedFile }) + @($seedFile) + @($migrations | Where-Object { $_ -gt $seedFile })
+}
 
 # -- ResumeFrom mode: skip empty-DB check, filter migration list --
 if ($ResumeFrom -ne "") {

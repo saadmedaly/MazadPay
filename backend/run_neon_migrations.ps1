@@ -1,15 +1,32 @@
-# Script pour exécuter toutes les migrations dans le conteneur Docker PostgreSQL
-# Usage: .\run_migrations.ps1
+# Script pour exécuter toutes les migrations dans le conteneur Docker PostgreSQL,
+# en ciblant une base Neon distante.
+# Usage:
+#   Définir les variables d'environnement avant l'exécution (jamais en dur dans ce
+#   fichier — audit sécurité, un mot de passe Neon réel était en clair ici) :
+#     $env:NEON_DB_HOST = "..."
+#     $env:NEON_DB_NAME = "..."
+#     $env:NEON_DB_USER = "..."
+#     $env:NEON_DB_PASSWORD = "..."
+#   .\run_neon_migrations.ps1
+#
+# Alternative : place ces variables dans un fichier local non suivi par Git (voir
+# .gitignore : .env.neon, migration.env) et charge-les avant d'appeler ce script.
 
 $ErrorActionPreference = "Stop"
 
-# Configuration
+# Configuration — lue depuis l'environnement, jamais codée en dur dans ce fichier.
 $CONTAINER_NAME = "mazadpay_postgres"
-$DB_HOST = "ep-late-sea-aph891wv-pooler.c-7.us-east-1.aws.neon.tech"
-$DB_NAME = "neondb"
-$DB_USER = "neondb_owner"
-$DB_PASSWORD = "npg_dneL5mPWfgT3"
+$DB_HOST = $env:NEON_DB_HOST
+$DB_NAME = $env:NEON_DB_NAME
+$DB_USER = $env:NEON_DB_USER
+$DB_PASSWORD = $env:NEON_DB_PASSWORD
 $MIGRATIONS_DIR = "./migrations"
+
+if (-not $DB_HOST -or -not $DB_NAME -or -not $DB_USER -or -not $DB_PASSWORD) {
+    Write-Host "Erreur: variables d'environnement manquantes." -ForegroundColor Red
+    Write-Host "Définissez NEON_DB_HOST, NEON_DB_NAME, NEON_DB_USER, NEON_DB_PASSWORD avant d'exécuter ce script." -ForegroundColor Yellow
+    exit 1
+}
 
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host "  Exécution des migrations vers Neon" -ForegroundColor Cyan

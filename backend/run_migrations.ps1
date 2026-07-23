@@ -1,13 +1,16 @@
-# Script pour exécuter toutes les migrations dans le conteneur Docker PostgreSQL
+# Script pour exécuter toutes les migrations dans le conteneur Docker PostgreSQL local.
 # Usage: .\run_migrations.ps1
+# Les identifiants du conteneur local peuvent être surchargés via l'environnement
+# (durcissement sécurité — éviter tout mot de passe en dur, même pour un conteneur
+# de développement local) ; valeurs par défaut inchangées si non définies.
 
 $ErrorActionPreference = "Stop"
 
 # Configuration
 $CONTAINER_NAME = "mazadpay_postgres"
-$DB_NAME = "mazadpay"
-$DB_USER = "mazadpay"
-$DB_PASSWORD = "mazadpay_secret"
+$DB_NAME = if ($env:LOCAL_DB_NAME) { $env:LOCAL_DB_NAME } else { "mazadpay" }
+$DB_USER = if ($env:LOCAL_DB_USER) { $env:LOCAL_DB_USER } else { "mazadpay" }
+$DB_PASSWORD = if ($env:LOCAL_DB_PASSWORD) { $env:LOCAL_DB_PASSWORD } else { "mazadpay_secret" }
 $MIGRATIONS_DIR = "./migrations"
 
 Write-Host "====================================" -ForegroundColor Cyan

@@ -51,3 +51,8 @@ test_user_interface/
 # receipt_url — jamais commités).
 migrate_receipts_backup_*.txt
 .env.production.local
+
+# Identifiants de migration locaux (Migration Tooling Security Hardening) — .env.neon
+# est déjà couvert par .env.* ci-dessus, listé ici explicitement par clarté.
+.env.neon
+migration.env
