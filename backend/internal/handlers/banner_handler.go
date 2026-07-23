@@ -1,18 +1,21 @@
 package handlers
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
 	"go.uber.org/zap"
 )
 
 type BannerHandler struct {
-	service services.ContentService
-	logger  *zap.Logger
+	service  services.ContentService
+	logger   *zap.Logger
+	auditSvc services.AuditService
 }
 
 func NewBannerHandler(svc services.ContentService, logger *zap.Logger) *BannerHandler {
@@ -20,6 +23,23 @@ func NewBannerHandler(svc services.ContentService, logger *zap.Logger) *BannerHa
 		service: svc,
 		logger:  logger,
 	}
+}
+
+// SetAuditService injecte le service d'audit après construction (Content/Settings
+// audit logs).
+func (h *BannerHandler) SetAuditService(auditSvc services.AuditService) {
+	h.auditSvc = auditSvc
+}
+
+// logBannerAudit journalise une action admin sur un banner (entity_id est un int, pas
+// un uuid.UUID — audit_logs.entity_id reste nil dans ce cas, l'id du banner est inclus
+// dans details à la place).
+func (h *BannerHandler) logBannerAudit(c *fiber.Ctx, action string, bannerID int, details string) {
+	if h.auditSvc == nil {
+		return
+	}
+	adminID, _ := middleware.GetUserID(c)
+	h.auditSvc.Log(c.Context(), adminID, action, "banner", nil, fmt.Sprintf("banner_id=%d %s", bannerID, details))
 }
 
 // List all active banners (Public)
@@ -72,6 +92,7 @@ func (h *BannerHandler) Toggle(c *fiber.Ctx) error {
 	if err := h.service.ToggleBanner(c.Context(), id, req.IsActive); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	h.logBannerAudit(c, "banner_updated", id, fmt.Sprintf("is_active=%v", req.IsActive))
 
 	return OK(c, fiber.Map{"message": "Banner status updated"})
 }
@@ -91,6 +112,9 @@ func (h *BannerHandler) Create(c *fiber.Ctx) error {
 	if err := h.service.CreateBanner(c.Context(), &banner); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	// Ne jamais journaliser image_url complète (Content/Settings audit logs) —
+	// seulement le fait qu'une image existe.
+	h.logBannerAudit(c, "banner_created", banner.ID, fmt.Sprintf("title_ar=%s has_image=%v", banner.TitleAr, banner.ImageURL != ""))
 
 	return Created(c, banner)
 }
@@ -114,6 +138,7 @@ func (h *BannerHandler) Delete(c *fiber.Ctx) error {
 	if err := h.service.DeleteBanner(c.Context(), id); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	h.logBannerAudit(c, "banner_deleted", id, "")
 	return OK(c, fiber.Map{"message": "Banner deleted successfully"})
 }
 
@@ -129,6 +154,7 @@ func (h *BannerHandler) Update(c *fiber.Ctx) error {
 	if err := h.service.UpdateBanner(c.Context(), &banner); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	h.logBannerAudit(c, "banner_updated", id, fmt.Sprintf("title_ar=%s has_image=%v", banner.TitleAr, banner.ImageURL != ""))
 
 	return OK(c, banner)
 }

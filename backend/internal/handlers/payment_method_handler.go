@@ -1,21 +1,38 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
 	"go.uber.org/zap"
 )
 
 type PaymentMethodHandler struct {
-	svc    services.PaymentMethodService
-	logger *zap.Logger
+	svc      services.PaymentMethodService
+	logger   *zap.Logger
+	auditSvc services.AuditService
 }
 
 func NewPaymentMethodHandler(svc services.PaymentMethodService, logger *zap.Logger) *PaymentMethodHandler {
 	return &PaymentMethodHandler{svc: svc, logger: logger}
+}
+
+// SetAuditService injecte le service d'audit après construction (Content/Settings
+// audit logs).
+func (h *PaymentMethodHandler) SetAuditService(auditSvc services.AuditService) {
+	h.auditSvc = auditSvc
+}
+
+func (h *PaymentMethodHandler) logAudit(c *fiber.Ctx, action string, id int, details string) {
+	if h.auditSvc == nil {
+		return
+	}
+	adminID, _ := middleware.GetUserID(c)
+	h.auditSvc.Log(c.Context(), adminID, action, "payment_method", nil, fmt.Sprintf("payment_method_id=%d %s", id, details))
 }
 
 // ListPaymentMethods - GET /api/payment-methods
@@ -39,6 +56,7 @@ func (h *PaymentMethodHandler) CreatePaymentMethod(c *fiber.Ctx) error {
 		h.logger.Error("failed to create payment method", zap.Error(err))
 		return InternalError(c, "Failed to create payment method")
 	}
+	h.logAudit(c, "payment_method_created", req.ID, fmt.Sprintf("code=%s name_ar=%s", req.Code, req.NameAr))
 
 	return OK(c, fiber.Map{"message": "Payment method created", "payment_method": req})
 }
@@ -59,6 +77,7 @@ func (h *PaymentMethodHandler) UpdatePaymentMethod(c *fiber.Ctx) error {
 		h.logger.Error("failed to update payment method", zap.Error(err))
 		return InternalError(c, "Failed to update payment method")
 	}
+	h.logAudit(c, "payment_method_updated", id, fmt.Sprintf("code=%s name_ar=%s", req.Code, req.NameAr))
 
 	return OK(c, fiber.Map{"message": "Payment method updated"})
 }
@@ -74,6 +93,7 @@ func (h *PaymentMethodHandler) DeletePaymentMethod(c *fiber.Ctx) error {
 		h.logger.Error("failed to delete payment method", zap.Error(err))
 		return InternalError(c, "Failed to delete payment method")
 	}
+	h.logAudit(c, "payment_method_deleted", id, "")
 
 	return OK(c, fiber.Map{"message": "Payment method deleted"})
 }
@@ -89,6 +109,7 @@ func (h *PaymentMethodHandler) TogglePaymentMethodStatus(c *fiber.Ctx) error {
 		h.logger.Error("failed to toggle payment method status", zap.Error(err))
 		return InternalError(c, "Failed to toggle payment method status")
 	}
+	h.logAudit(c, "payment_method_updated", id, "status toggled")
 
 	return OK(c, fiber.Map{"message": "Payment method status toggled"})
 }

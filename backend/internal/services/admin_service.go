@@ -35,7 +35,7 @@ type AdminService interface {
 	ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error
 	ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error)
 	ReviewReport(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
-	DeleteReport(ctx context.Context, id uuid.UUID) error
+	DeleteReport(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error
 
 	// KYC
 	ListKYC(ctx context.Context, status string) ([]models.KYCVerification, error)
@@ -45,9 +45,9 @@ type AdminService interface {
 	// FAQ/Tutorials CRUD is better in ContentService but Admin can call it
 
 	// Categories & Locations
-	CreateCategory(ctx context.Context, c *models.Category) error
-	UpdateCategory(ctx context.Context, c *models.Category) error
-	DeleteCategory(ctx context.Context, id int) error
+	CreateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error
+	UpdateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error
+	DeleteCategory(ctx context.Context, id int, adminID uuid.UUID) error
 	CreateLocation(ctx context.Context, l *models.Location) error
 	UpdateLocation(ctx context.Context, l *models.Location) error
 	DeleteLocation(ctx context.Context, id int) error
@@ -74,9 +74,9 @@ type AdminService interface {
 
 	// Payment Methods (from migration 000031)
 	ListPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error)
-	CreatePaymentMethod(ctx context.Context, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int) error
-	UpdatePaymentMethod(ctx context.Context, id int, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int) error
-	DeletePaymentMethod(ctx context.Context, id int) error
+	CreatePaymentMethod(ctx context.Context, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int, adminID uuid.UUID) error
+	UpdatePaymentMethod(ctx context.Context, id int, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int, adminID uuid.UUID) error
+	DeletePaymentMethod(ctx context.Context, id int, adminID uuid.UUID) error
 
 	// Auction Car Details (from migration 000031)
 	GetAuctionCarDetails(ctx context.Context, auctionID uuid.UUID) (*models.AuctionCarDetails, error)
@@ -630,11 +630,23 @@ func (s *adminService) ListReports(ctx context.Context, page, perPage int, statu
 }
 
 func (s *adminService) ReviewReport(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error {
-	return s.reportRepo.UpdateStatus(ctx, id, status, notes, adminID)
+	if err := s.reportRepo.UpdateStatus(ctx, id, status, notes, adminID); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, adminID, "report_reviewed", "report", &id, fmt.Sprintf("status=%s notes=%s", status, notes))
+	}
+	return nil
 }
 
-func (s *adminService) DeleteReport(ctx context.Context, id uuid.UUID) error {
-	return s.reportRepo.Delete(ctx, id)
+func (s *adminService) DeleteReport(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {
+	if err := s.reportRepo.Delete(ctx, id); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, adminID, "report_deleted", "report", &id, "")
+	}
+	return nil
 }
 
 func (s *adminService) ListKYC(ctx context.Context, status string) ([]models.KYCVerification, error) {
@@ -645,6 +657,15 @@ func (s *adminService) ReviewKYC(ctx context.Context, userID uuid.UUID, status, 
 	if err := s.kycRepo.UpdateStatus(ctx, userID, status, notes, adminID); err != nil {
 		return err
 	}
+
+	if s.auditSvc != nil {
+		action := "kyc_rejected"
+		if status == "approved" {
+			action = "kyc_approved"
+		}
+		s.auditSvc.Log(ctx, adminID, action, "kyc", &userID, fmt.Sprintf("notes=%s", notes))
+	}
+
 	// If approved, mark user as verified
 	if status == "approved" {
 		user, err := s.userRepo.FindByID(ctx, userID)
@@ -655,16 +676,41 @@ func (s *adminService) ReviewKYC(ctx context.Context, userID uuid.UUID, status, 
 	return nil
 }
 
-func (s *adminService) CreateCategory(ctx context.Context, c *models.Category) error {
-	return s.auctionRepo.CreateCategory(ctx, c)
+func (s *adminService) CreateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error {
+	if err := s.auctionRepo.CreateCategory(ctx, c); err != nil {
+		return err
+	}
+	s.logCategoryAudit(ctx, adminID, "category_created", c.ID, c.NameAr)
+	return nil
 }
 
-func (s *adminService) UpdateCategory(ctx context.Context, c *models.Category) error {
-	return s.auctionRepo.UpdateCategory(ctx, c)
+func (s *adminService) UpdateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error {
+	if err := s.auctionRepo.UpdateCategory(ctx, c); err != nil {
+		return err
+	}
+	s.logCategoryAudit(ctx, adminID, "category_updated", c.ID, c.NameAr)
+	return nil
 }
 
-func (s *adminService) DeleteCategory(ctx context.Context, id int) error {
-	return s.auctionRepo.DeleteCategory(ctx, id)
+func (s *adminService) DeleteCategory(ctx context.Context, id int, adminID uuid.UUID) error {
+	if err := s.auctionRepo.DeleteCategory(ctx, id); err != nil {
+		return err
+	}
+	s.logCategoryAudit(ctx, adminID, "category_deleted", id, "")
+	return nil
+}
+
+// logCategoryAudit journalise une action admin sur une catégorie (Content/Settings
+// audit logs).
+func (s *adminService) logCategoryAudit(ctx context.Context, adminID uuid.UUID, action string, id int, nameAr string) {
+	if s.auditSvc == nil {
+		return
+	}
+	details := fmt.Sprintf("category_id=%d", id)
+	if nameAr != "" {
+		details += " name_ar=" + nameAr
+	}
+	s.auditSvc.Log(ctx, adminID, action, "category", nil, details)
 }
 
 func (s *adminService) CreateLocation(ctx context.Context, l *models.Location) error {
@@ -852,25 +898,43 @@ func (s *adminService) ListPaymentMethods(ctx context.Context) ([]models.Payment
 	return methods, nil
 }
 
-func (s *adminService) CreatePaymentMethod(ctx context.Context, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int) error {
+func (s *adminService) CreatePaymentMethod(ctx context.Context, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int, adminID uuid.UUID) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO payment_methods (code, name_ar, name_fr, name_en, logo_url, is_active, country_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`, code, nameAr, nameFr, nameEn, logoURL, isActive, countryID)
-	return err
+	if err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, adminID, "payment_method_created", "payment_method", nil, fmt.Sprintf("code=%s name_ar=%s", code, nameAr))
+	}
+	return nil
 }
 
-func (s *adminService) UpdatePaymentMethod(ctx context.Context, id int, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int) error {
+func (s *adminService) UpdatePaymentMethod(ctx context.Context, id int, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int, adminID uuid.UUID) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE payment_methods SET code = $1, name_ar = $2, name_fr = $3, name_en = $4, logo_url = $5, is_active = $6, country_id = $7
 		WHERE id = $8
 	`, code, nameAr, nameFr, nameEn, logoURL, isActive, countryID, id)
-	return err
+	if err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, adminID, "payment_method_updated", "payment_method", nil, fmt.Sprintf("payment_method_id=%d code=%s name_ar=%s", id, code, nameAr))
+	}
+	return nil
 }
 
-func (s *adminService) DeletePaymentMethod(ctx context.Context, id int) error {
+func (s *adminService) DeletePaymentMethod(ctx context.Context, id int, adminID uuid.UUID) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM payment_methods WHERE id = $1`, id)
-	return err
+	if err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, adminID, "payment_method_deleted", "payment_method", nil, fmt.Sprintf("payment_method_id=%d", id))
+	}
+	return nil
 }
 
 // Auction Car Details implementations

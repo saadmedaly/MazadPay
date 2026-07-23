@@ -77,17 +77,22 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	userHandler := handlers.NewUserHandler(userSvc, logger)
 	adminHandler := handlers.NewAdminHandler(adminSvc, reportSvc, logger, rdb)
 	bannerHandler := handlers.NewBannerHandler(contentSvc, logger)
+	bannerHandler.SetAuditService(auditSvc)
 	walletHandler := handlers.NewWalletHandler(walletSvc, logger, mediaSvc)
 	walletHandler.SetAuditService(auditSvc)
 	reqHandler := handlers.NewRequestHandler(reqSvc, logger)
 	contentHandler := handlers.NewContentHandler(contentSvc, logger)
+	contentHandler.SetAuditService(auditSvc)
 	notifHandler := handlers.NewNotificationHandler(notifSvc, logger)
+	notifHandler.SetAuditService(auditSvc)
 	// New handlers with services
 	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodSvc, logger)
+	paymentMethodHandler.SetAuditService(auditSvc)
 	auctionBoostHandler := handlers.NewAuctionBoostHandler(auctionBoostSvc, logger)
 	deliveryDriverHandler := handlers.NewDeliveryDriverHandler(deliveryDriverSvc, logger)
 	bidAutoBidHandler := handlers.NewBidAutoBidHandler(bidAutoBidSvc, logger)
 	sponsorHandler := handlers.NewSponsorHandler(sponsorSvc, logger)
+	sponsorHandler.SetAuditService(auditSvc)
 	ratingHandler := handlers.NewRatingHandler(ratingSvc, logger)
 
 	// WebSocket registration

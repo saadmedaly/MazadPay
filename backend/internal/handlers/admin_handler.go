@@ -609,7 +609,12 @@ func (h *AdminHandler) DeleteReport(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid report ID")
 	}
 
-	if err := h.svc.DeleteReport(c.Context(), id); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.DeleteReport(c.Context(), id, adminID); err != nil {
 		return MapError(c, h.logger, err)
 	}
 
@@ -658,7 +663,11 @@ func (h *AdminHandler) CreateCategory(c *fiber.Ctx) error {
 	if err := c.BodyParser(&cat); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
-	if err := h.svc.CreateCategory(c.Context(), &cat); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.CreateCategory(c.Context(), &cat, adminID); err != nil {
 		return InternalError(c, "Failed to create category: "+err.Error())
 	}
 	h.invalidateCategoriesCache(c.Context())
@@ -672,7 +681,11 @@ func (h *AdminHandler) UpdateCategory(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 	cat.ID = id
-	if err := h.svc.UpdateCategory(c.Context(), &cat); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.UpdateCategory(c.Context(), &cat, adminID); err != nil {
 		return InternalError(c, "Failed to update category: "+err.Error())
 	}
 	h.invalidateCategoriesCache(c.Context())
@@ -681,7 +694,11 @@ func (h *AdminHandler) UpdateCategory(c *fiber.Ctx) error {
 
 func (h *AdminHandler) DeleteCategory(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
-	if err := h.svc.DeleteCategory(c.Context(), id); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.DeleteCategory(c.Context(), id, adminID); err != nil {
 		return InternalError(c, "Failed to delete category: "+err.Error())
 	}
 	h.invalidateCategoriesCache(c.Context())
@@ -892,7 +909,12 @@ func (h *AdminHandler) CreatePaymentMethod(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	if err := h.svc.CreatePaymentMethod(c.Context(), req.Code, req.NameAr, req.NameFr, req.NameEn, req.LogoURL, req.IsActive, req.CountryID); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.CreatePaymentMethod(c.Context(), req.Code, req.NameAr, req.NameFr, req.NameEn, req.LogoURL, req.IsActive, req.CountryID, adminID); err != nil {
 		return InternalError(c, "Failed to create payment method: "+err.Error())
 	}
 
@@ -920,7 +942,12 @@ func (h *AdminHandler) UpdatePaymentMethod(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	if err := h.svc.UpdatePaymentMethod(c.Context(), id, req.Code, req.NameAr, req.NameFr, req.NameEn, req.LogoURL, req.IsActive, req.CountryID); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.UpdatePaymentMethod(c.Context(), id, req.Code, req.NameAr, req.NameFr, req.NameEn, req.LogoURL, req.IsActive, req.CountryID, adminID); err != nil {
 		return InternalError(c, "Failed to update payment method")
 	}
 
@@ -933,7 +960,12 @@ func (h *AdminHandler) DeletePaymentMethod(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid payment method ID")
 	}
 
-	if err := h.svc.DeletePaymentMethod(c.Context(), id); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.DeletePaymentMethod(c.Context(), id, adminID); err != nil {
 		return InternalError(c, "Failed to delete payment method")
 	}
 

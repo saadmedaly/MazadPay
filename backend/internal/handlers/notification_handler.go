@@ -15,6 +15,7 @@ type NotificationHandler struct {
 	svc      services.NotificationService
 	logger   *zap.Logger
 	validate *validator.Validate
+	auditSvc services.AuditService
 }
 
 func NewNotificationHandler(svc services.NotificationService, logger *zap.Logger) *NotificationHandler {
@@ -23,6 +24,13 @@ func NewNotificationHandler(svc services.NotificationService, logger *zap.Logger
 		logger:   logger,
 		validate: validator.New(),
 	}
+}
+
+// SetAuditService injecte le service d'audit après construction (Content/Settings
+// audit logs — ne journalise que l'envoi d'admin, pas les endpoints utilisateur de
+// ce même handler).
+func (h *NotificationHandler) SetAuditService(auditSvc services.AuditService) {
+	h.auditSvc = auditSvc
 }
 
 type SaveTokenRequest struct {
@@ -224,12 +232,25 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 		zap.String("lang", lang),
 		zap.String("title", req.Title))
 
+	adminID, _ := middleware.GetUserID(c)
+	// title est court par nature (champ de formulaire) — safe à journaliser tel quel,
+	// contrairement au body qui peut être long et n'est donc jamais journalisé
+	// (Content/Settings audit logs).
+	shortTitle := req.Title
+	if len(shortTitle) > 100 {
+		shortTitle = shortTitle[:100]
+	}
+
 	// Priority: broadcast > specific user > admins
 	if req.Broadcast {
 		// Send to all users
 		if err := h.svc.SendBroadcast(c.Context(), req.Title, message, req.Type, req.Data); err != nil {
 			h.logger.Error("broadcast failed", zap.Error(err))
 			return MapError(c, h.logger, err)
+		}
+		if h.auditSvc != nil {
+			h.auditSvc.Log(c.Context(), adminID, "notification_broadcast_sent", "notification", nil,
+				"title="+shortTitle+" type="+req.Type)
 		}
 		return OK(c, fiber.Map{"message": "Notification sent to all users", "type": "broadcast"})
 	}
@@ -243,6 +264,10 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 		if err := h.svc.SendPush(c.Context(), userUUID, req.Title, message, req.Type, req.Data); err != nil {
 			h.logger.Error("send to user failed", zap.Error(err))
 			return MapError(c, h.logger, err)
+		}
+		if h.auditSvc != nil {
+			h.auditSvc.Log(c.Context(), adminID, "notification_sent", "user", &userUUID,
+				"title="+shortTitle+" type="+req.Type)
 		}
 		return OK(c, fiber.Map{"message": "Notification sent to user", "user_id": req.UserID})
 	}

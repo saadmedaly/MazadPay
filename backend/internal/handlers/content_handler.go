@@ -1,22 +1,39 @@
 package handlers
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
 	"go.uber.org/zap"
 )
 
 type ContentHandler struct {
-	svc    services.ContentService
-	logger *zap.Logger
+	svc      services.ContentService
+	logger   *zap.Logger
+	auditSvc services.AuditService
 }
 
 func NewContentHandler(svc services.ContentService, logger *zap.Logger) *ContentHandler {
 	return &ContentHandler{svc: svc, logger: logger}
+}
+
+// SetAuditService injecte le service d'audit après construction (Content/Settings
+// audit logs).
+func (h *ContentHandler) SetAuditService(auditSvc services.AuditService) {
+	h.auditSvc = auditSvc
+}
+
+func (h *ContentHandler) logAudit(c *fiber.Ctx, action, entityType string, entityIntID int, details string) {
+	if h.auditSvc == nil {
+		return
+	}
+	adminID, _ := middleware.GetUserID(c)
+	h.auditSvc.Log(c.Context(), adminID, action, entityType, nil, fmt.Sprintf("%s_id=%d %s", entityType, entityIntID, details))
 }
 
 func (h *ContentHandler) FAQ(c *fiber.Ctx) error {
@@ -43,6 +60,7 @@ func (h *ContentHandler) CreateFAQ(c *fiber.Ctx) error {
 	if err := h.svc.CreateFAQ(c.Context(), &item); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	h.logAudit(c, "faq_created", "faq", item.ID, "question_ar="+item.QuestionAr)
 	return Created(c, item)
 }
 
@@ -56,6 +74,7 @@ func (h *ContentHandler) UpdateFAQ(c *fiber.Ctx) error {
 	if err := h.svc.UpdateFAQ(c.Context(), &item); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	h.logAudit(c, "faq_updated", "faq", id, "question_ar="+item.QuestionAr)
 	return OK(c, item)
 }
 
@@ -64,6 +83,7 @@ func (h *ContentHandler) DeleteFAQ(c *fiber.Ctx) error {
 	if err := h.svc.DeleteFAQ(c.Context(), id); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	h.logAudit(c, "faq_deleted", "faq", id, "")
 	return OK(c, "FAQ deleted")
 }
 
@@ -91,6 +111,7 @@ func (h *ContentHandler) CreateTutorial(c *fiber.Ctx) error {
 	if err := h.svc.CreateTutorial(c.Context(), &t); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	h.logAudit(c, "tutorial_created", "tutorial", t.ID, "title_ar="+t.TitleAr)
 	return Created(c, t)
 }
 
@@ -104,6 +125,7 @@ func (h *ContentHandler) UpdateTutorial(c *fiber.Ctx) error {
 	if err := h.svc.UpdateTutorial(c.Context(), &t); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	h.logAudit(c, "tutorial_updated", "tutorial", id, "title_ar="+t.TitleAr)
 	return OK(c, t)
 }
 
@@ -112,6 +134,7 @@ func (h *ContentHandler) DeleteTutorial(c *fiber.Ctx) error {
 	if err := h.svc.DeleteTutorial(c.Context(), id); err != nil {
 		return MapError(c, h.logger, err)
 	}
+	h.logAudit(c, "tutorial_deleted", "tutorial", id, "")
 	return OK(c, "Tutorial deleted")
 }
 
