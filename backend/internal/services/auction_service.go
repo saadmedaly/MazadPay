@@ -742,7 +742,21 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 
 	if s.auditSvc != nil {
 		details := fmt.Sprintf("seller_id=%s old_status=%s new_status=canceled reason=%s", sellerID, oldStatus, reason)
-		s.auditSvc.Log(ctx, sellerID, "auction_cancelled", "auction", &auctionID, details)
+		detailsJSON := models.JSONB{
+			"auction_id": auctionID.String(),
+			"seller_id":  sellerID.String(),
+			"old_status": oldStatus,
+			"new_status": "canceled",
+		}
+		if reason != "" {
+			detailsJSON["reason"] = reason
+		}
+		// IP/User-Agent non disponibles ici : CancelAuction est une méthode de service
+		// sans *fiber.Ctx — non étendu dans cette phase (voir rapport Phase B).
+		s.auditSvc.Log(ctx, sellerID, "auction_cancelled", "auction", &auctionID, details,
+			WithActorType("user"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 
 	// Libère la caution (insurance_amount) de tous les enchérisseurs — l'auction est
@@ -758,7 +772,14 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 	_ = dbtx.Commit()
 
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, sellerID, "auction_holds_released", "auction", &auctionID, "reason=cancelled")
+		detailsJSON := models.JSONB{
+			"auction_id":          auctionID.String(),
+			"hold_release_reason": "cancelled",
+		}
+		s.auditSvc.Log(ctx, sellerID, "auction_holds_released", "auction", &auctionID, "reason=cancelled",
+			WithActorType("user"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 	return nil
 }
@@ -786,7 +807,17 @@ func (s *auctionService) RelistAuction(ctx context.Context, auctionID, sellerID 
 
 	if s.auditSvc != nil {
 		details := fmt.Sprintf("old_status=%s new_status=pending new_end_time=%s", oldStatus, newEndTime.Format(time.RFC3339))
-		s.auditSvc.Log(ctx, sellerID, "auction_relisted", "auction", &auctionID, details)
+		detailsJSON := models.JSONB{
+			"auction_id":   auctionID.String(),
+			"seller_id":    sellerID.String(),
+			"old_status":   oldStatus,
+			"new_status":   "pending",
+			"new_end_time": newEndTime.Format(time.RFC3339),
+		}
+		s.auditSvc.Log(ctx, sellerID, "auction_relisted", "auction", &auctionID, details,
+			WithActorType("user"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 	return nil
 }
@@ -812,7 +843,16 @@ func (s *auctionService) ExtendAuction(ctx context.Context, auctionID, sellerID 
 
 	if s.auditSvc != nil {
 		details := fmt.Sprintf("old_end_time=%s new_end_time=%s", oldEndTime.Format(time.RFC3339), newEndTime.Format(time.RFC3339))
-		s.auditSvc.Log(ctx, sellerID, "auction_extended", "auction", &auctionID, details)
+		detailsJSON := models.JSONB{
+			"auction_id":    auctionID.String(),
+			"seller_id":     sellerID.String(),
+			"old_end_time":  oldEndTime.Format(time.RFC3339),
+			"new_end_time":  newEndTime.Format(time.RFC3339),
+		}
+		s.auditSvc.Log(ctx, sellerID, "auction_extended", "auction", &auctionID, details,
+			WithActorType("user"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 	return nil
 }
@@ -842,8 +882,18 @@ func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 					// Résumé unique par mazad (pas par enchérisseur) — CloseExpiredAuctions
 					// tourne toutes les 30s sur potentiellement plusieurs mazads, éviter le
 					// bruit d'un log par utilisateur (Auction audit logs, exclusion explicite
-					// des events par bid).
-					s.auditSvc.Log(ctx, uuid.Nil, "auction_holds_released", "auction", &a.ID, "reason=expired_non_winners")
+					// des events par bid). actor_type=system + WithSystemActor() : aucun
+					// acteur humain réel, uuid.Nil ne doit pas être stocké comme si c'était
+					// un identifiant valide (Audit Schema Phase B - Auction only).
+					detailsJSON := models.JSONB{
+						"auction_id":          a.ID.String(),
+						"hold_release_reason": "expired_non_winners",
+					}
+					s.auditSvc.Log(ctx, uuid.Nil, "auction_holds_released", "auction", &a.ID, "reason=expired_non_winners",
+						WithActorType("system"),
+						WithSystemActor(),
+						WithDetailsJSON(detailsJSON),
+					)
 				}
 			} else {
 				dbtx.Rollback()

@@ -58,6 +58,15 @@ func WithEntityKey(key string) LogOption {
 	}
 }
 
+// WithSystemActor efface actor_id (NULL en base) pour une action déclenchée par un
+// processus système (ex: le scheduler CloseExpiredAuctions) plutôt que par un
+// utilisateur ou un admin réel — à utiliser avec WithActorType("system"). Sans cette
+// option, actor_id serait rempli avec la valeur (souvent uuid.Nil) passée en premier
+// argument de Log(...), ce qui n'est pas un vrai identifiant d'acteur.
+func WithSystemActor() LogOption {
+	return func(l *models.AuditLog) { l.ActorID = nil }
+}
+
 type AuditService interface {
 	Log(ctx context.Context, adminID uuid.UUID, action, entityType string, entityID *uuid.UUID, details string, opts ...LogOption) error
 	GetByEntity(ctx context.Context, entityType string, entityID uuid.UUID) ([]models.AuditLog, error)

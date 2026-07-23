@@ -364,7 +364,24 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 		}
 		details := fmt.Sprintf("seller_id=%s old_status=%s new_status=%s reason=%s",
 			auctionBefore.SellerID, auctionBefore.Status, status, reason)
-		s.auditSvc.Log(ctx, adminID, action, "auction", &id, details)
+		// details_json structuré (Audit Schema Phase B - Auction only) : uniquement
+		// des champs non sensibles, jamais de détails sur les enchérisseurs.
+		detailsJSON := models.JSONB{
+			"auction_id": id.String(),
+			"seller_id":  auctionBefore.SellerID.String(),
+			"old_status": auctionBefore.Status,
+			"new_status": status,
+		}
+		if reason != "" {
+			detailsJSON["reason"] = reason
+		}
+		// IP/User-Agent non disponibles ici : ValidateAuction est une méthode de
+		// service sans accès à *fiber.Ctx (voir même limitation documentée pour
+		// ValidateTransaction, Audit Schema Phase B - Financial only).
+		s.auditSvc.Log(ctx, adminID, action, "auction", &id, details,
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 
 	// Send notification to seller
