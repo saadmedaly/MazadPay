@@ -32,14 +32,24 @@ func (h *BannerHandler) SetAuditService(auditSvc services.AuditService) {
 }
 
 // logBannerAudit journalise une action admin sur un banner (entity_id est un int, pas
-// un uuid.UUID — audit_logs.entity_id reste nil dans ce cas, l'id du banner est inclus
-// dans details à la place).
-func (h *BannerHandler) logBannerAudit(c *fiber.Ctx, action string, bannerID int, details string) {
+// un uuid.UUID — audit_logs.entity_id reste nil dans ce cas ; entity_key porte l'id du
+// banner sous forme texte — Audit Schema Phase B - Content/Settings only).
+func (h *BannerHandler) logBannerAudit(c *fiber.Ctx, action string, bannerID int, detailsJSON models.JSONB, details string) {
 	if h.auditSvc == nil {
 		return
 	}
 	adminID, _ := middleware.GetUserID(c)
-	h.auditSvc.Log(c.Context(), adminID, action, "banner", nil, fmt.Sprintf("banner_id=%d %s", bannerID, details))
+	if detailsJSON == nil {
+		detailsJSON = models.JSONB{}
+	}
+	detailsJSON["banner_id"] = bannerID
+	h.auditSvc.Log(c.Context(), adminID, action, "banner", nil, fmt.Sprintf("banner_id=%d %s", bannerID, details),
+		services.WithActorType("admin"),
+		services.WithDetailsJSON(detailsJSON),
+		services.WithEntityKey(strconv.Itoa(bannerID)),
+		services.WithIP(c.IP()),
+		services.WithUserAgent(c.Get("User-Agent")),
+	)
 }
 
 // List all active banners (Public)
@@ -92,7 +102,7 @@ func (h *BannerHandler) Toggle(c *fiber.Ctx) error {
 	if err := h.service.ToggleBanner(c.Context(), id, req.IsActive); err != nil {
 		return MapError(c, h.logger, err)
 	}
-	h.logBannerAudit(c, "banner_updated", id, fmt.Sprintf("is_active=%v", req.IsActive))
+	h.logBannerAudit(c, "banner_updated", id, models.JSONB{"is_active": req.IsActive}, fmt.Sprintf("is_active=%v", req.IsActive))
 
 	return OK(c, fiber.Map{"message": "Banner status updated"})
 }
@@ -114,7 +124,10 @@ func (h *BannerHandler) Create(c *fiber.Ctx) error {
 	}
 	// Ne jamais journaliser image_url complète (Content/Settings audit logs) —
 	// seulement le fait qu'une image existe.
-	h.logBannerAudit(c, "banner_created", banner.ID, fmt.Sprintf("title_ar=%s has_image=%v", banner.TitleAr, banner.ImageURL != ""))
+	h.logBannerAudit(c, "banner_created", banner.ID, models.JSONB{
+		"title_ar":   banner.TitleAr,
+		"has_image":  banner.ImageURL != "",
+	}, fmt.Sprintf("title_ar=%s has_image=%v", banner.TitleAr, banner.ImageURL != ""))
 
 	return Created(c, banner)
 }
@@ -138,7 +151,7 @@ func (h *BannerHandler) Delete(c *fiber.Ctx) error {
 	if err := h.service.DeleteBanner(c.Context(), id); err != nil {
 		return MapError(c, h.logger, err)
 	}
-	h.logBannerAudit(c, "banner_deleted", id, "")
+	h.logBannerAudit(c, "banner_deleted", id, nil, "")
 	return OK(c, fiber.Map{"message": "Banner deleted successfully"})
 }
 
@@ -154,7 +167,10 @@ func (h *BannerHandler) Update(c *fiber.Ctx) error {
 	if err := h.service.UpdateBanner(c.Context(), &banner); err != nil {
 		return MapError(c, h.logger, err)
 	}
-	h.logBannerAudit(c, "banner_updated", id, fmt.Sprintf("title_ar=%s has_image=%v", banner.TitleAr, banner.ImageURL != ""))
+	h.logBannerAudit(c, "banner_updated", id, models.JSONB{
+		"title_ar":   banner.TitleAr,
+		"has_image":  banner.ImageURL != "",
+	}, fmt.Sprintf("title_ar=%s has_image=%v", banner.TitleAr, banner.ImageURL != ""))
 
 	return OK(c, banner)
 }

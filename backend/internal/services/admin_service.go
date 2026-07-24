@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -694,7 +695,14 @@ func (s *adminService) ReviewReport(ctx context.Context, id uuid.UUID, status, n
 		return err
 	}
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, adminID, "report_reviewed", "report", &id, fmt.Sprintf("status=%s notes=%s", status, notes))
+		detailsJSON := models.JSONB{"report_id": id.String(), "status": status}
+		if notes != "" {
+			detailsJSON["notes"] = notes
+		}
+		s.auditSvc.Log(ctx, adminID, "report_reviewed", "report", &id, fmt.Sprintf("status=%s notes=%s", status, notes),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 	return nil
 }
@@ -704,7 +712,10 @@ func (s *adminService) DeleteReport(ctx context.Context, id uuid.UUID, adminID u
 		return err
 	}
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, adminID, "report_deleted", "report", &id, "")
+		s.auditSvc.Log(ctx, adminID, "report_deleted", "report", &id, "",
+			WithActorType("admin"),
+			WithDetailsJSON(models.JSONB{"report_id": id.String()}),
+		)
 	}
 	return nil
 }
@@ -723,7 +734,14 @@ func (s *adminService) ReviewKYC(ctx context.Context, userID uuid.UUID, status, 
 		if status == "approved" {
 			action = "kyc_approved"
 		}
-		s.auditSvc.Log(ctx, adminID, action, "kyc", &userID, fmt.Sprintf("notes=%s", notes))
+		detailsJSON := models.JSONB{"target_user_id": userID.String(), "status": status}
+		if notes != "" {
+			detailsJSON["notes"] = notes
+		}
+		s.auditSvc.Log(ctx, adminID, action, "kyc", &userID, fmt.Sprintf("notes=%s", notes),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		)
 	}
 
 	// If approved, mark user as verified
@@ -761,7 +779,8 @@ func (s *adminService) DeleteCategory(ctx context.Context, id int, adminID uuid.
 }
 
 // logCategoryAudit journalise une action admin sur une catégorie (Content/Settings
-// audit logs).
+// audit logs — Phase B). IP/User-Agent non disponibles ici : ces méthodes de service
+// n'ont pas accès à *fiber.Ctx (même limitation documentée pour ValidateAuction).
 func (s *adminService) logCategoryAudit(ctx context.Context, adminID uuid.UUID, action string, id int, nameAr string) {
 	if s.auditSvc == nil {
 		return
@@ -770,7 +789,15 @@ func (s *adminService) logCategoryAudit(ctx context.Context, adminID uuid.UUID, 
 	if nameAr != "" {
 		details += " name_ar=" + nameAr
 	}
-	s.auditSvc.Log(ctx, adminID, action, "category", nil, details)
+	detailsJSON := models.JSONB{"category_id": id}
+	if nameAr != "" {
+		detailsJSON["name_ar"] = nameAr
+	}
+	s.auditSvc.Log(ctx, adminID, action, "category", nil, details,
+		WithActorType("admin"),
+		WithDetailsJSON(detailsJSON),
+		WithEntityKey(strconv.Itoa(id)),
+	)
 }
 
 func (s *adminService) CreateLocation(ctx context.Context, l *models.Location) error {
@@ -967,7 +994,11 @@ func (s *adminService) CreatePaymentMethod(ctx context.Context, code, nameAr, na
 		return err
 	}
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, adminID, "payment_method_created", "payment_method", nil, fmt.Sprintf("code=%s name_ar=%s", code, nameAr))
+		// IP/User-Agent non disponibles ici : méthode de service sans *fiber.Ctx.
+		s.auditSvc.Log(ctx, adminID, "payment_method_created", "payment_method", nil, fmt.Sprintf("code=%s name_ar=%s", code, nameAr),
+			WithActorType("admin"),
+			WithDetailsJSON(models.JSONB{"code": code, "name_ar": nameAr}),
+		)
 	}
 	return nil
 }
@@ -981,7 +1012,11 @@ func (s *adminService) UpdatePaymentMethod(ctx context.Context, id int, code, na
 		return err
 	}
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, adminID, "payment_method_updated", "payment_method", nil, fmt.Sprintf("payment_method_id=%d code=%s name_ar=%s", id, code, nameAr))
+		s.auditSvc.Log(ctx, adminID, "payment_method_updated", "payment_method", nil, fmt.Sprintf("payment_method_id=%d code=%s name_ar=%s", id, code, nameAr),
+			WithActorType("admin"),
+			WithDetailsJSON(models.JSONB{"payment_method_id": id, "code": code, "name_ar": nameAr}),
+			WithEntityKey(strconv.Itoa(id)),
+		)
 	}
 	return nil
 }
@@ -992,7 +1027,11 @@ func (s *adminService) DeletePaymentMethod(ctx context.Context, id int, adminID 
 		return err
 	}
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, adminID, "payment_method_deleted", "payment_method", nil, fmt.Sprintf("payment_method_id=%d", id))
+		s.auditSvc.Log(ctx, adminID, "payment_method_deleted", "payment_method", nil, fmt.Sprintf("payment_method_id=%d", id),
+			WithActorType("admin"),
+			WithDetailsJSON(models.JSONB{"payment_method_id": id}),
+			WithEntityKey(strconv.Itoa(id)),
+		)
 	}
 	return nil
 }

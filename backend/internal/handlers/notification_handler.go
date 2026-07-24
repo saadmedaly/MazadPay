@@ -7,6 +7,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/middleware"
+	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
 	"go.uber.org/zap"
 )
@@ -249,8 +250,17 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 			return MapError(c, h.logger, err)
 		}
 		if h.auditSvc != nil {
+			detailsJSON := models.JSONB{
+				"title": shortTitle,
+				"type":  req.Type,
+			}
 			h.auditSvc.Log(c.Context(), adminID, "notification_broadcast_sent", "notification", nil,
-				"title="+shortTitle+" type="+req.Type)
+				"title="+shortTitle+" type="+req.Type,
+				services.WithActorType("admin"),
+				services.WithDetailsJSON(detailsJSON),
+				services.WithIP(c.IP()),
+				services.WithUserAgent(c.Get("User-Agent")),
+			)
 		}
 		return OK(c, fiber.Map{"message": "Notification sent to all users", "type": "broadcast"})
 	}
@@ -266,8 +276,18 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 			return MapError(c, h.logger, err)
 		}
 		if h.auditSvc != nil {
+			detailsJSON := models.JSONB{
+				"target_user_id": userUUID.String(),
+				"title":          shortTitle,
+				"type":           req.Type,
+			}
 			h.auditSvc.Log(c.Context(), adminID, "notification_sent", "user", &userUUID,
-				"title="+shortTitle+" type="+req.Type)
+				"title="+shortTitle+" type="+req.Type,
+				services.WithActorType("admin"),
+				services.WithDetailsJSON(detailsJSON),
+				services.WithIP(c.IP()),
+				services.WithUserAgent(c.Get("User-Agent")),
+			)
 		}
 		return OK(c, fiber.Map{"message": "Notification sent to user", "user_id": req.UserID})
 	}

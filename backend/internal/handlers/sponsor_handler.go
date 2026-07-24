@@ -30,12 +30,21 @@ func (h *SponsorHandler) SetAuditService(auditSvc services.AuditService) {
 	h.auditSvc = auditSvc
 }
 
-func (h *SponsorHandler) logAudit(c *fiber.Ctx, action string, id uuid.UUID, details string) {
+func (h *SponsorHandler) logAudit(c *fiber.Ctx, action string, id uuid.UUID, detailsJSON models.JSONB, details string) {
 	if h.auditSvc == nil {
 		return
 	}
 	adminID, _ := middleware.GetUserID(c)
-	h.auditSvc.Log(c.Context(), adminID, action, "sponsor", &id, details)
+	if detailsJSON == nil {
+		detailsJSON = models.JSONB{}
+	}
+	detailsJSON["sponsor_id"] = id.String()
+	h.auditSvc.Log(c.Context(), adminID, action, "sponsor", &id, details,
+		services.WithActorType("admin"),
+		services.WithDetailsJSON(detailsJSON),
+		services.WithIP(c.IP()),
+		services.WithUserAgent(c.Get("User-Agent")),
+	)
 }
 
 func (h *SponsorHandler) ListActive(c *fiber.Ctx) error {
@@ -100,7 +109,7 @@ func (h *SponsorHandler) Create(c *fiber.Ctx) error {
 	if err := h.service.CreateSponsor(c.Context(), sponsor); err != nil {
 		return MapError(c, h.logger, err)
 	}
-	h.logAudit(c, "sponsor_created", sponsor.ID, fmt.Sprintf("name=%s is_active=%v", sponsor.Name, sponsor.IsActive))
+	h.logAudit(c, "sponsor_created", sponsor.ID, models.JSONB{"name": sponsor.Name, "is_active": sponsor.IsActive}, fmt.Sprintf("name=%s is_active=%v", sponsor.Name, sponsor.IsActive))
 
 	return Created(c, sponsor)
 }
@@ -130,7 +139,7 @@ func (h *SponsorHandler) Update(c *fiber.Ctx) error {
 	if err := h.service.UpdateSponsor(c.Context(), sponsor); err != nil {
 		return MapError(c, h.logger, err)
 	}
-	h.logAudit(c, "sponsor_updated", id, fmt.Sprintf("name=%s is_active=%v", sponsor.Name, sponsor.IsActive))
+	h.logAudit(c, "sponsor_updated", id, models.JSONB{"name": sponsor.Name, "is_active": sponsor.IsActive}, fmt.Sprintf("name=%s is_active=%v", sponsor.Name, sponsor.IsActive))
 
 	return OK(c, sponsor)
 }
@@ -144,7 +153,7 @@ func (h *SponsorHandler) ToggleStatus(c *fiber.Ctx) error {
 	if err := h.service.ToggleSponsorStatus(c.Context(), id); err != nil {
 		return MapError(c, h.logger, err)
 	}
-	h.logAudit(c, "sponsor_updated", id, "status toggled")
+	h.logAudit(c, "sponsor_updated", id, nil, "status toggled")
 
 	return OK(c, fiber.Map{"message": "Sponsor status updated"})
 }
@@ -158,7 +167,7 @@ func (h *SponsorHandler) Delete(c *fiber.Ctx) error {
 	if err := h.service.DeleteSponsor(c.Context(), id); err != nil {
 		return MapError(c, h.logger, err)
 	}
-	h.logAudit(c, "sponsor_deleted", id, "")
+	h.logAudit(c, "sponsor_deleted", id, nil, "")
 
 	return OK(c, fiber.Map{"message": "Sponsor deleted"})
 }
