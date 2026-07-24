@@ -16,7 +16,9 @@ import (
 	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
 )
 
 type AdminService interface {
@@ -146,6 +148,9 @@ type adminService struct {
 	mediaSvc     MediaService
 	notifSvc     NotificationService
 	auditSvc     AuditService
+	rdb          *redis.Client
+	logger       *zap.Logger
+	jwtExpiry    int
 }
 
 func NewAdminService(
@@ -163,6 +168,9 @@ func NewAdminService(
 	mediaSvc MediaService,
 	notifSvc NotificationService,
 	auditSvc AuditService,
+	rdb *redis.Client,
+	logger *zap.Logger,
+	jwtExpiry int,
 ) AdminService {
 	return &adminService{
 		db:           db,
@@ -179,6 +187,9 @@ func NewAdminService(
 		mediaSvc:     mediaSvc,
 		notifSvc:     notifSvc,
 		auditSvc:     auditSvc,
+		rdb:          rdb,
+		logger:       logger,
+		jwtExpiry:    jwtExpiry,
 	}
 }
 
@@ -289,6 +300,12 @@ func (s *adminService) BlockUser(ctx context.Context, id uuid.UUID, block bool, 
 
 	if err := s.userRepo.UpdateStatus(ctx, id, !block); err != nil {
 		return err
+	}
+
+	if block {
+		// Un compte bloqué ne doit pas rester utilisable via un JWT déjà émis —
+		// invalider toutes ses sessions actives (Session Security Phase 1).
+		RevokeUserSessions(ctx, s.rdb, s.logger, id, s.jwtExpiry)
 	}
 
 	if findErr == nil && s.auditSvc != nil {

@@ -45,6 +45,45 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
+// RevokedBeforeKey retourne la clé Redis portant l'horodatage de révocation globale
+// d'un utilisateur (Session Security Phase 1 — user-level revocation). Tout JWT émis
+// (IssuedAt) avant cet horodatage doit être rejeté par le middleware JWT, même s'il
+// est par ailleurs valide (signature correcte, non expiré, non blacklisté
+// individuellement). Fonction partagée entre services (écriture, lors d'un blocage ou
+// d'une réinitialisation de PIN) et middleware (lecture, à chaque requête).
+func RevokedBeforeKey(userID uuid.UUID) string {
+	return fmt.Sprintf("revoked_before:user:%s", userID.String())
+}
+
+// revocationTTLSafetyMargin est ajouté à la durée de vie max d'un JWT pour calculer le
+// TTL de la clé revoked_before : couvre les dérives d'horloge et la latence réseau
+// entre l'émission d'un token et son premier contrôle côté serveur.
+const revocationTTLSafetyMargin = 1 * time.Hour
+
+// RevokeUserSessions marque tous les JWT actuellement émis pour cet utilisateur comme
+// invalides (Session Security Phase 1). N'échoue jamais bruyamment : si Redis est
+// indisponible, l'appelant (blocage utilisateur, réinitialisation de PIN) continue
+// normalement — cette révocation est une couche de défense supplémentaire, pas une
+// condition bloquante pour l'opération principale qui l'a déclenchée.
+//
+// jwtExpiryHours doit être la même valeur que cfg.JWT.ExpiryHours utilisée pour
+// signer les tokens (JWT_EXPIRY_HOURS) : le TTL ne doit jamais être un nombre fixe
+// indépendant de cette configuration, sous peine qu'un changement futur de
+// JWT_EXPIRY_HOURS rende ce TTL trop court et laisse une fenêtre de réutilisation
+// d'un token pourtant révoqué (voir revue Session Security Phase 1).
+func RevokeUserSessions(ctx context.Context, rdb *redis.Client, logger *zap.Logger, userID uuid.UUID, jwtExpiryHours int) {
+	if rdb == nil {
+		return
+	}
+	key := RevokedBeforeKey(userID)
+	ttl := time.Duration(jwtExpiryHours)*time.Hour + revocationTTLSafetyMargin
+	if err := rdb.Set(ctx, key, time.Now().Unix(), ttl).Err(); err != nil {
+		if logger != nil {
+			logger.Error("RevokeUserSessions: failed to write revocation marker", zap.Error(err), zap.String("user_id", userID.String()))
+		}
+	}
+}
+
 type authService struct {
 	userRepo       repository.UserRepository
 	jwtSecret      string
@@ -316,7 +355,16 @@ func (s *authService) ResetPassword(ctx context.Context, phone, newPin string) e
 		return err
 	}
 
-	return s.userRepo.UpdatePin(ctx, user.ID, string(hash))
+	if err := s.userRepo.UpdatePin(ctx, user.ID, string(hash)); err != nil {
+		return err
+	}
+
+	// Un PIN réinitialisé implique souvent une prise de contrôle de compte suspectée —
+	// invalider toute session déjà émise plutôt que de laisser un éventuel attaquant
+	// garder l'accès via un JWT encore valide (Session Security Phase 1).
+	RevokeUserSessions(ctx, s.rdb, s.logger, user.ID, s.jwtExpiry)
+
+	return nil
 }
 
 func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldPin, newPin string) error {

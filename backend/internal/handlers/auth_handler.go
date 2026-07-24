@@ -230,12 +230,43 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		return OK(c, fiber.Map{"message": "Logged out successfully (empty token)"})
 	}
 
-	// Ajouter le token à la blacklist Redis (expirer après 24h par sécurité)
-	if h.rdb != nil {
-		err := h.rdb.Set(c.Context(), fmt.Sprintf("blacklist:%s", tokenStr), "1", 24*time.Hour).Err()
-		if err != nil {
-			h.logger.Error("Failed to blacklist token", zap.Error(err))
+	if h.rdb == nil {
+		// Sans Redis, aucune blacklist n'est possible : le token reste valide malgré
+		// la demande de logout. Le signaler explicitement plutôt que de répondre
+		// succès (Session Security Phase 1 — ne jamais faire croire à un logout
+		// effectif quand il ne l'est pas).
+		h.logger.Error("Logout failed: Redis unavailable, cannot blacklist token")
+		return c.Status(503).JSON(fiber.Map{
+			"success": false,
+			"error":   fiber.Map{"code": "service_unavailable", "message": "تعذر تسجيل الخروج حالياً، حاول لاحقاً"},
+		})
+	}
+
+	// TTL du blacklist aligné sur la durée de vie réelle restante du token (Session
+	// Security Phase 1) : auparavant fixé à 24h alors que JWT_EXPIRY_HOURS peut aller
+	// jusqu'à 72h, laissant une fenêtre où le token redevenait utilisable après
+	// expiration prématurée de l'entrée Redis mais avant l'expiration réelle du JWT.
+	ttl := 24 * time.Hour
+	claims, parseErr := h.service.ValidateJWT(tokenStr)
+	if parseErr == nil && claims.ExpiresAt != nil {
+		remaining := time.Until(claims.ExpiresAt.Time)
+		if remaining <= 0 {
+			// Déjà expiré naturellement : rien à blacklister, le middleware JWT
+			// rejettera ce token via la vérification exp standard.
+			return OK(c, fiber.Map{"message": "Logged out successfully"})
 		}
+		ttl = remaining
+	}
+	// Si le token est invalide/non parseable (signature altérée, format inattendu),
+	// on garde le TTL par défaut de 24h par prudence plutôt que de ne pas blacklister
+	// du tout — un token illisible ici ne doit pas empêcher un logout best-effort.
+
+	if err := h.rdb.Set(c.Context(), fmt.Sprintf("blacklist:%s", tokenStr), "1", ttl).Err(); err != nil {
+		h.logger.Error("Logout failed: could not write blacklist entry", zap.Error(err))
+		return c.Status(503).JSON(fiber.Map{
+			"success": false,
+			"error":   fiber.Map{"code": "service_unavailable", "message": "تعذر تسجيل الخروج حالياً، حاول لاحقاً"},
+		})
 	}
 
 	return OK(c, fiber.Map{"message": "Logged out successfully"})

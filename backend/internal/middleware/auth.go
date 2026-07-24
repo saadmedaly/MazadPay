@@ -60,7 +60,7 @@ func JWT(jwtSecret string, logger *zap.Logger, rdb *redis.Client) fiber.Handler 
 		}
 
 		claims := token.Claims.(*services.JWTClaims)
-		
+
 		uid, err := uuid.Parse(claims.UserID)
 		if err != nil {
 			logger.Error("Auth failed: Invalid UUID in token", zap.Error(err))
@@ -68,6 +68,42 @@ func JWT(jwtSecret string, logger *zap.Logger, rdb *redis.Client) fiber.Handler 
 				"success": false,
 				"error":   fiber.Map{"code": "unauthorized", "message": "Invalid token content"},
 			})
+		}
+
+		// Révocation au niveau utilisateur (Session Security Phase 1) : rejette tout
+		// JWT émis avant un blocage de compte ou une réinitialisation de PIN, même
+		// s'il est par ailleurs valide (signature/exp corrects, non blacklisté
+		// individuellement). fail-closed : si Redis est indisponible, on refuse la
+		// requête plutôt que de laisser passer un token potentiellement révoqué —
+		// cohérent avec le traitement fail-closed déjà appliqué aux routes
+		// sensibles (Auth/OTP Rate Limiting Hardening). Risque assumé : une panne
+		// Redis bloque alors tous les endpoints authentifiés, pas seulement l'auth ;
+		// à surveiller en production.
+		if rdb != nil {
+			revokedBefore, rErr := rdb.Get(c.Context(), services.RevokedBeforeKey(uid)).Int64()
+			if rErr != nil && rErr != redis.Nil {
+				logger.Error("Auth failed: Redis error checking user revocation", zap.Error(rErr), zap.String("path", c.Path()))
+				return c.Status(503).JSON(fiber.Map{
+					"success": false,
+					"error":   fiber.Map{"code": "service_unavailable", "message": "الخدمة مشغولة حالياً، يرجى المحاولة لاحقاً"},
+				})
+			}
+			// Comparaison stricte (<, pas <=) : IssuedAt et revokedBefore sont tous deux
+			// tronqués à la seconde (Unix()), donc un nouveau login effectué la même
+			// seconde qu'une révocation (ex: ResetPassword suivi immédiatement d'un
+			// nouveau Login avec le nouveau PIN) aurait pu avoir IssuedAt == revokedBefore
+			// et être rejeté à tort avec un <=. RevokeUserSessions écrit revoked_before
+			// avant que ResetPassword ne retourne, donc tout token émis par un Login
+			// postérieur — même à la même seconde — est légitimement postérieur en temps
+			// réel malgré l'égalité au niveau de la précision seconde ; < laisse passer
+			// ce cas tout en rejetant strictement tout ce qui est antérieur.
+			if rErr == nil && claims.IssuedAt != nil && claims.IssuedAt.Unix() < revokedBefore {
+				logger.Warn("Auth failed: Token issued before user-level revocation", zap.String("path", c.Path()), zap.String("user_id", uid.String()))
+				return c.Status(401).JSON(fiber.Map{
+					"success": false,
+					"error":   fiber.Map{"code": "unauthorized", "message": "Token has been invalidated (logged out)"},
+				})
+			}
 		}
 
 		c.Locals("user_id", uid)
