@@ -20,6 +20,7 @@ var (
 	ErrInvalidPin               = errors.New("invalid_pin")
 	ErrWeakPin                  = errors.New("weak_pin")
 	ErrAccountBlocked           = errors.New("account_blocked")
+	ErrPhoneUnavailable         = errors.New("phone_unavailable")
 	ErrWablasNotConfigured      = errors.New("wablas_not_configured")
 	ErrResetPasswordRateLimited = errors.New("reset_password_rate_limited")
 

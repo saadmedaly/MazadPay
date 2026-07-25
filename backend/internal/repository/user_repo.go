@@ -26,6 +26,13 @@ type UserRepository interface {
 	UpdateNotificationSettings(ctx context.Context, id uuid.UUID, enabled bool) error
 	SetBlockedUntil(ctx context.Context, phone string, until time.Time) error
 
+	// IsPhoneBlocked vérifie la table blocked_phones (fonctionnalité admin distincte
+	// de users.blocked_until — voir Blocked Phone Phase 1A). Un numéro est considéré
+	// bloqué si une ligne existe avec expires_at NULL (blocage permanent) ou
+	// expires_at > now() (blocage encore actif) ; un blocage expiré n'empêche plus
+	// rien, sans suppression automatique de la ligne.
+	IsPhoneBlocked(ctx context.Context, phone string) (bool, error)
+
 	// OTP
 	CreateOTP(ctx context.Context, otp *models.OTPVerification) error
 	FindLatestOTP(ctx context.Context, phone, purpose string) (*models.OTPVerification, error)
@@ -150,6 +157,20 @@ func (r *userRepo) SetBlockedUntil(ctx context.Context, phone string, until time
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE users SET blocked_until = $1 WHERE phone = $2`, until, phone)
 	return err
+}
+
+// IsPhoneBlocked interroge blocked_phones (Blocked Phone Phase 1A) : un blocage
+// permanent (expires_at IS NULL) ou encore actif (expires_at > now()) retourne true ;
+// un blocage expiré (ligne toujours présente mais expires_at <= now()) retourne
+// false, sans suppression automatique de la ligne.
+func (r *userRepo) IsPhoneBlocked(ctx context.Context, phone string) (bool, error) {
+	var exists bool
+	err := r.db.GetContext(ctx, &exists,
+		`SELECT EXISTS (
+			SELECT 1 FROM blocked_phones
+			WHERE phone = $1 AND (expires_at IS NULL OR expires_at > now())
+		)`, phone)
+	return exists, err
 }
 
 func (r *userRepo) UpdateProfile(ctx context.Context, id uuid.UUID, fullName, email, city string) error {

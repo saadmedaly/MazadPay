@@ -227,6 +227,9 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "account_blocked":
 		logger.Warn("Account blocked", logFields...)
 		return Fail(c, 403, "account_blocked", "تم إيقاف تسجيل الدخول مؤقتاً بسبب محاولات كثيرة، حاول لاحقاً")
+	case "phone_unavailable":
+		logger.Warn("Phone unavailable", logFields...)
+		return Fail(c, 403, "phone_unavailable", "الخدمة غير متاحة لهذا الرقم حالياً")
 	case "wablas_not_configured":
 		logger.Error("Wablas WhatsApp service not configured", logFields...)
 		return Fail(c, 503, "sms_service_unavailable", "SMS service is temporarily unavailable. Please try again later")

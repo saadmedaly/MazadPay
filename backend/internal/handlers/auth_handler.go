@@ -114,7 +114,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		// can_register permettaient de déterminer si un numéro possède un compte.
 		// Aucun code mobile/web ne dépend de ces champs (vérifié avant ce changement),
 		// donc aucune adaptation client n'est requise pour ce correctif.
-		if errors.Is(err, apperr.ErrInvalidPin) || errors.Is(err, apperr.ErrUserNotFound) {
+		if errors.Is(err, apperr.ErrInvalidPin) || errors.Is(err, apperr.ErrUserNotFound) || errors.Is(err, apperr.ErrPhoneUnavailable) {
 			return Fail(c, fiber.StatusUnauthorized, "invalid_credentials", "Invalid phone or PIN")
 		}
 		return MapError(c, h.logger, err)

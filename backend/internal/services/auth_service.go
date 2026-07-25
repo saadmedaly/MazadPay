@@ -135,6 +135,13 @@ var ValidCountryCodes = map[string]string{
 }
 
 func (s *authService) Register(ctx context.Context, phone, pin, fullName, email, city, countryCode string) error {
+	// Blocage admin au niveau du numéro (Blocked Phone Phase 1A) — table blocked_phones,
+	// distincte de users.blocked_until. Erreur générique : ne révèle jamais la raison,
+	// la durée, ni si le numéro est par ailleurs déjà enregistré.
+	if blocked, err := s.userRepo.IsPhoneBlocked(ctx, phone); err == nil && blocked {
+		return apperr.ErrPhoneUnavailable
+	}
+
 	// Vérifier si le code pays est valide
 	if countryCode == "" {
 		countryCode = "+222" // Default: Mauritanie
@@ -184,6 +191,12 @@ func loginFailKey(phone string) string {
 }
 
 func (s *authService) Login(ctx context.Context, phone, pin string) (string, *models.User, error) {
+	// Blocage admin au niveau du numéro (Blocked Phone Phase 1A) — vérifié avant même
+	// FindByPhone pour ne rien révéler de plus que l'erreur générique existante.
+	if blocked, err := s.userRepo.IsPhoneBlocked(ctx, phone); err == nil && blocked {
+		return "", nil, apperr.ErrPhoneUnavailable
+	}
+
 	user, err := s.userRepo.FindByPhone(ctx, phone)
 	if err != nil {
 		return "", nil, apperr.ErrUserNotFound
@@ -265,6 +278,12 @@ func (s *authService) recordFailedLogin(ctx context.Context, phone string) {
 }
 
 func (s *authService) SendOTP(ctx context.Context, phone, purpose, ip string) error {
+	// Blocage admin au niveau du numéro (Blocked Phone Phase 1A) — empêche l'envoi
+	// d'un OTP à un numéro bloqué, quel que soit purpose (register/reset_password).
+	if blocked, err := s.userRepo.IsPhoneBlocked(ctx, phone); err == nil && blocked {
+		return apperr.ErrPhoneUnavailable
+	}
+
 	code := GenerateOTP(s.otpLength)
 
 	// Vérifier s'il existe déjà un OTP en cours de validité
