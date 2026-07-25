@@ -24,12 +24,21 @@ func NewAdminInvitationRepository(db *sqlx.DB) AdminInvitationRepository {
 	return &adminInvitationRepo{db: db}
 }
 
+// Create n'écrit pas encore target_phone_hash/target_phone_masked (Admin
+// Authorization Phase 1C-A — fondation de schéma uniquement, aucun comportement
+// changé). L'enforcement effectif (calcul du hash, colonnes écrites) arrive en
+// Phase 1C-B ; ce comportement inchangé est intentionnel pour cette phase.
 func (r *adminInvitationRepo) Create(ctx context.Context, inv *models.AdminInvitation) error {
 	query := `INSERT INTO admin_invitations (id, token, created_by, expires_at) VALUES (:id, :token, :created_by, :expires_at)`
 	_, err := r.db.NamedExecContext(ctx, query, inv)
 	return err
 }
 
+// GetByToken utilise SELECT * : les nouvelles colonnes target_phone_hash/
+// target_phone_masked sont automatiquement peuplées dans le struct via leurs tags
+// `db:` dès que la migration 000043 est appliquée (NULL pour les invitations
+// existantes, comme pour toute invitation créée avant Phase 1C-B) — aucun
+// changement de requête nécessaire ici.
 func (r *adminInvitationRepo) GetByToken(ctx context.Context, token string) (*models.AdminInvitation, error) {
 	var inv models.AdminInvitation
 	query := `SELECT * FROM admin_invitations WHERE token = $1`
