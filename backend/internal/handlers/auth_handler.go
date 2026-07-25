@@ -179,11 +179,6 @@ func (h *AuthHandler) ResetPassword(c *fiber.Ctx) error {
 		return BadRequest(c, "New PIN is too weak. Avoid repeating digits (1111) or sequences (1234)")
 	}
 
-	// Verify OTP code
-	if err := h.service.VerifyOTP(c.Context(), req.Phone, req.Code, "reset_password"); err != nil {
-		return MapError(c, h.logger, err)
-	}
-
 	// Track password reset attempt
 	ip := c.IP()
 	if err := h.service.TrackPasswordReset(c.Context(), req.Phone, ip); err != nil {
@@ -199,7 +194,10 @@ func (h *AuthHandler) ResetPassword(c *fiber.Ctx) error {
 	// du compte par le contenu de la réponse.
 	const neutralResetMessage = "If this phone is registered, the PIN has been reset successfully."
 
-	if err := h.service.ResetPassword(c.Context(), req.Phone, req.NewPin); err != nil {
+	// La vérification OTP ("reset_password") est désormais effectuée à l'intérieur de
+	// ResetPassword elle-même (OTP Security Phase 1C) — le handler ne fait plus que
+	// relayer req.Code, il n'est plus seul responsable d'imposer la preuve OTP.
+	if err := h.service.ResetPassword(c.Context(), req.Phone, req.Code, req.NewPin); err != nil {
 		// apperr.ErrNotFound (numéro sans compte, après un OTP pourtant valide) reçoit
 		// la même réponse 200 + même message que le succès réel — voir neutralResetMessage
 		// ci-dessus. Toute autre erreur (OTP invalide/expiré/MaxAttempts, PIN faible,

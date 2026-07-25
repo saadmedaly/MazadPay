@@ -31,7 +31,7 @@ type AuthService interface {
 	Login(ctx context.Context, phone, pin string) (string, *models.User, error) // token, user, err
 	SendOTP(ctx context.Context, phone, purpose, ip string) error
 	VerifyOTP(ctx context.Context, phone, code, purpose string) error
-	ResetPassword(ctx context.Context, phone, newPin string) error
+	ResetPassword(ctx context.Context, phone, code, newPin string) error
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPin, newPin string) error
 	GenerateJWT(userID uuid.UUID, role string, isSuperAdmin bool) (string, error)
 	ValidateJWT(tokenString string) (*JWTClaims, error)
@@ -344,7 +344,19 @@ func (s *authService) VerifyOTP(ctx context.Context, phone, code, purpose string
 	return nil
 }
 
-func (s *authService) ResetPassword(ctx context.Context, phone, newPin string) error {
+// ResetPassword exige une preuve OTP valide ("reset_password") avant toute
+// modification du PIN — la vérification vit désormais ici, dans le service, et non
+// plus seulement dans le handler appelant (OTP Security Phase 1C). Auparavant, le
+// handler (auth_handler.go) appelait VerifyOTP puis ResetPassword séparément : cela
+// fonctionnait tant que ResetPassword n'avait qu'un seul appelant discipliné, mais
+// rien n'empêchait un futur appelant (nouvel endpoint, script, tâche interne) de
+// contourner la vérification en appelant directement le service. Le contrat est
+// maintenant imposé par la signature elle-même.
+func (s *authService) ResetPassword(ctx context.Context, phone, code, newPin string) error {
+	if err := s.VerifyOTP(ctx, phone, code, "reset_password"); err != nil {
+		return err
+	}
+
 	user, err := s.userRepo.FindByPhone(ctx, phone)
 	if err != nil {
 		return apperr.ErrNotFound
