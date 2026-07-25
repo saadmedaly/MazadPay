@@ -782,18 +782,21 @@ func (h *AdminHandler) UnblockPhone(c *fiber.Ctx) error {
 	// Decode URL encoded phone number
 	decodedPhone, err := url.QueryUnescape(phone)
 	if err != nil {
-		h.logger.Error("Failed to decode phone parameter", zap.String("phone", phone), zap.Error(err))
+		h.logger.Error("Failed to decode phone parameter", zap.Error(err))
 		return BadRequest(c, "Invalid phone parameter")
 	}
 
-	h.logger.Info("Attempting to unblock phone", zap.String("phone", phone), zap.String("decodedPhone", decodedPhone))
+	adminID, _ := middleware.GetUserID(c)
+	phoneMasked := maskPhone(decodedPhone)
 
-	if err := h.svc.UnblockPhone(c.Context(), decodedPhone); err != nil {
-		h.logger.Error("Failed to unblock phone", zap.String("phone", phone), zap.String("decodedPhone", decodedPhone), zap.Error(err))
+	h.logger.Info("Attempting to unblock phone", zap.String("phone_masked", phoneMasked))
+
+	if err := h.svc.UnblockPhone(c.Context(), decodedPhone, adminID); err != nil {
+		h.logger.Error("Failed to unblock phone", zap.String("phone_masked", phoneMasked), zap.Error(err))
 		return InternalError(c, "Failed to unblock phone")
 	}
 
-	h.logger.Info("Successfully unblocked phone", zap.String("phone", phone), zap.String("decodedPhone", decodedPhone))
+	h.logger.Info("Successfully unblocked phone", zap.String("phone_masked", phoneMasked))
 	return OK(c, fiber.Map{"message": "Phone unblocked successfully"})
 }
 

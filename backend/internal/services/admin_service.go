@@ -66,7 +66,7 @@ type AdminService interface {
 	// Blocked Phones
 	ListBlockedPhones(ctx context.Context) ([]map[string]interface{}, error)
 	BlockPhone(ctx context.Context, phone, reason string, blockedBy uuid.UUID) error
-	UnblockPhone(ctx context.Context, phone string) error
+	UnblockPhone(ctx context.Context, phone string, unblockedBy uuid.UUID) error
 
 	// Countries
 	GetCountries(ctx context.Context) ([]models.Country, error)
@@ -1083,10 +1083,34 @@ func (s *adminService) BlockPhone(ctx context.Context, phone, reason string, blo
 		VALUES ($1, $2, $3)
 		ON CONFLICT (phone) DO UPDATE SET reason = $2
 	`, phone, reason, blockedBy)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if s.auditSvc != nil {
+		// Ne jamais journaliser le numéro complet (audit de sécurité — Blocked Phone
+		// Phase 1B), uniquement sa version masquée (4 derniers chiffres). Cette
+		// insertion ne fixe jamais expires_at (colonne existante mais non utilisée
+		// par ce chemin), donc le blocage est toujours permanent ici.
+		phoneMasked := maskPhoneForInvitation(phone)
+		details := map[string]interface{}{
+			"phone_masked": phoneMasked,
+			"permanent":    true,
+		}
+		if reason != "" {
+			details["reason"] = reason
+		}
+		s.auditSvc.Log(ctx, blockedBy, "phone_blocked", "blocked_phone", nil,
+			fmt.Sprintf("phone_masked=%s permanent=true", phoneMasked),
+			WithActorType("admin"),
+			WithDetailsJSON(details),
+		)
+	}
+
+	return nil
 }
 
-func (s *adminService) UnblockPhone(ctx context.Context, phone string) error {
+func (s *adminService) UnblockPhone(ctx context.Context, phone string, unblockedBy uuid.UUID) error {
 	result, err := s.db.ExecContext(ctx, `DELETE FROM blocked_phones WHERE phone = $1`, phone)
 	if err != nil {
 		return err
@@ -1097,7 +1121,20 @@ func (s *adminService) UnblockPhone(ctx context.Context, phone string) error {
 		return err
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("no blocked phone found with number: %s", phone)
+		return fmt.Errorf("no blocked phone found")
+	}
+
+	if s.auditSvc != nil {
+		// Ne jamais journaliser le numéro complet (audit de sécurité — Blocked Phone
+		// Phase 1B), uniquement sa version masquée (4 derniers chiffres).
+		phoneMasked := maskPhoneForInvitation(phone)
+		s.auditSvc.Log(ctx, unblockedBy, "phone_unblocked", "blocked_phone", nil,
+			fmt.Sprintf("phone_masked=%s", phoneMasked),
+			WithActorType("admin"),
+			WithDetailsJSON(map[string]interface{}{
+				"phone_masked": phoneMasked,
+			}),
+		)
 	}
 
 	return nil
