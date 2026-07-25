@@ -297,7 +297,11 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Get("/users/:id", adminHandler.GetUserByID)
 	admin.Get("/users/:id/auctions", adminHandler.GetUserAuctions)
 	admin.Get("/users/:id/transactions", adminHandler.GetUserTransactions)
-	admin.Post("/invitations", adminHandler.GenerateInvitation)
+	// Super Admin only - Créer une invitation admin (Admin Authorization Phase 1B) :
+	// un admin peut ainsi créer/promouvoir un autre admin via /auth/register-admin,
+	// une action de sensibilité au moins équivalente à la suppression d'utilisateur —
+	// restreinte au même niveau que DeleteUser ci-dessous.
+	admin.Post("/invitations", middleware.SuperAdminOnly(logger), adminHandler.GenerateInvitation)
 	admin.Put("/users/:id/block", adminHandler.BlockUser)
 
 	// Super Admin only - Delete user
