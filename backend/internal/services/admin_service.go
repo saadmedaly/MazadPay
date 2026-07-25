@@ -829,6 +829,10 @@ func (s *adminService) DeleteLocation(ctx context.Context, id int) error {
 	return s.auctionRepo.DeleteLocation(ctx, id)
 }
 
+// CreateAdmin n'est actuellement rattachée à aucune route (code non exposé côté API) —
+// l'audit log est ajouté ici par cohérence avec RegisterAdminWithToken/CreateAdmin, sans
+// modifier le comportement ni relier la fonction à un endpoint (Admin Authorization
+// Phase 1A). Jamais de PIN/password_hash/token journalisé.
 func (s *adminService) CreateAdmin(ctx context.Context, phone, pin, fullName, email string) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
 	if err != nil {
@@ -846,7 +850,22 @@ func (s *adminService) CreateAdmin(ctx context.Context, phone, pin, fullName, em
 		IsVerified:   true, // Admins created by admins are verified
 	}
 
-	return s.userRepo.Create(ctx, user)
+	if err := s.userRepo.Create(ctx, user); err != nil {
+		return err
+	}
+
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, user.ID, "admin_created", "user", &user.ID,
+			fmt.Sprintf("user_id=%s mode=created", user.ID),
+			WithActorType("admin"),
+			WithDetailsJSON(models.JSONB{
+				"user_id": user.ID.String(),
+				"mode":    "created",
+			}),
+		)
+	}
+
+	return nil
 }
 
 func (s *adminService) GenerateAdminInvitation(ctx context.Context, createdBy uuid.UUID) (string, error) {
@@ -865,6 +884,21 @@ func (s *adminService) GenerateAdminInvitation(ctx context.Context, createdBy uu
 
 	if err := s.invRepo.Create(ctx, inv); err != nil {
 		return "", err
+	}
+
+	if s.auditSvc != nil {
+		// Ne jamais journaliser le token lui-même (audit de sécurité — Admin
+		// Authorization Phase 1A), uniquement l'identifiant de l'invitation et ses
+		// métadonnées non sensibles.
+		s.auditSvc.Log(ctx, createdBy, "admin_invitation_created", "admin_invitation", &inv.ID,
+			fmt.Sprintf("invitation_id=%s expires_at=%s", inv.ID, inv.ExpiresAt.Format(time.RFC3339)),
+			WithActorType("admin"),
+			WithDetailsJSON(models.JSONB{
+				"invitation_id": inv.ID.String(),
+				"created_by":    createdBy.String(),
+				"expires_at":    inv.ExpiresAt.Format(time.RFC3339),
+			}),
+		)
 	}
 
 	return token, nil
@@ -893,11 +927,16 @@ func (s *adminService) RegisterAdminWithToken(ctx context.Context, token, phone,
 		return err
 	}
 
+	var userID uuid.UUID
+	mode := "created"
+
 	if existingUser != nil {
 		// Promote existing user to admin
 		if err := s.userRepo.PromoteToAdmin(ctx, existingUser.ID, fullName, email, string(hash)); err != nil {
 			return err
 		}
+		userID = existingUser.ID
+		mode = "promoted"
 	} else {
 		// Create new admin user
 		user := &models.User{
@@ -913,6 +952,35 @@ func (s *adminService) RegisterAdminWithToken(ctx context.Context, token, phone,
 		if err := s.userRepo.Create(ctx, user); err != nil {
 			return err
 		}
+		userID = user.ID
+	}
+
+	if s.auditSvc != nil {
+		// Endpoint public (register-admin) sans JWT admin — l'acteur n'est ni un admin
+		// authentifié ni un processus système au sens strict, mais l'utilisateur/
+		// invité qui a consommé le token. actor_type="user" reflète cela ; actor_id
+		// pointe vers le compte concerné lui-même (aucune autre identité disponible
+		// côté serveur à ce stade). Jamais de token/password_hash/PIN journalisé —
+		// uniquement le téléphone masqué (Admin Authorization Phase 1A).
+		action := "admin_registered_with_invitation"
+		if mode == "promoted" {
+			action = "user_promoted_to_admin_with_invitation"
+		}
+		maskedPhone := "####"
+		if len(phone) >= 4 {
+			maskedPhone = "####" + phone[len(phone)-4:]
+		}
+		s.auditSvc.Log(ctx, userID, action, "user", &userID,
+			fmt.Sprintf("user_id=%s invitation_id=%s mode=%s", userID, inv.ID, mode),
+			WithActorType("user"),
+			WithDetailsJSON(models.JSONB{
+				"user_id":       userID.String(),
+				"invitation_id": inv.ID.String(),
+				"invited_by":    inv.CreatedBy.String(),
+				"phone_masked":  maskedPhone,
+				"mode":          mode,
+			}),
+		)
 	}
 
 	// Mark invitation as used
