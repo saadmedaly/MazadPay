@@ -96,7 +96,22 @@ func (h *AdminHandler) GenerateInvitation(c *fiber.Ctx) error {
 	if err != nil {
 		return Unauthorized(c)
 	}
-	token, err := h.svc.GenerateAdminInvitation(c.Context(), adminID)
+
+	// target_phone requis (Admin Authorization Phase 1C-B) : lie l'invitation à un
+	// numéro spécifique choisi par le super admin, au lieu de laisser le porteur du
+	// token choisir librement quel compte promouvoir (voir Phase 1C — audit).
+	type Request struct {
+		TargetPhone string `json:"target_phone" validate:"required"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if req.TargetPhone == "" {
+		return BadRequest(c, "target_phone is required")
+	}
+
+	token, err := h.svc.GenerateAdminInvitation(c.Context(), adminID, req.TargetPhone)
 	if err != nil {
 		return InternalError(c, "Failed to generate invitation: "+err.Error())
 	}

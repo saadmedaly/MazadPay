@@ -24,14 +24,29 @@ export function UsersPage() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [token, setToken] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [invitePhone, setInvitePhone] = useState('')
+  const [invitePhoneError, setInvitePhoneError] = useState<string | null>(null)
 
   const { data, isLoading, isError } = useUsers(q, page)
   const blockUser = useBlockUser()
   const deleteUser = useDeleteUser()
   const generateInvitation = useGenerateInvitation()
 
+  // Même bornes que le backend (RegisterRequest.Phone: min=8,max=20) — évite un
+  // aller-retour réseau inutile pour une saisie manifestement invalide, sans
+  // dupliquer la validation faite côté serveur (Admin Authorization Phase 1C-C).
   const handleGenerateLink = () => {
-    generateInvitation.mutate(undefined, {
+    const trimmed = invitePhone.trim()
+    if (!trimmed) {
+      setInvitePhoneError('رقم الهاتف مطلوب')
+      return
+    }
+    if (trimmed.length < 8 || trimmed.length > 20) {
+      setInvitePhoneError('رقم الهاتف غير صالح')
+      return
+    }
+    setInvitePhoneError(null)
+    generateInvitation.mutate(trimmed, {
       onSuccess: (newToken) => {
         setToken(newToken)
       }
@@ -174,9 +189,11 @@ export function UsersPage() {
           />
         </div>
         
-        <button 
+        <button
           onClick={() => {
             setToken(null)
+            setInvitePhone('')
+            setInvitePhoneError(null)
             setShowInviteModal(true)
           }}
           className="bg-mazad-primary hover:bg-mazad-primary/90 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-mazad-primary/20"
@@ -251,9 +268,27 @@ export function UsersPage() {
                   </div>
                   <div>
                     <p className="text-sm text-surface-muted">
-                      قم بتوليد رابط دعوة خاص لإرساله إلى المشرف الجديد.
-                      الرابط صالح لمرة واحدة ولمدة 24 ساعة.
+                      أدخل رقم هاتف المشرف الجديد، ثم قم بتوليد رابط دعوة خاص به لإرساله إليه.
+                      الرابط صالح لمرة واحدة ولمدة 24 ساعة، ولن يعمل إلا لهذا الرقم تحديداً.
                     </p>
+                  </div>
+                  <div className="text-right space-y-2">
+                    <label className="text-xs font-bold text-surface-muted uppercase tracking-wider">
+                      رقم هاتف المشرف الجديد
+                    </label>
+                    <Input
+                      value={invitePhone}
+                      onChange={(e) => {
+                        setInvitePhone(e.target.value)
+                        if (invitePhoneError) setInvitePhoneError(null)
+                      }}
+                      placeholder="+222XXXXXXXX"
+                      dir="ltr"
+                      className="text-left"
+                    />
+                    {invitePhoneError && (
+                      <p className="text-xs text-red-400 font-bold">{invitePhoneError}</p>
+                    )}
                   </div>
                   <button
                     onClick={handleGenerateLink}
@@ -266,9 +301,9 @@ export function UsersPage() {
               ) : (
                 <div className="space-y-4">
                   <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
-                    <p className="text-emerald-400 text-sm font-bold">تم توليد الرابط بنجاح!</p>
+                    <p className="text-emerald-400 text-sm font-bold">تم توليد دعوة لهذا الرقم بنجاح!</p>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-surface-muted uppercase tracking-wider">رابط الدعوة</label>
                     <div className="relative group">

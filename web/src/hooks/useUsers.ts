@@ -91,8 +91,12 @@ export function useCreateAdmin() {
 
 export function useGenerateInvitation() {
   return useMutation({
-    mutationFn: async () => {
-      const { data } = await client.post<{ data: { token: string } }>('/v1/api/admin/invitations')
+    // target_phone requis par le backend (Admin Authorization Phase 1C-B) : lie
+    // l'invitation à un numéro spécifique choisi par le super admin.
+    mutationFn: async (targetPhone: string) => {
+      const { data } = await client.post<{ data: { token: string } }>('/v1/api/admin/invitations', {
+        target_phone: targetPhone,
+      })
       return data.data.token
     },
     onError: (err: any) => toast.error(err.response?.data?.message || err.message),

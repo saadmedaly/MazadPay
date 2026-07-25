@@ -24,12 +24,12 @@ func NewAdminInvitationRepository(db *sqlx.DB) AdminInvitationRepository {
 	return &adminInvitationRepo{db: db}
 }
 
-// Create n'écrit pas encore target_phone_hash/target_phone_masked (Admin
-// Authorization Phase 1C-A — fondation de schéma uniquement, aucun comportement
-// changé). L'enforcement effectif (calcul du hash, colonnes écrites) arrive en
-// Phase 1C-B ; ce comportement inchangé est intentionnel pour cette phase.
+// Create écrit désormais target_phone_hash/target_phone_masked (Admin Authorization
+// Phase 1C-B) — nullable si l'appelant ne les fournit pas (compatibilité), mais
+// GenerateAdminInvitation les fournit systématiquement depuis cette phase.
 func (r *adminInvitationRepo) Create(ctx context.Context, inv *models.AdminInvitation) error {
-	query := `INSERT INTO admin_invitations (id, token, created_by, expires_at) VALUES (:id, :token, :created_by, :expires_at)`
+	query := `INSERT INTO admin_invitations (id, token, created_by, expires_at, target_phone_hash, target_phone_masked)
+		VALUES (:id, :token, :created_by, :expires_at, :target_phone_hash, :target_phone_masked)`
 	_, err := r.db.NamedExecContext(ctx, query, inv)
 	return err
 }

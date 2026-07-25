@@ -3,10 +3,13 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -57,7 +60,7 @@ type AdminService interface {
 
 	// Admin Management
 	CreateAdmin(ctx context.Context, phone, pin, fullName, email string) error
-	GenerateAdminInvitation(ctx context.Context, createdBy uuid.UUID) (string, error)
+	GenerateAdminInvitation(ctx context.Context, createdBy uuid.UUID, targetPhone string) (string, error)
 	RegisterAdminWithToken(ctx context.Context, token, phone, pin, fullName, email string) error
 
 	// Blocked Phones
@@ -829,6 +832,37 @@ func (s *adminService) DeleteLocation(ctx context.Context, id int) error {
 	return s.auctionRepo.DeleteLocation(ctx, id)
 }
 
+// normalizePhoneForInvitation applique une normalisation simple et sûre, dédiée aux
+// invitations admin (Admin Authorization Phase 1C-B) — ne touche jamais à la logique
+// de login/register générale. Doit être appelée à l'identique lors de la création de
+// l'invitation (hash stocké) et lors de son utilisation (hash comparé), sinon la
+// comparaison échouerait silencieusement pour un numéro pourtant identique.
+func normalizePhoneForInvitation(phone string) string {
+	p := strings.TrimSpace(phone)
+	p = strings.NewReplacer(" ", "", "-", "", "(", "", ")", "").Replace(p)
+	if strings.HasPrefix(p, "00") {
+		p = "+" + strings.TrimPrefix(p, "00")
+	}
+	return p
+}
+
+// hashPhoneForInvitation calcule le SHA-256 hex du numéro normalisé — jamais le
+// numéro complet n'est stocké en base pour une invitation (Admin Authorization Phase
+// 1C-B) ; seul ce hash sert à la comparaison lors de RegisterAdminWithToken.
+func hashPhoneForInvitation(normalizedPhone string) string {
+	sum := sha256.Sum256([]byte(normalizedPhone))
+	return hex.EncodeToString(sum[:])
+}
+
+// maskPhoneForInvitation retourne une version affichable/auditable du numéro (les 4
+// derniers chiffres seulement), jamais le numéro complet.
+func maskPhoneForInvitation(phone string) string {
+	if len(phone) < 4 {
+		return "####"
+	}
+	return "####" + phone[len(phone)-4:]
+}
+
 // CreateAdmin n'est actuellement rattachée à aucune route (code non exposé côté API) —
 // l'audit log est ajouté ici par cohérence avec RegisterAdminWithToken/CreateAdmin, sans
 // modifier le comportement ni relier la fonction à un endpoint (Admin Authorization
@@ -868,18 +902,27 @@ func (s *adminService) CreateAdmin(ctx context.Context, phone, pin, fullName, em
 	return nil
 }
 
-func (s *adminService) GenerateAdminInvitation(ctx context.Context, createdBy uuid.UUID) (string, error) {
+// GenerateAdminInvitation exige désormais un targetPhone (Admin Authorization Phase
+// 1C-B) : le numéro complet n'est jamais stocké, seuls son hash SHA-256 (comparaison)
+// et sa version masquée (affichage/audit) le sont.
+func (s *adminService) GenerateAdminInvitation(ctx context.Context, createdBy uuid.UUID, targetPhone string) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	token := hex.EncodeToString(b)
 
+	normalizedPhone := normalizePhoneForInvitation(targetPhone)
+	targetPhoneHash := hashPhoneForInvitation(normalizedPhone)
+	targetPhoneMasked := maskPhoneForInvitation(normalizedPhone)
+
 	inv := &models.AdminInvitation{
-		ID:        uuid.New(),
-		Token:     token,
-		CreatedBy: createdBy,
-		ExpiresAt: time.Now().Add(24 * time.Hour), // 24h validity
+		ID:                uuid.New(),
+		Token:             token,
+		CreatedBy:         createdBy,
+		ExpiresAt:         time.Now().Add(24 * time.Hour), // 24h validity
+		TargetPhoneHash:   &targetPhoneHash,
+		TargetPhoneMasked: &targetPhoneMasked,
 	}
 
 	if err := s.invRepo.Create(ctx, inv); err != nil {
@@ -887,16 +930,17 @@ func (s *adminService) GenerateAdminInvitation(ctx context.Context, createdBy uu
 	}
 
 	if s.auditSvc != nil {
-		// Ne jamais journaliser le token lui-même (audit de sécurité — Admin
-		// Authorization Phase 1A), uniquement l'identifiant de l'invitation et ses
-		// métadonnées non sensibles.
+		// Ne jamais journaliser le token ni le numéro complet ni son hash (audit de
+		// sécurité — Admin Authorization Phase 1A/1C-B), uniquement l'identifiant de
+		// l'invitation et le numéro masqué.
 		s.auditSvc.Log(ctx, createdBy, "admin_invitation_created", "admin_invitation", &inv.ID,
-			fmt.Sprintf("invitation_id=%s expires_at=%s", inv.ID, inv.ExpiresAt.Format(time.RFC3339)),
+			fmt.Sprintf("invitation_id=%s expires_at=%s target_phone_masked=%s", inv.ID, inv.ExpiresAt.Format(time.RFC3339), targetPhoneMasked),
 			WithActorType("admin"),
 			WithDetailsJSON(models.JSONB{
-				"invitation_id": inv.ID.String(),
-				"created_by":    createdBy.String(),
-				"expires_at":    inv.ExpiresAt.Format(time.RFC3339),
+				"invitation_id":       inv.ID.String(),
+				"created_by":          createdBy.String(),
+				"expires_at":          inv.ExpiresAt.Format(time.RFC3339),
+				"target_phone_masked": targetPhoneMasked,
 			}),
 		)
 	}
@@ -917,6 +961,22 @@ func (s *adminService) RegisterAdminWithToken(ctx context.Context, token, phone,
 	}
 	if time.Now().After(inv.ExpiresAt) {
 		return fmt.Errorf("cette invitation a expiré")
+	}
+
+	// Invitation liée à un numéro cible (Admin Authorization Phase 1C-B) : une
+	// invitation sans target_phone_hash (créée avant ce durcissement) est refusée —
+	// comportement intentionnel, pas un bug (voir plan Phase 1C). Le message reste
+	// générique, identique à celui utilisé plus bas en cas de non-correspondance,
+	// pour ne jamais révéler si l'invitation avait ou non un numéro cible.
+	if inv.TargetPhoneHash == nil || *inv.TargetPhoneHash == "" {
+		return fmt.Errorf("invitation invalide")
+	}
+	normalizedInputPhone := normalizePhoneForInvitation(phone)
+	computedHash := hashPhoneForInvitation(normalizedInputPhone)
+	if subtle.ConstantTimeCompare([]byte(computedHash), []byte(*inv.TargetPhoneHash)) != 1 {
+		// Message générique : ne jamais révéler le numéro cible attendu (empêche
+		// l'énumération, cohérent avec le durcissement OTP Security Phase 1B).
+		return fmt.Errorf("invitation invalide")
 	}
 
 	// Check if user already exists
