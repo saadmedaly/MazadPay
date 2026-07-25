@@ -191,11 +191,26 @@ func (h *AuthHandler) ResetPassword(c *fiber.Ctx) error {
 		// Don't return error, continue with reset
 	}
 
+	// Message neutre unique, identique que le compte existe ou non (OTP Security Phase
+	// 1B-2 — durcissement anti-énumération). Un texte différent selon le cas ("Password
+	// reset successfully" vs un message conditionnel) permettait de deviner l'existence
+	// du compte même à statut HTTP 200 identique — corrigé ici en unifiant aussi le
+	// texte, pas seulement le code de statut. Ne jamais confirmer/infirmer l'existence
+	// du compte par le contenu de la réponse.
+	const neutralResetMessage = "If this phone is registered, the PIN has been reset successfully."
+
 	if err := h.service.ResetPassword(c.Context(), req.Phone, req.NewPin); err != nil {
+		// apperr.ErrNotFound (numéro sans compte, après un OTP pourtant valide) reçoit
+		// la même réponse 200 + même message que le succès réel — voir neutralResetMessage
+		// ci-dessus. Toute autre erreur (OTP invalide/expiré/MaxAttempts, PIN faible,
+		// etc.) garde son traitement normal via MapError, inchangé.
+		if errors.Is(err, apperr.ErrNotFound) {
+			return OK(c, fiber.Map{"message": neutralResetMessage})
+		}
 		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, fiber.Map{"message": "Password reset successfully"})
+	return OK(c, fiber.Map{"message": neutralResetMessage})
 }
 
 func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
