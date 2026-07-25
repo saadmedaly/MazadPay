@@ -1,9 +1,10 @@
 package services
 
 import (
+	"crypto/rand"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
@@ -95,13 +96,26 @@ func (s *smsService) SendOTP(phone, code string) error {
 	return nil
 }
 
+// GenerateOTP génère un code OTP à `length` chiffres via crypto/rand (audit de
+// sécurité OTP Security Phase 1A) — remplace l'ancien math/rand.NewSource(time.Now()...),
+// une graine prévisible par un attaquant connaissant approximativement l'heure de la
+// requête, combinée à un espace de seulement 10^length valeurs. rand.Int avec un
+// module de 10 évite tout biais de distribution (contrairement à `% 10` sur un flux
+// d'octets, qui biaiserait légèrement les chiffres 0-5 sur un espace non multiple de
+// 10). panic en cas d'échec de crypto/rand : cela n'arrive en pratique que si la
+// source d'entropie du système est cassée, un état dans lequel il est plus sûr
+// d'interrompre la requête (récupérée par le middleware de recover de Fiber) que de
+// continuer avec un code prévisible ou vide.
 func GenerateOTP(length int) string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	code := ""
+	digits := make([]byte, length)
 	for i := 0; i < length; i++ {
-		code += fmt.Sprintf("%d", r.Intn(10))
+		n, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			panic(fmt.Sprintf("GenerateOTP: crypto/rand failure, cannot safely generate OTP: %v", err))
+		}
+		digits[i] = byte('0' + n.Int64())
 	}
-	return code
+	return string(digits)
 }
 
 // ValidatePINStrength vérifie que le PIN respecte les critères de sécurité minimum
