@@ -108,11 +108,14 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	token, user, err := h.service.Login(c.Context(), req.Phone, req.Pin)
 	if err != nil {
-		if errors.Is(err, apperr.ErrInvalidPin) {
-			return FailWithData(c, fiber.StatusUnauthorized, "invalid_pin", "Invalid PIN", fiber.Map{"can_reset_password": true})
-		}
-		if errors.Is(err, apperr.ErrUserNotFound) {
-			return FailWithData(c, fiber.StatusUnauthorized, "phone_not_registered", "Phone number not registered", fiber.Map{"can_register": true})
+		// Réponse identique que le PIN soit incorrect ou que le numéro ne soit pas
+		// enregistré (OTP Security Phase 1B-1 — durcissement anti-énumération) :
+		// auparavant, invalid_pin/phone_not_registered + can_reset_password/
+		// can_register permettaient de déterminer si un numéro possède un compte.
+		// Aucun code mobile/web ne dépend de ces champs (vérifié avant ce changement),
+		// donc aucune adaptation client n'est requise pour ce correctif.
+		if errors.Is(err, apperr.ErrInvalidPin) || errors.Is(err, apperr.ErrUserNotFound) {
+			return Fail(c, fiber.StatusUnauthorized, "invalid_credentials", "Invalid phone or PIN")
 		}
 		return MapError(c, h.logger, err)
 	}
