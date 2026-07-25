@@ -72,16 +72,24 @@ const revocationTTLSafetyMargin = 1 * time.Hour
 // JWT_EXPIRY_HOURS rende ce TTL trop court et laisse une fenêtre de réutilisation
 // d'un token pourtant révoqué (voir revue Session Security Phase 1).
 func RevokeUserSessions(ctx context.Context, rdb *redis.Client, logger *zap.Logger, userID uuid.UUID, jwtExpiryHours int) {
-	if rdb == nil {
-		return
-	}
-	key := RevokedBeforeKey(userID)
-	ttl := time.Duration(jwtExpiryHours)*time.Hour + revocationTTLSafetyMargin
-	if err := rdb.Set(ctx, key, time.Now().Unix(), ttl).Err(); err != nil {
+	if err := RevokeUserSessionsErr(ctx, rdb, userID, jwtExpiryHours); err != nil {
 		if logger != nil {
 			logger.Error("RevokeUserSessions: failed to write revocation marker", zap.Error(err), zap.String("user_id", userID.String()))
 		}
 	}
+}
+
+// RevokeUserSessionsErr est la même opération que RevokeUserSessions mais remonte
+// l'erreur Redis à l'appelant au lieu de l'avaler (Blocked Phone Phase 1C) : utilisée
+// uniquement là où un échec silencieux de révocation serait trompeur pour l'admin
+// (BlockPhone doit savoir si les sessions n'ont pas pu être invalidées).
+func RevokeUserSessionsErr(ctx context.Context, rdb *redis.Client, userID uuid.UUID, jwtExpiryHours int) error {
+	if rdb == nil {
+		return fmt.Errorf("redis unavailable: cannot revoke sessions")
+	}
+	key := RevokedBeforeKey(userID)
+	ttl := time.Duration(jwtExpiryHours)*time.Hour + revocationTTLSafetyMargin
+	return rdb.Set(ctx, key, time.Now().Unix(), ttl).Err()
 }
 
 type authService struct {

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -1078,6 +1079,17 @@ func (s *adminService) ListBlockedPhones(ctx context.Context) ([]map[string]inte
 }
 
 func (s *adminService) BlockPhone(ctx context.Context, phone, reason string, blockedBy uuid.UUID) error {
+	phoneMasked := maskPhoneForInvitation(phone)
+
+	// Vérifie d'abord si un compte actif existe pour ce numéro, avec une variante
+	// stricte qui distingue "non enregistré" d'une vraie panne DB (Blocked Phone
+	// Phase 1C) : FindByPhone (générique) fusionnerait les deux en ErrNotFound, ce
+	// qui masquerait une panne DB réelle et donnerait un faux sentiment de succès.
+	existingUser, findErr := s.userRepo.FindByPhoneForRevocation(ctx, phone)
+	if findErr != nil && !errors.Is(findErr, apperr.ErrNotFound) {
+		return findErr
+	}
+
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO blocked_phones (phone, reason, blocked_by)
 		VALUES ($1, $2, $3)
@@ -1087,21 +1099,41 @@ func (s *adminService) BlockPhone(ctx context.Context, phone, reason string, blo
 		return err
 	}
 
+	// Un numéro bloqué correspondant à un compte existant ne doit pas rester
+	// utilisable via un JWT déjà émis avant le blocage — invalider ses sessions
+	// actives (Blocked Phone Phase 1C), comme pour BlockUser (Session Security
+	// Phase 1). Si aucun compte actif n'a ce numéro (ErrNotFound ci-dessus), ce
+	// n'est pas une erreur : le blocage reste enregistré pour empêcher une
+	// inscription/utilisation future.
+	revokedSessions := false
+	if existingUser != nil {
+		if revokeErr := RevokeUserSessionsErr(ctx, s.rdb, existingUser.ID, s.jwtExpiry); revokeErr != nil {
+			if s.logger != nil {
+				s.logger.Error("BlockPhone: failed to revoke existing sessions",
+					zap.String("phone_masked", phoneMasked),
+					zap.Error(revokeErr),
+				)
+			}
+			return fmt.Errorf("phone blocked but failed to revoke active sessions: %w", revokeErr)
+		}
+		revokedSessions = true
+	}
+
 	if s.auditSvc != nil {
 		// Ne jamais journaliser le numéro complet (audit de sécurité — Blocked Phone
 		// Phase 1B), uniquement sa version masquée (4 derniers chiffres). Cette
 		// insertion ne fixe jamais expires_at (colonne existante mais non utilisée
 		// par ce chemin), donc le blocage est toujours permanent ici.
-		phoneMasked := maskPhoneForInvitation(phone)
 		details := map[string]interface{}{
-			"phone_masked": phoneMasked,
-			"permanent":    true,
+			"phone_masked":     phoneMasked,
+			"permanent":        true,
+			"revoked_sessions": revokedSessions,
 		}
 		if reason != "" {
 			details["reason"] = reason
 		}
 		s.auditSvc.Log(ctx, blockedBy, "phone_blocked", "blocked_phone", nil,
-			fmt.Sprintf("phone_masked=%s permanent=true", phoneMasked),
+			fmt.Sprintf("phone_masked=%s permanent=true revoked_sessions=%t", phoneMasked, revokedSessions),
 			WithActorType("admin"),
 			WithDetailsJSON(details),
 		)

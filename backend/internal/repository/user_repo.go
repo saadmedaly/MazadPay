@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -32,6 +33,14 @@ type UserRepository interface {
 	// expires_at > now() (blocage encore actif) ; un blocage expiré n'empêche plus
 	// rien, sans suppression automatique de la ligne.
 	IsPhoneBlocked(ctx context.Context, phone string) (bool, error)
+
+	// FindByPhoneForRevocation est une variante stricte de FindByPhone, réservée à
+	// BlockPhone (Blocked Phone Phase 1C) : contrairement à FindByPhone qui fusionne
+	// toute erreur (y compris les erreurs DB réelles) en apperr.ErrNotFound, elle
+	// distingue "numéro non enregistré" (sql.ErrNoRows → apperr.ErrNotFound) d'une
+	// vraie panne DB (retournée telle quelle), pour que l'appelant ne traite jamais
+	// silencieusement une panne DB comme "numéro non enregistré".
+	FindByPhoneForRevocation(ctx context.Context, phone string) (*models.User, error)
 
 	// OTP
 	CreateOTP(ctx context.Context, otp *models.OTPVerification) error
@@ -74,6 +83,18 @@ func (r *userRepo) FindByPhone(ctx context.Context, phone string) (*models.User,
 		return nil, apperr.ErrNotFound
 	}
 	return &u, nil
+}
+
+func (r *userRepo) FindByPhoneForRevocation(ctx context.Context, phone string) (*models.User, error) {
+	var u models.User
+	err := r.db.GetContext(ctx, &u, `SELECT * FROM users WHERE phone = $1 AND is_active = true`, phone)
+	if err == nil {
+		return &u, nil
+	}
+	if err == sql.ErrNoRows {
+		return nil, apperr.ErrNotFound
+	}
+	return nil, err
 }
 
 func (r *userRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
