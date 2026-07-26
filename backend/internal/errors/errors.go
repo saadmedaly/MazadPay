@@ -14,6 +14,10 @@ var (
 	// Settings (Admin Settings Phase B — key-based authorization)
 	ErrSettingKeyUnknown        = errors.New("setting_key_unknown")
 	ErrSettingRequiresSuperAdmin = errors.New("setting_requires_super_admin")
+
+	// Settings (Admin Settings Phase C — validation)
+	ErrSettingInvalidType  = errors.New("setting_invalid_type")
+	ErrSettingInvalidValue = errors.New("setting_invalid_value")
 	
 	// Auth
 	ErrOTPExpired               = errors.New("otp_expired")

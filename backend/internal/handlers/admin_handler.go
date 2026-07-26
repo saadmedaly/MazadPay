@@ -829,6 +829,12 @@ func (h *AdminHandler) UpdateSetting(c *fiber.Ctx) error {
 		if errors.Is(err, apperr.ErrSettingKeyUnknown) {
 			return BadRequest(c, "Unknown setting key")
 		}
+		if errors.Is(err, apperr.ErrSettingInvalidType) {
+			return BadRequest(c, "Type does not match this setting key")
+		}
+		if errors.Is(err, apperr.ErrSettingInvalidValue) {
+			return BadRequest(c, "Value is not valid for this setting")
+		}
 		return InternalError(c, "Failed to update setting")
 	}
 	return OK(c, fiber.Map{"message": "Setting updated successfully"})

@@ -1192,6 +1192,85 @@ var superAdminOnlySettingKeys = map[string]bool{
 	models.SettingMinBidIncrement:   true,
 }
 
+// expectedSettingTypes fixe le type attendu pour chaque clé connue (Admin Settings
+// Phase C). "string" et "text" sont acceptés comme équivalents pour la catégorie
+// texte : le seed (000013_system_settings) écrit 'string' pour contact_whatsapp/
+// contact_email, mais le formulaire Web (SettingsPage.tsx) envoie toujours
+// type: 'text' pour ces mêmes clés — rejeter 'text' casserait la mise à jour
+// normale de ces clés depuis l'admin dashboard existant.
+var expectedSettingTypes = map[string]string{
+	models.SettingMaintenanceMode:     "boolean",
+	models.SettingRegistrationOpen:    "boolean",
+	models.SettingMaxAuctionDuration:  "number",
+	models.SettingDefaultInsurance:    "number",
+	models.SettingMinBidIncrement:     "number",
+	models.SettingContactWhatsApp:     "string",
+	models.SettingContactEmail:        "string",
+	models.SettingTermsAr:             "string",
+	models.SettingTermsFr:             "string",
+	models.SettingTermsEn:             "string",
+}
+
+// validateSettingTypeAndValue vérifie, pour une clé déjà connue de l'allowlist
+// (Phase B), que le type déclaré par la requête correspond au type attendu pour
+// cette clé et que la valeur est convertible dans ce type (Admin Settings Phase C).
+// Ne journalise jamais value — uniquement key/type dans les messages d'erreur.
+func validateSettingTypeAndValue(key, value, settingType string) error {
+	expected := expectedSettingTypes[key]
+
+	normalizedType := settingType
+	if normalizedType == "" {
+		// Type non fourni par la requête : on retombe sur le type attendu pour cette
+		// clé plutôt que de rejeter, cohérent avec le fait que le type est
+		// intégralement déterminé par la clé (déjà validée par l'allowlist Phase B) —
+		// aucune requête légitime existante (Web envoie toujours type) n'est cassée
+		// par ce choix, et cela évite un rejet superflu si un futur appelant omet type.
+		normalizedType = expected
+	}
+
+	// "text" et "string" désignent la même catégorie (voir commentaire sur
+	// expectedSettingTypes) ; on les normalise avant comparaison.
+	compareType := normalizedType
+	if compareType == "text" {
+		compareType = "string"
+	}
+	if compareType != expected {
+		return apperr.ErrSettingInvalidType
+	}
+
+	switch expected {
+	case "boolean":
+		if value != "true" && value != "false" {
+			return apperr.ErrSettingInvalidValue
+		}
+	case "number":
+		n, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return apperr.ErrSettingInvalidValue
+		}
+		switch key {
+		case models.SettingMaxAuctionDuration:
+			if n <= 0 {
+				return apperr.ErrSettingInvalidValue
+			}
+		case models.SettingDefaultInsurance:
+			if n < 0 {
+				return apperr.ErrSettingInvalidValue
+			}
+		case models.SettingMinBidIncrement:
+			if n <= 0 {
+				return apperr.ErrSettingInvalidValue
+			}
+		}
+	case "string":
+		// Aucune contrainte supplémentaire à ce stade (voir consigne Phase C) : une
+		// valeur vide reste acceptée pour ne pas casser un cas d'usage existant non
+		// vérifié (ex: vider temporairement contact_whatsapp).
+	}
+
+	return nil
+}
+
 func (s *adminService) ListSettings(ctx context.Context) ([]models.SystemSettings, error) {
 	return s.settingsRepo.List(ctx)
 }
@@ -1203,6 +1282,10 @@ func (s *adminService) UpdateSetting(ctx context.Context, key, value, settingTyp
 		}
 	} else if !adminOnlySettingKeys[key] {
 		return apperr.ErrSettingKeyUnknown
+	}
+
+	if err := validateSettingTypeAndValue(key, value, settingType); err != nil {
+		return err
 	}
 
 	// Lu avant la mise à jour uniquement pour l'audit (old_type/value_changed) — son
