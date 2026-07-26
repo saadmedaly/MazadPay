@@ -10,6 +10,7 @@ import (
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
 )
 
 var ErrInvalidStatus = errors.New("invalid status")
@@ -41,15 +42,17 @@ type requestService struct {
 	contentRepo         repository.ContentRepository
 	auditSvc            AuditService
 	notificationService NotificationService
+	logger              *zap.Logger
 }
 
-func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, auditSvc AuditService, notificationService NotificationService) RequestService {
+func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, auditSvc AuditService, notificationService NotificationService, logger *zap.Logger) RequestService {
 	return &requestService{
 		repo:                repo,
 		auctionRepo:         auctionRepo,
 		contentRepo:         contentRepo,
 		auditSvc:            auditSvc,
 		notificationService: notificationService,
+		logger:              logger,
 	}
 }
 
@@ -191,8 +194,12 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 	}
 
 	// Log audit
-	s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_request_reviewed_%s", status), "auction_request", &id,
-		fmt.Sprintf("Status changed to %s. Notes: %s", status, notes))
+	if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_request_reviewed_%s", status), "auction_request", &id,
+		fmt.Sprintf("Status changed to %s. Notes: %s", status, notes)); auditErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ReviewAuctionRequest: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
+		}
+	}
 
 	return nil
 }
@@ -203,7 +210,11 @@ func (s *requestService) DeleteAuctionRequest(ctx context.Context, id uuid.UUID,
 	}
 
 	// Log audit
-	s.auditSvc.Log(ctx, deletedBy, "auction_request_deleted", "auction_request", &id, "Auction request deleted")
+	if auditErr := s.auditSvc.Log(ctx, deletedBy, "auction_request_deleted", "auction_request", &id, "Auction request deleted"); auditErr != nil {
+		if s.logger != nil {
+			s.logger.Error("DeleteAuctionRequest: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
+		}
+	}
 
 	return nil
 }
@@ -218,8 +229,12 @@ func (s *requestService) BulkReviewAuctionRequests(ctx context.Context, ids []uu
 
 	// Log audit for each request
 	for _, id := range ids {
-		s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_requests_bulk_reviewed_%s", status), "auction_request", &id,
-			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes))
+		if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_requests_bulk_reviewed_%s", status), "auction_request", &id,
+			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes)); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("BulkReviewAuctionRequests: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	return nil
@@ -232,7 +247,11 @@ func (s *requestService) BulkDeleteAuctionRequests(ctx context.Context, ids []uu
 
 	// Log audit for each request
 	for _, id := range ids {
-		s.auditSvc.Log(ctx, deletedBy, "auction_requests_bulk_deleted", "auction_request", &id, "Bulk deleted auction request")
+		if auditErr := s.auditSvc.Log(ctx, deletedBy, "auction_requests_bulk_deleted", "auction_request", &id, "Bulk deleted auction request"); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("BulkDeleteAuctionRequests: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	return nil
@@ -338,8 +357,12 @@ func (s *requestService) ReviewBannerRequest(ctx context.Context, id uuid.UUID, 
 	}
 
 	// Log audit
-	s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_request_reviewed_%s", status), "banner_request", &id,
-		fmt.Sprintf("Status changed to %s. Notes: %s", status, notes))
+	if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_request_reviewed_%s", status), "banner_request", &id,
+		fmt.Sprintf("Status changed to %s. Notes: %s", status, notes)); auditErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ReviewBannerRequest: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
+		}
+	}
 
 	// Send localized notification (outside transaction)
 	if status == "approved" {
@@ -379,7 +402,11 @@ func (s *requestService) DeleteBannerRequest(ctx context.Context, id uuid.UUID, 
 	}
 
 	// Log audit
-	s.auditSvc.Log(ctx, deletedBy, "banner_request_deleted", "banner_request", &id, "Banner request deleted")
+	if auditErr := s.auditSvc.Log(ctx, deletedBy, "banner_request_deleted", "banner_request", &id, "Banner request deleted"); auditErr != nil {
+		if s.logger != nil {
+			s.logger.Error("DeleteBannerRequest: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
+		}
+	}
 
 	return nil
 }
@@ -394,8 +421,12 @@ func (s *requestService) BulkReviewBannerRequests(ctx context.Context, ids []uui
 
 	// Log audit for each request
 	for _, id := range ids {
-		s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_requests_bulk_reviewed_%s", status), "banner_request", &id,
-			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes))
+		if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_requests_bulk_reviewed_%s", status), "banner_request", &id,
+			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes)); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("BulkReviewBannerRequests: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	return nil
@@ -408,7 +439,11 @@ func (s *requestService) BulkDeleteBannerRequests(ctx context.Context, ids []uui
 
 	// Log audit for each request
 	for _, id := range ids {
-		s.auditSvc.Log(ctx, deletedBy, "banner_requests_bulk_deleted", "banner_request", &id, "Bulk deleted banner request")
+		if auditErr := s.auditSvc.Log(ctx, deletedBy, "banner_requests_bulk_deleted", "banner_request", &id, "Bulk deleted banner request"); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("BulkDeleteBannerRequests: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	return nil
