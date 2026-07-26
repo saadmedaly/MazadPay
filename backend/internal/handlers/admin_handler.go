@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
@@ -819,7 +821,14 @@ func (h *AdminHandler) UpdateSetting(c *fiber.Ctx) error {
 	}
 	key := c.Params("key")
 	adminID, _ := middleware.GetUserID(c)
-	if err := h.svc.UpdateSetting(c.Context(), key, req.Value, req.Type, adminID); err != nil {
+	isSuperAdmin, _ := c.Locals("is_super_admin").(bool)
+	if err := h.svc.UpdateSetting(c.Context(), key, req.Value, req.Type, adminID, isSuperAdmin); err != nil {
+		if errors.Is(err, apperr.ErrSettingRequiresSuperAdmin) {
+			return Forbidden(c, "This setting requires Super Admin access")
+		}
+		if errors.Is(err, apperr.ErrSettingKeyUnknown) {
+			return BadRequest(c, "Unknown setting key")
+		}
 		return InternalError(c, "Failed to update setting")
 	}
 	return OK(c, fiber.Map{"message": "Setting updated successfully"})

@@ -77,7 +77,7 @@ type AdminService interface {
 
 	// Settings
 	ListSettings(ctx context.Context) ([]models.SystemSettings, error)
-	UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID) error
+	UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID, isSuperAdmin bool) error
 
 	// Payment Methods (from migration 000031)
 	ListPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error)
@@ -1172,11 +1172,39 @@ func (s *adminService) UnblockPhone(ctx context.Context, phone string, unblocked
 	return nil
 }
 
+// adminOnlySettingKeys et superAdminOnlySettingKeys forment l'allowlist complète
+// des clés modifiables via PUT /admin/settings/:key (Admin Settings Phase B) — toute
+// clé absente des deux est refusée, empêchant l'insertion de clés arbitraires via
+// l'API (contournement du formulaire Web, qui ne propose que ces clés connues).
+var adminOnlySettingKeys = map[string]bool{
+	models.SettingContactWhatsApp: true,
+	models.SettingContactEmail:    true,
+	models.SettingTermsAr:         true,
+	models.SettingTermsFr:         true,
+	models.SettingTermsEn:         true,
+}
+
+var superAdminOnlySettingKeys = map[string]bool{
+	models.SettingMaintenanceMode:    true,
+	models.SettingRegistrationOpen:  true,
+	models.SettingMaxAuctionDuration: true,
+	models.SettingDefaultInsurance:  true,
+	models.SettingMinBidIncrement:   true,
+}
+
 func (s *adminService) ListSettings(ctx context.Context) ([]models.SystemSettings, error) {
 	return s.settingsRepo.List(ctx)
 }
 
-func (s *adminService) UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID) error {
+func (s *adminService) UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID, isSuperAdmin bool) error {
+	if superAdminOnlySettingKeys[key] {
+		if !isSuperAdmin {
+			return apperr.ErrSettingRequiresSuperAdmin
+		}
+	} else if !adminOnlySettingKeys[key] {
+		return apperr.ErrSettingKeyUnknown
+	}
+
 	// Lu avant la mise à jour uniquement pour l'audit (old_type/value_changed) — son
 	// absence (première écriture de cette clé) n'empêche jamais l'opération
 	// principale (Admin Settings Phase A).

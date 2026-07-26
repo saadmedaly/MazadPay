@@ -10,6 +10,10 @@ var (
 	ErrForbidden    = errors.New("forbidden")
 	ErrConflict     = errors.New("conflict")
 	ErrBadRequest   = errors.New("bad_request")
+
+	// Settings (Admin Settings Phase B — key-based authorization)
+	ErrSettingKeyUnknown        = errors.New("setting_key_unknown")
+	ErrSettingRequiresSuperAdmin = errors.New("setting_requires_super_admin")
 	
 	// Auth
 	ErrOTPExpired               = errors.New("otp_expired")
