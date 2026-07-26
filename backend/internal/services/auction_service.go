@@ -13,6 +13,7 @@ import (
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
 )
 
 type CreateAuctionInput struct {
@@ -76,9 +77,10 @@ type auctionService struct {
 	rdb         *redis.Client
 	walletRepo  repository.WalletRepository
 	auditSvc    AuditService
+	logger      *zap.Logger
 }
 
-func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client, walletRepo repository.WalletRepository, auditSvc AuditService) AuctionService {
+func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client, walletRepo repository.WalletRepository, auditSvc AuditService, logger *zap.Logger) AuctionService {
 	return &auctionService{
 		db:          db,
 		auctionRepo: auctionRepo,
@@ -89,6 +91,7 @@ func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, re
 		rdb:         rdb,
 		walletRepo:  walletRepo,
 		auditSvc:    auditSvc,
+		logger:      logger,
 	}
 }
 
@@ -753,10 +756,14 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 		}
 		// IP/User-Agent non disponibles ici : CancelAuction est une méthode de service
 		// sans *fiber.Ctx — non étendu dans cette phase (voir rapport Phase B).
-		s.auditSvc.Log(ctx, sellerID, "auction_cancelled", "auction", &auctionID, details,
+		if auditErr := s.auditSvc.Log(ctx, sellerID, "auction_cancelled", "auction", &auctionID, details,
 			WithActorType("user"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("CancelAuction: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	// Libère la caution (insurance_amount) de tous les enchérisseurs — l'auction est
@@ -776,10 +783,14 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 			"auction_id":          auctionID.String(),
 			"hold_release_reason": "cancelled",
 		}
-		s.auditSvc.Log(ctx, sellerID, "auction_holds_released", "auction", &auctionID, "reason=cancelled",
+		if auditErr := s.auditSvc.Log(ctx, sellerID, "auction_holds_released", "auction", &auctionID, "reason=cancelled",
 			WithActorType("user"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("CancelAuction: failed to write audit log for holds release", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -814,10 +825,14 @@ func (s *auctionService) RelistAuction(ctx context.Context, auctionID, sellerID 
 			"new_status":   "pending",
 			"new_end_time": newEndTime.Format(time.RFC3339),
 		}
-		s.auditSvc.Log(ctx, sellerID, "auction_relisted", "auction", &auctionID, details,
+		if auditErr := s.auditSvc.Log(ctx, sellerID, "auction_relisted", "auction", &auctionID, details,
 			WithActorType("user"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("RelistAuction: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -849,10 +864,14 @@ func (s *auctionService) ExtendAuction(ctx context.Context, auctionID, sellerID 
 			"old_end_time":  oldEndTime.Format(time.RFC3339),
 			"new_end_time":  newEndTime.Format(time.RFC3339),
 		}
-		s.auditSvc.Log(ctx, sellerID, "auction_extended", "auction", &auctionID, details,
+		if auditErr := s.auditSvc.Log(ctx, sellerID, "auction_extended", "auction", &auctionID, details,
 			WithActorType("user"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("ExtendAuction: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -889,11 +908,15 @@ func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 						"auction_id":          a.ID.String(),
 						"hold_release_reason": "expired_non_winners",
 					}
-					s.auditSvc.Log(ctx, uuid.Nil, "auction_holds_released", "auction", &a.ID, "reason=expired_non_winners",
+					if auditErr := s.auditSvc.Log(ctx, uuid.Nil, "auction_holds_released", "auction", &a.ID, "reason=expired_non_winners",
 						WithActorType("system"),
 						WithSystemActor(),
 						WithDetailsJSON(detailsJSON),
-					)
+					); auditErr != nil {
+						if s.logger != nil {
+							s.logger.Error("CloseExpiredAuctions: failed to write audit log", zap.String("auction_id", a.ID.String()), zap.Error(auditErr))
+						}
+					}
 				}
 			} else {
 				dbtx.Rollback()

@@ -11,6 +11,7 @@ import (
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
 )
 
 type WalletService interface {
@@ -33,10 +34,11 @@ type walletService struct {
 	txRepo     repository.TransactionRepository
 	notifSvc   NotificationService
 	auditSvc   AuditService
+	logger     *zap.Logger
 }
 
-func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, notifSvc NotificationService, auditSvc AuditService) WalletService {
-	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, notifSvc: notifSvc, auditSvc: auditSvc}
+func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, notifSvc NotificationService, auditSvc AuditService, logger *zap.Logger) WalletService {
+	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, notifSvc: notifSvc, auditSvc: auditSvc, logger: logger}
 }
 
 func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
@@ -85,10 +87,14 @@ func (s *walletService) UploadReceipt(ctx context.Context, txID uuid.UUID, userI
 		}
 		// IP/User-Agent non disponibles ici : UploadReceipt est une méthode de service
 		// sans *fiber.Ctx — non étendu dans cette phase (voir rapport Phase B).
-		s.auditSvc.Log(ctx, userID, "receipt_uploaded", "transaction", &txID, "Receipt uploaded by user",
+		if auditErr := s.auditSvc.Log(ctx, userID, "receipt_uploaded", "transaction", &txID, "Receipt uploaded by user",
 			WithActorType("user"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("UploadReceipt: failed to write audit log", zap.String("transaction_id", txID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -144,10 +150,14 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 		}
 		// IP/User-Agent non disponibles ici : RequestWithdraw est une méthode de
 		// service sans *fiber.Ctx — non étendu dans cette phase (voir rapport Phase B).
-		s.auditSvc.Log(ctx, userID, "withdraw_requested_funds_frozen", "transaction", &txModel.ID, details,
+		if auditErr := s.auditSvc.Log(ctx, userID, "withdraw_requested_funds_frozen", "transaction", &txModel.ID, details,
 			WithActorType("user"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("RequestWithdraw: failed to write audit log", zap.String("transaction_id", txModel.ID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 	return txModel, nil
 }
