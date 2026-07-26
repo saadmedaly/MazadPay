@@ -334,10 +334,14 @@ func (s *adminService) BlockUser(ctx context.Context, id uuid.UUID, block bool, 
 		// IP/User-Agent non disponibles ici : BlockUser est une méthode de service
 		// sans *fiber.Ctx — non étendu dans cette phase (même limitation documentée
 		// pour ValidateTransaction/ValidateAuction, Phases B précédentes).
-		s.auditSvc.Log(ctx, adminID, action, "user", &id, details,
+		if auditErr := s.auditSvc.Log(ctx, adminID, action, "user", &id, details,
 			WithActorType("admin"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("BlockUser: failed to write audit log", zap.String("action", action), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -362,10 +366,14 @@ func (s *adminService) DeleteUser(ctx context.Context, id uuid.UUID, adminID uui
 			"target_user_id": id.String(),
 			"role":           role,
 		}
-		s.auditSvc.Log(ctx, adminID, "user_deleted", "user", &id, fmt.Sprintf("role=%s", role),
+		if auditErr := s.auditSvc.Log(ctx, adminID, "user_deleted", "user", &id, fmt.Sprintf("role=%s", role),
 			WithActorType("admin"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("DeleteUser: failed to write audit log", zap.String("target_user_id", id.String()), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -422,10 +430,14 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 		// IP/User-Agent non disponibles ici : ValidateAuction est une méthode de
 		// service sans accès à *fiber.Ctx (voir même limitation documentée pour
 		// ValidateTransaction, Audit Schema Phase B - Financial only).
-		s.auditSvc.Log(ctx, adminID, action, "auction", &id, details,
+		if auditErr := s.auditSvc.Log(ctx, adminID, action, "auction", &id, details,
 			WithActorType("admin"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("ValidateAuction: failed to write audit log", zap.String("action", action), zap.String("auction_id", id.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	// Send notification to seller
@@ -670,10 +682,14 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 		// ne les transmet pas actuellement. Étendre cette signature pour les faire
 		// transiter serait un changement plus large que ce que demande cette phase
 		// (voir rapport Phase B) — laissé pour une phase ultérieure si nécessaire.
-		s.auditSvc.Log(ctx, adminID, action, "transaction", &id, details,
+		if auditErr := s.auditSvc.Log(ctx, adminID, action, "transaction", &id, details,
 			WithActorType("admin"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("ValidateTransaction: failed to write audit log", zap.String("action", action), zap.String("transaction_id", id.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	// Send notification to user
@@ -720,10 +736,14 @@ func (s *adminService) ReviewReport(ctx context.Context, id uuid.UUID, status, n
 		if notes != "" {
 			detailsJSON["notes"] = notes
 		}
-		s.auditSvc.Log(ctx, adminID, "report_reviewed", "report", &id, fmt.Sprintf("status=%s notes=%s", status, notes),
+		if auditErr := s.auditSvc.Log(ctx, adminID, "report_reviewed", "report", &id, fmt.Sprintf("status=%s notes=%s", status, notes),
 			WithActorType("admin"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("ReviewReport: failed to write audit log", zap.String("report_id", id.String()), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -733,10 +753,14 @@ func (s *adminService) DeleteReport(ctx context.Context, id uuid.UUID, adminID u
 		return err
 	}
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, adminID, "report_deleted", "report", &id, "",
+		if auditErr := s.auditSvc.Log(ctx, adminID, "report_deleted", "report", &id, "",
 			WithActorType("admin"),
 			WithDetailsJSON(models.JSONB{"report_id": id.String()}),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("DeleteReport: failed to write audit log", zap.String("report_id", id.String()), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -759,10 +783,14 @@ func (s *adminService) ReviewKYC(ctx context.Context, userID uuid.UUID, status, 
 		if notes != "" {
 			detailsJSON["notes"] = notes
 		}
-		s.auditSvc.Log(ctx, adminID, action, "kyc", &userID, fmt.Sprintf("notes=%s", notes),
+		if auditErr := s.auditSvc.Log(ctx, adminID, action, "kyc", &userID, fmt.Sprintf("notes=%s", notes),
 			WithActorType("admin"),
 			WithDetailsJSON(detailsJSON),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("ReviewKYC: failed to write audit log", zap.String("action", action), zap.String("target_user_id", userID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	// If approved, mark user as verified
@@ -814,11 +842,15 @@ func (s *adminService) logCategoryAudit(ctx context.Context, adminID uuid.UUID, 
 	if nameAr != "" {
 		detailsJSON["name_ar"] = nameAr
 	}
-	s.auditSvc.Log(ctx, adminID, action, "category", nil, details,
+	if auditErr := s.auditSvc.Log(ctx, adminID, action, "category", nil, details,
 		WithActorType("admin"),
 		WithDetailsJSON(detailsJSON),
 		WithEntityKey(strconv.Itoa(id)),
-	)
+	); auditErr != nil {
+		if s.logger != nil {
+			s.logger.Error("logCategoryAudit: failed to write audit log", zap.String("action", action), zap.Int("category_id", id), zap.Error(auditErr))
+		}
+	}
 }
 
 func (s *adminService) CreateLocation(ctx context.Context, l *models.Location) error {
@@ -890,14 +922,18 @@ func (s *adminService) CreateAdmin(ctx context.Context, phone, pin, fullName, em
 	}
 
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, user.ID, "admin_created", "user", &user.ID,
+		if auditErr := s.auditSvc.Log(ctx, user.ID, "admin_created", "user", &user.ID,
 			fmt.Sprintf("user_id=%s mode=created", user.ID),
 			WithActorType("admin"),
 			WithDetailsJSON(models.JSONB{
 				"user_id": user.ID.String(),
 				"mode":    "created",
 			}),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("RegisterAdminWithToken: failed to write audit log", zap.String("user_id", user.ID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	return nil
@@ -934,7 +970,7 @@ func (s *adminService) GenerateAdminInvitation(ctx context.Context, createdBy uu
 		// Ne jamais journaliser le token ni le numéro complet ni son hash (audit de
 		// sécurité — Admin Authorization Phase 1A/1C-B), uniquement l'identifiant de
 		// l'invitation et le numéro masqué.
-		s.auditSvc.Log(ctx, createdBy, "admin_invitation_created", "admin_invitation", &inv.ID,
+		if auditErr := s.auditSvc.Log(ctx, createdBy, "admin_invitation_created", "admin_invitation", &inv.ID,
 			fmt.Sprintf("invitation_id=%s expires_at=%s target_phone_masked=%s", inv.ID, inv.ExpiresAt.Format(time.RFC3339), targetPhoneMasked),
 			WithActorType("admin"),
 			WithDetailsJSON(models.JSONB{
@@ -943,7 +979,11 @@ func (s *adminService) GenerateAdminInvitation(ctx context.Context, createdBy uu
 				"expires_at":          inv.ExpiresAt.Format(time.RFC3339),
 				"target_phone_masked": targetPhoneMasked,
 			}),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("GenerateAdminInvitation: failed to write audit log", zap.String("invitation_id", inv.ID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	return token, nil
@@ -1031,7 +1071,7 @@ func (s *adminService) RegisterAdminWithToken(ctx context.Context, token, phone,
 		if len(phone) >= 4 {
 			maskedPhone = "####" + phone[len(phone)-4:]
 		}
-		s.auditSvc.Log(ctx, userID, action, "user", &userID,
+		if auditErr := s.auditSvc.Log(ctx, userID, action, "user", &userID,
 			fmt.Sprintf("user_id=%s invitation_id=%s mode=%s", userID, inv.ID, mode),
 			WithActorType("user"),
 			WithDetailsJSON(models.JSONB{
@@ -1041,7 +1081,11 @@ func (s *adminService) RegisterAdminWithToken(ctx context.Context, token, phone,
 				"phone_masked":  maskedPhone,
 				"mode":          mode,
 			}),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("RegisterAdminWithToken: failed to write audit log", zap.String("action", action), zap.String("user_id", userID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 
 	// Mark invitation as used
@@ -1132,11 +1176,15 @@ func (s *adminService) BlockPhone(ctx context.Context, phone, reason string, blo
 		if reason != "" {
 			details["reason"] = reason
 		}
-		s.auditSvc.Log(ctx, blockedBy, "phone_blocked", "blocked_phone", nil,
+		if auditErr := s.auditSvc.Log(ctx, blockedBy, "phone_blocked", "blocked_phone", nil,
 			fmt.Sprintf("phone_masked=%s permanent=true revoked_sessions=%t", phoneMasked, revokedSessions),
 			WithActorType("admin"),
 			WithDetailsJSON(details),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("BlockPhone: failed to write audit log", zap.String("phone_masked", phoneMasked), zap.Error(auditErr))
+			}
+		}
 	}
 
 	return nil
@@ -1160,13 +1208,17 @@ func (s *adminService) UnblockPhone(ctx context.Context, phone string, unblocked
 		// Ne jamais journaliser le numéro complet (audit de sécurité — Blocked Phone
 		// Phase 1B), uniquement sa version masquée (4 derniers chiffres).
 		phoneMasked := maskPhoneForInvitation(phone)
-		s.auditSvc.Log(ctx, unblockedBy, "phone_unblocked", "blocked_phone", nil,
+		if auditErr := s.auditSvc.Log(ctx, unblockedBy, "phone_unblocked", "blocked_phone", nil,
 			fmt.Sprintf("phone_masked=%s", phoneMasked),
 			WithActorType("admin"),
 			WithDetailsJSON(map[string]interface{}{
 				"phone_masked": phoneMasked,
 			}),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("UnblockPhone: failed to write audit log", zap.String("phone_masked", phoneMasked), zap.Error(auditErr))
+			}
+		}
 	}
 
 	return nil
@@ -1360,10 +1412,14 @@ func (s *adminService) CreatePaymentMethod(ctx context.Context, code, nameAr, na
 	}
 	if s.auditSvc != nil {
 		// IP/User-Agent non disponibles ici : méthode de service sans *fiber.Ctx.
-		s.auditSvc.Log(ctx, adminID, "payment_method_created", "payment_method", nil, fmt.Sprintf("code=%s name_ar=%s", code, nameAr),
+		if auditErr := s.auditSvc.Log(ctx, adminID, "payment_method_created", "payment_method", nil, fmt.Sprintf("code=%s name_ar=%s", code, nameAr),
 			WithActorType("admin"),
 			WithDetailsJSON(models.JSONB{"code": code, "name_ar": nameAr}),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("CreatePaymentMethod: failed to write audit log", zap.String("code", code), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -1377,11 +1433,15 @@ func (s *adminService) UpdatePaymentMethod(ctx context.Context, id int, code, na
 		return err
 	}
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, adminID, "payment_method_updated", "payment_method", nil, fmt.Sprintf("payment_method_id=%d code=%s name_ar=%s", id, code, nameAr),
+		if auditErr := s.auditSvc.Log(ctx, adminID, "payment_method_updated", "payment_method", nil, fmt.Sprintf("payment_method_id=%d code=%s name_ar=%s", id, code, nameAr),
 			WithActorType("admin"),
 			WithDetailsJSON(models.JSONB{"payment_method_id": id, "code": code, "name_ar": nameAr}),
 			WithEntityKey(strconv.Itoa(id)),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("UpdatePaymentMethod: failed to write audit log", zap.Int("payment_method_id", id), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
@@ -1392,11 +1452,15 @@ func (s *adminService) DeletePaymentMethod(ctx context.Context, id int, adminID 
 		return err
 	}
 	if s.auditSvc != nil {
-		s.auditSvc.Log(ctx, adminID, "payment_method_deleted", "payment_method", nil, fmt.Sprintf("payment_method_id=%d", id),
+		if auditErr := s.auditSvc.Log(ctx, adminID, "payment_method_deleted", "payment_method", nil, fmt.Sprintf("payment_method_id=%d", id),
 			WithActorType("admin"),
 			WithDetailsJSON(models.JSONB{"payment_method_id": id}),
 			WithEntityKey(strconv.Itoa(id)),
-		)
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("DeletePaymentMethod: failed to write audit log", zap.Int("payment_method_id", id), zap.Error(auditErr))
+			}
+		}
 	}
 	return nil
 }
