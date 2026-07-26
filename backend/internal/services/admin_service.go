@@ -1177,7 +1177,47 @@ func (s *adminService) ListSettings(ctx context.Context) ([]models.SystemSetting
 }
 
 func (s *adminService) UpdateSetting(ctx context.Context, key, value, settingType string, userID uuid.UUID) error {
-	return s.settingsRepo.Set(ctx, key, value, settingType)
+	// Lu avant la mise à jour uniquement pour l'audit (old_type/value_changed) — son
+	// absence (première écriture de cette clé) n'empêche jamais l'opération
+	// principale (Admin Settings Phase A).
+	var oldType *string
+	valueChanged := true
+	if existing, getErr := s.settingsRepo.Get(ctx, key); getErr == nil && existing != nil {
+		t := existing.Type
+		oldType = &t
+		valueChanged = existing.Value != value
+	}
+
+	if err := s.settingsRepo.Set(ctx, key, value, settingType, userID); err != nil {
+		return err
+	}
+
+	if s.auditSvc != nil {
+		// Ne jamais journaliser value/old_value/new_value (Admin Settings Phase A) :
+		// key est encore libre (pas d'allowlist à ce stade) et pourrait recevoir une
+		// valeur sensible à l'avenir — seuls key, type et le fait qu'elle ait changé
+		// sont journalisés.
+		details := map[string]interface{}{
+			"key":           key,
+			"new_type":      settingType,
+			"value_changed": valueChanged,
+			"updated_by":    userID.String(),
+		}
+		if oldType != nil {
+			details["old_type"] = *oldType
+		}
+		if auditErr := s.auditSvc.Log(ctx, userID, "setting_updated", "system_setting", nil,
+			fmt.Sprintf("key=%s value_changed=%t", key, valueChanged),
+			WithActorType("admin"),
+			WithDetailsJSON(details),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("UpdateSetting: failed to write audit log", zap.String("key", key), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return nil
 }
 
 // Payment Methods implementations

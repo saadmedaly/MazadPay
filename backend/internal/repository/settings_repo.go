@@ -3,13 +3,14 @@ package repository
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/mazadpay/backend/internal/models"
 )
 
 type SettingsRepository interface {
 	Get(ctx context.Context, key string) (*models.SystemSettings, error)
-	Set(ctx context.Context, key, value, settingType string) error
+	Set(ctx context.Context, key, value, settingType string, updatedBy uuid.UUID) error
 	List(ctx context.Context) ([]models.SystemSettings, error)
 }
 
@@ -31,12 +32,12 @@ func (r *settingsRepo) Get(ctx context.Context, key string) (*models.SystemSetti
 	return &s, err
 }
 
-func (r *settingsRepo) Set(ctx context.Context, key, value, settingType string) error {
+func (r *settingsRepo) Set(ctx context.Context, key, value, settingType string, updatedBy uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO system_settings (key, value, type, updated_at)
-		VALUES ($1, $2, $3, now())
-		ON CONFLICT (key) DO UPDATE SET value = $2, type = $3, updated_at = now()
-	`, key, value, settingType)
+		INSERT INTO system_settings (key, value, type, updated_by, updated_at)
+		VALUES ($1, $2, $3, $4, now())
+		ON CONFLICT (key) DO UPDATE SET value = $2, type = $3, updated_by = $4, updated_at = now()
+	`, key, value, settingType, updatedBy)
 	return err
 }
 

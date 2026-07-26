@@ -27,7 +27,7 @@ func (s *settingsService) Get(ctx context.Context, key string) (*models.SystemSe
 }
 
 func (s *settingsService) Set(ctx context.Context, key, value, settingType string, userID uuid.UUID) error {
-	return s.repo.Set(ctx, key, value, settingType)
+	return s.repo.Set(ctx, key, value, settingType, userID)
 }
 
 func (s *settingsService) List(ctx context.Context) ([]models.SystemSettings, error) {
