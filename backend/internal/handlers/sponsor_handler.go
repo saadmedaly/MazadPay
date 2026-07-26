@@ -39,12 +39,16 @@ func (h *SponsorHandler) logAudit(c *fiber.Ctx, action string, id uuid.UUID, det
 		detailsJSON = models.JSONB{}
 	}
 	detailsJSON["sponsor_id"] = id.String()
-	h.auditSvc.Log(c.Context(), adminID, action, "sponsor", &id, details,
+	if auditErr := h.auditSvc.Log(c.Context(), adminID, action, "sponsor", &id, details,
 		services.WithActorType("admin"),
 		services.WithDetailsJSON(detailsJSON),
 		services.WithIP(c.IP()),
 		services.WithUserAgent(c.Get("User-Agent")),
-	)
+	); auditErr != nil {
+		if h.logger != nil {
+			h.logger.Error("logAudit: failed to write audit log", zap.String("action", action), zap.String("sponsor_id", id.String()), zap.Error(auditErr))
+		}
+	}
 }
 
 func (h *SponsorHandler) ListActive(c *fiber.Ctx) error {

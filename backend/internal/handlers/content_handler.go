@@ -37,13 +37,17 @@ func (h *ContentHandler) logAudit(c *fiber.Ctx, action, entityType string, entit
 		detailsJSON = models.JSONB{}
 	}
 	detailsJSON[entityType+"_id"] = entityIntID
-	h.auditSvc.Log(c.Context(), adminID, action, entityType, nil, fmt.Sprintf("%s_id=%d %s", entityType, entityIntID, details),
+	if auditErr := h.auditSvc.Log(c.Context(), adminID, action, entityType, nil, fmt.Sprintf("%s_id=%d %s", entityType, entityIntID, details),
 		services.WithActorType("admin"),
 		services.WithDetailsJSON(detailsJSON),
 		services.WithEntityKey(strconv.Itoa(entityIntID)),
 		services.WithIP(c.IP()),
 		services.WithUserAgent(c.Get("User-Agent")),
-	)
+	); auditErr != nil {
+		if h.logger != nil {
+			h.logger.Error("logAudit: failed to write audit log", zap.String("action", action), zap.String("entity_type", entityType), zap.Int("entity_id", entityIntID), zap.Error(auditErr))
+		}
+	}
 }
 
 func (h *ContentHandler) FAQ(c *fiber.Ctx) error {

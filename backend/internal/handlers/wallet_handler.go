@@ -189,12 +189,16 @@ func (h *WalletHandler) GetReceiptURL(c *fiber.Ctx) error {
 			"transaction_id": txID.String(),
 			"user_id":        tx.UserID.String(),
 		}
-		h.auditSvc.Log(c.Context(), userID, "receipt_viewed_by_admin", "transaction", &txID, "Admin viewed payment receipt",
+		if auditErr := h.auditSvc.Log(c.Context(), userID, "receipt_viewed_by_admin", "transaction", &txID, "Admin viewed payment receipt",
 			services.WithActorType("admin"),
 			services.WithDetailsJSON(detailsJSON),
 			services.WithIP(c.IP()),
 			services.WithUserAgent(c.Get("User-Agent")),
-		)
+		); auditErr != nil {
+			if h.logger != nil {
+				h.logger.Error("GetReceiptURL: failed to write audit log", zap.String("transaction_id", txID.String()), zap.Error(auditErr))
+			}
+		}
 	}
 	if tx.ReceiptURL == nil || *tx.ReceiptURL == "" {
 		return NotFound(c, "Receipt")

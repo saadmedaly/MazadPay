@@ -43,13 +43,17 @@ func (h *BannerHandler) logBannerAudit(c *fiber.Ctx, action string, bannerID int
 		detailsJSON = models.JSONB{}
 	}
 	detailsJSON["banner_id"] = bannerID
-	h.auditSvc.Log(c.Context(), adminID, action, "banner", nil, fmt.Sprintf("banner_id=%d %s", bannerID, details),
+	if auditErr := h.auditSvc.Log(c.Context(), adminID, action, "banner", nil, fmt.Sprintf("banner_id=%d %s", bannerID, details),
 		services.WithActorType("admin"),
 		services.WithDetailsJSON(detailsJSON),
 		services.WithEntityKey(strconv.Itoa(bannerID)),
 		services.WithIP(c.IP()),
 		services.WithUserAgent(c.Get("User-Agent")),
-	)
+	); auditErr != nil {
+		if h.logger != nil {
+			h.logger.Error("logBannerAudit: failed to write audit log", zap.String("action", action), zap.Int("banner_id", bannerID), zap.Error(auditErr))
+		}
+	}
 }
 
 // List all active banners (Public)

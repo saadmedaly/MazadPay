@@ -36,13 +36,17 @@ func (h *PaymentMethodHandler) logAudit(c *fiber.Ctx, action string, id int, det
 		detailsJSON = models.JSONB{}
 	}
 	detailsJSON["payment_method_id"] = id
-	h.auditSvc.Log(c.Context(), adminID, action, "payment_method", nil, fmt.Sprintf("payment_method_id=%d %s", id, details),
+	if auditErr := h.auditSvc.Log(c.Context(), adminID, action, "payment_method", nil, fmt.Sprintf("payment_method_id=%d %s", id, details),
 		services.WithActorType("admin"),
 		services.WithDetailsJSON(detailsJSON),
 		services.WithEntityKey(strconv.Itoa(id)),
 		services.WithIP(c.IP()),
 		services.WithUserAgent(c.Get("User-Agent")),
-	)
+	); auditErr != nil {
+		if h.logger != nil {
+			h.logger.Error("logAudit: failed to write audit log", zap.String("action", action), zap.Int("payment_method_id", id), zap.Error(auditErr))
+		}
+	}
 }
 
 // ListPaymentMethods - GET /api/payment-methods

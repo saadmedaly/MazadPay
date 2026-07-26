@@ -254,13 +254,17 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 				"title": shortTitle,
 				"type":  req.Type,
 			}
-			h.auditSvc.Log(c.Context(), adminID, "notification_broadcast_sent", "notification", nil,
+			if auditErr := h.auditSvc.Log(c.Context(), adminID, "notification_broadcast_sent", "notification", nil,
 				"title="+shortTitle+" type="+req.Type,
 				services.WithActorType("admin"),
 				services.WithDetailsJSON(detailsJSON),
 				services.WithIP(c.IP()),
 				services.WithUserAgent(c.Get("User-Agent")),
-			)
+			); auditErr != nil {
+				if h.logger != nil {
+					h.logger.Error("SendNotification: failed to write audit log", zap.String("type", req.Type), zap.Error(auditErr))
+				}
+			}
 		}
 		return OK(c, fiber.Map{"message": "Notification sent to all users", "type": "broadcast"})
 	}
@@ -281,13 +285,17 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 				"title":          shortTitle,
 				"type":           req.Type,
 			}
-			h.auditSvc.Log(c.Context(), adminID, "notification_sent", "user", &userUUID,
+			if auditErr := h.auditSvc.Log(c.Context(), adminID, "notification_sent", "user", &userUUID,
 				"title="+shortTitle+" type="+req.Type,
 				services.WithActorType("admin"),
 				services.WithDetailsJSON(detailsJSON),
 				services.WithIP(c.IP()),
 				services.WithUserAgent(c.Get("User-Agent")),
-			)
+			); auditErr != nil {
+				if h.logger != nil {
+					h.logger.Error("SendNotification: failed to write audit log", zap.String("target_user_id", userUUID.String()), zap.String("type", req.Type), zap.Error(auditErr))
+				}
+			}
 		}
 		return OK(c, fiber.Map{"message": "Notification sent to user", "user_id": req.UserID})
 	}
