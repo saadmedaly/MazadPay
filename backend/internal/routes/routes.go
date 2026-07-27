@@ -90,6 +90,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	paymentMethodHandler.SetAuditService(auditSvc)
 	auctionBoostHandler := handlers.NewAuctionBoostHandler(auctionBoostSvc, logger)
 	deliveryDriverHandler := handlers.NewDeliveryDriverHandler(deliveryDriverSvc, logger)
+	deliveryDriverHandler.SetAuditService(auditSvc)
 	bidAutoBidHandler := handlers.NewBidAutoBidHandler(bidAutoBidSvc, logger)
 	sponsorHandler := handlers.NewSponsorHandler(sponsorSvc, logger)
 	sponsorHandler.SetAuditService(auditSvc)

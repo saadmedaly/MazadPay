@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/middleware"
@@ -10,12 +12,48 @@ import (
 )
 
 type DeliveryDriverHandler struct {
-	svc    services.DeliveryDriverService
-	logger *zap.Logger
+	svc      services.DeliveryDriverService
+	logger   *zap.Logger
+	auditSvc services.AuditService
 }
 
 func NewDeliveryDriverHandler(svc services.DeliveryDriverService, logger *zap.Logger) *DeliveryDriverHandler {
 	return &DeliveryDriverHandler{svc: svc, logger: logger}
+}
+
+// SetAuditService injecte le service d'audit après construction (Delivery Drivers
+// Phase 3), même convention que BannerHandler/PaymentMethodHandler/etc. — évite de
+// changer la signature de NewDeliveryDriverHandler et son appel dans routes.go.
+func (h *DeliveryDriverHandler) SetAuditService(auditSvc services.AuditService) {
+	h.auditSvc = auditSvc
+}
+
+// logDriverAudit journalise une action admin sur un delivery_driver (Delivery
+// Drivers Phase 3). Ne journalise jamais license_number/vehicle_plate/coordonnées
+// GPS — uniquement driver_id, user_id, et vehicle_type (jugé non sensible).
+func (h *DeliveryDriverHandler) logDriverAudit(c *fiber.Ctx, action string, driverID uuid.UUID, userID *uuid.UUID, vehicleType *string) {
+	if h.auditSvc == nil {
+		return
+	}
+	adminID, _ := middleware.GetUserID(c)
+	detailsJSON := models.JSONB{"driver_id": driverID.String()}
+	if userID != nil {
+		detailsJSON["user_id"] = userID.String()
+	}
+	if vehicleType != nil {
+		detailsJSON["vehicle_type"] = *vehicleType
+	}
+	if auditErr := h.auditSvc.Log(c.Context(), adminID, action, "delivery_driver", &driverID,
+		fmt.Sprintf("driver_id=%s", driverID.String()),
+		services.WithActorType("admin"),
+		services.WithDetailsJSON(detailsJSON),
+		services.WithIP(c.IP()),
+		services.WithUserAgent(c.Get("User-Agent")),
+	); auditErr != nil {
+		if h.logger != nil {
+			h.logger.Error("logDriverAudit: failed to write audit log", zap.String("action", action), zap.String("driver_id", driverID.String()), zap.Error(auditErr))
+		}
+	}
 }
 
 // RegisterDriver - POST /api/admin/drivers/register (Admin only)
@@ -47,6 +85,8 @@ func (h *DeliveryDriverHandler) RegisterDriver(c *fiber.Ctx) error {
 		h.logger.Error("failed to register driver", zap.Error(err))
 		return InternalError(c, "Failed to register driver")
 	}
+
+	h.logDriverAudit(c, "delivery_driver_registered", driver.ID, driver.UserID, driver.VehicleType)
 
 	return OK(c, fiber.Map{"message": "Driver registered successfully", "driver": driver})
 }
@@ -94,6 +134,8 @@ func (h *DeliveryDriverHandler) UpdateDriver(c *fiber.Ctx) error {
 		return InternalError(c, "Failed to update driver")
 	}
 
+	h.logDriverAudit(c, "delivery_driver_updated", driverID, req.UserID, req.VehicleType)
+
 	return OK(c, fiber.Map{"message": "Driver updated", "driver_id": driverID})
 }
 
@@ -111,6 +153,8 @@ func (h *DeliveryDriverHandler) DeleteDriver(c *fiber.Ctx) error {
 		h.logger.Error("failed to delete driver", zap.Error(err))
 		return InternalError(c, "Failed to delete driver")
 	}
+
+	h.logDriverAudit(c, "delivery_driver_deleted", driverID, nil, nil)
 
 	return OK(c, fiber.Map{"message": "Driver deleted", "driver_id": driverID})
 }
