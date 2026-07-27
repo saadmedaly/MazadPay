@@ -128,7 +128,16 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
         await AuthService().saveHasRegistered(true);
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => LoginPage()),
+          MaterialPageRoute(
+            // Transmet le numéro local et le country_code choisis au register
+            // (Mobile Auth Phase 2) — jamais le numéro déjà préfixé, pour que
+            // LoginPage recompose exactement le même format que celui envoyé
+            // à /auth/register.
+            builder: (context) => LoginPage(
+              initialPhone: phone,
+              initialCountryCode: countryCode,
+            ),
+          ),
         );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(AppLocalizations.of(context)!.profile_created), backgroundColor: Colors.green),

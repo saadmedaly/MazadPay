@@ -14,8 +14,15 @@ import '../utils/error_mapper.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   final bool showSuccessDialog;
-  
-  const LoginPage({super.key, this.showSuccessDialog = false});
+  final String? initialPhone;
+  final String? initialCountryCode;
+
+  const LoginPage({
+    super.key,
+    this.showSuccessDialog = false,
+    this.initialPhone,
+    this.initialCountryCode,
+  });
 
   @override
   ConsumerState<LoginPage> createState() => _LoginPageState();
@@ -32,13 +39,31 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   void initState() {
     super.initState();
+    // Pré-remplit le numéro local si on arrive depuis l'inscription réussie
+    // (Mobile Auth Phase 2) — jamais avec le préfixe pays, uniquement les
+    // chiffres locaux tapés par l'utilisateur lors du register.
+    if (widget.initialPhone != null) {
+      _phoneController.text = widget.initialPhone!;
+    }
     _phoneController.addListener(() {
       setState(() {});
     });
     _passwordController.addListener(() {
       setState(() {});
     });
-    
+
+    // Arrivée depuis une inscription réussie : efface une éventuelle erreur de
+    // login résiduelle (Mobile Auth Phase 1) pour ne pas l'afficher sur un
+    // formulaire fraîchement pré-rempli. Ne touche pas à LoginController
+    // au-delà de cet appel à copyWith déjà prévu pour cet usage.
+    if (widget.initialPhone != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(loginControllerProvider.notifier).clearError();
+        }
+      });
+    }
+
     _loadCountries();
     _checkShowSuccessDialog();
   }
@@ -49,14 +74,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (mounted) {
         setState(() {
           _countries = response.data!;
-          // Select default country (+222 Mauritania) or first available
+          // Si un country_code a été transmis depuis l'inscription (Mobile Auth
+          // Phase 2), on tente d'abord de retrouver ce pays précis, pour éviter
+          // qu'un dropdown différent de celui choisi au register ne produise un
+          // numéro complet différent de celui stocké côté backend.
+          final targetCode = widget.initialCountryCode;
           try {
-            _selectedCountry = _countries.firstWhere(
-              (c) => c['country_code'] == '+222' || c['code'] == 'MR',
-            );
+            if (targetCode != null) {
+              _selectedCountry = _countries.firstWhere(
+                (c) => c['country_code'] == targetCode,
+              );
+            } else {
+              _selectedCountry = _countries.firstWhere(
+                (c) => c['country_code'] == '+222' || c['code'] == 'MR',
+              );
+            }
           } catch (e) {
-            if (_countries.isNotEmpty) {
-              _selectedCountry = _countries.first;
+            try {
+              _selectedCountry = _countries.firstWhere(
+                (c) => c['country_code'] == '+222' || c['code'] == 'MR',
+              );
+            } catch (e) {
+              if (_countries.isNotEmpty) {
+                _selectedCountry = _countries.first;
+              }
             }
           }
         });

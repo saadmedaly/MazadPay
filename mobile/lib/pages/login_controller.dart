@@ -32,8 +32,16 @@ class LoginState {
 
 class LoginController extends StateNotifier<LoginState> {
   final AuthApi _authApi = AuthApi();
-  
+
   LoginController() : super(LoginState());
+
+  // Efface une erreur résiduelle sans déclencher de requête (Mobile Auth Phase 2)
+  // — utilisé quand LoginPage s'ouvre après une inscription réussie, pour ne pas
+  // afficher un message d'échec d'une tentative précédente sans rapport.
+  void clearError() {
+    if (state.error == null && state.errorCode == null) return;
+    state = state.copyWith(error: null, errorCode: null);
+  }
 
   Future<bool> login(String phone, String password) async {
     state = state.copyWith(isLoading: true, error: null, errorCode: null);
