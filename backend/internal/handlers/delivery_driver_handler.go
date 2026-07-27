@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -58,6 +59,44 @@ func (h *DeliveryDriverHandler) logDriverAudit(c *fiber.Ctx, action string, driv
 	}
 }
 
+// validateDriverFields applique les règles Delivery Drivers Phase 5 sur
+// vehicle_type/vehicle_plate/vehicle_color/license_number, communes à Register et
+// Update. Retourne les valeurs nettoyées (trim) et une erreur descriptive sinon.
+// Ne valide jamais current_location_lat/lng (hors périmètre — self-service
+// uniquement) ni ne pré-vérifie l'unicité de vehicle_plate/license_number : le
+// schéma delivery_drivers (migration 000031) n'a pas de contrainte UNIQUE sur ces
+// colonnes, donc des doublons restent possibles côté DB tant qu'une migration
+// dédiée ne les interdit pas — non ajoutée dans cette phase.
+func validateDriverFields(vehicleType, vehiclePlate, vehicleColor, licenseNumber string) (string, string, string, string, error) {
+	vehicleType = strings.TrimSpace(vehicleType)
+	vehiclePlate = strings.TrimSpace(vehiclePlate)
+	vehicleColor = strings.TrimSpace(vehicleColor)
+	licenseNumber = strings.TrimSpace(licenseNumber)
+
+	if vehicleType == "" {
+		return "", "", "", "", fmt.Errorf("vehicle_type is required")
+	}
+	if len(vehicleType) > 50 {
+		return "", "", "", "", fmt.Errorf("vehicle_type must be at most 50 characters")
+	}
+	if vehiclePlate == "" {
+		return "", "", "", "", fmt.Errorf("vehicle_plate is required")
+	}
+	if len(vehiclePlate) > 20 {
+		return "", "", "", "", fmt.Errorf("vehicle_plate must be at most 20 characters")
+	}
+	if len(vehicleColor) > 50 {
+		return "", "", "", "", fmt.Errorf("vehicle_color must be at most 50 characters")
+	}
+	if licenseNumber == "" {
+		return "", "", "", "", fmt.Errorf("license_number is required")
+	}
+	if len(licenseNumber) > 50 {
+		return "", "", "", "", fmt.Errorf("license_number must be at most 50 characters")
+	}
+	return vehicleType, vehiclePlate, vehicleColor, licenseNumber, nil
+}
+
 // RegisterDriver - POST /api/admin/drivers/register (Admin only)
 func (h *DeliveryDriverHandler) RegisterDriver(c *fiber.Ctx) error {
 	type Request struct {
@@ -72,6 +111,19 @@ func (h *DeliveryDriverHandler) RegisterDriver(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+
+	if req.UserID == uuid.Nil {
+		return BadRequest(c, "user_id is required")
+	}
+
+	vehicleType, vehiclePlate, vehicleColor, licenseNumber, err := validateDriverFields(req.VehicleType, req.VehiclePlate, req.VehicleColor, req.LicenseNumber)
+	if err != nil {
+		return BadRequest(c, err.Error())
+	}
+	req.VehicleType = vehicleType
+	req.VehiclePlate = vehiclePlate
+	req.VehicleColor = vehicleColor
+	req.LicenseNumber = licenseNumber
 
 	driver := &models.DeliveryDriver{
 		UserID:         &req.UserID,
@@ -130,6 +182,28 @@ func (h *DeliveryDriverHandler) UpdateDriver(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+
+	var vehicleType, vehiclePlate, vehicleColor, licenseNumber string
+	if req.VehicleType != nil {
+		vehicleType = *req.VehicleType
+	}
+	if req.VehiclePlate != nil {
+		vehiclePlate = *req.VehiclePlate
+	}
+	if req.VehicleColor != nil {
+		vehicleColor = *req.VehicleColor
+	}
+	if req.LicenseNumber != nil {
+		licenseNumber = *req.LicenseNumber
+	}
+	vehicleType, vehiclePlate, vehicleColor, licenseNumber, err = validateDriverFields(vehicleType, vehiclePlate, vehicleColor, licenseNumber)
+	if err != nil {
+		return BadRequest(c, err.Error())
+	}
+	req.VehicleType = &vehicleType
+	req.VehiclePlate = &vehiclePlate
+	req.VehicleColor = &vehicleColor
+	req.LicenseNumber = &licenseNumber
 
 	if err := h.svc.Update(c.Context(), driverID, &req); err != nil {
 		h.logger.Error("failed to update driver", zap.Error(err))
