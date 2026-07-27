@@ -398,12 +398,36 @@ func (r *auctionRepo) UpdateLocation(ctx context.Context, l *models.Location) er
 }
 
 func (r *auctionRepo) DeleteLocation(ctx context.Context, id int) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE auctions SET location_id = NULL WHERE location_id = $1`, id)
+	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	_, err = r.db.ExecContext(ctx, `DELETE FROM locations WHERE id = $1`, id)
-	return err
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `UPDATE auctions SET location_id = NULL WHERE location_id = $1`, id); err != nil {
+		return err
+	}
+	// auction_requests.location_id référence aussi locations(id) (migration 000003) —
+	// oublié dans la version précédente, qui ne traitait que auctions.location_id et
+	// pouvait donc échouer avec une violation FK RESTRICT si le location n'était
+	// référencé que par une demande d'enchère (Countries/Locations Phase 6).
+	if _, err := tx.ExecContext(ctx, `UPDATE auction_requests SET location_id = NULL WHERE location_id = $1`, id); err != nil {
+		return err
+	}
+
+	result, err := tx.ExecContext(ctx, `DELETE FROM locations WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return apperr.ErrNotFound
+	}
+
+	return tx.Commit()
 }
 
 // ============================================================
