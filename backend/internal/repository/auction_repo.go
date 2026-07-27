@@ -380,7 +380,8 @@ func (r *auctionRepo) GetLocationsByCountry(ctx context.Context, countryID int) 
 	err := r.db.SelectContext(ctx, &locs, `
 		SELECT DISTINCT ON (city_name_ar) *
 		FROM locations
-		ORDER BY city_name_ar, area_name_ar`)
+		WHERE country_id = $1
+		ORDER BY city_name_ar, area_name_ar`, countryID)
 	return locs, err
 }
 
