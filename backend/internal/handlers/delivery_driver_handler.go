@@ -97,6 +97,24 @@ func (h *DeliveryDriverHandler) UpdateDriver(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{"message": "Driver updated", "driver_id": driverID})
 }
 
+// DeleteDriver - DELETE /api/admin/drivers/:id (Admin only)
+// Note (Delivery Drivers Phase 1) : le service Delete() sous-jacent n'inspecte pas
+// RowsAffected — un id inexistant ne renvoie donc pas d'erreur "not found" ici,
+// comportement documenté mais non élargi dans cette phase (hors périmètre demandé).
+func (h *DeliveryDriverHandler) DeleteDriver(c *fiber.Ctx) error {
+	driverID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid driver ID")
+	}
+
+	if err := h.svc.Delete(c.Context(), driverID); err != nil {
+		h.logger.Error("failed to delete driver", zap.Error(err))
+		return InternalError(c, "Failed to delete driver")
+	}
+
+	return OK(c, fiber.Map{"message": "Driver deleted", "driver_id": driverID})
+}
+
 // UpdateDriverLocation - PUT /api/drivers/location (Driver only)
 func (h *DeliveryDriverHandler) UpdateDriverLocation(c *fiber.Ctx) error {
 	userID, err := middleware.GetUserID(c)

@@ -587,12 +587,20 @@ func setupDeliveryDriverRoutes(api fiber.Router, h *handlers.DeliveryDriverHandl
 	admin.Get("/", h.ListDrivers)
 	admin.Get("/:id", h.GetDriver)
 	admin.Put("/:id", h.UpdateDriver)
+	// Delivery Drivers Phase 1 : complète Implementation B (candidate canonique) —
+	// le hook web useDeleteDriver appelle déjà DELETE /admin/drivers/:id, route
+	// absente jusqu'ici (seule Implementation A l'avait).
+	admin.Delete("/:id", h.DeleteDriver)
 	admin.Get("/available", h.GetAvailableDrivers)
 
 	// Driver routes
 	driver := api.Group("/drivers", jwtMiddleware)
 	driver.Put("/location", h.UpdateDriverLocation)
 	driver.Put("/availability", h.ToggleAvailability)
+	// Alias PATCH (Delivery Drivers Phase 1) : le hook web useToggleDriverAvailability
+	// envoie PATCH, alors que seul PUT était enregistré — les deux méthodes
+	// appellent le même handler, PUT reste inchangé pour compatibilité.
+	driver.Patch("/availability", h.ToggleAvailability)
 }
 
 func setupBidAutoBidRoutes(api fiber.Router, h *handlers.BidAutoBidHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
