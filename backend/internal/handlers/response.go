@@ -191,6 +191,9 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "bid_conflict":
 		logger.Warn("Bid conflict occurred", logFields...)
 		return Fail(c, 409, "bid_conflict", "Bid conflict, please retry")
+	case "request_already_reviewed":
+		logger.Info("Attempt to re-review an already reviewed request", logFields...)
+		return Fail(c, 409, "request_already_reviewed", "This request has already been reviewed")
 	case "insufficient_balance":
 		logger.Warn("Insufficient balance for operation", logFields...)
 		return Fail(c, 422, "insufficient_balance", "Insufficient wallet balance")

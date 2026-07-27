@@ -15,6 +15,11 @@ import (
 
 var ErrInvalidStatus = errors.New("invalid status")
 
+// ErrRequestAlreadyReviewed est retournée quand une demande n'est plus "pending"
+// (Requests Phase 1) : empêche de ré-approuver/ré-rejeter une demande déjà
+// traitée, ce qui aurait pu créer un auction/banner en double.
+var ErrRequestAlreadyReviewed = errors.New("request_already_reviewed")
+
 type RequestService interface {
 	CreateAuctionRequest(ctx context.Context, req *models.AuctionRequest) error
 	GetAuctionRequests(ctx context.Context, status string, userID *uuid.UUID, dateFrom, dateTo *time.Time, categoryID, locationID *int, minPrice, maxPrice *float64, sortBy, sortOrder string, page, perPage int) ([]models.AuctionRequest, int, error)
@@ -110,6 +115,14 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 		return err
 	}
 
+	// Refuse de re-réviser une demande déjà traitée (Requests Phase 1) : sans ce
+	// garde, ré-approuver une demande déjà "approved" créerait un second auction en
+	// double, et le statut ne peut légitimement transiter qu'une seule fois depuis
+	// "pending".
+	if req.Status != "pending" {
+		return ErrRequestAlreadyReviewed
+	}
+
 	// Begin transaction
 	tx, err := s.repo.BeginTx(ctx)
 	if err != nil {
@@ -123,6 +136,7 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 	}
 
 	// If approved, create the actual auction within the same transaction
+	var auctionID uuid.UUID
 	if status == "approved" {
 		reservePrice := decimal.Decimal{}
 		if req.ReservePrice != nil {
@@ -159,8 +173,26 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 		if err := s.auctionRepo.Create(ctx, tx, auction); err != nil {
 			return err
 		}
+		auctionID = auction.ID
+	}
 
-		// Send localized FCM notification to user
+	// Commit transaction (Requests Phase 1 — manquait entièrement auparavant : sans
+	// cet appel, defer tx.Rollback() annulait silencieusement la mise à jour de
+	// statut et la création de l'auction, malgré une réponse de succès au client).
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Log audit
+	if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_request_reviewed_%s", status), "auction_request", &id,
+		fmt.Sprintf("Status changed to %s. Notes: %s", status, notes)); auditErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ReviewAuctionRequest: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
+		}
+	}
+
+	// Send localized notification (outside transaction)
+	if status == "approved" {
 		if req.User != nil {
 			language := "ar"
 			if req.User.LanguagePref != "" {
@@ -171,12 +203,11 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 			}
 			data := map[string]string{
 				"request_id": req.ID.String(),
-				"auction_id": auction.ID.String(),
+				"auction_id": auctionID.String(),
 			}
 			s.notificationService.SendLocalizedPush(ctx, req.UserID, "auction_approved", language, params, data)
 		}
 	} else {
-		// Send localized rejection notification
 		if req.User != nil {
 			language := "ar"
 			if req.User.LanguagePref != "" {
@@ -190,14 +221,6 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 				"request_id": req.ID.String(),
 			}
 			s.notificationService.SendLocalizedPush(ctx, req.UserID, "auction_rejected", language, params, data)
-		}
-	}
-
-	// Log audit
-	if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_request_reviewed_%s", status), "auction_request", &id,
-		fmt.Sprintf("Status changed to %s. Notes: %s", status, notes)); auditErr != nil {
-		if s.logger != nil {
-			s.logger.Error("ReviewAuctionRequest: failed to write audit log", zap.String("request_id", id.String()), zap.Error(auditErr))
 		}
 	}
 
