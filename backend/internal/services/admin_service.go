@@ -1396,7 +1396,10 @@ func (s *adminService) ListPaymentMethods(ctx context.Context) ([]models.Payment
 	for rows.Next() {
 		var m models.PaymentMethod
 		if err := rows.Scan(&m.ID, &m.Code, &m.NameAr, &m.NameFr, &m.NameEn, &m.LogoURL, &m.IsActive, &m.CountryID, &m.CreatedAt); err != nil {
-			continue
+			// Ne plus avaler silencieusement une ligne corrompue/désynchronisée
+			// (Payment Methods Phase 3) : un scan qui échoue signale un problème de
+			// schéma ou de données plus large, pas un cas normal à ignorer par ligne.
+			return nil, err
 		}
 		methods = append(methods, m)
 	}

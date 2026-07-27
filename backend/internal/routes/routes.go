@@ -363,11 +363,20 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Get("/payment-methods", adminHandler.ListPaymentMethods)
 	admin.Post("/payment-methods", adminHandler.CreatePaymentMethod)
 	admin.Put("/payment-methods/:id", adminHandler.UpdatePaymentMethod)
-	admin.Delete("/payment-methods/:id", adminHandler.DeletePaymentMethod)
+	// Delete et Toggle exigent SuperAdminOnly (Payment Methods Phase 3) : ce sont les
+	// opérations les plus disruptives (suppression définitive / activation-
+	// désactivation immédiate d'un moyen de paiement en production) — Create/Update
+	// restent AdminOnly pour ne pas casser le flux d'édition courant d'un admin
+	// normal. Choix middleware au niveau route (comme SuperAdminOnly sur /invitations
+	// et /users/:id ci-dessus) plutôt qu'un paramètre isSuperAdmin en service, car
+	// aucune de ces deux opérations n'a besoin d'un comportement différent selon le
+	// rôle (contrairement à Admin Settings, où certaines clés restent modifiables par
+	// un admin normal) — un simple refus binaire suffit ici.
+	admin.Delete("/payment-methods/:id", middleware.SuperAdminOnly(logger), adminHandler.DeletePaymentMethod)
 	// PATCH (pas PUT) car le frontend (usePaymentMethods.ts) envoie PATCH — voir
 	// Payment Methods Phase 1 : endpoint canonical dans Implementation A, l'ancien
 	// PUT .../toggle d'Implementation B (setupPaymentMethodRoutes) reste inchangé.
-	admin.Patch("/payment-methods/:id/toggle", adminHandler.TogglePaymentMethodStatus)
+	admin.Patch("/payment-methods/:id/toggle", middleware.SuperAdminOnly(logger), adminHandler.TogglePaymentMethodStatus)
 
 	// Auction Car Details management (from migration 000031)
 	admin.Get("/auctions/:id/car-details", adminHandler.GetAuctionCarDetails)

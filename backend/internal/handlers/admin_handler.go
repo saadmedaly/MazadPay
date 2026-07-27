@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -921,9 +923,53 @@ func (h *AdminHandler) DeleteCountry(c *fiber.Ctx) error {
 func (h *AdminHandler) ListPaymentMethods(c *fiber.Ctx) error {
 	methods, err := h.svc.ListPaymentMethods(c.Context())
 	if err != nil {
+		if h.logger != nil {
+			h.logger.Error("ListPaymentMethods: query failed", zap.Error(err))
+		}
 		return InternalError(c, "Failed to list payment methods")
 	}
 	return OK(c, methods)
+}
+
+// paymentMethodCodePattern autorise lettres/chiffres/underscore/hyphen (Payment
+// Methods Phase 3) : les codes existants en production (bankily, masrvi, bimbank,
+// al-sedad_bank) sont en minuscules et l'un contient un hyphen — un regex
+// uppercase-only aurait cassé toute future mise à jour de ces lignes.
+var paymentMethodCodePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+// validatePaymentMethodRequest applique les règles de validation Phase 3 sur
+// code/name_ar/name_fr/name_en/country_id. Ne valide jamais logo_url (pas de
+// contrainte de format imposée dans cette phase) ni is_active (booléen natif).
+func validatePaymentMethodRequest(code, nameAr, nameFr string, nameEn *string, countryID *int) (string, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", fmt.Errorf("code is required")
+	}
+	if len(code) > 20 {
+		return "", fmt.Errorf("code must be at most 20 characters")
+	}
+	if !paymentMethodCodePattern.MatchString(code) {
+		return "", fmt.Errorf("code must contain only letters, numbers, underscore or hyphen")
+	}
+	if strings.TrimSpace(nameAr) == "" {
+		return "", fmt.Errorf("name_ar is required")
+	}
+	if len(nameAr) > 100 {
+		return "", fmt.Errorf("name_ar must be at most 100 characters")
+	}
+	if strings.TrimSpace(nameFr) == "" {
+		return "", fmt.Errorf("name_fr is required")
+	}
+	if len(nameFr) > 100 {
+		return "", fmt.Errorf("name_fr must be at most 100 characters")
+	}
+	if nameEn != nil && len(*nameEn) > 100 {
+		return "", fmt.Errorf("name_en must be at most 100 characters")
+	}
+	if countryID != nil && *countryID <= 0 {
+		return "", fmt.Errorf("country_id must be a positive integer")
+	}
+	return code, nil
 }
 
 func (h *AdminHandler) CreatePaymentMethod(c *fiber.Ctx) error {
@@ -942,13 +988,18 @@ func (h *AdminHandler) CreatePaymentMethod(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
+	code, err := validatePaymentMethodRequest(req.Code, req.NameAr, req.NameFr, req.NameEn, req.CountryID)
+	if err != nil {
+		return BadRequest(c, err.Error())
+	}
+
 	adminID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c, "User not authenticated")
 	}
 
-	if err := h.svc.CreatePaymentMethod(c.Context(), req.Code, req.NameAr, req.NameFr, req.NameEn, req.LogoURL, req.IsActive, req.CountryID, adminID); err != nil {
-		return InternalError(c, "Failed to create payment method: "+err.Error())
+	if err := h.svc.CreatePaymentMethod(c.Context(), code, req.NameAr, req.NameFr, req.NameEn, req.LogoURL, req.IsActive, req.CountryID, adminID); err != nil {
+		return MapError(c, h.logger, err)
 	}
 
 	return OK(c, fiber.Map{"message": "Payment method created successfully"})
@@ -975,13 +1026,18 @@ func (h *AdminHandler) UpdatePaymentMethod(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
+	code, err := validatePaymentMethodRequest(req.Code, req.NameAr, req.NameFr, req.NameEn, req.CountryID)
+	if err != nil {
+		return BadRequest(c, err.Error())
+	}
+
 	adminID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c, "User not authenticated")
 	}
 
-	if err := h.svc.UpdatePaymentMethod(c.Context(), id, req.Code, req.NameAr, req.NameFr, req.NameEn, req.LogoURL, req.IsActive, req.CountryID, adminID); err != nil {
-		return InternalError(c, "Failed to update payment method")
+	if err := h.svc.UpdatePaymentMethod(c.Context(), id, code, req.NameAr, req.NameFr, req.NameEn, req.LogoURL, req.IsActive, req.CountryID, adminID); err != nil {
+		return MapError(c, h.logger, err)
 	}
 
 	return OK(c, fiber.Map{"message": "Payment method updated successfully"})
