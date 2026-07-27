@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mezadpay/l10n/app_localizations.dart';
+import 'package:mezadpay/services/auth_service.dart';
 import 'package:mezadpay/services/user_api.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
+import 'login_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -13,6 +15,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final UserApi _userApi = UserApi();
   bool _isLoading = true;
+  bool _isDeletingAccount = false;
   Map<String, dynamic> _settings = {
     'push_notifications': true,
     'email_notifications': true,
@@ -60,6 +63,70 @@ class _SettingsPageState extends State<SettingsPage> {
           const SnackBar(content: Text('Erreur lors de la mise à jour des paramètres')),
         );
       }
+    }
+  }
+
+  // Release Phase 1 — conformité App Store (guideline 5.1.1(v)) : le compte doit
+  // pouvoir être supprimé/désactivé depuis l'app elle-même. Confirmation forte
+  // requise avant tout appel réseau — aucune suppression en un seul tap.
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حذف الحساب'),
+        content: const Text(
+          'سيتم حذف حسابك وإزالة بياناتك الشخصية التي لا نحتاج للاحتفاظ بها لأسباب '
+          'قانونية أو مالية. قد نحتفظ ببعض السجلات المرتبطة بالمعاملات حسب المتطلبات '
+          'القانونية.\n\nلا يمكن التراجع عن هذا الإجراء. هل أنت متأكد من رغبتك في المتابعة؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('حذف الحساب', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteAccount();
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    setState(() => _isDeletingAccount = true);
+    try {
+      final response = await _userApi.deleteAccount();
+      if (!mounted) return;
+
+      if (response.success) {
+        await AuthService().logout();
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حذف حسابك بنجاح'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر حذف الحساب، يرجى المحاولة لاحقاً'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر حذف الحساب، يرجى المحاولة لاحقاً'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDeletingAccount = false);
     }
   }
 
@@ -133,7 +200,22 @@ class _SettingsPageState extends State<SettingsPage> {
                   },
                 ),
               ),
-              
+
+              const Divider(),
+              _buildSectionHeader('الحساب'),
+              ListTile(
+                leading: _isDeletingAccount
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
+                      )
+                    : const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('حذف الحساب', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500)),
+                subtitle: const Text('حذف حسابك بشكل نهائي', style: TextStyle(fontSize: 12)),
+                onTap: _isDeletingAccount ? null : _confirmDeleteAccount,
+              ),
+
               const SizedBox(height: 32),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),

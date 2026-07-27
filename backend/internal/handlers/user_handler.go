@@ -338,6 +338,26 @@ func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{"message": "User deleted successfully"})
 }
 
+// DeleteMe - DELETE /users/me (Release Phase 1B — App Store account deletion
+// requirement, guideline 5.1.1(v)). userID vient exclusivement du JWT, jamais
+// d'un paramètre client — un utilisateur ne peut supprimer que son propre
+// compte. Anonymise les champs personnels directs + is_active=false ; ne
+// supprime jamais physiquement les données financières/légales à conserver
+// (transactions, enchères, audit logs).
+func (h *UserHandler) DeleteMe(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c)
+	}
+
+	if err := h.service.DeactivateOwnAccount(c.Context(), userID); err != nil {
+		h.logger.Error("Failed to delete own account", zap.Error(err), zap.String("user_id", userID.String()))
+		return InternalError(c, "Failed to delete account")
+	}
+
+	return OK(c, fiber.Map{"message": "Account deletion completed"})
+}
+
 // New endpoints for extended user functionality
 
 func (h *UserHandler) GetUserSettings(c *fiber.Ctx) error {

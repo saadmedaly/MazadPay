@@ -6,6 +6,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 type UserService interface {
@@ -16,6 +18,7 @@ type UserService interface {
 	UpdateLanguage(ctx context.Context, id uuid.UUID, lang string) error
 	UpdateNotificationSettings(ctx context.Context, id uuid.UUID, enabled bool) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	DeactivateOwnAccount(ctx context.Context, userID uuid.UUID) error
 
 	// Favorites
 	AddFavorite(ctx context.Context, userID, auctionID uuid.UUID) error
@@ -45,6 +48,10 @@ type userService struct {
 	favoriteRepo repository.FavoriteRepository
 	auctionRepo  repository.AuctionRepository
 	kycRepo      repository.KYCRepository
+	auditSvc     AuditService
+	rdb          *redis.Client
+	logger       *zap.Logger
+	jwtExpiry    int
 }
 
 func NewUserService(
@@ -52,12 +59,20 @@ func NewUserService(
 	favoriteRepo repository.FavoriteRepository,
 	auctionRepo repository.AuctionRepository,
 	kycRepo repository.KYCRepository,
+	auditSvc AuditService,
+	rdb *redis.Client,
+	logger *zap.Logger,
+	jwtExpiry int,
 ) UserService {
 	return &userService{
 		repo:         repo,
 		favoriteRepo: favoriteRepo,
 		auctionRepo:  auctionRepo,
 		kycRepo:      kycRepo,
+		auditSvc:     auditSvc,
+		rdb:          rdb,
+		logger:       logger,
+		jwtExpiry:    jwtExpiry,
 	}
 }
 
@@ -79,6 +94,47 @@ func (s *userService) UpdateLanguage(ctx context.Context, id uuid.UUID, lang str
 
 func (s *userService) UpdateNotificationSettings(ctx context.Context, id uuid.UUID, enabled bool) error {
 	return s.repo.UpdateNotificationSettings(ctx, id, enabled)
+}
+
+// DeactivateOwnAccount supprime le compte de l'utilisateur authentifié
+// lui-même — jamais un autre utilisateur, userID vient exclusivement du JWT côté
+// handler (Release Phase 1B — App Store account deletion, guideline 5.1.1(v),
+// qui exige une suppression réelle et pas seulement une désactivation). Un hard
+// delete de la ligne users (comme AdminService.DeleteUser / userRepo.Delete)
+// reste délibérément évité : auctions/bids/wallet/transactions référencent
+// users(id) par FK, et les retirer casserait ces relations ou nécessiterait des
+// CASCADE dangereux sur des données financières/légales à conserver. À la
+// place : is_active=false + anonymisation des champs personnels directs
+// (userRepo.AnonymizeAndDeactivate — voir son commentaire pour le détail exact
+// des colonnes effacées/remplacées). Révoque aussi toutes les sessions JWT
+// actives (même mécanisme que BlockUser, Session Security Phase 1).
+func (s *userService) DeactivateOwnAccount(ctx context.Context, userID uuid.UUID) error {
+	if err := s.repo.AnonymizeAndDeactivate(ctx, userID); err != nil {
+		return err
+	}
+
+	// Un compte supprimé ne doit pas rester utilisable via un JWT déjà émis.
+	RevokeUserSessions(ctx, s.rdb, s.logger, userID, s.jwtExpiry)
+
+	if s.auditSvc != nil {
+		// Jamais l'ancien phone/email/token — uniquement l'identifiant de
+		// l'utilisateur et des indicateurs non sensibles (Release Phase 1B).
+		if auditErr := s.auditSvc.Log(ctx, userID, "user_account_deleted", "user", &userID,
+			"Account deletion requested by owner (anonymized, financial/legal records retained)",
+			WithActorType("user"),
+			WithDetailsJSON(models.JSONB{
+				"target_user_id":   userID.String(),
+				"anonymized":       true,
+				"retained_records": []string{"transactions", "auctions", "bids"},
+			}),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("DeactivateOwnAccount: failed to write audit log", zap.String("user_id", userID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *userService) DeleteUser(ctx context.Context, id uuid.UUID) error {

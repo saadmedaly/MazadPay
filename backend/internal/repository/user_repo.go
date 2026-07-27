@@ -58,6 +58,19 @@ type UserRepository interface {
 	Count(ctx context.Context, query string) (int, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, isActive bool) error
 	Delete(ctx context.Context, id uuid.UUID) error
+
+	// AnonymizeAndDeactivate implémente la suppression de compte demandée par
+	// l'utilisateur lui-même (Release Phase 1B — conformité App Store guideline
+	// 5.1.1(v)). Contrairement à Delete (hard delete, réservé à l'admin), cette
+	// méthode ne retire jamais la ligne users elle-même — auctions/bids/wallet/
+	// transactions référencent users(id) par FK, et un hard delete casserait ces
+	// relations ou nécessiterait des CASCADE dangereux sur des données
+	// financières. À la place : is_active=false (même mécanisme que BlockUser)
+	// + anonymisation des champs personnels directs (nom, email, photo, ville,
+	// adresse, code postal, date de naissance, genre). phone doit rester unique
+	// et NOT NULL (contrainte DB) : remplacé par un placeholder déterministe basé
+	// sur l'ID, jamais réutilisable, jamais journalisé nulle part.
+	AnonymizeAndDeactivate(ctx context.Context, id uuid.UUID) error
 	GetStats(ctx context.Context) (int, int, error) // Total, Verified
 	PromoteToAdmin(ctx context.Context, id uuid.UUID, fullName, email, hash string) error
 	FindAllAdmins(ctx context.Context) ([]models.User, error)
@@ -257,6 +270,27 @@ func (r *userRepo) Count(ctx context.Context, query string) (int, error) {
 
 func (r *userRepo) UpdateStatus(ctx context.Context, id uuid.UUID, isActive bool) error {
 	_, err := r.db.ExecContext(ctx, "UPDATE users SET is_active = $1 WHERE id = $2", isActive, id)
+	return err
+}
+
+func (r *userRepo) AnonymizeAndDeactivate(ctx context.Context, id uuid.UUID) error {
+	// Placeholder déterministe et unique basé sur l'ID (satisfait phone UNIQUE
+	// NOT NULL) — jamais un numéro réel, jamais réutilisable par un autre compte.
+	anonymizedPhone := fmt.Sprintf("deleted_%s", id.String())
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE users SET
+			is_active = false,
+			phone = $1,
+			full_name = 'Deleted User',
+			email = NULL,
+			profile_pic_url = NULL,
+			city = NULL,
+			address = NULL,
+			postal_code = NULL,
+			date_of_birth = NULL,
+			gender = NULL
+		WHERE id = $2
+	`, anonymizedPhone, id)
 	return err
 }
 

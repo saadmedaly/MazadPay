@@ -48,7 +48,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	auditSvc := services.NewAuditService(auditRepo)
 	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, hub)
-	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo)
+	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
 	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
 	walletSvc := services.NewWalletService(db, walletRepo, txRepo, notifSvc, auditSvc, logger)
 	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc)
@@ -241,6 +241,9 @@ func setupUserRoutes(api fiber.Router, userHandler *handlers.UserHandler, wallet
 	users.Get("/search", userHandler.Search)
 	users.Get("/me", userHandler.GetMe)
 	users.Put("/me", userHandler.UpdateProfile)
+	// Release Phase 1 : conformité App Store — suppression/désactivation de compte
+	// initiable depuis l'app, userID exclusivement issu du JWT (jwtMiddleware).
+	users.Delete("/me", userHandler.DeleteMe)
 	users.Post("/me/avatar", userHandler.UpdateAvatar)
 	// Multipart avatar upload to R2
 	users.Post("/me/avatar/upload", func(c *fiber.Ctx) error {

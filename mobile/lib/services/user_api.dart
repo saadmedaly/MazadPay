@@ -226,6 +226,18 @@ class UserApi {
     }
   }
 
+  /// Désactiver (soft delete) le compte de l'utilisateur connecté (Release
+  /// Phase 1 — conformité App Store). userID est déterminé côté backend via le
+  /// JWT, jamais transmis ici.
+  Future<ApiResponse<Map<String, dynamic>>> deleteAccount() async {
+    try {
+      final response = await _apiService.delete<Map<String, dynamic>>('/users/me');
+      return ApiResponse<Map<String, dynamic>>.fromJson(response);
+    } catch (e) {
+      return ApiResponse.error(e.toString());
+    }
+  }
+
   /// Rechercher des utilisateurs
   Future<ApiResponse<List<dynamic>>> searchUsers(String query) async {
     try {
