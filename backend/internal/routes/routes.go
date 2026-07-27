@@ -342,13 +342,19 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	// Location management
 	admin.Post("/locations", adminHandler.CreateLocation)
 	admin.Put("/locations/:id", adminHandler.UpdateLocation)
-	admin.Delete("/locations/:id", adminHandler.DeleteLocation)
+	// Delete exige SuperAdminOnly (Countries/Locations Phase 3) : DeleteLocation
+	// modifie auctions.location_id avant de supprimer la ligne — même logique que
+	// Payment Methods Phase 3 (Delete/Toggle SuperAdminOnly, Create/Update AdminOnly).
+	admin.Delete("/locations/:id", middleware.SuperAdminOnly(logger), adminHandler.DeleteLocation)
 
 	// Country management
 	admin.Get("/countries", adminHandler.ListCountries)
 	admin.Post("/countries", adminHandler.CreateCountry)
 	admin.Put("/countries/:id", adminHandler.UpdateCountry)
-	admin.Delete("/countries/:id", adminHandler.DeleteCountry)
+	// Delete exige SuperAdminOnly (Countries/Locations Phase 3) : DeleteCountry fait
+	// un soft delete pouvant affecter des locations/payment_methods qui référencent
+	// encore ce country_id.
+	admin.Delete("/countries/:id", middleware.SuperAdminOnly(logger), adminHandler.DeleteCountry)
 
 	// Blocked phones management
 	admin.Get("/blocked-phones", adminHandler.ListBlockedPhones)
