@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 )
 
@@ -102,8 +103,18 @@ func (s *deliveryDriverService) Update(ctx context.Context, id uuid.UUID, driver
 }
 
 func (s *deliveryDriverService) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM delivery_drivers WHERE id = $1`, id)
-	return err
+	result, err := s.db.ExecContext(ctx, `DELETE FROM delivery_drivers WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return apperr.ErrNotFound
+	}
+	return nil
 }
 
 func (s *deliveryDriverService) UpdateLocation(ctx context.Context, id uuid.UUID, lat, lng float64) error {

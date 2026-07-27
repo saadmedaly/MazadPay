@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
@@ -139,10 +141,9 @@ func (h *DeliveryDriverHandler) UpdateDriver(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{"message": "Driver updated", "driver_id": driverID})
 }
 
-// DeleteDriver - DELETE /api/admin/drivers/:id (Admin only)
-// Note (Delivery Drivers Phase 1) : le service Delete() sous-jacent n'inspecte pas
-// RowsAffected — un id inexistant ne renvoie donc pas d'erreur "not found" ici,
-// comportement documenté mais non élargi dans cette phase (hors périmètre demandé).
+// DeleteDriver - DELETE /api/admin/drivers/:id (Super Admin only)
+// Delivery Drivers Phase 4 : Delete() vérifie désormais RowsAffected et renvoie
+// apperr.ErrNotFound si l'id n'existe pas, au lieu d'un succès silencieux.
 func (h *DeliveryDriverHandler) DeleteDriver(c *fiber.Ctx) error {
 	driverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -150,6 +151,9 @@ func (h *DeliveryDriverHandler) DeleteDriver(c *fiber.Ctx) error {
 	}
 
 	if err := h.svc.Delete(c.Context(), driverID); err != nil {
+		if errors.Is(err, apperr.ErrNotFound) {
+			return NotFound(c, "Driver")
+		}
 		h.logger.Error("failed to delete driver", zap.Error(err))
 		return InternalError(c, "Failed to delete driver")
 	}

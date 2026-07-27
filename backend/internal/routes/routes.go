@@ -593,7 +593,10 @@ func setupDeliveryDriverRoutes(api fiber.Router, h *handlers.DeliveryDriverHandl
 	// Delivery Drivers Phase 1 : complète Implementation B (candidate canonique) —
 	// le hook web useDeleteDriver appelle déjà DELETE /admin/drivers/:id, route
 	// absente jusqu'ici (seule Implementation A l'avait).
-	admin.Delete("/:id", h.DeleteDriver)
+	// Delivery Drivers Phase 4 : Delete exige SuperAdminOnly, même logique que
+	// /admin/users/:id, /admin/payment-methods/:id, /admin/locations/:id,
+	// /admin/countries/:id — suppression définitive d'un profil chauffeur.
+	admin.Delete("/:id", middleware.SuperAdminOnly(logger), h.DeleteDriver)
 	admin.Get("/available", h.GetAvailableDrivers)
 
 	// Driver routes
