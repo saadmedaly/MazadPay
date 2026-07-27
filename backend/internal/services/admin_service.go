@@ -55,9 +55,9 @@ type AdminService interface {
 	CreateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error
 	UpdateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error
 	DeleteCategory(ctx context.Context, id int, adminID uuid.UUID) error
-	CreateLocation(ctx context.Context, l *models.Location) error
-	UpdateLocation(ctx context.Context, l *models.Location) error
-	DeleteLocation(ctx context.Context, id int) error
+	CreateLocation(ctx context.Context, l *models.Location, adminID uuid.UUID) error
+	UpdateLocation(ctx context.Context, l *models.Location, adminID uuid.UUID) error
+	DeleteLocation(ctx context.Context, id int, adminID uuid.UUID) error
 
 	// Admin Management
 	CreateAdmin(ctx context.Context, phone, pin, fullName, email string) error
@@ -71,9 +71,9 @@ type AdminService interface {
 
 	// Countries
 	GetCountries(ctx context.Context) ([]models.Country, error)
-	CreateCountry(ctx context.Context, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string) error
-	UpdateCountry(ctx context.Context, id int, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool) error
-	DeleteCountry(ctx context.Context, id int) error
+	CreateCountry(ctx context.Context, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string, adminID uuid.UUID) error
+	UpdateCountry(ctx context.Context, id int, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool, adminID uuid.UUID) error
+	DeleteCountry(ctx context.Context, id int, adminID uuid.UUID) error
 
 	// Settings
 	ListSettings(ctx context.Context) ([]models.SystemSettings, error)
@@ -854,16 +854,77 @@ func (s *adminService) logCategoryAudit(ctx context.Context, adminID uuid.UUID, 
 	}
 }
 
-func (s *adminService) CreateLocation(ctx context.Context, l *models.Location) error {
-	return s.auctionRepo.CreateLocation(ctx, l)
+func (s *adminService) CreateLocation(ctx context.Context, l *models.Location, adminID uuid.UUID) error {
+	if err := s.auctionRepo.CreateLocation(ctx, l); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"location_id":  l.ID,
+			"city_name_ar": l.CityNameAr,
+			"area_name_ar": l.AreaNameAr,
+		}
+		if l.CountryID != nil {
+			detailsJSON["country_id"] = *l.CountryID
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "location_created", "location", nil,
+			fmt.Sprintf("location_id=%d city_name_ar=%s", l.ID, l.CityNameAr),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+			WithEntityKey(strconv.Itoa(l.ID)),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("CreateLocation: failed to write audit log", zap.Int("location_id", l.ID), zap.Error(auditErr))
+			}
+		}
+	}
+	return nil
 }
 
-func (s *adminService) UpdateLocation(ctx context.Context, l *models.Location) error {
-	return s.auctionRepo.UpdateLocation(ctx, l)
+func (s *adminService) UpdateLocation(ctx context.Context, l *models.Location, adminID uuid.UUID) error {
+	if err := s.auctionRepo.UpdateLocation(ctx, l); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"location_id":  l.ID,
+			"city_name_ar": l.CityNameAr,
+			"area_name_ar": l.AreaNameAr,
+		}
+		if l.CountryID != nil {
+			detailsJSON["country_id"] = *l.CountryID
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "location_updated", "location", nil,
+			fmt.Sprintf("location_id=%d city_name_ar=%s", l.ID, l.CityNameAr),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+			WithEntityKey(strconv.Itoa(l.ID)),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("UpdateLocation: failed to write audit log", zap.Int("location_id", l.ID), zap.Error(auditErr))
+			}
+		}
+	}
+	return nil
 }
 
-func (s *adminService) DeleteLocation(ctx context.Context, id int) error {
-	return s.auctionRepo.DeleteLocation(ctx, id)
+func (s *adminService) DeleteLocation(ctx context.Context, id int, adminID uuid.UUID) error {
+	if err := s.auctionRepo.DeleteLocation(ctx, id); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		if auditErr := s.auditSvc.Log(ctx, adminID, "location_deleted", "location", nil,
+			fmt.Sprintf("location_id=%d", id),
+			WithActorType("admin"),
+			WithDetailsJSON(models.JSONB{"location_id": id}),
+			WithEntityKey(strconv.Itoa(id)),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("DeleteLocation: failed to write audit log", zap.Int("location_id", id), zap.Error(auditErr))
+			}
+		}
+	}
+	return nil
 }
 
 // normalizePhoneForInvitation applique une normalisation simple et sûre, dédiée aux
@@ -1647,7 +1708,7 @@ func (s *adminService) GetCountries(ctx context.Context) ([]models.Country, erro
 	return s.auctionRepo.GetCountries(ctx)
 }
 
-func (s *adminService) CreateCountry(ctx context.Context, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string) error {
+func (s *adminService) CreateCountry(ctx context.Context, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string, adminID uuid.UUID) error {
 	country := &models.Country{
 		Code:        code,
 		CountryCode: nil, // NULL by default
@@ -1661,10 +1722,32 @@ func (s *adminService) CreateCountry(ctx context.Context, code, countryCode, nam
 	if countryCode != "" {
 		country.CountryCode = &countryCode
 	}
-	return s.auctionRepo.CreateCountry(ctx, country)
+	if err := s.auctionRepo.CreateCountry(ctx, country); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"country_id": country.ID,
+			"code":       country.Code,
+		}
+		if country.CountryCode != nil {
+			detailsJSON["country_code"] = *country.CountryCode
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "country_created", "country", nil,
+			fmt.Sprintf("country_id=%d code=%s", country.ID, country.Code),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+			WithEntityKey(strconv.Itoa(country.ID)),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("CreateCountry: failed to write audit log", zap.Int("country_id", country.ID), zap.Error(auditErr))
+			}
+		}
+	}
+	return nil
 }
 
-func (s *adminService) UpdateCountry(ctx context.Context, id int, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool) error {
+func (s *adminService) UpdateCountry(ctx context.Context, id int, code, countryCode, nameAr, nameFr, nameEn, flagEmoji string, isActive *bool, adminID uuid.UUID) error {
 	country := &models.Country{
 		ID:          id,
 		Code:        code,
@@ -1683,11 +1766,49 @@ func (s *adminService) UpdateCountry(ctx context.Context, id int, code, countryC
 		country.IsActive = *isActive
 	}
 
-	return s.auctionRepo.UpdateCountry(ctx, country)
+	if err := s.auctionRepo.UpdateCountry(ctx, country); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"country_id": id,
+			"code":       code,
+			"is_active":  country.IsActive,
+		}
+		if country.CountryCode != nil {
+			detailsJSON["country_code"] = *country.CountryCode
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "country_updated", "country", nil,
+			fmt.Sprintf("country_id=%d code=%s", id, code),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+			WithEntityKey(strconv.Itoa(id)),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("UpdateCountry: failed to write audit log", zap.Int("country_id", id), zap.Error(auditErr))
+			}
+		}
+	}
+	return nil
 }
 
-func (s *adminService) DeleteCountry(ctx context.Context, id int) error {
-	return s.auctionRepo.DeleteCountry(ctx, id)
+func (s *adminService) DeleteCountry(ctx context.Context, id int, adminID uuid.UUID) error {
+	if err := s.auctionRepo.DeleteCountry(ctx, id); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		if auditErr := s.auditSvc.Log(ctx, adminID, "country_deleted", "country", nil,
+			fmt.Sprintf("country_id=%d", id),
+			WithActorType("admin"),
+			WithDetailsJSON(models.JSONB{"country_id": id}),
+			WithEntityKey(strconv.Itoa(id)),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("DeleteCountry: failed to write audit log", zap.Int("country_id", id), zap.Error(auditErr))
+			}
+		}
+	}
+	return nil
 }
 
 

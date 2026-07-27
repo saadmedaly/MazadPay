@@ -730,7 +730,11 @@ func (h *AdminHandler) CreateLocation(c *fiber.Ctx) error {
 	if err := c.BodyParser(&loc); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
-	if err := h.svc.CreateLocation(c.Context(), &loc); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.CreateLocation(c.Context(), &loc, adminID); err != nil {
 		return InternalError(c, "Failed to create location: "+err.Error())
 	}
 	return Created(c, loc)
@@ -743,7 +747,11 @@ func (h *AdminHandler) UpdateLocation(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 	loc.ID = id
-	if err := h.svc.UpdateLocation(c.Context(), &loc); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.UpdateLocation(c.Context(), &loc, adminID); err != nil {
 		return InternalError(c, "Failed to update location: "+err.Error())
 	}
 	return OK(c, loc)
@@ -751,7 +759,11 @@ func (h *AdminHandler) UpdateLocation(c *fiber.Ctx) error {
 
 func (h *AdminHandler) DeleteLocation(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
-	if err := h.svc.DeleteLocation(c.Context(), id); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.DeleteLocation(c.Context(), id, adminID); err != nil {
 		return InternalError(c, "Failed to delete location: "+err.Error())
 	}
 	return OK(c, fiber.Map{"message": "Location deleted"})
@@ -871,7 +883,12 @@ func (h *AdminHandler) CreateCountry(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	if err := h.svc.CreateCountry(c.Context(), req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.CreateCountry(c.Context(), req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji, adminID); err != nil {
 		return InternalError(c, "Failed to create country")
 	}
 
@@ -899,7 +916,12 @@ func (h *AdminHandler) UpdateCountry(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
-	if err := h.svc.UpdateCountry(c.Context(), id, req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji, req.IsActive); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.UpdateCountry(c.Context(), id, req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji, req.IsActive, adminID); err != nil {
 		return InternalError(c, "Failed to update country")
 	}
 
@@ -912,7 +934,12 @@ func (h *AdminHandler) DeleteCountry(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid country ID")
 	}
 
-	if err := h.svc.DeleteCountry(c.Context(), id); err != nil {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.DeleteCountry(c.Context(), id, adminID); err != nil {
 		return InternalError(c, "Failed to delete country")
 	}
 
