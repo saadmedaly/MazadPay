@@ -10,11 +10,22 @@ class LoginState {
 
   LoginState({this.isLoading = false, this.error, this.errorCode});
 
-  LoginState copyWith({bool? isLoading, String? error, String? errorCode}) {
+  // Sentinel utilisé pour distinguer "paramètre non fourni" de "null explicite"
+  // (Mobile Auth Phase 1) : avec `String? error`, `error ?? this.error` ne pouvait
+  // jamais effacer une erreur existante, puisque `null ?? this.error` retombe
+  // toujours sur l'ancienne valeur — le message d'erreur restait donc affiché
+  // indéfiniment après une nouvelle tentative réussie.
+  static const _unset = Object();
+
+  LoginState copyWith({
+    bool? isLoading,
+    Object? error = _unset,
+    Object? errorCode = _unset,
+  }) {
     return LoginState(
       isLoading: isLoading ?? this.isLoading,
-      error: error ?? this.error,
-      errorCode: errorCode ?? this.errorCode,
+      error: identical(error, _unset) ? this.error : error as String?,
+      errorCode: identical(errorCode, _unset) ? this.errorCode : errorCode as String?,
     );
   }
 }
@@ -34,7 +45,7 @@ class LoginController extends StateNotifier<LoginState> {
       );
       
       if (response.success) {
-        state = state.copyWith(isLoading: false);
+        state = state.copyWith(isLoading: false, error: null, errorCode: null);
         
         // Synchroniser les favoris locaux avec le serveur
         try {
