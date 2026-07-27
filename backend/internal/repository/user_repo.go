@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -276,7 +277,15 @@ func (r *userRepo) UpdateStatus(ctx context.Context, id uuid.UUID, isActive bool
 func (r *userRepo) AnonymizeAndDeactivate(ctx context.Context, id uuid.UUID) error {
 	// Placeholder déterministe et unique basé sur l'ID (satisfait phone UNIQUE
 	// NOT NULL) — jamais un numéro réel, jamais réutilisable par un autre compte.
-	anonymizedPhone := fmt.Sprintf("deleted_%s", id.String())
+	// phone est VARCHAR(20) (migration 000001) : "deleted_" + UUID complet (36
+	// caractères) dépassait cette limite et faisait échouer silencieusement tout
+	// l'UPDATE avec une erreur Postgres "value too long", jamais commité (Release
+	// Phase 1C). "del_" (4) + 16 caractères hex de l'UUID compacté = 20 caractères
+	// exactement, dans la limite, tout en restant unique en pratique (128 bits
+	// d'entropie tronqués à 64 bits, largement suffisant face au volume d'utilisateurs
+	// réel de cette table).
+	compactID := strings.ReplaceAll(id.String(), "-", "")
+	anonymizedPhone := "del_" + compactID[:16]
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE users SET
 			is_active = false,
