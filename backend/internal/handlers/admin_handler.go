@@ -724,11 +724,47 @@ func (h *AdminHandler) DeleteCategory(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{"message": "Category deleted"})
 }
 
+// validateLocationRequest applique les règles Countries/Locations Phase 4. Ne
+// journalise/ne bloque jamais sur area_name_ar/area_name_fr vides : des lignes
+// existantes en production ont ces champs vides ("") intentionnellement.
+func validateLocationRequest(loc *models.Location) error {
+	loc.CityNameAr = strings.TrimSpace(loc.CityNameAr)
+	loc.CityNameFr = strings.TrimSpace(loc.CityNameFr)
+	loc.AreaNameAr = strings.TrimSpace(loc.AreaNameAr)
+	loc.AreaNameFr = strings.TrimSpace(loc.AreaNameFr)
+
+	if loc.CityNameAr == "" {
+		return fmt.Errorf("city_name_ar is required")
+	}
+	if len(loc.CityNameAr) > 100 {
+		return fmt.Errorf("city_name_ar must be at most 100 characters")
+	}
+	if loc.CityNameFr == "" {
+		return fmt.Errorf("city_name_fr is required")
+	}
+	if len(loc.CityNameFr) > 100 {
+		return fmt.Errorf("city_name_fr must be at most 100 characters")
+	}
+	if len(loc.AreaNameAr) > 100 {
+		return fmt.Errorf("area_name_ar must be at most 100 characters")
+	}
+	if len(loc.AreaNameFr) > 100 {
+		return fmt.Errorf("area_name_fr must be at most 100 characters")
+	}
+	if loc.CountryID != nil && *loc.CountryID <= 0 {
+		return fmt.Errorf("country_id must be a positive integer")
+	}
+	return nil
+}
+
 // Location management
 func (h *AdminHandler) CreateLocation(c *fiber.Ctx) error {
 	var loc models.Location
 	if err := c.BodyParser(&loc); err != nil {
 		return BadRequest(c, "Invalid request body")
+	}
+	if err := validateLocationRequest(&loc); err != nil {
+		return BadRequest(c, err.Error())
 	}
 	adminID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -748,6 +784,9 @@ func (h *AdminHandler) UpdateLocation(c *fiber.Ctx) error {
 	var loc models.Location
 	if err := c.BodyParser(&loc); err != nil {
 		return BadRequest(c, "Invalid request body")
+	}
+	if err := validateLocationRequest(&loc); err != nil {
+		return BadRequest(c, err.Error())
 	}
 	loc.ID = id
 	adminID, err := middleware.GetUserID(c)
@@ -874,6 +913,57 @@ func (h *AdminHandler) ListCountries(c *fiber.Ctx) error {
 	return OK(c, countries)
 }
 
+// countryCodeLettersPattern : code pays doit être 2 lettres (les valeurs actuelles
+// en production — MR, SN, TU — sont toutes 2 lettres majuscules).
+var countryCodeLettersPattern = regexp.MustCompile(`^[A-Za-z]{2}$`)
+
+// validateCountryRequest applique les règles Countries/Locations Phase 4.
+// country_code et flag_emoji restent volontairement peu stricts (longueur + trim
+// seulement, pas de format imposé) : des lignes existantes en production ont
+// country_code="216" (sans +) et flag_emoji="TUN" (pas un emoji) — imposer un
+// format strict aurait bloqué toute future mise à jour de ces lignes tant que
+// leurs données ne sont pas corrigées séparément.
+func validateCountryRequest(code, countryCode, nameAr, nameFr, nameEn, flagEmoji string) (string, string, string, string, string, string, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	countryCode = strings.TrimSpace(countryCode)
+	nameAr = strings.TrimSpace(nameAr)
+	nameFr = strings.TrimSpace(nameFr)
+	nameEn = strings.TrimSpace(nameEn)
+	flagEmoji = strings.TrimSpace(flagEmoji)
+
+	if code == "" {
+		return "", "", "", "", "", "", fmt.Errorf("code is required")
+	}
+	if !countryCodeLettersPattern.MatchString(code) {
+		return "", "", "", "", "", "", fmt.Errorf("code must be exactly 2 letters")
+	}
+	if len(countryCode) > 5 {
+		return "", "", "", "", "", "", fmt.Errorf("country_code must be at most 5 characters")
+	}
+	if nameAr == "" {
+		return "", "", "", "", "", "", fmt.Errorf("name_ar is required")
+	}
+	if len(nameAr) > 100 {
+		return "", "", "", "", "", "", fmt.Errorf("name_ar must be at most 100 characters")
+	}
+	if nameFr == "" {
+		return "", "", "", "", "", "", fmt.Errorf("name_fr is required")
+	}
+	if len(nameFr) > 100 {
+		return "", "", "", "", "", "", fmt.Errorf("name_fr must be at most 100 characters")
+	}
+	if len(nameEn) > 100 {
+		return "", "", "", "", "", "", fmt.Errorf("name_en must be at most 100 characters")
+	}
+	if flagEmoji == "" {
+		return "", "", "", "", "", "", fmt.Errorf("flag_emoji is required")
+	}
+	if len(flagEmoji) > 10 {
+		return "", "", "", "", "", "", fmt.Errorf("flag_emoji must be at most 10 characters")
+	}
+	return code, countryCode, nameAr, nameFr, nameEn, flagEmoji, nil
+}
+
 func (h *AdminHandler) CreateCountry(c *fiber.Ctx) error {
 	type Request struct {
 		Code        string `json:"code"        validate:"required,len=2"`
@@ -889,13 +979,18 @@ func (h *AdminHandler) CreateCountry(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
+	code, countryCode, nameAr, nameFr, nameEn, flagEmoji, err := validateCountryRequest(req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji)
+	if err != nil {
+		return BadRequest(c, err.Error())
+	}
+
 	adminID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c, "User not authenticated")
 	}
 
-	if err := h.svc.CreateCountry(c.Context(), req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji, adminID); err != nil {
-		return InternalError(c, "Failed to create country")
+	if err := h.svc.CreateCountry(c.Context(), code, countryCode, nameAr, nameFr, nameEn, flagEmoji, adminID); err != nil {
+		return MapError(c, h.logger, err)
 	}
 
 	return OK(c, fiber.Map{"message": "Country created successfully"})
@@ -922,13 +1017,18 @@ func (h *AdminHandler) UpdateCountry(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
+	code, countryCode, nameAr, nameFr, nameEn, flagEmoji, err := validateCountryRequest(req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji)
+	if err != nil {
+		return BadRequest(c, err.Error())
+	}
+
 	adminID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c, "User not authenticated")
 	}
 
-	if err := h.svc.UpdateCountry(c.Context(), id, req.Code, req.CountryCode, req.NameAr, req.NameFr, req.NameEn, req.FlagEmoji, req.IsActive, adminID); err != nil {
-		return InternalError(c, "Failed to update country")
+	if err := h.svc.UpdateCountry(c.Context(), id, code, countryCode, nameAr, nameFr, nameEn, flagEmoji, req.IsActive, adminID); err != nil {
+		return MapError(c, h.logger, err)
 	}
 
 	return OK(c, fiber.Map{"message": "Country updated successfully"})
