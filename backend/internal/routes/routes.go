@@ -393,11 +393,13 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Post("/auction-boosts", adminHandler.CreateAuctionBoost)
 	admin.Delete("/auction-boosts/:id", adminHandler.DeleteAuctionBoost)
 
-	// Delivery Drivers management (from migration 000031)
-	admin.Get("/delivery-drivers", adminHandler.ListDeliveryDrivers)
-	admin.Post("/delivery-drivers", adminHandler.CreateDeliveryDriver)
-	admin.Put("/delivery-drivers/:id", adminHandler.UpdateDeliveryDriver)
-	admin.Delete("/delivery-drivers/:id", adminHandler.DeleteDeliveryDriver)
+	// Delivery Drivers management — retiré (Delivery Drivers Phase 2) : Implementation
+	// B (setupDeliveryDriverRoutes, /admin/drivers) est désormais l'unique chemin
+	// canonique ; ces routes /admin/delivery-drivers n'étaient appelées par aucun
+	// client (Web/Mobile) d'après l'audit Phase 0. adminHandler.ListDeliveryDrivers/
+	// CreateDeliveryDriver/UpdateDeliveryDriver/DeleteDeliveryDriver et le service
+	// sous-jacent restent en place (non supprimés dans cette phase), seul leur point
+	// d'entrée HTTP est retiré ici.
 
 	// User Settings management (from migration 000031)
 	admin.Get("/users/:id/settings", adminHandler.GetUserSettings)
