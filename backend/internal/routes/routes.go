@@ -534,18 +534,17 @@ func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, j
 // New route setup functions for additional features
 
 func setupPaymentMethodRoutes(api fiber.Router, h *handlers.PaymentMethodHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
-	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
-	adminMiddleware := middleware.AdminOnly(logger)
-
 	// Public routes (Public Endpoints / Scraping Protection : rate limit + cache 5 min)
 	api.Get("/payment-methods", middleware.RateLimit(rdb, 60, 120, logger, false), middleware.CacheControl(300), h.ListPaymentMethods)
 
-	// Admin routes
-	admin := api.Group("/admin/payment-methods", jwtMiddleware, adminMiddleware)
-	admin.Post("/", h.CreatePaymentMethod)
-	admin.Put("/:id", h.UpdatePaymentMethod)
-	admin.Delete("/:id", h.DeletePaymentMethod)
-	admin.Put("/:id/toggle", h.TogglePaymentMethodStatus)
+	// Les routes admin (Create/Update/Delete/Toggle) dupliquées ici ont été retirées
+	// (Payment Methods Phase 2) : Implementation A (AdminHandler/adminService, voir
+	// setupAdminRoutes) est désormais l'unique chemin canonique pour ces mutations —
+	// elles étaient de toute façon inatteignables (Implementation A s'enregistre en
+	// premier dans Setup() et gagnait déjà tout conflit de route identique). Le
+	// handler/service PaymentMethodHandler/paymentMethodService restent en place
+	// (non supprimés dans cette phase) pour ne pas casser ce fichier ; seul le
+	// GET public ci-dessus reste actif depuis ce point d'entrée.
 }
 
 func setupAuctionBoostRoutes(api fiber.Router, h *handlers.AuctionBoostHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
