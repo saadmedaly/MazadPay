@@ -735,13 +735,16 @@ func (h *AdminHandler) CreateLocation(c *fiber.Ctx) error {
 		return Unauthorized(c, "User not authenticated")
 	}
 	if err := h.svc.CreateLocation(c.Context(), &loc, adminID); err != nil {
-		return InternalError(c, "Failed to create location: "+err.Error())
+		return MapError(c, h.logger, err)
 	}
 	return Created(c, loc)
 }
 
 func (h *AdminHandler) UpdateLocation(c *fiber.Ctx) error {
-	id, _ := strconv.Atoi(c.Params("id"))
+	id, err := c.ParamsInt("id", 0)
+	if err != nil || id <= 0 {
+		return BadRequest(c, "Invalid location ID")
+	}
 	var loc models.Location
 	if err := c.BodyParser(&loc); err != nil {
 		return BadRequest(c, "Invalid request body")
@@ -752,19 +755,22 @@ func (h *AdminHandler) UpdateLocation(c *fiber.Ctx) error {
 		return Unauthorized(c, "User not authenticated")
 	}
 	if err := h.svc.UpdateLocation(c.Context(), &loc, adminID); err != nil {
-		return InternalError(c, "Failed to update location: "+err.Error())
+		return MapError(c, h.logger, err)
 	}
 	return OK(c, loc)
 }
 
 func (h *AdminHandler) DeleteLocation(c *fiber.Ctx) error {
-	id, _ := strconv.Atoi(c.Params("id"))
+	id, err := c.ParamsInt("id", 0)
+	if err != nil || id <= 0 {
+		return BadRequest(c, "Invalid location ID")
+	}
 	adminID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c, "User not authenticated")
 	}
 	if err := h.svc.DeleteLocation(c.Context(), id, adminID); err != nil {
-		return InternalError(c, "Failed to delete location: "+err.Error())
+		return MapError(c, h.logger, err)
 	}
 	return OK(c, fiber.Map{"message": "Location deleted"})
 }
