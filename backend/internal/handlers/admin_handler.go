@@ -1005,6 +1005,27 @@ func (h *AdminHandler) DeletePaymentMethod(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{"message": "Payment method deleted successfully"})
 }
 
+func (h *AdminHandler) TogglePaymentMethodStatus(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id", 0)
+	if err != nil {
+		return BadRequest(c, "Invalid payment method ID")
+	}
+
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	if err := h.svc.TogglePaymentMethodStatus(c.Context(), id, adminID); err != nil {
+		if errors.Is(err, apperr.ErrNotFound) {
+			return NotFound(c, "Payment method")
+		}
+		return InternalError(c, "Failed to toggle payment method status")
+	}
+
+	return OK(c, fiber.Map{"message": "Payment method status toggled successfully"})
+}
+
 // Auction Car Details management (from migration 000031)
 func (h *AdminHandler) GetAuctionCarDetails(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))

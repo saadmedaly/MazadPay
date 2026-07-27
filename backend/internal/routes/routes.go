@@ -364,6 +364,10 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Post("/payment-methods", adminHandler.CreatePaymentMethod)
 	admin.Put("/payment-methods/:id", adminHandler.UpdatePaymentMethod)
 	admin.Delete("/payment-methods/:id", adminHandler.DeletePaymentMethod)
+	// PATCH (pas PUT) car le frontend (usePaymentMethods.ts) envoie PATCH — voir
+	// Payment Methods Phase 1 : endpoint canonical dans Implementation A, l'ancien
+	// PUT .../toggle d'Implementation B (setupPaymentMethodRoutes) reste inchangé.
+	admin.Patch("/payment-methods/:id/toggle", adminHandler.TogglePaymentMethodStatus)
 
 	// Auction Car Details management (from migration 000031)
 	admin.Get("/auctions/:id/car-details", adminHandler.GetAuctionCarDetails)

@@ -84,6 +84,7 @@ type AdminService interface {
 	CreatePaymentMethod(ctx context.Context, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int, adminID uuid.UUID) error
 	UpdatePaymentMethod(ctx context.Context, id int, code, nameAr, nameFr string, nameEn, logoURL *string, isActive *bool, countryID *int, adminID uuid.UUID) error
 	DeletePaymentMethod(ctx context.Context, id int, adminID uuid.UUID) error
+	TogglePaymentMethodStatus(ctx context.Context, id int, adminID uuid.UUID) error
 
 	// Auction Car Details (from migration 000031)
 	GetAuctionCarDetails(ctx context.Context, auctionID uuid.UUID) (*models.AuctionCarDetails, error)
@@ -1459,6 +1460,38 @@ func (s *adminService) DeletePaymentMethod(ctx context.Context, id int, adminID 
 		); auditErr != nil {
 			if s.logger != nil {
 				s.logger.Error("DeletePaymentMethod: failed to write audit log", zap.Int("payment_method_id", id), zap.Error(auditErr))
+			}
+		}
+	}
+	return nil
+}
+
+func (s *adminService) TogglePaymentMethodStatus(ctx context.Context, id int, adminID uuid.UUID) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE payment_methods SET is_active = NOT is_active WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return apperr.ErrNotFound
+	}
+
+	if s.auditSvc != nil {
+		// Action distincte de payment_method_updated (Payment Methods Phase 1) pour
+		// pouvoir distinguer un simple bascule d'activation d'une modification de
+		// champs dans les audit_logs. Jamais code/name_* ni aucune valeur complète —
+		// uniquement l'identifiant du moyen de paiement.
+		if auditErr := s.auditSvc.Log(ctx, adminID, "payment_method_toggled", "payment_method", nil, fmt.Sprintf("payment_method_id=%d", id),
+			WithActorType("admin"),
+			WithDetailsJSON(models.JSONB{"payment_method_id": id}),
+			WithEntityKey(strconv.Itoa(id)),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("TogglePaymentMethodStatus: failed to write audit log", zap.Int("payment_method_id", id), zap.Error(auditErr))
 			}
 		}
 	}
