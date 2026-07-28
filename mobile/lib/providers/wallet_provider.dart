@@ -191,16 +191,16 @@ class WalletNotifier extends _$WalletNotifier {
   /// Effectuer un retrait
   Future<bool> withdraw({
     required double amount,
+    required String gateway,
     Map<String, dynamic>? bankDetails,
-    String? method,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       final response = await _walletApi.withdraw(
         amount: amount,
+        gateway: gateway,
         bankDetails: bankDetails,
-        method: method,
       );
 
       if (response.success) {
