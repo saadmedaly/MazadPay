@@ -721,14 +721,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
                 const SizedBox(height: 24),
                 _buildContactItem(
-                  icon: FontAwesomeIcons.whatsapp,
+                  faIcon: FontAwesomeIcons.whatsapp,
                   label: AppLocalizations.of(context)!.text_225,
                   value: '47601175',
                   color: const Color(0xFF25D366),
                 ),
                 const SizedBox(height: 16),
                 _buildContactItem(
-                  icon: Icons.email_outlined,
+                  materialIcon: Icons.email_outlined,
                   label: AppLocalizations.of(context)!.text_41,
                   value: 'mazadpay@gmail.com',
                   color: const Color(0xFF135BEC),
@@ -742,7 +742,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Widget _buildContactItem({
-    required IconData icon,
+    FaIconData? faIcon,
+    IconData? materialIcon,
     required String label,
     required String value,
     required Color color,
@@ -765,7 +766,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: faIcon != null
+                ? FaIcon(faIcon, color: color, size: 24)
+                : Icon(materialIcon, color: color, size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(
