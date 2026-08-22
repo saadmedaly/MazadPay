@@ -81,6 +81,14 @@ jobs:
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      - name: Create CI environment placeholder
+        run: |
+          cat > .env <<'EOF'
+          API_BASE_URL=http://localhost:8082/v1/api
+          WS_BASE_URL=ws://localhost:8082/v1/api
+          WS_URL=ws://localhost:8082
+          EOF
+
       - name: Flutter test
         run: flutter test
 
