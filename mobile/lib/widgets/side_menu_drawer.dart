@@ -497,7 +497,7 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
     );
   }
 
-  Widget _buildSocialIcon(IconData icon, Color color, {bool isYellow = false}) {
+  Widget _buildSocialIcon(FaIconData icon, Color color, {bool isYellow = false}) {
     return Container(
       width: 44,
       height: 44,

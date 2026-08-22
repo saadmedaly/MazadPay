@@ -300,7 +300,7 @@ class AppModals {
                 
                 _buildContactItem(
                   context,
-                  icon: FontAwesomeIcons.whatsapp,
+                  faIcon: FontAwesomeIcons.whatsapp,
                   isWhatsApp: true,
                   title: AppLocalizations.of(context)!.text_225,
                   subtitle: '47601175',
@@ -315,7 +315,7 @@ class AppModals {
                 
                 _buildContactItem(
                   context,
-                  icon: Icons.email_outlined,
+                  materialIcon: Icons.email_outlined,
                   isWhatsApp: false,
                   title: AppLocalizations.of(context)!.text_41,
                   subtitle: 'mazadpay@gmail.com',
@@ -336,7 +336,8 @@ class AppModals {
 
   static Widget _buildContactItem(
     BuildContext context, {
-    required dynamic icon, // Can be IconData
+    FaIconData? faIcon,
+    IconData? materialIcon,
     required bool isWhatsApp,
     required String title,
     required String subtitle,
@@ -345,8 +346,6 @@ class AppModals {
     required bool isDarkMode,
     required VoidCallback onTap,
   }) {
-    // In order to not depend on font_awesome_flutter in this file if not needed, 
-    // we use a generic icon or we import it. I will simply use standard icons.
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -367,9 +366,9 @@ class AppModals {
                 color: bgColor,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: isWhatsApp 
-                ? FaIcon(icon as IconData, color: iconColor, size: 24)
-                : Icon(icon as IconData, color: iconColor, size: 24),
+              child: faIcon != null
+                  ? FaIcon(faIcon, color: iconColor, size: 24)
+                  : Icon(materialIcon, color: iconColor, size: 24),
             ),
             const SizedBox(width: 16),
             Column(
