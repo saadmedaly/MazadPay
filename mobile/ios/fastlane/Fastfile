@@ -1,0 +1,19 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Validate that the iOS project resolves dependencies and builds (no signing, no upload)"
+  lane :build_validation do
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      configuration: "Release",
+      skip_archive: true,
+      skip_codesigning: true,
+      export_method: "development"
+    )
+  end
+
+  # Signing and TestFlight/App Store lanes are intentionally not implemented yet.
+  # They will be added once Apple Developer assets (Distribution Certificate,
+  # Provisioning Profile via Match, App Store Connect API Key) are provisioned.
+end

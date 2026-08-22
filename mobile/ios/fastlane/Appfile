@@ -1,0 +1,2 @@
+app_identifier(ENV["IOS_BUNDLE_ID"] || "com.mezadpay.app.mezadPay")
+team_id(ENV["IOS_TEAM_ID"])

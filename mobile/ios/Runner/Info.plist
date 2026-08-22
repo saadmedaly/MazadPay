@@ -56,5 +56,11 @@
 	<string>Cette application a besoin d'accéder à votre position pour détecter votre ville et afficher les enchères proches de vous.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Cette application a besoin d'accéder à votre position pour détecter votre ville et afficher les enchères proches de vous.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

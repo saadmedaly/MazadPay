@@ -1,0 +1,109 @@
+name: iOS Build Validation
+
+# This workflow currently performs BUILD VALIDATION ONLY.
+# It does NOT sign, archive for distribution, or upload to App Store Connect/TestFlight.
+# Signing and release upload will be added in a later phase once Apple Developer
+# assets (Distribution Certificate, Provisioning Profile, App Store Connect API Key)
+# are provisioned and stored as GitHub Secrets.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/ios-release.yml"
+
+defaults:
+  run:
+    working-directory: mobile
+
+env:
+  FLUTTER_VERSION: "3.44.7"
+  # Pinned to Xcode 26.6 stable (not 27 beta/preview). Do NOT switch to
+  # macos-latest without re-verifying the default Xcode version — GitHub
+  # periodically repoints that label and can silently move the build onto a
+  # newer/preview Xcode.
+  XCODE_VERSION: "26.6"
+
+jobs:
+  build-validation:
+    name: Flutter + CocoaPods + Xcode build validation
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: List available Xcode versions on this runner
+        run: ls -la /Applications | grep -i Xcode
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          set -e
+          TARGET_APP="/Applications/Xcode_${{ env.XCODE_VERSION }}.app"
+          if [ ! -d "$TARGET_APP" ]; then
+            echo "::error::$TARGET_APP not found on this runner image."
+            echo "::error::See the 'List available Xcode versions' step output above for what IS installed."
+            echo "::error::This workflow must use Xcode 26.6 stable only — do NOT select Xcode 27 beta/preview"
+            echo "::error::or any other version as a substitute. Update XCODE_VERSION only after confirming"
+            echo "::error::the exact Xcode 26.6.x stable build is present on this runner image."
+            exit 1
+          fi
+          sudo xcode-select -s "$TARGET_APP/Contents/Developer"
+
+      - name: Show build environment
+        run: |
+          echo "---- xcodebuild -version ----"
+          xcodebuild -version
+          echo "---- xcode-select -p ----"
+          xcode-select -p
+          echo "---- xcodebuild -showsdks ----"
+          xcodebuild -showsdks
+          echo "---- flutter --version (pre-setup, may be absent) ----"
+          flutter --version || true
+          echo "---- pod --version ----"
+          pod --version || true
+
+      - name: Install Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+          cache: true
+
+      - name: Confirm Flutter version
+        run: flutter --version
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Flutter test
+        run: flutter test
+
+      - name: Install CocoaPods dependencies
+        working-directory: mobile/ios
+        run: pod install --repo-update
+
+      - name: iOS dependency validation (xcodebuild -list)
+        working-directory: mobile/ios
+        run: xcodebuild -list -workspace Runner.xcworkspace
+
+      - name: iOS build validation (no signing, no archive)
+        run: |
+          flutter build ios \
+            --release \
+            --no-codesign
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: |
+            mobile/ios/Pods
+            mobile/build/ios/Release-iphoneos
+          retention-days: 5
