@@ -17,13 +17,14 @@ interface Props {
   onConfirm: () => void
   onCancel?: () => void
   loading?: boolean
+  confirmDisabled?: boolean
   children?: React.ReactNode
 }
 
 export function ConfirmDialog({
   open, onOpenChange, title, description, message,
   confirmLabel = 'تأكيد', cancelLabel = 'إلغاء',
-  variant = 'default', onConfirm, onCancel, loading, children
+  variant = 'default', onConfirm, onCancel, loading, confirmDisabled, children
 }: Props) {
   const btnCls = {
     danger:  'bg-red-500 hover:bg-red-600 text-white',
@@ -50,8 +51,8 @@ export function ConfirmDialog({
               e.preventDefault()
               onConfirm()
             }}
-            disabled={loading}
-            className={cn(btnCls, 'border-0', loading && 'opacity-50 cursor-not-allowed')}
+            disabled={loading || confirmDisabled}
+            className={cn(btnCls, 'border-0', (loading || confirmDisabled) && 'opacity-50 cursor-not-allowed')}
           >
             {loading ? 'جاري التنفيذ...' : confirmLabel}
           </AlertDialogAction>

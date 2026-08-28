@@ -15,9 +15,9 @@ type AuctionRequest struct {
 	TitleAr         string          `db:"title_ar"          json:"title_ar" validate:"required"`
 	TitleFr         *string         `db:"title_fr"          json:"title_fr"`
 	TitleEn         *string         `db:"title_en"          json:"title_en"`
-	DescriptionAr   *string         `db:"description_ar"    json:"description_ar"`
-	DescriptionFr   *string         `db:"description_fr"    json:"description_fr"`
-	DescriptionEn   *string         `db:"description_en"    json:"description_en"`
+	DescriptionAr   *string         `db:"description_ar"    json:"description_ar" validate:"required,min=10,max=5000"`
+	DescriptionFr   *string         `db:"description_fr"    json:"description_fr" validate:"omitempty,min=10,max=5000"`
+	DescriptionEn   *string         `db:"description_en"    json:"description_en" validate:"omitempty,min=10,max=5000"`
 	StartPrice      decimal.Decimal `db:"start_price"       json:"start_price" validate:"required,gt=0"`
 	MinIncrement    decimal.Decimal `db:"min_increment"     json:"min_increment" validate:"required,gt=0"`
 	InsuranceAmount decimal.Decimal `db:"insurance_amount"  json:"insurance_amount" validate:"gte=0"`

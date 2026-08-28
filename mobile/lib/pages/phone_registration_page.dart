@@ -6,12 +6,15 @@ import 'otp_entry_page.dart';
 import '../services/auth_api.dart';
 import '../services/category_api.dart';
 import '../utils/error_mapper.dart';
+import '../utils/phone_validation.dart';
+import '../widgets/country_picker_sheet.dart';
 
 class PhoneRegistrationPage extends ConsumerStatefulWidget {
   const PhoneRegistrationPage({super.key});
 
   @override
-  ConsumerState<PhoneRegistrationPage> createState() => _PhoneRegistrationPageState();
+  ConsumerState<PhoneRegistrationPage> createState() =>
+      _PhoneRegistrationPageState();
 }
 
 class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
@@ -58,22 +61,27 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
     super.dispose();
   }
 
-  bool get _isMauritania => _selectedCountry?['country_code'] == '+222';
-
   Future<void> _sendOTP() async {
+    if (_isLoading) return;
     final l10n = AppLocalizations.of(context)!;
     final phone = _phoneController.text.trim();
 
-    if (phone.length != 8) {
+    if (_selectedCountry == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.error_phone_length), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(l10n.error_country_required),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
 
-    if (_isMauritania && !RegExp(r'^[234]').hasMatch(phone)) {
+    if (!isPhoneLengthValid(phone, _selectedCountry)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.error_phone_start_digit), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(l10n.error_phone_length),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -100,7 +108,15 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mapError(context, response.error?.code, response.error?.message ?? ''))),
+          SnackBar(
+            content: Text(
+              mapError(
+                context,
+                response.error?.code,
+                response.error?.message ?? '',
+              ),
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -115,7 +131,7 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -203,7 +219,8 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
               ),
               const SizedBox(height: 20),
               Row(
-                textDirection: TextDirection.rtl, // Match Stitch: Flag on the right
+                textDirection:
+                    TextDirection.rtl, // Match Stitch: Flag on the right
                 children: [
                   InkWell(
                     onTap: () => _showCountryPicker(context),
@@ -238,20 +255,26 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
                           const SizedBox(width: 8),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(2),
-                            child: _selectedCountry?['code'] != null 
-                              ? Image.network(
-                                  'https://flagcdn.com/w80/${_selectedCountry!['code'].toString().toLowerCase()}.png',
-                                  width: 24,
-                                  height: 16,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stack) => Image.asset('assets/mr.png', width: 24, height: 16, fit: BoxFit.cover),
-                                )
-                              : Image.asset(
-                                  'assets/mr.png',
-                                  width: 24,
-                                  height: 16,
-                                  fit: BoxFit.cover,
-                                ),
+                            child: _selectedCountry?['code'] != null
+                                ? Image.network(
+                                    'https://flagcdn.com/w80/${_selectedCountry!['code'].toString().toLowerCase()}.png',
+                                    width: 24,
+                                    height: 16,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stack) =>
+                                        Image.asset(
+                                          'assets/mr.png',
+                                          width: 24,
+                                          height: 16,
+                                          fit: BoxFit.cover,
+                                        ),
+                                  )
+                                : Image.asset(
+                                    'assets/mr.png',
+                                    width: 24,
+                                    height: 16,
+                                    fit: BoxFit.cover,
+                                  ),
                           ),
                         ],
                       ),
@@ -294,7 +317,7 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
                           ),
                           counterText: "", // Hide default counter
                         ),
-                        maxLength: 8,
+                        maxLength: phoneMaxLengthFor(_selectedCountry),
                       ),
                     ),
                   ),
@@ -304,7 +327,7 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
               Align(
                 alignment: AlignmentDirectional.centerEnd,
                 child: Text(
-                  '${_phoneController.text.length}/8',
+                  '${_phoneController.text.length}/${phoneMaxLengthFor(_selectedCountry)}',
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(context).brightness == Brightness.light
@@ -317,7 +340,11 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.chat_outlined, size: 16, color: const Color(0xFF25D366)),
+                  Icon(
+                    Icons.chat_outlined,
+                    size: 16,
+                    color: const Color(0xFF25D366),
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     AppLocalizations.of(context)!.text_261,
@@ -345,7 +372,10 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
                         )
                       : Text(
                           AppLocalizations.of(context)!.text_211,
@@ -372,7 +402,9 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
                     onTap: () {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => const LoginPage()),
+                        MaterialPageRoute(
+                          builder: (context) => const LoginPage(),
+                        ),
                       );
                     },
                     child: Text(
@@ -417,145 +449,13 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
         ),
       ),
     );
-}
-
-  void _showCountryPicker(BuildContext context) {
-    bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-            borderRadius: const BorderRadiusDirectional.only(
-              topStart: Radius.circular(24),
-              topEnd: Radius.circular(24),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: isDarkMode ? Colors.grey[700] : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                AppLocalizations.of(context)!.text_219,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 24),
-              if (_countries.isEmpty)
-                const CircularProgressIndicator()
-              else
-                ..._countries.map((country) {
-                  final isArabic = Localizations.localeOf(context).languageCode == 'ar';
-                  final isFrench = Localizations.localeOf(context).languageCode == 'fr';
-                  final name = isArabic 
-                      ? country['name_ar'] 
-                      : (isFrench ? country['name_fr'] : country['name_en']);
-                  
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12.0),
-                    child: _buildCountryItem(
-                      context,
-                      name: name ?? 'Unknown',
-                      code: country['country_code'] ?? '',
-                      flagUrl: 'https://flagcdn.com/w80/${country['code'].toString().toLowerCase()}.png',
-                      isAvailable: country['is_active'] ?? true,
-                      onTap: () {
-                        if (country['is_active'] ?? true) {
-                          setState(() => _selectedCountry = country);
-                          Navigator.pop(context);
-                        }
-                      },
-                    ),
-                  );
-                }),
-              const SizedBox(height: 40),
-            ],
-          ),
-        );
-      },
-    );
   }
 
-  Widget _buildCountryItem(
-    BuildContext context, {
-    required String name,
-    required String code,
-    required String flagUrl,
-    required bool isAvailable,
-    VoidCallback? onTap,
-  }) {
-    return Opacity(
-      opacity: isAvailable ? 1.0 : 0.5,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isAvailable
-                  ? const Color(0xFF135BEC).withOpacity(0.3)
-                  : Colors.grey.withOpacity(0.2),
-            ),
-          ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: flagUrl.startsWith('http')
-                    ? Image.network(
-                        flagUrl,
-                        width: 32,
-                        height: 20,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          width: 32,
-                          height: 20,
-                          color: Colors.grey[300],
-                          child: const Icon(Icons.flag, size: 12),
-                        ),
-                      )
-                    : Image.asset(
-                        flagUrl,
-                        width: 32,
-                        height: 20,
-                        fit: BoxFit.cover,
-                      ),
-              ),
-              const SizedBox(width: 16),
-              Text(
-                name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                code,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
-                textDirection: TextDirection.ltr,
-              ),
-            ],
-          ),
-        ),
-      ),
+  void _showCountryPicker(BuildContext context) {
+    showCountryPickerSheet(
+      context,
+      countries: _countries,
+      onSelected: (country) => setState(() => _selectedCountry = country),
     );
   }
 }

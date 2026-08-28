@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, XCircle, Eye, ShieldCheck, Image as ImageIcon, Tag, Trash2, Search, Calendar } from 'lucide-react'
+import { CheckCircle2, XCircle, Eye, ShieldCheck, Image as ImageIcon, Tag, Trash2, Search, Calendar, Plus, Pencil } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { DataTable } from '@/components/shared/DataTable'
@@ -18,6 +19,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 export function KYCPage() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [requestType, setRequestType] = useState<'auction' | 'banner'>('auction')
   const [status, setStatus] = useState('pending')
   const [page, setPage] = useState(1)
@@ -159,6 +161,15 @@ export function KYCPage() {
                 </button>
               </>
             )}
+            {(row.original.status === 'draft' || row.original.status === 'rejected') && (
+              <button
+                onClick={() => navigate(`/requests/auctions/${row.original.id}/edit`)}
+                className="p-2 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-colors"
+                title="تعديل الطلب"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={() => setDeleteTarget({ id: row.original.id, name: row.original.title_ar, type: 'auction' })}
               className="p-2 rounded-lg text-surface-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
@@ -280,7 +291,11 @@ export function KYCPage() {
 
   const handleReview = () => {
     if (!reviewTarget) return
-    
+
+    if (reviewTarget.status === 'rejected' && !notes.trim()) {
+      return
+    }
+
     const mutation = reviewTarget.type === 'auction' ? reviewAuctionRequest : reviewBannerRequest
     mutation.mutate(
       { id: reviewTarget.id, status: reviewTarget.status, notes },
@@ -328,6 +343,8 @@ export function KYCPage() {
   const handleBulkAction = () => {
     if (!bulkAction || selectedIds.length === 0) return
 
+    if (bulkAction === 'reject' && !notes.trim()) return
+
     if (bulkAction === 'delete') {
       const mutation = requestType === 'auction' ? bulkDeleteAuction : bulkDeleteBanner
       mutation.mutate(selectedIds, {
@@ -364,10 +381,15 @@ export function KYCPage() {
 
   return (
     <div className="animate-fade-in" dir="rtl">
-      <PageHeader 
-        title="إدارة الطلبات" 
+      <PageHeader
+        title="إدارة الطلبات"
         subtitle="مراجعة طلبات إضافة المزادات   الاعلانات"
         icon={ShieldCheck}
+        action={{
+          label: 'طلب مزاد جديد',
+          icon: Plus,
+          onClick: () => navigate('/requests/auctions/new'),
+        }}
       />
 
       <div className="flex items-center gap-2 mb-6">
@@ -396,17 +418,17 @@ export function KYCPage() {
       </div>
 
       <div className="flex items-center gap-2 mb-6">
-        {['pending', 'approved', 'rejected'].map((s) => (
+        {(requestType === 'auction' ? ['pending', 'draft', 'approved', 'rejected'] : ['pending', 'approved', 'rejected']).map((s) => (
           <button
             key={s}
             onClick={() => setStatus(s)}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
-              status === s 
-                ? 'bg-mazad-primary text-white border-mazad-primary shadow-lg shadow-mazad-primary/20' 
+              status === s
+                ? 'bg-mazad-primary text-white border-mazad-primary shadow-lg shadow-mazad-primary/20'
                 : 'bg-surface-card text-surface-muted border-surface-border hover:text-white'
             }`}
           >
-            {s === 'pending' ? 'بانتظار المراجعة' : s === 'approved' ? 'مقبولة' : 'مرفوضة'}
+            {s === 'pending' ? 'بانتظار المراجعة' : s === 'draft' ? 'مسودات' : s === 'approved' ? 'مقبولة' : 'مرفوضة'}
           </button>
         ))}
       </div>
@@ -553,19 +575,29 @@ export function KYCPage() {
           <div className="space-y-4 pt-2 text-right" dir="rtl">
             <p>هل أنت متأكد من {reviewTarget?.status === 'approved' ? 'قبول' : 'رفض'} طلب <span className="text-white font-bold">{reviewTarget?.name}</span>؟</p>
             <div className="space-y-2">
-              <label className="text-xs text-surface-muted block font-bold">ملاحظات إضافية (اختياري)</label>
+              <label className="text-xs text-surface-muted block font-bold">
+                {reviewTarget?.status === 'rejected' ? (
+                  <>سبب الرفض <span className="text-red-500">*</span></>
+                ) : (
+                  'ملاحظات إضافية (اختياري)'
+                )}
+              </label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl p-3 text-xs text-white focus:outline-none focus:border-mazad-primary min-h-[100px]"
                 placeholder={reviewTarget?.status === 'approved' ? 'مثال: تم التحقق من البيانات' : 'مثال: البيانات غير كافية...'}
               />
+              {reviewTarget?.status === 'rejected' && !notes.trim() && (
+                <p className="text-xs text-red-400">سبب الرفض مطلوب</p>
+              )}
             </div>
           </div>
         }
         confirmLabel={reviewTarget?.status === 'approved' ? 'تأكيد القبول' : 'تأكيد الرفض'}
         variant={reviewTarget?.status === 'approved' ? 'success' : 'danger'}
         loading={reviewAuctionRequest.isPending || reviewBannerRequest.isPending}
+        confirmDisabled={reviewTarget?.status === 'rejected' && !notes.trim()}
         onConfirm={handleReview}
       />
 
@@ -608,13 +640,22 @@ export function KYCPage() {
             <p>هل أنت متأكد من {bulkAction === 'approve' ? 'قبول' : bulkAction === 'reject' ? 'رفض' : 'حذف'} {selectedIds.length} طلب؟</p>
             {bulkAction !== 'delete' && (
               <div className="space-y-2">
-                <label className="text-xs text-surface-muted block font-bold">ملاحظات إضافية (اختياري)</label>
+                <label className="text-xs text-surface-muted block font-bold">
+                  {bulkAction === 'reject' ? (
+                    <>سبب الرفض <span className="text-red-500">*</span></>
+                  ) : (
+                    'ملاحظات إضافية (اختياري)'
+                  )}
+                </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="w-full bg-surface-bg border border-surface-border rounded-xl p-3 text-xs text-white focus:outline-none focus:border-mazad-primary min-h-[100px]"
                   placeholder={bulkAction === 'approve' ? 'مثال: تم التحقق من البيانات' : 'مثال: البيانات غير كافية...'}
                 />
+                {bulkAction === 'reject' && !notes.trim() && (
+                  <p className="text-xs text-red-400">سبب الرفض مطلوب</p>
+                )}
               </div>
             )}
             {bulkAction === 'delete' && (
@@ -629,6 +670,7 @@ export function KYCPage() {
         }
         variant={bulkAction === 'approve' ? 'success' : 'danger'}
         loading={bulkReviewAuction.isPending || bulkDeleteAuction.isPending || bulkReviewBanner.isPending || bulkDeleteBanner.isPending}
+        confirmDisabled={bulkAction === 'reject' && !notes.trim()}
         onConfirm={handleBulkAction}
       />
 
@@ -645,6 +687,10 @@ export function KYCPage() {
         onReject={(id) => {
           setReviewTarget({ id, name: '', type: requestType, status: 'rejected' })
           closeDetailModal()
+        }}
+        onEdit={(id) => {
+          closeDetailModal()
+          navigate(`/requests/auctions/${id}/edit`)
         }}
         onDelete={(id) => {
           const item = currentData?.find(i => i.id === id)

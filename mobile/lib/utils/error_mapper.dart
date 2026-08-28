@@ -39,13 +39,21 @@ String mapError(BuildContext context, String? code, String defaultMessage) {
     case 'server_error':
       return l10n.error_server;
     case 'weak_pin':
-      return l10n.error_invalid_pin;
+      return l10n.error_password_too_short;
+    case 'invalid_phone':
+      return l10n.error_invalid_phone;
+    case 'not_request_owner':
+      return l10n.error_generic(defaultMessage);
+    case 'invalid_status':
+      return l10n.error_generic(defaultMessage);
     case 'bad_request':
     case 'validation_error':
       return l10n.error_generic(defaultMessage);
     default:
       final lowered = defaultMessage.toLowerCase();
-      if (lowered.contains('connexion') || lowered.contains('connection') || lowered.contains('timeout')) {
+      if (lowered.contains('connexion') ||
+          lowered.contains('connection') ||
+          lowered.contains('timeout')) {
         return l10n.error_connection;
       }
       return l10n.error_generic(defaultMessage);

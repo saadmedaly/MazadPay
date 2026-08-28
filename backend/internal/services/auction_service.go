@@ -95,6 +95,19 @@ func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, re
 	}
 }
 
+// PubliclyVisibleAuctionStatuses liste les statuts qu'un visiteur anonyme
+// peut consulter sur la page de détail publique (International Auth /
+// Product Review Phase). Utilisé uniquement par le handler de l'endpoint
+// public GET /auctions/:id (voir auction_handler.go GetByID) — GetByID au
+// niveau service reste volontairement sans filtre de statut, car il est
+// aussi utilisé par des flux internes légitimes qui doivent voir un auction
+// "pending" (upload d'images pendant la création, contrôle de propriété,
+// etc. — voir handleMultipartImages).
+var PubliclyVisibleAuctionStatuses = map[string]bool{
+	"active": true,
+	"ended":  true,
+}
+
 func (s *auctionService) GetByID(ctx context.Context, id uuid.UUID) (*models.Auction, []models.AuctionImage, error) {
 	auction, err := s.auctionRepo.FindByID(ctx, id)
 	if err != nil {

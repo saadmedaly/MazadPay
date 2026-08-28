@@ -437,10 +437,11 @@ func (r *auctionRepo) DeleteLocation(ctx context.Context, id int) error {
 func (r *auctionRepo) GetCountries(ctx context.Context) ([]models.Country, error) {
 	var countries []models.Country
 	err := r.db.SelectContext(ctx, &countries, `
-        SELECT id, code, country_code, name_ar, name_fr, name_en, flag_emoji, is_active, created_at 
-        FROM countries 
-        WHERE is_active = TRUE 
-        ORDER BY created_at ASC
+        SELECT id, code, country_code, name_ar, name_fr, name_en, flag_emoji, is_active, created_at,
+               phone_min_length, phone_max_length
+        FROM countries
+        WHERE is_active = TRUE
+        ORDER BY name_ar ASC
     `)
 	return countries, err
 }

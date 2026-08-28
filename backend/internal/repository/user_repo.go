@@ -16,6 +16,11 @@ import (
 
 type UserRepository interface {
 	FindByPhone(ctx context.Context, phone string) (*models.User, error)
+
+	// FindByPhoneE164 recherche par le numéro canonique E.164 (migration 000044),
+	// utilisée en priorité par Register/Login pour la nouvelle prise en charge
+	// internationale des numéros — voir phone_service.go.
+	FindByPhoneE164(ctx context.Context, e164 string) (*models.User, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*models.User, error)
 	Create(ctx context.Context, user *models.User) error
 	SetVerified(ctx context.Context, phone string) error
@@ -99,6 +104,15 @@ func (r *userRepo) FindByPhone(ctx context.Context, phone string) (*models.User,
 	return &u, nil
 }
 
+func (r *userRepo) FindByPhoneE164(ctx context.Context, e164 string) (*models.User, error) {
+	var u models.User
+	err := r.db.GetContext(ctx, &u, `SELECT * FROM users WHERE phone_e164 = $1 AND is_active = true`, e164)
+	if err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	return &u, nil
+}
+
 func (r *userRepo) FindByPhoneForRevocation(ctx context.Context, phone string) (*models.User, error) {
 	var u models.User
 	err := r.db.GetContext(ctx, &u, `SELECT * FROM users WHERE phone = $1 AND is_active = true`, phone)
@@ -122,8 +136,8 @@ func (r *userRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.User, er
 
 func (r *userRepo) Create(ctx context.Context, user *models.User) error {
 	_, err := r.db.NamedExecContext(ctx, `
-		INSERT INTO users (id, phone, password_hash, full_name, email, city, country_code, language_pref, role, is_verified)
-		VALUES (:id, :phone, :password_hash, :full_name, :email, :city, :country_code, :language_pref, :role, :is_verified)
+		INSERT INTO users (id, phone, phone_e164, phone_country_iso, password_hash, full_name, email, city, country_code, language_pref, role, is_verified)
+		VALUES (:id, :phone, :phone_e164, :phone_country_iso, :password_hash, :full_name, :email, :city, :country_code, :language_pref, :role, :is_verified)
 	`, user)
 	return err
 }

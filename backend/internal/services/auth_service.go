@@ -26,16 +26,74 @@ const (
 	loginLockoutPeriod = 15 * time.Minute
 )
 
+// AuthService expose DEUX contrats de contenu Register/ResetPassword côte à côte —
+// "Legacy" (v1, /v1/api/auth/...) et le contrat par défaut (v2, /v2/api/auth/...) — pour
+// permettre au Backend d'être déployé AVANT que la mise à jour Flutter n'atteigne tous
+// les utilisateurs de la version déjà publiée sur Google Play (API Versioning Phase 1).
+//
+// La version publiée actuelle de l'app envoie déjà : country_code parmi
+// {+222,+221,+212,+216} uniquement (jamais country_iso), et un PIN à 4 chiffres
+// numériques. Casser cet appel avant que l'app mise à jour ne soit largement installée
+// bloquerait l'inscription ET la réinitialisation de mot de passe pour TOUS les
+// utilisateurs existants — inacceptable. RegisterLegacy/ResetPasswordLegacy reproduisent
+// donc EXACTEMENT le comportement du contrat publié (voir historique git, commit de
+// baseline avant cette fonctionnalité), sans aucune régression, y compris le refus des
+// pays hors de la liste fermée historique.
+//
+// Register/ResetPassword (sans suffixe) restent le contrat v2 strict déjà implémenté
+// (country_iso obligatoire, validation libphonenumber par région, mot de passe 8-72
+// caractères) — c'est le contrat que la nouvelle version de Flutter doit utiliser
+// exclusivement (voir mobile/lib/services/auth_api.dart, endpoints /v2/api/auth/...).
+//
+// v1 est TEMPORAIRE : à retirer une fois l'ancienne version de l'app suffisamment
+// désinstallée/mise à jour (suivre le taux d'appels sur /v1/api/auth/register en
+// production avant de planifier son retrait — ne pas retirer sur une base arbitraire).
 type AuthService interface {
-	Register(ctx context.Context, phone, pin, fullName, email, city, countryCode string) error
-	Login(ctx context.Context, phone, pin string) (string, *models.User, error) // token, user, err
+	// Register (v2, /v2/api/auth/register) — countryISO doit être un code région ISO-2
+	// (ex: "MR", "TN", "US", "CA") — requis pour distinguer les pays qui partagent un
+	// même indicatif téléphonique (ex: +1 pour US/CA/plusieurs Caraïbes). Voir
+	// NormalizeE164 (phone_service.go). N'accepte QUE ce contrat strict — un appelant ne
+	// peut jamais obtenir le comportement legacy (4 pays, sans country_iso) en omettant
+	// simplement le champ : country_iso est requis dès la validation du DTO
+	// (auth_handler.go RegisterRequest), avant même d'atteindre cette fonction.
+	Register(ctx context.Context, phone, pin, fullName, email, city, countryISO string) error
+	// RegisterLegacy (v1, /v1/api/auth/register) — reproduit EXACTEMENT le contrat publié
+	// avant cette fonctionnalité : countryCode est un indicatif d'appel (ex: "+222"),
+	// restreint aux 4 pays historiques (validé ici, pas seulement côté DTO), PIN 4
+	// chiffres numériques (la contrainte de longueur reste au niveau DTO
+	// RegisterRequestLegacy, mais la validation de force reste identique). Ne JAMAIS
+	// étendre ce contrat — toute nouvelle capacité va exclusivement dans Register (v2).
+	RegisterLegacy(ctx context.Context, phone, pin, fullName, email, city, countryCode string) error
+	// countryISO est optionnel ici : un appelant ancien (app non mise à jour) qui ne
+	// l'envoie pas retombe sur la recherche legacy par 'phone' brut (pont de
+	// compatibilité — voir Login). Un appelant à jour doit toujours l'envoyer. Login est
+	// PARTAGÉ entre v1 et v2 (un seul endpoint /auth/login pour les deux, voir routes.go)
+	// car il accepte déjà indifféremment un PIN 4 chiffres ou un mot de passe 8+.
+	Login(ctx context.Context, phone, countryISO, pin string) (string, *models.User, error) // token, user, err
 	SendOTP(ctx context.Context, phone, purpose, ip string) error
 	VerifyOTP(ctx context.Context, phone, code, purpose string) error
+	// ResetPassword est PARTAGÉE entre v1 et v2 (contrairement à Register) : sa logique
+	// interne est identique au comportement publié (correspondance exacte de 'phone',
+	// aucune normalisation E.164 obligatoire) — seule la politique de longueur de newPin
+	// diffère, et elle est imposée en amont par la validation du DTO (voir
+	// ResetPasswordRequestLegacy en 4 chiffres vs ResetPasswordRequest en 8-72
+	// caractères dans auth_handler.go), jamais dans cette fonction elle-même.
 	ResetPassword(ctx context.Context, phone, code, newPin string) error
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPin, newPin string) error
 	GenerateJWT(userID uuid.UUID, role string, isSuperAdmin bool) (string, error)
 	ValidateJWT(tokenString string) (*JWTClaims, error)
 	TrackPasswordReset(ctx context.Context, phone, ip string) error
+}
+
+// ValidCountryCodesLegacy liste les 4 codes pays acceptés par le contrat v1
+// (/v1/api/auth/...) — c'est EXACTEMENT la liste fermée du contrat publié sur Google
+// Play avant cette fonctionnalité (voir git history). Ne jamais l'étendre : toute
+// nouvelle capacité (nouveaux pays) n'existe que dans le contrat v2 (Register).
+var ValidCountryCodesLegacy = map[string]string{
+	"+222": "MR", // Mauritanie
+	"+221": "SN", // Sénégal
+	"+212": "MA", // Maroc
+	"+216": "TN", // Tunisie
 }
 
 type JWTClaims struct {
@@ -134,15 +192,7 @@ func NewAuthService(userRepo repository.UserRepository, jwtSecret string, jwtExp
 	}
 }
 
-// ValidCountryCodes liste les codes pays supportés
-var ValidCountryCodes = map[string]string{
-	"+222": "MR", // Mauritanie
-	"+221": "SN", // Sénégal
-	"+212": "MA", // Maroc
-	"+216": "TN", // Tunisie
-}
-
-func (s *authService) Register(ctx context.Context, phone, pin, fullName, email, city, countryCode string) error {
+func (s *authService) Register(ctx context.Context, phone, pin, fullName, email, city, countryISO string) error {
 	// Blocage admin au niveau du numéro (Blocked Phone Phase 1A) — table blocked_phones,
 	// distincte de users.blocked_until. Erreur générique : ne révèle jamais la raison,
 	// la durée, ni si le numéro est par ailleurs déjà enregistré.
@@ -150,16 +200,20 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 		return apperr.ErrPhoneUnavailable
 	}
 
-	// Vérifier si le code pays est valide
-	if countryCode == "" {
-		countryCode = "+222" // Default: Mauritanie
-	}
-	if _, valid := ValidCountryCodes[countryCode]; !valid {
-		return fmt.Errorf("code pays non supporté: %s (supportés: +222, +221, +212, +216)", countryCode)
+	// Support téléphonique international (migration 000044, corrigé en Phase 2) :
+	// countryISO doit être un code région ISO-2 explicite (ex: "US" vs "CA"), jamais un
+	// simple indicatif d'appel — plusieurs pays partagent le même indicatif (+1, +7, ...)
+	// et un indicatif seul ne suffit pas à identifier le pays réel. NormalizeE164 valide
+	// le numéro spécifiquement pour cette région ; il échoue si le numéro n'est pas
+	// valide pour ELLE, même s'il serait valide pour un autre pays du même indicatif.
+	e164, isoRegion, err := NormalizeE164(phone, countryISO)
+	if err != nil {
+		return apperr.ErrInvalidPhone
 	}
 
-	// Vérifier si le numéro existe déjà
-	existing, _ := s.userRepo.FindByPhone(ctx, phone)
+	// Vérifier si le numéro (normalisé) existe déjà — recherche par E.164 canonique,
+	// robuste aux différents formats d'entrée pour un même numéro logique.
+	existing, _ := s.userRepo.FindByPhoneE164(ctx, e164)
 	if existing != nil {
 		return apperr.ErrDuplicatePhone
 	}
@@ -171,6 +225,72 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 
 	// Auto-verify user when SMS is not configured so login works immediately.
 	// When Wablas credentials are set, user must verify via OTP first.
+	isVerified := !s.smsEnabled
+
+	user := &models.User{
+		ID: uuid.New(),
+		// Phone (legacy) reste peuplé avec la valeur normalisée pour compatibilité avec
+		// tout code existant qui lit encore ce champ (recherche, affichage, OTP).
+		Phone:           e164,
+		PhoneE164:       &e164,
+		PhoneCountryISO: &isoRegion,
+		PasswordHash:    string(hash),
+		FullName:        stringPtr(fullName),
+		Email:           stringPtr(email),
+		City:            stringPtr(city),
+		CountryCode:     stringPtr(countryISO),
+		LanguagePref:    "ar",
+		Role:            "user",
+		IsActive:        true,
+		IsVerified:      isVerified,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+	}
+
+	return s.userRepo.Create(ctx, user)
+}
+
+// RegisterLegacy (API Versioning Phase 1, /v1/api/auth/register) reproduit EXACTEMENT
+// le comportement du contrat publié sur Google Play avant l'introduction du support
+// téléphonique international : liste fermée à 4 pays, countryCode = indicatif d'appel
+// (pas ISO-2), phone stocké tel qu'envoyé par le client (pas de normalisation E.164
+// obligatoire — un numéro mal formé passait déjà avant, et doit continuer à passer
+// exactement pareil ici, sinon des inscriptions qui fonctionnaient hier échoueraient
+// après ce déploiement backend, cassant la version déjà publiée).
+//
+// Amélioration SANS RISQUE ajoutée ici : on tente, en best-effort, de renseigner
+// phone_e164/phone_country_iso via NormalizeE164 avec le pays legacy déjà connu
+// (ValidCountryCodesLegacy[countryCode]) — mais un échec de cette tentative n'affecte
+// JAMAIS le résultat de l'inscription (pas de "return" sur erreur ici), contrairement à
+// Register (v2) où NormalizeE164 est bloquante. Ainsi on "normalise et stocke de façon
+// sûre autant que possible" (comme demandé) sans jamais rejeter une inscription que le
+// contrat v1 publié aurait acceptée.
+func (s *authService) RegisterLegacy(ctx context.Context, phone, pin, fullName, email, city, countryCode string) error {
+	if blocked, err := s.userRepo.IsPhoneBlocked(ctx, phone); err == nil && blocked {
+		return apperr.ErrPhoneUnavailable
+	}
+
+	if countryCode == "" {
+		countryCode = "+222" // Default historique : Mauritanie
+	}
+	isoRegion, valid := ValidCountryCodesLegacy[countryCode]
+	if !valid {
+		return fmt.Errorf("code pays non supporté: %s (supportés: +222, +221, +212, +216)", countryCode)
+	}
+
+	// Recherche de doublon IDENTIQUE au contrat publié : correspondance exacte de
+	// 'phone' tel qu'envoyé, PAS de normalisation E.164 (une normalisation obligatoire
+	// ici pourrait rejeter un numéro que le contrat v1 acceptait auparavant).
+	existing, _ := s.userRepo.FindByPhone(ctx, phone)
+	if existing != nil {
+		return apperr.ErrDuplicatePhone
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
 	isVerified := !s.smsEnabled
 
 	user := &models.User{
@@ -189,6 +309,15 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 		UpdatedAt:    time.Now(),
 	}
 
+	// Best-effort seulement : ne bloque jamais l'inscription, voir commentaire de
+	// fonction. isoRegion vient de ValidCountryCodesLegacy, donc déjà connu et fiable —
+	// on ne fait confiance qu'à NormalizeE164 pour la validité du NUMÉRO lui-même dans
+	// cette région, pas pour déterminer la région (déjà fixée par countryCode ici).
+	if e164, normalizedISO, normErr := NormalizeE164(phone, isoRegion); normErr == nil {
+		user.PhoneE164 = &e164
+		user.PhoneCountryISO = &normalizedISO
+	}
+
 	return s.userRepo.Create(ctx, user)
 }
 
@@ -198,16 +327,37 @@ func loginFailKey(phone string) string {
 	return fmt.Sprintf("login_fail:%s", phone)
 }
 
-func (s *authService) Login(ctx context.Context, phone, pin string) (string, *models.User, error) {
+func (s *authService) Login(ctx context.Context, phone, countryISO, pin string) (string, *models.User, error) {
 	// Blocage admin au niveau du numéro (Blocked Phone Phase 1A) — vérifié avant même
 	// FindByPhone pour ne rien révéler de plus que l'erreur générique existante.
 	if blocked, err := s.userRepo.IsPhoneBlocked(ctx, phone); err == nil && blocked {
 		return "", nil, apperr.ErrPhoneUnavailable
 	}
 
-	user, err := s.userRepo.FindByPhone(ctx, phone)
-	if err != nil {
-		return "", nil, apperr.ErrUserNotFound
+	// Pont de compatibilité E.164 (migration 000044, corrigé en Phase 2) : on tente
+	// d'abord une recherche par le numéro normalisé — UNIQUEMENT si countryISO est fourni
+	// (un client à jour l'envoie toujours). NormalizeE164 exige désormais une région
+	// explicite ; sans elle on n'essaie même pas la normalisation, et on retombe
+	// directement sur la correspondance exacte de l'ancien champ 'phone' tel qu'envoyé
+	// par le client — c'est le pont de compatibilité pour les appels d'une éventuelle
+	// ancienne version de l'app qui n'enverrait pas encore country_iso, et pour les
+	// comptes pas encore backfillés (voir cmd/backfill_phone_e164). La normalisation
+	// reste best-effort même quand countryISO est fourni : un échec ne bloque jamais le
+	// login, on utilise simplement le fallback.
+	var user *models.User
+	if countryISO != "" {
+		if e164, _, normErr := NormalizeE164(phone, countryISO); normErr == nil {
+			if u, findErr := s.userRepo.FindByPhoneE164(ctx, e164); findErr == nil {
+				user = u
+			}
+		}
+	}
+	if user == nil {
+		u, err := s.userRepo.FindByPhone(ctx, phone)
+		if err != nil {
+			return "", nil, apperr.ErrUserNotFound
+		}
+		user = u
 	}
 
 	// Vérifier si le compte est actif
@@ -384,6 +534,12 @@ func (s *authService) ResetPassword(ctx context.Context, phone, code, newPin str
 		return err
 	}
 
+	// Résolution du compte par correspondance exacte de 'phone' tel qu'envoyé par le
+	// client — sans indice de région ici (contrairement à Register/Login), NormalizeE164
+	// ne peut plus être tentée en aveugle depuis la Phase 2 (elle exige désormais une
+	// région explicite). C'est sans impact : ce numéro doit déjà correspondre exactement
+	// à otp_verifications.phone (VerifyOTP juste au-dessus utilise la même valeur brute),
+	// donc la correspondance exacte historique reste correcte ici.
 	user, err := s.userRepo.FindByPhone(ctx, phone)
 	if err != nil {
 		return apperr.ErrNotFound

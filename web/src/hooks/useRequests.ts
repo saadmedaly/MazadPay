@@ -1,6 +1,19 @@
 import client from '@/api/client'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import type { AxiosError } from 'axios'
+
+type ApiErrorShape = { error?: { code?: string; message?: string } }
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  const axiosErr = error as AxiosError<ApiErrorShape>
+  return axiosErr?.response?.data?.error?.message || fallback
+}
+
+function getApiErrorCode(error: unknown): string | undefined {
+  const axiosErr = error as AxiosError<ApiErrorShape>
+  return axiosErr?.response?.data?.error?.code
+}
 
 export interface AuctionRequest {
   id: string
@@ -20,8 +33,9 @@ export interface AuctionRequest {
   buy_now_price?: string
   start_date: string
   end_date: string
-  images?: any
-  status: 'pending' | 'approved' | 'rejected'
+  images?: string[] | unknown
+  quantity?: number
+  status: 'draft' | 'pending' | 'approved' | 'rejected'
   admin_notes?: string
   reviewed_by?: string
   reviewed_at?: string
@@ -83,48 +97,16 @@ export const useAuctionRequests = (
   return useQuery({
     queryKey: ['auction-requests', filters, page, perPage],
     queryFn: async () => {
-      // Récupérer les enchères avec statut pending (en attente d'approbation)
-      const response = await client.get<{ data: any[]; total: number; page: number; per_page: number }>('/v1/api/auctions', {
+      const response = await client.get<{ data: AuctionRequest[]; total: number; page: number; per_page: number }>('/v1/api/admin/requests/auctions', {
         params: {
-          status: 'pending',
           ...filters,
           page,
           per_page: perPage
         }
       })
 
-      // Transformer les enchères en format AuctionRequest
-      const auctions = response.data.data || []
-      const requests: AuctionRequest[] = auctions.map(auction => ({
-        id: auction.id,
-        user_id: auction.user_id || auction.userId,
-        category_id: auction.category_id || auction.categoryId || 0,
-        location_id: auction.location_id || auction.locationId,
-        title_ar: auction.title_ar || auction.titleAr || auction.title || '',
-        title_fr: auction.title_fr || auction.titleFr,
-        title_en: auction.title_en || auction.titleEn,
-        description_ar: auction.description_ar || auction.descriptionAr || auction.description,
-        description_fr: auction.description_fr || auction.descriptionFr,
-        description_en: auction.description_en || auction.descriptionEn,
-        start_price: auction.start_price || auction.startPrice || '0',
-        min_increment: auction.min_increment || auction.minIncrement || '0',
-        insurance_amount: auction.insurance_amount || auction.insuranceAmount || '0',
-        reserve_price: auction.reserve_price || auction.reservePrice,
-        buy_now_price: auction.buy_now_price || auction.buyNowPrice,
-        start_date: auction.start_date || auction.startDate || new Date().toISOString(),
-        end_date: auction.end_date || auction.endDate || auction.end_time || auction.endTime || new Date().toISOString(),
-        images: auction.images || [],
-        status: auction.status === 'active' ? 'approved' : auction.status === 'pending' ? 'pending' : 'rejected',
-        admin_notes: auction.admin_notes || auction.adminNotes,
-        reviewed_by: auction.reviewed_by || auction.reviewedBy,
-        reviewed_at: auction.reviewed_at || auction.reviewedAt,
-        created_at: auction.created_at || auction.createdAt || new Date().toISOString(),
-        updated_at: auction.updated_at || auction.updatedAt || new Date().toISOString(),
-        user: auction.user
-      }))
-
       return {
-        data: requests,
+        data: response.data.data || [],
         total: response.data.total,
         page: response.data.page,
         perPage: response.data.per_page
@@ -134,16 +116,53 @@ export const useAuctionRequests = (
 }
 
 export const useReviewAuctionRequest = () => {
+  const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, status, notes }: { id: string; status: 'approved' | 'rejected'; notes?: string }) => {
-      const approve = status === 'approved'
-      return client.put(`/v1/api/admin/auctions/${id}/validate`, { approve, reason: notes ?? '' })
-    },
-    onSuccess: () => {
+    mutationFn: ({ id, status, notes }: { id: string; status: 'approved' | 'rejected'; notes?: string }) =>
+      client.put(`/v1/api/admin/requests/auctions/${id}/review`, { status, notes: notes ?? '' }),
+    onSuccess: (_, variables) => {
       toast.success('تمت مراجعة طلب المزاد بنجاح')
+      queryClient.invalidateQueries({ queryKey: ['auction-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['auction-request', variables.id] })
     },
-    onError: () => {
-      toast.error('فشل مراجعة طلب المزاد')
+    onError: (error: unknown) => {
+      const code = getApiErrorCode(error)
+      if (code === 'rejection_notes_required') {
+        toast.error('سبب الرفض مطلوب')
+      } else {
+        toast.error(getApiErrorMessage(error, 'فشل مراجعة طلب المزاد'))
+      }
+    }
+  })
+}
+
+export const useUpdateAuctionRequest = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<AuctionRequest> }) =>
+      client.put(`/v1/api/admin/requests/auctions/${id}`, payload),
+    onSuccess: (_, variables) => {
+      toast.success('تم تحديث طلب المزاد بنجاح')
+      queryClient.invalidateQueries({ queryKey: ['auction-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['auction-request', variables.id] })
+    },
+    onError: (error: unknown) => {
+      toast.error(getApiErrorMessage(error, 'فشل تحديث طلب المزاد'))
+    }
+  })
+}
+
+export const useCreateAuctionRequestAdmin = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: Partial<AuctionRequest>) =>
+      client.post('/v1/api/admin/requests/auctions', payload),
+    onSuccess: () => {
+      toast.success('تم إنشاء طلب المزاد بنجاح')
+      queryClient.invalidateQueries({ queryKey: ['auction-requests'] })
+    },
+    onError: (error: unknown) => {
+      toast.error(getApiErrorMessage(error, 'فشل إنشاء طلب المزاد'))
     }
   })
 }

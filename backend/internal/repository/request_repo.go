@@ -23,6 +23,15 @@ type RequestRepository interface {
 	GetUserAuctionRequests(ctx context.Context, userID uuid.UUID, status string, page, perPage int) ([]models.AuctionRequest, int, error)
 	UpdateAuctionRequestStatus(ctx context.Context, id uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
 	UpdateAuctionRequestStatusTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
+
+	// UpdateAuctionRequest applique une édition complète du contenu d'une demande
+	// (Product Description Phase 1 — draft/resubmit workflow). admin_notes/reviewed_by/
+	// reviewed_at sont gérés séparément par le service selon le cas (resoumission après
+	// rejet vs édition admin), donc pas inclus ici.
+	UpdateAuctionRequest(ctx context.Context, req *models.AuctionRequest) error
+	// ClearAuctionRequestReview efface admin_notes/reviewed_by/reviewed_at et fixe le
+	// statut — utilisé lors d'une resoumission après rejet (retour à "pending").
+	ClearAuctionRequestReview(ctx context.Context, id uuid.UUID, status string) error
 	DeleteAuctionRequest(ctx context.Context, id uuid.UUID) error
 	CountPendingAuctionRequests(ctx context.Context) (int, error)
 	BulkUpdateAuctionRequestStatus(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
@@ -185,6 +194,8 @@ func (r *requestRepo) GetAuctionRequests(ctx context.Context, status string, use
 	for rows.Next() {
 		var req models.AuctionRequest
 		var user models.User
+		// Voir commentaire équivalent dans GetAuctionRequestByID : 'quantity' (migration
+		// 000033) apparaît en dernière position dans ar.*, après updated_at.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 			&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -192,7 +203,7 @@ func (r *requestRepo) GetAuctionRequests(ctx context.Context, status string, use
 			&req.StartPrice, &req.MinIncrement, &req.InsuranceAmount,
 			&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 			&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
-			&req.CreatedAt, &req.UpdatedAt,
+			&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {
@@ -215,6 +226,11 @@ func (r *requestRepo) GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (
 		LEFT JOIN users u ON ar.user_id = u.id
 		WHERE ar.id = $1
 	`
+	// ar.* colonne order matches the table's physical column order — 'quantity' was
+	// added later by migration 000033 (ALTER TABLE ... ADD COLUMN), so it appears LAST
+	// among ar.* columns, after updated_at, not in its "logical" position next to the
+	// other fields. Missing this Scan slot here previously caused "sql: expected N
+	// destination arguments in Scan, not N-1" once quantity actually existed in the DB.
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 		&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -222,7 +238,7 @@ func (r *requestRepo) GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (
 		&req.StartPrice, &req.MinIncrement, &req.InsuranceAmount,
 		&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 		&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
-		&req.CreatedAt, &req.UpdatedAt,
+		&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
 		&user.ID, &user.Phone, &user.FullName, &user.Role,
 	)
 	if err != nil {
@@ -252,6 +268,36 @@ func (r *requestRepo) UpdateAuctionRequestStatusTx(ctx context.Context, tx *sqlx
 		WHERE id = $4
 	`
 	_, err := tx.ExecContext(ctx, query, status, notes, reviewedBy, id)
+	return err
+}
+
+func (r *requestRepo) UpdateAuctionRequest(ctx context.Context, req *models.AuctionRequest) error {
+	query := `
+		UPDATE auction_requests SET
+			category_id = $1, location_id = $2, title_ar = $3, title_fr = $4, title_en = $5,
+			description_ar = $6, description_fr = $7, description_en = $8,
+			start_price = $9, min_increment = $10, insurance_amount = $11,
+			reserve_price = $12, buy_now_price = $13, start_date = $14, end_date = $15,
+			images = $16, status = $17, quantity = $18, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $19
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		req.CategoryID, req.LocationID, req.TitleAr, req.TitleFr, req.TitleEn,
+		req.DescriptionAr, req.DescriptionFr, req.DescriptionEn,
+		req.StartPrice, req.MinIncrement, req.InsuranceAmount,
+		req.ReservePrice, req.BuyNowPrice, req.StartDate, req.EndDate,
+		req.Images, req.Status, req.Quantity, req.ID,
+	)
+	return err
+}
+
+func (r *requestRepo) ClearAuctionRequestReview(ctx context.Context, id uuid.UUID, status string) error {
+	query := `
+		UPDATE auction_requests
+		SET status = $1, admin_notes = NULL, reviewed_by = NULL, reviewed_at = NULL, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $2
+	`
+	_, err := r.db.ExecContext(ctx, query, status, id)
 	return err
 }
 
@@ -291,6 +337,8 @@ func (r *requestRepo) GetUserAuctionRequests(ctx context.Context, userID uuid.UU
 	for rows.Next() {
 		var req models.AuctionRequest
 		var user models.User
+		// Voir commentaire équivalent dans GetAuctionRequestByID : 'quantity' (migration
+		// 000033) apparaît en dernière position dans ar.*, après updated_at.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 			&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -298,7 +346,7 @@ func (r *requestRepo) GetUserAuctionRequests(ctx context.Context, userID uuid.UU
 			&req.StartPrice, &req.MinIncrement, &req.InsuranceAmount,
 			&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 			&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
-			&req.CreatedAt, &req.UpdatedAt,
+			&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {

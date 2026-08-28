@@ -2551,8 +2551,80 @@ abstract class AppLocalizations {
   /// No description provided for @error_phone_length.
   ///
   /// In ar, this message translates to:
-  /// **'رقم الهاتف يجب أن يتكون من 8 أرقام'**
+  /// **'رقم الهاتف غير صحيح لهذه الدولة'**
   String get error_phone_length;
+
+  /// No description provided for @error_invalid_phone.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم الهاتف غير صالح لهذه الدولة'**
+  String get error_invalid_phone;
+
+  /// No description provided for @error_description_too_short.
+  ///
+  /// In ar, this message translates to:
+  /// **'الوصف يجب أن يتكون من 10 أحرف على الأقل'**
+  String get error_description_too_short;
+
+  /// No description provided for @error_description_too_long.
+  ///
+  /// In ar, this message translates to:
+  /// **'الوصف طويل جدًا (الحد الأقصى 5000 حرف)'**
+  String get error_description_too_long;
+
+  /// No description provided for @label_description.
+  ///
+  /// In ar, this message translates to:
+  /// **'الوصف'**
+  String get label_description;
+
+  /// No description provided for @label_save_as_draft.
+  ///
+  /// In ar, this message translates to:
+  /// **'حفظ كمسودة'**
+  String get label_save_as_draft;
+
+  /// No description provided for @status_draft.
+  ///
+  /// In ar, this message translates to:
+  /// **'مسودة'**
+  String get status_draft;
+
+  /// No description provided for @status_pending.
+  ///
+  /// In ar, this message translates to:
+  /// **'قيد المراجعة'**
+  String get status_pending;
+
+  /// No description provided for @status_approved.
+  ///
+  /// In ar, this message translates to:
+  /// **'تمت الموافقة'**
+  String get status_approved;
+
+  /// No description provided for @status_rejected.
+  ///
+  /// In ar, this message translates to:
+  /// **'مرفوض'**
+  String get status_rejected;
+
+  /// No description provided for @label_admin_notes.
+  ///
+  /// In ar, this message translates to:
+  /// **'سبب الرفض'**
+  String get label_admin_notes;
+
+  /// No description provided for @action_edit_resubmit.
+  ///
+  /// In ar, this message translates to:
+  /// **'تعديل وإعادة الإرسال'**
+  String get action_edit_resubmit;
+
+  /// No description provided for @search_country_hint.
+  ///
+  /// In ar, this message translates to:
+  /// **'ابحث عن دولة...'**
+  String get search_country_hint;
 
   /// No description provided for @error_password_length.
   ///
@@ -2641,8 +2713,14 @@ abstract class AppLocalizations {
   /// No description provided for @error_password_too_short.
   ///
   /// In ar, this message translates to:
-  /// **'يجب أن تكون كلمة المرور 4 أحرف على الأقل'**
+  /// **'يجب أن تكون كلمة السر 8 أحرف على الأقل'**
   String get error_password_too_short;
+
+  /// No description provided for @hint_password_min_length.
+  ///
+  /// In ar, this message translates to:
+  /// **'8 أحرف على الأقل'**
+  String get hint_password_min_length;
 
   /// No description provided for @error_register.
   ///

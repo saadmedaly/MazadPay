@@ -4,16 +4,48 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
+	"github.com/microcosm-cc/bluemonday"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
 var ErrInvalidStatus = errors.New("invalid status")
+
+// ErrRejectionNotesRequired est retournée quand un admin tente de rejeter une demande
+// sans fournir de motif — un rejet sans explication ne permet pas au vendeur de corriger
+// et resoumettre sa demande.
+var ErrRejectionNotesRequired = errors.New("rejection_notes_required")
+
+// ErrNotRequestOwner est retournée quand un utilisateur tente de modifier une demande
+// qui ne lui appartient pas (UpdateAuctionRequest, hors admin).
+var ErrNotRequestOwner = errors.New("not_request_owner")
+
+// descriptionSanitizer retire tout HTML des descriptions saisies par l'utilisateur avant
+// stockage (Product Description Phase 1) — politique stricte : aucune balise autorisée.
+var descriptionSanitizer = bluemonday.StrictPolicy()
+
+// sanitizeDescriptions nettoie en place les 3 champs de description localisés d'une
+// AuctionRequest.
+func sanitizeDescriptions(req *models.AuctionRequest) {
+	if req.DescriptionAr != nil {
+		clean := descriptionSanitizer.Sanitize(*req.DescriptionAr)
+		req.DescriptionAr = &clean
+	}
+	if req.DescriptionFr != nil {
+		clean := descriptionSanitizer.Sanitize(*req.DescriptionFr)
+		req.DescriptionFr = &clean
+	}
+	if req.DescriptionEn != nil {
+		clean := descriptionSanitizer.Sanitize(*req.DescriptionEn)
+		req.DescriptionEn = &clean
+	}
+}
 
 // ErrRequestAlreadyReviewed est retournée quand une demande n'est plus "pending"
 // (Requests Phase 1) : empêche de ré-approuver/ré-rejeter une demande déjà
@@ -26,6 +58,11 @@ type RequestService interface {
 	GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (*models.AuctionRequest, error)
 	GetUserAuctionRequests(ctx context.Context, userID uuid.UUID, status string, page, perPage int) ([]models.AuctionRequest, int, error)
 	ReviewAuctionRequest(ctx context.Context, id uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
+	// UpdateAuctionRequest applique les modifications d'un vendeur à sa propre demande
+	// (draft ou rejected uniquement). isAdmin=true (via AdminUpdateAuctionRequest)
+	// contourne la vérification de propriété et la restriction de statut.
+	UpdateAuctionRequest(ctx context.Context, id uuid.UUID, userID uuid.UUID, updates *models.AuctionRequest) error
+	AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest) error
 	DeleteAuctionRequest(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error
 	BulkReviewAuctionRequests(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
 	BulkDeleteAuctionRequests(ctx context.Context, ids []uuid.UUID, deletedBy uuid.UUID) error
@@ -74,7 +111,15 @@ func (s *requestService) CreateAuctionRequest(ctx context.Context, req *models.A
 		return errors.New("buy_now_price must be greater than or equal to start_price")
 	}
 
-	req.Status = "pending"
+	// Product Description Phase 1 : un vendeur peut sauvegarder un brouillon ("draft")
+	// avant de soumettre pour revue ("pending"). Tout autre statut envoyé par l'appelant
+	// est ignoré et remplacé par "pending", pour préserver le comportement historique.
+	if req.Status != "draft" && req.Status != "pending" {
+		req.Status = "pending"
+	}
+
+	sanitizeDescriptions(req)
+
 	if err := s.repo.CreateAuctionRequest(ctx, req); err != nil {
 		return err
 	}
@@ -107,6 +152,14 @@ func (s *requestService) GetUserAuctionRequests(ctx context.Context, userID uuid
 func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID, status, notes string, reviewedBy uuid.UUID) error {
 	if status != "approved" && status != "rejected" {
 		return ErrInvalidStatus
+	}
+
+	// Un rejet doit toujours être motivé (Product Description Phase 1) : sans ce garde,
+	// le vendeur n'a aucune information pour corriger et resoumettre sa demande. Vérifié
+	// ici en plus de la validation du handler pour ne jamais dépendre uniquement de
+	// l'appelant HTTP.
+	if status == "rejected" && strings.TrimSpace(notes) == "" {
+		return ErrRejectionNotesRequired
 	}
 
 	// Get the request details first
@@ -225,6 +278,98 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 	}
 
 	return nil
+}
+
+// applyAuctionRequestUpdates copie les champs modifiables de updates sur existing —
+// utilisé par UpdateAuctionRequest et AdminUpdateAuctionRequest pour ne jamais laisser
+// l'appelant écraser des champs de gouvernance (user_id, id, timestamps, review fields)
+// directement.
+func applyAuctionRequestUpdates(existing, updates *models.AuctionRequest) {
+	existing.CategoryID = updates.CategoryID
+	existing.LocationID = updates.LocationID
+	existing.TitleAr = updates.TitleAr
+	existing.TitleFr = updates.TitleFr
+	existing.TitleEn = updates.TitleEn
+	existing.DescriptionAr = updates.DescriptionAr
+	existing.DescriptionFr = updates.DescriptionFr
+	existing.DescriptionEn = updates.DescriptionEn
+	existing.StartPrice = updates.StartPrice
+	existing.MinIncrement = updates.MinIncrement
+	existing.InsuranceAmount = updates.InsuranceAmount
+	existing.ReservePrice = updates.ReservePrice
+	existing.BuyNowPrice = updates.BuyNowPrice
+	existing.StartDate = updates.StartDate
+	existing.EndDate = updates.EndDate
+	existing.Images = updates.Images
+	if updates.Quantity > 0 {
+		existing.Quantity = updates.Quantity
+	}
+}
+
+func (s *requestService) UpdateAuctionRequest(ctx context.Context, id uuid.UUID, userID uuid.UUID, updates *models.AuctionRequest) error {
+	existing, err := s.repo.GetAuctionRequestByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if existing.UserID != userID {
+		return ErrNotRequestOwner
+	}
+
+	// Seul un brouillon ou une demande rejetée peut être édité par son auteur — une
+	// demande "pending" ou "approved" est déjà en cours/terminée de traitement admin.
+	if existing.Status != "draft" && existing.Status != "rejected" {
+		return ErrInvalidStatus
+	}
+
+	wasRejected := existing.Status == "rejected"
+
+	applyAuctionRequestUpdates(existing, updates)
+	sanitizeDescriptions(existing)
+
+	if wasRejected {
+		// Resoumission après rejet : retour forcé à "pending", on efface l'ancienne
+		// revue (admin_notes/reviewed_by/reviewed_at) — la demande repart à zéro dans
+		// la file de revue admin.
+		existing.Status = "pending"
+	} else {
+		// Brouillon : reste "draft", ou le statut choisi par l'appelant (typiquement
+		// "pending" pour soumettre) — seules "draft"/"pending" sont acceptées ici, tout
+		// le reste (approved/rejected) ne peut être atteint que via ReviewAuctionRequest.
+		if updates.Status == "pending" {
+			existing.Status = "pending"
+		} else {
+			existing.Status = "draft"
+		}
+	}
+
+	if err := s.repo.UpdateAuctionRequest(ctx, existing); err != nil {
+		return err
+	}
+
+	if wasRejected {
+		if err := s.repo.ClearAuctionRequestReview(ctx, id, "pending"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *requestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest) error {
+	existing, err := s.repo.GetAuctionRequestByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Un admin peut éditer à n'importe quel statut (autorité de modération complète) —
+	// ni vérification de propriété, ni restriction de statut, contrairement à
+	// UpdateAuctionRequest. Le statut lui-même n'est pas modifié ici : ReviewAuctionRequest
+	// reste le seul chemin pour approuver/rejeter.
+	applyAuctionRequestUpdates(existing, updates)
+	sanitizeDescriptions(existing)
+
+	return s.repo.UpdateAuctionRequest(ctx, existing)
 }
 
 func (s *requestService) DeleteAuctionRequest(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error {

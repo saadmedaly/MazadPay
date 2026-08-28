@@ -43,13 +43,14 @@ class LoginController extends StateNotifier<LoginState> {
     state = state.copyWith(error: null, errorCode: null);
   }
 
-  Future<bool> login(String phone, String password) async {
+  Future<bool> login(String phone, String password, {String? countryIso}) async {
     state = state.copyWith(isLoading: true, error: null, errorCode: null);
-    
+
     try {
       final response = await _authApi.login(
         phone: phone,
         pin: password,
+        countryIso: countryIso,
       );
       
       if (response.success) {

@@ -140,6 +140,13 @@ type Country struct {
 	FlagEmoji   string    `db:"flag_emoji"   json:"flag_emoji"`
 	IsActive    bool      `db:"is_active"    json:"is_active"`
 	CreatedAt   time.Time `db:"created_at"   json:"created_at"`
+	// PhoneMinLength/PhoneMaxLength (migration 000044): national significant
+	// number length hints (digits only, excluding dial code), used by mobile
+	// clients for soft inline validation only. Authoritative validation always
+	// happens server-side via libphonenumber (services.NormalizeE164), never
+	// via these hints alone.
+	PhoneMinLength *int16 `db:"phone_min_length" json:"phone_min_length,omitempty"`
+	PhoneMaxLength *int16 `db:"phone_max_length" json:"phone_max_length,omitempty"`
 }
 
 // New models from migration 000031
