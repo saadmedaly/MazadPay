@@ -11,6 +11,8 @@ import '../widgets/success_dialog.dart';
 import 'phone_password_page.dart';
 import '../services/category_api.dart';
 import '../utils/error_mapper.dart';
+import '../utils/phone_validation.dart';
+import '../widgets/country_picker_sheet.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   final bool showSuccessDialog;
@@ -128,25 +130,51 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     super.dispose();
   }
 
-  bool get _isMauritania => _selectedCountry?['country_code'] == '+222';
-  bool get _isPhoneValid {
-    final phone = _phoneController.text.trim();
-    if (phone.length != 8) return false;
-    if (_isMauritania && !RegExp(r'^[234]').hasMatch(phone)) return false;
-    return true;
+  bool get _isPhoneValid =>
+      isPhoneLengthValid(_phoneController.text, _selectedCountry);
+  // Login accepts either a legacy 4-digit PIN or a new 8+ character
+  // password — the backend transparently supports both via bcrypt
+  // comparison, so the client must not artificially restrict length here.
+  bool get _isPasswordValid {
+    final len = _passwordController.text.trim().length;
+    return len == 4 || len >= 8;
   }
-  bool get _isPasswordValid => _passwordController.text.trim().length == 4;
-  bool get _areFieldsValid => _isPhoneValid && _isPasswordValid;
+
+  bool get _areFieldsValid =>
+      _isPhoneValid && _isPasswordValid && _selectedCountry != null;
 
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: Container(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF1D1D1D)
+                : const Color(0xFFF2F4F7),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: IconButton(
+            icon: Icon(
+              Icons.language,
+              color: isDarkMode ? Colors.white : Colors.black,
+              size: 20,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LanguagePage()),
+              );
+            },
+          ),
+        ),
+        actions: [
+          Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: isDarkMode
@@ -156,244 +184,235 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             ),
             child: IconButton(
               icon: Icon(
-                Icons.language,
+                Icons.arrow_forward_ios,
                 color: isDarkMode ? Colors.white : Colors.black,
-                size: 20,
+                size: 18,
               ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LanguagePage()),
-                );
-              },
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ),
-          actions: [
-            Container(
-              margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isDarkMode
-                    ? const Color(0xFF1D1D1D)
-                    : const Color(0xFFF2F4F7),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: IconButton(
-                icon: Icon(
-                  Icons.arrow_forward_ios,
-                  color: isDarkMode ? Colors.white : Colors.black,
-                  size: 18,
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-          ],
-        ),
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              children: [
-                // Logo & Branding
-                const MazadPayLogo(fontSize: 42, arabicFontSize: 24),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              // Logo & Branding
+              const MazadPayLogo(fontSize: 42, arabicFontSize: 24),
 
-                const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                // Form Fields
-                _buildInputField(
-                  controller: _phoneController,
-                  label: AppLocalizations.of(context)!.text_40,
-                  hint: AppLocalizations.of(context)!.text_213,
-                  keyboardType: TextInputType.phone,
-                  counter: '${_phoneController.text.length}/8',
-                  maxLength: 8,
-                ),
-                // Phone inline validation
-                if (_phoneController.text.isNotEmpty) ...[
-                  if (_phoneController.text.trim().length != 8)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, right: 8),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          AppLocalizations.of(context)!.error_phone_length,
-                          style: const TextStyle(color: Colors.red, fontSize: 12),
-                        ),
-                      ),
-                    ),
-                  if (_isMauritania && _phoneController.text.trim().length == 8 && !RegExp(r'^[234]').hasMatch(_phoneController.text.trim()))
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, right: 8),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          AppLocalizations.of(context)!.error_phone_start_digit,
-                          style: const TextStyle(color: Colors.red, fontSize: 12),
-                        ),
-                      ),
-                    ),
-                ],
-                const SizedBox(height: 8),
-                _buildInputField(
-                  controller: _passwordController,
-                  label: AppLocalizations.of(context)!.text_214,
-                  hint: '• • • •',
-                  isPassword: true,
-                  obscureText: _obscurePassword,
-                  onToggleVisibility: () {
-                    setState(() {
-                      _obscurePassword = !_obscurePassword;
-                    });
-                  },
-                  counter: '${_passwordController.text.length}/4',
-                  maxLength: 4,
-                  keyboardType: TextInputType.number,
-                  letterSpacing: 24,
-                ),
-                // Password inline validation
-                if (_passwordController.text.isNotEmpty && _passwordController.text.trim().length != 4)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, right: 8),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        AppLocalizations.of(context)!.error_password_length,
-                        style: const TextStyle(color: Colors.red, fontSize: 12),
-                      ),
+              // Form Fields
+              _buildInputField(
+                controller: _phoneController,
+                label: AppLocalizations.of(context)!.text_40,
+                hint: AppLocalizations.of(context)!.text_213,
+                keyboardType: TextInputType.phone,
+                counter:
+                    '${_phoneController.text.length}/${phoneMaxLengthFor(_selectedCountry)}',
+                maxLength: phoneMaxLengthFor(_selectedCountry),
+              ),
+              // Phone inline validation
+              if (_phoneController.text.isNotEmpty && !_isPhoneValid)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 8),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      AppLocalizations.of(context)!.error_phone_length,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
                     ),
                   ),
+                ),
+              const SizedBox(height: 8),
+              _buildInputField(
+                controller: _passwordController,
+                label: AppLocalizations.of(context)!.text_214,
+                hint: '• • • •',
+                isPassword: true,
+                obscureText: _obscurePassword,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+                keyboardType: TextInputType.visiblePassword,
+                letterSpacing: 4,
+              ),
+              // Password inline validation
+              if (_passwordController.text.isNotEmpty && !_isPasswordValid)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 8),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      AppLocalizations.of(context)!.error_password_length,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  ),
+                ),
 
-                // Affichage des erreurs
-                Consumer(
-                  builder: (context, ref, child) {
-                    final loginState = ref.watch(loginControllerProvider);
-                    if (loginState.error == null) return const SizedBox.shrink();
-                    
-                    return Container(
-                      margin: const EdgeInsets.only(top: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              mapError(context, loginState.errorCode, loginState.error!),
-                              style: const TextStyle(color: Colors.red, fontSize: 14),
+              // Affichage des erreurs
+              Consumer(
+                builder: (context, ref, child) {
+                  final loginState = ref.watch(loginControllerProvider);
+                  if (loginState.error == null) return const SizedBox.shrink();
+
+                  return Container(
+                    margin: const EdgeInsets.only(top: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            mapError(
+                              context,
+                              loginState.errorCode,
+                              loginState.error!,
+                            ),
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 14,
                             ),
                           ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-
-                Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => NewPasswordPage(
-                            initialPhone: _phoneController.text,
-                            initialCountryCode: _selectedCountry?['country_code'] ?? '+222',
-                          ),
                         ),
-                      );
-                    },
-                    child: Text(
-                      AppLocalizations.of(context)!.text_215,
-                      style: TextStyle(color: Color(0xFF667085)),
+                      ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () {
+                  );
+                },
+              ),
+
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  onPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const PhonePasswordPage(),
+                        builder: (context) => NewPasswordPage(
+                          initialPhone: _phoneController.text,
+                          initialCountryCode:
+                              _selectedCountry?['country_code'] ?? '+222',
+                          initialCountryIso: _selectedCountry?['code']
+                              ?.toString(),
+                        ),
                       ),
                     );
                   },
                   child: Text(
-                    AppLocalizations.of(context)!.text_216,
-                    style: TextStyle(
-                      color: Color(0xFF667085),
-                      fontWeight: FontWeight.w500,
-                    ),
+                    AppLocalizations.of(context)!.text_215,
+                    style: TextStyle(color: Color(0xFF667085)),
                   ),
                 ),
-                const SizedBox(height: 10), // Reduced space for bottom button
-              ],
-            ),
+              ),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const PhonePasswordPage(),
+                    ),
+                  );
+                },
+                child: Text(
+                  AppLocalizations.of(context)!.text_216,
+                  style: TextStyle(
+                    color: Color(0xFF667085),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10), // Reduced space for bottom button
+            ],
           ),
         ),
-        bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: ref.watch(loginControllerProvider).isLoading || !_areFieldsValid
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed:
+                      ref.watch(loginControllerProvider).isLoading ||
+                          !_areFieldsValid
                       ? null
                       : () async {
-                          final countryCode = _selectedCountry?['country_code'] ?? '+222';
-                          final fullPhone = '$countryCode${_phoneController.text}';
-                          final success = await ref.read(loginControllerProvider.notifier).login(
-                            fullPhone,
-                            _passwordController.text,
-                          );
-                          
+                          final countryCode =
+                              _selectedCountry?['country_code'] ?? '+222';
+                          final fullPhone =
+                              '$countryCode${_phoneController.text}';
+                          final success = await ref
+                              .read(loginControllerProvider.notifier)
+                              .login(
+                                fullPhone,
+                                _passwordController.text,
+                                countryIso: _selectedCountry?['code']
+                                    ?.toString(),
+                              );
+
                           if (success && mounted) {
                             // Redirection vers HomePage après login réussi
                             Navigator.pushAndRemoveUntil(
                               context,
-                              MaterialPageRoute(builder: (context) => const HomePage()),
-                              (route) => false, // Supprime toutes les routes précédentes
+                              MaterialPageRoute(
+                                builder: (context) => const HomePage(),
+                              ),
+                              (route) =>
+                                  false, // Supprime toutes les routes précédentes
                             );
                           }
                         },
-                    child: ref.watch(loginControllerProvider).isLoading
+                  child: ref.watch(loginControllerProvider).isLoading
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
                         )
                       : Text(AppLocalizations.of(context)!.text_217),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _showContactInfo(context),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  AppLocalizations.of(context)!.text_218,
+                  style: TextStyle(
+                    color: Color(0xFF135BEC),
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
                   ),
                 ),
-                TextButton(
-                  onPressed: () => _showContactInfo(context),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    AppLocalizations.of(context)!.text_218,
-                    style: TextStyle(
-                      color: Color(0xFF135BEC),
-                      fontWeight: FontWeight.bold,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildInputField({
@@ -436,7 +455,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           maxLength: maxLength,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(color: Color(0xFF98A2B3), fontSize: 14, letterSpacing: 0),
+            hintStyle: const TextStyle(
+              color: Color(0xFF98A2B3),
+              fontSize: 14,
+              letterSpacing: 0,
+            ),
             counterText: "",
             suffixIcon: isPassword
                 ? IconButton(
@@ -456,7 +479,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         border: Border(
-                          right: BorderSide( // Swapping border to right for prefix
+                          right: BorderSide(
+                            // Swapping border to right for prefix
                             color: isDarkMode
                                 ? const Color(0xFF333333)
                                 : const Color(0xFFF2F4F7),
@@ -469,20 +493,26 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(2),
-                            child: _selectedCountry?['code'] != null 
-                              ? Image.network(
-                                  'https://flagcdn.com/w80/${_selectedCountry!['code'].toString().toLowerCase()}.png',
-                                  width: 24,
-                                  height: 16,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stack) => Image.asset('assets/mr.png', width: 24, height: 16, fit: BoxFit.cover),
-                                )
-                              : Image.asset(
-                                  'assets/mr.png',
-                                  width: 24,
-                                  height: 16,
-                                  fit: BoxFit.cover,
-                                ),
+                            child: _selectedCountry?['code'] != null
+                                ? Image.network(
+                                    'https://flagcdn.com/w80/${_selectedCountry!['code'].toString().toLowerCase()}.png',
+                                    width: 24,
+                                    height: 16,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stack) =>
+                                        Image.asset(
+                                          'assets/mr.png',
+                                          width: 24,
+                                          height: 16,
+                                          fit: BoxFit.cover,
+                                        ),
+                                  )
+                                : Image.asset(
+                                    'assets/mr.png',
+                                    width: 24,
+                                    height: 16,
+                                    fit: BoxFit.cover,
+                                  ),
                           ),
                           const SizedBox(width: 8),
                           Text(
@@ -539,142 +569,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   void _showCountryPicker(BuildContext context) {
-    bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-            borderRadius: const BorderRadiusDirectional.only(
-              topStart: Radius.circular(24),
-              topEnd: Radius.circular(24),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: isDarkMode ? Colors.grey[700] : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                AppLocalizations.of(context)!.text_219,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 24),
-              if (_countries.isEmpty)
-                const CircularProgressIndicator()
-              else
-                ..._countries.map((country) {
-                  final isArabic = Localizations.localeOf(context).languageCode == 'ar';
-                  final isFrench = Localizations.localeOf(context).languageCode == 'fr';
-                  final name = isArabic 
-                      ? country['name_ar'] 
-                      : (isFrench ? country['name_fr'] : country['name_en']);
-                  
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12.0),
-                    child: _buildCountryItem(
-                      context,
-                      name: name ?? 'Unknown',
-                      code: country['country_code'] ?? '',
-                      flagUrl: 'https://flagcdn.com/w80/${country['code'].toString().toLowerCase()}.png',
-                      isAvailable: country['is_active'] ?? true,
-                      onTap: () {
-                        if (country['is_active'] ?? true) {
-                          setState(() => _selectedCountry = country);
-                          Navigator.pop(context);
-                        }
-                      },
-                    ),
-                  );
-                }),
-              const SizedBox(height: 40),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCountryItem(
-    BuildContext context, {
-    required String name,
-    required String code,
-    required String flagUrl,
-    required bool isAvailable,
-    VoidCallback? onTap,
-  }) {
-    return Opacity(
-      opacity: isAvailable ? 1.0 : 0.5,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isAvailable
-                    ? const Color(0xFF135BEC).withOpacity(0.3)
-                    : Colors.grey.withOpacity(0.2),
-              ),
-          ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: flagUrl.startsWith('http')
-                    ? Image.network(
-                        flagUrl,
-                        width: 32,
-                        height: 20,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          width: 32,
-                          height: 20,
-                          color: Colors.grey[300],
-                          child: const Icon(Icons.flag, size: 12),
-                        ),
-                      )
-                    : Image.asset(
-                        flagUrl,
-                        width: 32,
-                        height: 20,
-                        fit: BoxFit.cover,
-                      ),
-              ),
-              const SizedBox(width: 16),
-              Text(
-                name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                code,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
-                textDirection: TextDirection.ltr,
-              ),
-            ],
-          ),
-        ),
-      ),
+    showCountryPickerSheet(
+      context,
+      countries: _countries,
+      onSelected: (country) => setState(() => _selectedCountry = country),
     );
   }
 

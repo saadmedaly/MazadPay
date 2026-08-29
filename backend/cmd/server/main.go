@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -111,14 +112,22 @@ func main() {
 	// Referrer-Policy, etc.) — n'affecte pas les réponses JSON de l'API ni CORS.
 	app.Use(helmet.New())
 
-	// CORS : origines strictement séparées entre production et développement, pour ne
-	// jamais autoriser localhost à appeler l'API de production (durcissement sécurité).
-	allowedOrigins := "https://mazadpay-admin.onrender.com,https://admin.mazadpay.com,https://mazadpay.com,https://www.mazadpay.com"
-	if cfg.App.Env == "development" {
-		allowedOrigins = "http://localhost:5173,http://localhost:3000"
+	// CORS (CORS_ALLOWED_ORIGINS Phase 1) : CORS_ALLOWED_ORIGINS, si définie, prime
+	// pour TOUT environnement (ex: un déploiement Staging comme
+	// mazadpay-validation-api peut ainsi autoriser son propre Admin Staging sans
+	// jamais toucher la liste de production codée en dur). Si elle est vide, le
+	// comportement historique reste EXACTEMENT inchangé : liste localhost en
+	// développement, liste production sinon — la production, qui n'a jamais défini
+	// cette variable, ne change donc jamais de comportement. Toute valeur invalide
+	// interrompt le démarrage plutôt que de retomber sur une politique CORS trop
+	// permissive.
+	allowedOrigins, corsErr := ResolveAllowedOrigins(cfg.App.CORSAllowedOrigins, cfg.App.Env)
+	if corsErr != nil {
+		println("Invalid CORS configuration:", corsErr.Error())
+		os.Exit(1)
 	}
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: allowedOrigins,
+		AllowOrigins: strings.Join(allowedOrigins, ","),
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-User-ID",
 		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
 	}))

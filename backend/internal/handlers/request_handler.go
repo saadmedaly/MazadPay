@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -27,6 +28,17 @@ func NewRequestHandler(svc services.RequestService, logger *zap.Logger) *Request
 type ReviewRequest struct {
 	Status string `json:"status" validate:"required,oneof=approved rejected"`
 	Notes  string `json:"notes"`
+}
+
+// requiresNotesWhenRejected renvoie une erreur claire si le statut soumis est "rejected"
+// et qu'aucun motif n'est fourni — notes n'est validable par une simple tag struct
+// puisqu'elle n'est requise que conditionnellement au statut soumis dans le même corps
+// de requête.
+func requiresNotesWhenRejected(status, notes string) error {
+	if status == "rejected" && strings.TrimSpace(notes) == "" {
+		return fmt.Errorf("notes is required when status is rejected")
+	}
+	return nil
 }
 
 // Create Auction Request (public endpoint for users)
@@ -229,6 +241,9 @@ func (h *RequestHandler) ReviewAuctionRequest(c *fiber.Ctx) error {
 	if err := h.validate.Struct(req); err != nil {
 		return BadRequest(c, err.Error())
 	}
+	if err := requiresNotesWhenRejected(req.Status, req.Notes); err != nil {
+		return BadRequest(c, err.Error())
+	}
 
 	adminID, _ := middleware.GetUserID(c)
 	if err := h.svc.ReviewAuctionRequest(c.Context(), id, req.Status, req.Notes, adminID); err != nil {
@@ -236,6 +251,84 @@ func (h *RequestHandler) ReviewAuctionRequest(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{"message": "Auction request reviewed successfully"})
+}
+
+// Update Auction Request (owner: draft or rejected only)
+func (h *RequestHandler) UpdateAuctionRequest(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid request ID")
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	var req models.AuctionRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if err := h.validate.Struct(req); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	if err := h.svc.UpdateAuctionRequest(c.Context(), id, userID, &req); err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, fiber.Map{"message": "Auction request updated successfully"})
+}
+
+// Admin Update Auction Request (bypasses ownership + status restrictions)
+func (h *RequestHandler) AdminUpdateAuctionRequest(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid request ID")
+	}
+
+	var req models.AuctionRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if err := h.validate.Struct(req); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	if err := h.svc.AdminUpdateAuctionRequest(c.Context(), id, &req); err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, fiber.Map{"message": "Auction request updated successfully"})
+}
+
+// Admin Create Auction Request (admin creates on behalf of themselves, draft or pending)
+func (h *RequestHandler) AdminCreateAuctionRequest(c *fiber.Ctx) error {
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	var req models.AuctionRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if err := h.validate.Struct(req); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
+	req.ID = uuid.New()
+	req.UserID = adminID
+
+	if req.Quantity == 0 {
+		req.Quantity = 1
+	}
+
+	if err := h.svc.CreateAuctionRequest(c.Context(), &req); err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, fiber.Map{"message": "Auction request created successfully", "id": req.ID})
 }
 
 // Delete Auction Request

@@ -33,6 +33,10 @@ type User struct {
 	Gender               *string    `db:"gender"                json:"gender"`
 	ProfileCompleted     bool       `db:"profile_completed"     json:"profile_completed"`
 	KycStatus            *string    `db:"kyc_status"            json:"kyc_status"`
+	// New fields from migration 000044: canonical E.164 phone + detected ISO region,
+	// alongside the legacy Phone field (kept populated for backward compatibility).
+	PhoneE164       *string `db:"phone_e164"        json:"phone_e164"`
+	PhoneCountryISO *string `db:"phone_country_iso" json:"phone_country_iso"`
 }
 
  func (u *User) MaskPhone() string {

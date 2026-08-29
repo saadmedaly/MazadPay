@@ -1258,8 +1258,45 @@ class AppLocalizationsFr extends AppLocalizations {
   String get error_user_not_registered => 'Utilisateur non enregistré';
 
   @override
-  String get error_phone_length =>
-      'Le numéro de téléphone doit contenir 8 chiffres';
+  String get error_phone_length => 'Numéro de téléphone invalide pour ce pays';
+
+  @override
+  String get error_invalid_phone => 'Numéro de téléphone invalide pour ce pays';
+
+  @override
+  String get error_description_too_short =>
+      'La description doit contenir au moins 10 caractères';
+
+  @override
+  String get error_description_too_long =>
+      'La description est trop longue (5000 caractères max)';
+
+  @override
+  String get label_description => 'Description';
+
+  @override
+  String get label_save_as_draft => 'Enregistrer comme brouillon';
+
+  @override
+  String get status_draft => 'Brouillon';
+
+  @override
+  String get status_pending => 'En cours de révision';
+
+  @override
+  String get status_approved => 'Approuvé';
+
+  @override
+  String get status_rejected => 'Rejeté';
+
+  @override
+  String get label_admin_notes => 'Motif du rejet';
+
+  @override
+  String get action_edit_resubmit => 'Modifier et renvoyer';
+
+  @override
+  String get search_country_hint => 'Rechercher un pays...';
 
   @override
   String get error_password_length =>
@@ -1308,7 +1345,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get error_password_too_short =>
-      'Le mot de passe doit contenir au moins 4 caractères';
+      'Le mot de passe doit contenir au moins 8 caractères';
+
+  @override
+  String get hint_password_min_length => '8 caractères minimum';
 
   @override
   String get error_register => 'Erreur lors de l\'inscription';

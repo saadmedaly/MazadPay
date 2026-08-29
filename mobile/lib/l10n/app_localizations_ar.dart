@@ -1268,7 +1268,45 @@ class AppLocalizationsAr extends AppLocalizations {
   String get error_user_not_registered => 'المستخدم غير مسجل';
 
   @override
-  String get error_phone_length => 'رقم الهاتف يجب أن يتكون من 8 أرقام';
+  String get error_phone_length => 'رقم الهاتف غير صحيح لهذه الدولة';
+
+  @override
+  String get error_invalid_phone => 'رقم الهاتف غير صالح لهذه الدولة';
+
+  @override
+  String get error_description_too_short =>
+      'الوصف يجب أن يتكون من 10 أحرف على الأقل';
+
+  @override
+  String get error_description_too_long =>
+      'الوصف طويل جدًا (الحد الأقصى 5000 حرف)';
+
+  @override
+  String get label_description => 'الوصف';
+
+  @override
+  String get label_save_as_draft => 'حفظ كمسودة';
+
+  @override
+  String get status_draft => 'مسودة';
+
+  @override
+  String get status_pending => 'قيد المراجعة';
+
+  @override
+  String get status_approved => 'تمت الموافقة';
+
+  @override
+  String get status_rejected => 'مرفوض';
+
+  @override
+  String get label_admin_notes => 'سبب الرفض';
+
+  @override
+  String get action_edit_resubmit => 'تعديل وإعادة الإرسال';
+
+  @override
+  String get search_country_hint => 'ابحث عن دولة...';
 
   @override
   String get error_password_length => 'كلمة المرور يجب أن تتكون من 4 أرقام';
@@ -1315,7 +1353,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get error_password_too_short =>
-      'يجب أن تكون كلمة المرور 4 أحرف على الأقل';
+      'يجب أن تكون كلمة السر 8 أحرف على الأقل';
+
+  @override
+  String get hint_password_min_length => '8 أحرف على الأقل';
 
   @override
   String get error_register => 'خطأ أثناء التسجيل';

@@ -68,6 +68,11 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	ratingSvc := services.NewRatingService(db, ratingRepo)
 
 	api := app.Group("/v1/api")
+	// apiV2 (API Versioning Phase 1) : sert UNIQUEMENT le contrat d'authentification
+	// strict (voir setupAuthRoutesV2). Le reste de l'API (auctions, requests, admin,
+	// etc.) n'a pas besoin d'un tel versioning pour l'instant — seul le contrat
+	// register/reset-password a changé de façon incompatible avec la version publiée.
+	apiV2 := app.Group("/v2/api")
 
 	// Handlers
 	wsHandler := handlers.NewWSHandler(hub, authSvc, logger)
@@ -106,6 +111,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 	// Routes registration
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
+	setupAuthRoutesV2(apiV2, authSvc, rdb, cfg, logger)
 	setupAuctionRoutes(api, auctionSvc, bidHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupUserRoutes(api, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupAdminRoutes(api, adminHandler, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
@@ -149,15 +155,50 @@ func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, adminHandle
 
 	auth := api.Group("/auth")
 
-	// Public routes avec rate limiting double (téléphone + IP), fail-closed sur erreur Redis
+	// API Versioning Phase 1 : ce groupe "auth" est celui monté sous /v1/api (voir
+	// l'appelant de setupAuthRoutes, api = app.Group("/v1/api")) — c'est donc EXACTEMENT
+	// le chemin déjà utilisé par la version publiée sur Google Play. register et
+	// reset-password pointent ici vers *Legacy (contrat 4 pays + PIN 4 chiffres,
+	// inchangé), PAS vers le contrat v2 strict — casser ce chemin casserait
+	// l'inscription et la réinitialisation de mot de passe pour tous les utilisateurs
+	// n'ayant pas encore la nouvelle version de l'app. login/otp/logout/change-password
+	// sont PARTAGÉS entre v1 et v2 (identiques dans les deux, voir handlers/AuthService).
+	auth.Post("/register", rateLimitByIP, rateLimitByPhone, h.RegisterLegacy)
+	auth.Post("/login", rateLimitByIP, rateLimitByPhone, h.Login)
+	auth.Post("/otp/send", rateLimitByIP, rateLimitByPhone, h.SendOTP)
+	auth.Post("/otp/verify", rateLimitByIP, rateLimitByPhone, h.VerifyOTP)
+	auth.Post("/reset-password", rateLimitByIP, rateLimitByPhone, h.ResetPasswordLegacy)
+	auth.Post("/register-admin", rateLimitByIP, rateLimitByPhone, adminHandler.RegisterWithInvitation)
+
+	// Protected routes
+	auth.Post("/logout", jwtMiddleware, h.Logout)
+	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
+}
+
+// setupAuthRoutesV2 enregistre le contrat d'authentification STRICT (country_iso
+// obligatoire, mot de passe 8-72 caractères) sous /v2/api/auth/... (API Versioning
+// Phase 1). C'est le contrat que la NOUVELLE version de Flutter doit utiliser
+// exclusivement (voir mobile/lib/services/auth_api.dart). Miroir volontaire de
+// setupAuthRoutes ci-dessus : login/otp/logout/change-password sont exposés aux DEUX
+// préfixes (ils sont identiques dans les deux contrats), register/reset-password
+// pointent ici vers les handlers stricts (h.Register/h.ResetPassword), jamais vers
+// *Legacy. v1 (setupAuthRoutes) est TEMPORAIRE — voir AuthService pour la note de
+// dépréciation ; ne retirer /v1/api/auth/... qu'une fois la version publiée
+// suffisamment désinstallée/mise à jour, jamais sur une base arbitraire.
+func setupAuthRoutesV2(api fiber.Router, authSvc services.AuthService, rdb *redis.Client, cfg *config.Config, logger *zap.Logger) {
+	jwtMiddleware := middleware.JWT(cfg.JWT.Secret, logger, rdb)
+	rateLimitByPhone := middleware.RateLimitByPhone(rdb, cfg.Redis.RateLimitWindowSeconds, cfg.Redis.RateLimitMaxAttempts, logger, true)
+	rateLimitByIP := middleware.RateLimit(rdb, cfg.Redis.RateLimitWindowSeconds, cfg.Redis.RateLimitMaxAttempts, logger, true)
+	h := handlers.NewAuthHandler(authSvc, logger, rdb)
+
+	auth := api.Group("/auth")
+
 	auth.Post("/register", rateLimitByIP, rateLimitByPhone, h.Register)
 	auth.Post("/login", rateLimitByIP, rateLimitByPhone, h.Login)
 	auth.Post("/otp/send", rateLimitByIP, rateLimitByPhone, h.SendOTP)
 	auth.Post("/otp/verify", rateLimitByIP, rateLimitByPhone, h.VerifyOTP)
 	auth.Post("/reset-password", rateLimitByIP, rateLimitByPhone, h.ResetPassword)
-	auth.Post("/register-admin", rateLimitByIP, rateLimitByPhone, adminHandler.RegisterWithInvitation)
 
-	// Protected routes
 	auth.Post("/logout", jwtMiddleware, h.Logout)
 	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
 }
@@ -526,6 +567,10 @@ func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, j
 	})
 	user.Get("/auctions/my", reqHandler.GetUserAuctionRequests)
 	user.Get("/banners/my", reqHandler.GetUserBannerRequests)
+	// Product Description Phase 1 : le vendeur peut éditer son propre brouillon ou
+	// resoumettre une demande rejetée (draft/rejected uniquement — voir
+	// RequestService.UpdateAuctionRequest).
+	user.Put("/auctions/:id", reqHandler.UpdateAuctionRequest)
 
 	// Admin request management
 	admin := api.Group("/admin/requests", jwtMiddleware, adminMiddleware)
@@ -533,6 +578,10 @@ func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, j
 	// Auction requests
 	admin.Get("/auctions", reqHandler.GetAuctionRequests)
 	admin.Get("/auctions/:id", reqHandler.GetAuctionRequestByID)
+	// Admin peut créer une demande pour son propre compte (draft ou pending) et éditer
+	// n'importe quelle demande à n'importe quel statut (autorité de modération complète).
+	admin.Post("/auctions", reqHandler.AdminCreateAuctionRequest)
+	admin.Put("/auctions/:id", reqHandler.AdminUpdateAuctionRequest)
 	admin.Put("/auctions/:id/review", reqHandler.ReviewAuctionRequest)
 	admin.Delete("/auctions/:id", reqHandler.DeleteAuctionRequest)
 	admin.Post("/auctions/bulk/review", reqHandler.BulkReviewAuctionRequests)

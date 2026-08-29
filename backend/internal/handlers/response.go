@@ -221,6 +221,9 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "phone_already_registered":
 		logger.Info("Registration attempt with existing phone", logFields...)
 		return Fail(c, 409, "duplicate_phone", "Phone number already registered")
+	case "invalid_phone":
+		logger.Info("Invalid phone number provided", logFields...)
+		return Fail(c, 400, "invalid_phone", "Invalid phone number for the selected country")
 	case "invalid_pin":
 		logger.Info("Invalid PIN attempt", logFields...)
 		return Fail(c, 401, "invalid_pin", "Invalid PIN code")
@@ -251,6 +254,15 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "otp_rate_limited":
 		logger.Warn("OTP rate limited", logFields...)
 		return Fail(c, 429, "otp_rate_limited", "Too many OTP requests, please try again later")
+	case "not_request_owner":
+		logger.Warn("Attempt to modify another user's request", logFields...)
+		return Forbidden(c, "You do not have permission to modify this request")
+	case "rejection_notes_required":
+		logger.Info("Rejection attempted without notes", logFields...)
+		return Fail(c, 400, "rejection_notes_required", "A reason is required when rejecting a request")
+	case "invalid status":
+		logger.Info("Invalid status for request operation", logFields...)
+		return Fail(c, 400, "invalid_status", "This request cannot be modified in its current status")
 	default:
 		errStr := err.Error()
 		if strings.Contains(errStr, "at least 1 minute in the future") {

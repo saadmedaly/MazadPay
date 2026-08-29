@@ -1236,7 +1236,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get error_user_not_registered => 'User not registered';
 
   @override
-  String get error_phone_length => 'Phone number must be 8 digits';
+  String get error_phone_length => 'Invalid phone number for this country';
+
+  @override
+  String get error_invalid_phone => 'Invalid phone number for this country';
+
+  @override
+  String get error_description_too_short =>
+      'Description must be at least 10 characters';
+
+  @override
+  String get error_description_too_long =>
+      'Description is too long (max 5000 characters)';
+
+  @override
+  String get label_description => 'Description';
+
+  @override
+  String get label_save_as_draft => 'Save as draft';
+
+  @override
+  String get status_draft => 'Draft';
+
+  @override
+  String get status_pending => 'Under review';
+
+  @override
+  String get status_approved => 'Approved';
+
+  @override
+  String get status_rejected => 'Rejected';
+
+  @override
+  String get label_admin_notes => 'Rejection reason';
+
+  @override
+  String get action_edit_resubmit => 'Edit and resubmit';
+
+  @override
+  String get search_country_hint => 'Search for a country...';
 
   @override
   String get error_password_length => 'Password must be 4 digits';
@@ -1283,7 +1321,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get error_password_too_short =>
-      'Password must be at least 4 characters';
+      'Password must be at least 8 characters';
+
+  @override
+  String get hint_password_min_length => 'At least 8 characters';
 
   @override
   String get error_register => 'Error during registration';

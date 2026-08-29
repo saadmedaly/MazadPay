@@ -1,12 +1,14 @@
 import { cn } from '@/lib/utils'
 
 export type StatusType =
-  | 'pending' | 'active' | 'ended' | 'rejected' | 'canceled'
+  | 'draft' | 'pending' | 'approved' | 'active' | 'ended' | 'rejected' | 'canceled'
   | 'pending_review' | 'completed' | 'failed' | 'refunded'
   | 'verified' | 'unverified' | 'blocked' | 'reviewed' | 'dismissed'
 
 const STATUS_CONFIG: Record<StatusType, { label: string; bg: string; color: string; border: string; dot: string }> = {
+  draft:          { label: 'مسودة',              bg: 'rgba(100,116,139,0.12)',color: '#94A3B8', border: 'rgba(100,116,139,0.2)', dot: '#64748B' },
   pending:        { label: 'قيد المراجعة',       bg: 'rgba(245,158,11,0.12)', color: '#FCD34D', border: 'rgba(245,158,11,0.25)', dot: '#F59E0B' },
+  approved:       { label: 'مقبول',              bg: 'rgba(16,185,129,0.12)', color: '#34D399', border: 'rgba(16,185,129,0.25)', dot: '#10B981' },
   active:         { label: 'نشط',               bg: 'rgba(16,185,129,0.12)', color: '#34D399', border: 'rgba(16,185,129,0.25)', dot: '#10B981' },
   ended:          { label: 'منتهي',              bg: 'rgba(100,116,139,0.12)',color: '#94A3B8', border: 'rgba(100,116,139,0.2)', dot: '#64748B' },
   rejected:       { label: 'مرفوض',              bg: 'rgba(239,68,68,0.1)',   color: '#F87171', border: 'rgba(239,68,68,0.25)', dot: '#EF4444' },

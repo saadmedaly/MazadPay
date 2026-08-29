@@ -58,6 +58,7 @@ class AuthNotifier extends _$AuthNotifier {
   Future<bool> login({
     required String phone,
     required String pin,
+    String? countryIso,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
 
@@ -65,6 +66,7 @@ class AuthNotifier extends _$AuthNotifier {
       final response = await _authApi.login(
         phone: phone,
         pin: pin,
+        countryIso: countryIso,
       );
 
       if (response.success && response.data != null) {
@@ -101,6 +103,7 @@ class AuthNotifier extends _$AuthNotifier {
     required String phone,
     required String pin,
     required String fullName,
+    required String countryIso,
     String? email,
     String? city,
   }) async {
@@ -111,6 +114,7 @@ class AuthNotifier extends _$AuthNotifier {
         phone: phone,
         pin: pin,
         fullName: fullName,
+        countryIso: countryIso,
         email: email,
         city: city,
       );

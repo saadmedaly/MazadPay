@@ -25,6 +25,7 @@ var (
 	ErrOTPMaxAttempts           = errors.New("otp_max_attempts")
 	ErrOTPRateLimited           = errors.New("otp_rate_limited")
 	ErrDuplicatePhone           = errors.New("phone_already_registered")
+	ErrInvalidPhone             = errors.New("invalid_phone")
 	ErrInvalidPin               = errors.New("invalid_pin")
 	ErrWeakPin                  = errors.New("weak_pin")
 	ErrAccountBlocked           = errors.New("account_blocked")

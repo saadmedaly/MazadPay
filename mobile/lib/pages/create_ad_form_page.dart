@@ -8,27 +8,37 @@ import '../services/auction_api.dart';
 import '../services/r2_upload_service.dart';
 import '../services/category_api.dart';
 import '../services/cache_service.dart';
+import '../services/request_api.dart';
 import '../models/category.dart';
+import '../utils/description_validation.dart';
 
 class CreateAdFormPage extends StatefulWidget {
-  const CreateAdFormPage({super.key});
+  /// Requête existante (brouillon ou rejetée) à éditer et resoumettre via
+  /// PUT /requests/auctions/:id, plutôt que de créer une nouvelle demande.
+  final Map<String, dynamic>? existingRequest;
+
+  const CreateAdFormPage({super.key, this.existingRequest});
 
   @override
   State<CreateAdFormPage> createState() => _CreateAdFormPageState();
 }
 
 class _CreateAdFormPageState extends State<CreateAdFormPage> {
+  static const int _descriptionMinLength = kDescriptionMinLength;
+  static const int _descriptionMaxLength = kDescriptionMaxLength;
+
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _phoneController = TextEditingController();
   final _priceController = TextEditingController();
   final _insuranceController = TextEditingController();
-  
-  String? _selectedMainCategory;     // display name (nameAr)
-  int?    _selectedMainCategoryId;   // actual ID sent to API
-  String? _selectedSubCategory;      // display name (nameAr)
-  int?    _selectedSubCategoryId;    // actual ID sent to API
+
+  String? _selectedMainCategory; // display name (nameAr)
+  int? _selectedMainCategoryId; // actual ID sent to API
+  String? _selectedSubCategory; // display name (nameAr)
+  int? _selectedSubCategoryId; // actual ID sent to API
   String? _selectedCity;
+  int? _selectedLocationId;
   DateTime? _endTime;
   final _brandController = TextEditingController();
   // Backend accepte: new, used, refurbished, damaged
@@ -43,57 +53,111 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   final AuctionApi _auctionApi = AuctionApi();
   final R2UploadService _r2UploadService = R2UploadService();
   final CategoryApi _categoryApi = CategoryApi();
+  final RequestApi _requestApi = RequestApi();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isLoading = false;
+  bool _isSavingDraft = false;
   bool _isUploadingImages = false;
   double _uploadProgress = 0.0;
-  
+
+  bool get _isEditingRequest => widget.existingRequest != null;
+
   // Données depuis le cache/API
   List<Category> _categories = [];
   List<Location> _locations = [];
   @override
   void initState() {
     super.initState();
+    _descriptionController.addListener(() => setState(() {}));
+    _prefillFromExistingRequest();
     _loadFromCache(); // Charger immédiatement depuis le cache
   }
-  
+
+  void _prefillFromExistingRequest() {
+    final req = widget.existingRequest;
+    if (req == null) return;
+    _nameController.text = (req['title_ar'] ?? '').toString();
+    _descriptionController.text = (req['description_ar'] ?? '').toString();
+    final startPrice = req['start_price'];
+    if (startPrice != null) _priceController.text = startPrice.toString();
+    final insurance = req['insurance_amount'];
+    if (insurance != null) _insuranceController.text = insurance.toString();
+    final catId = req['category_id'];
+    if (catId != null) _selectedMainCategoryId = int.tryParse(catId.toString());
+    final locId = req['location_id'];
+    if (locId != null) _selectedLocationId = int.tryParse(locId.toString());
+  }
+
+  /// Sélectionne la catégorie affichée : reprend l'ID préexistant
+  /// (préremplissage édition) si présent dans la liste chargée, sinon
+  /// applique le comportement par défaut (première catégorie) uniquement
+  /// pour une nouvelle demande.
+  void _reconcileSelectedCategory() {
+    if (_categories.isEmpty) return;
+    if (_selectedMainCategoryId != null) {
+      final match = _categories
+          .where((c) => c.id == _selectedMainCategoryId)
+          .toList();
+      if (match.isNotEmpty) {
+        _selectedMainCategory = match.first.nameAr;
+        return;
+      }
+    }
+    if (_selectedMainCategory == null && !_isEditingRequest) {
+      _selectedMainCategory = _categories.first.nameAr;
+      _selectedMainCategoryId = _categories.first.id;
+    }
+  }
+
+  void _reconcileSelectedCity() {
+    if (_locations.isEmpty) return;
+    if (_selectedLocationId != null) {
+      final match = _locations
+          .where((l) => l.id == _selectedLocationId)
+          .toList();
+      if (match.isNotEmpty) {
+        _selectedCity = match.first.cityNameAr;
+        return;
+      }
+    }
+    if (_selectedCity == null && !_isEditingRequest) {
+      _selectedCity = _locations.first.cityNameAr;
+      _selectedLocationId = _locations.first.id;
+    }
+  }
+
   // Charger depuis le cache d'abord (rapide), puis fetch en arrière-plan
   Future<void> _loadFromCache() async {
     try {
       // Charger catégories depuis cache (le fetch en arrière-plan ci-dessous
       // rafraîchira le cache si les données sont périmées ou absentes)
-      final cachedCategories = await CacheService.instance.getCachedCategories();
+      final cachedCategories = await CacheService.instance
+          .getCachedCategories();
       if (cachedCategories != null && cachedCategories.isNotEmpty) {
         setState(() {
           _categories = cachedCategories
               .map((c) => Category.fromJson(c))
               .toList();
-          if (_selectedMainCategory == null && _categories.isNotEmpty) {
-            _selectedMainCategory = _categories.first.nameAr;
-          }
+          _reconcileSelectedCategory();
         });
       }
-      
+
       // Charger villes depuis cache
       final cachedCities = await CacheService.instance.getCachedCities();
       if (cachedCities != null && cachedCities.isNotEmpty) {
         setState(() {
-          _locations = cachedCities
-              .map((c) => Location.fromJson(c))
-              .toList();
-          if (_selectedCity == null && _locations.isNotEmpty) {
-            _selectedCity = _locations.first.cityNameAr;
-          }
+          _locations = cachedCities.map((c) => Location.fromJson(c)).toList();
+          _reconcileSelectedCity();
         });
       }
     } catch (e) {
       debugPrint('Erreur chargement cache: $e');
     }
-    
+
     // Fetch en arrière-plan pour mettre à jour le cache
     _fetchFromApi();
   }
-  
+
   // Fetch depuis l'API en arrière-plan
   Future<void> _fetchFromApi() async {
     try {
@@ -107,16 +171,14 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
             .toList();
         setState(() {
           _categories = categories;
-          if (_selectedMainCategory == null && _categories.isNotEmpty) {
-            _selectedMainCategory = _categories.first.nameAr;
-          }
+          _reconcileSelectedCategory();
         });
         // Sauvegarder dans le cache
         await CacheService.instance.cacheCategories(
-          categories.map((c) => c.toJson()).toList()
+          categories.map((c) => c.toJson()).toList(),
         );
       }
-      
+
       // Fetch locations
       final locResponse = await _categoryApi.getLocations();
       if (locResponse.success && locResponse.data != null) {
@@ -127,22 +189,47 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
             .toList();
         setState(() {
           _locations = locations;
-          if (_selectedCity == null && _locations.isNotEmpty) {
-            _selectedCity = _locations.first.cityNameAr;
-          }
+          _reconcileSelectedCity();
         });
         // Sauvegarder dans le cache
         await CacheService.instance.cacheCities(
-          locations.map((l) => l.toJson()).toList()
+          locations.map((l) => l.toJson()).toList(),
         );
       }
     } catch (e) {
       debugPrint('Erreur fetch API: $e');
     }
   }
-  
+
+  /// Valide la description (10-5000 caractères, exigence backend) et affiche
+  /// un message d'erreur si besoin. Retourne true si valide.
+  bool _validateDescription() {
+    final l10n = AppLocalizations.of(context)!;
+    final description = _descriptionController.text.trim();
+    if (description.length < _descriptionMinLength) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.error_description_too_short),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+    if (description.length > _descriptionMaxLength) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.error_description_too_long),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+    return true;
+  }
+
   // Helper pour obtenir le nom en arabe
   Future<void> _submitAd() async {
+    if (_isLoading || _isSavingDraft) return;
     final name = _nameController.text.trim();
     final description = _descriptionController.text.trim();
     final phone = _phoneController.text.trim();
@@ -151,10 +238,16 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
 
     if (name.isEmpty || description.isEmpty || phone.isEmpty || price == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.error_fill_required_fields)),
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.error_fill_required_fields,
+          ),
+        ),
       );
       return;
     }
+
+    if (!_validateDescription()) return;
 
     // Le backend rejette désormais toute mise sur un auction sans caution définie
     // (insurance_amount <= 0) — voir bid_service.go. On valide donc ici aussi côté
@@ -189,7 +282,9 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         images: [], // Créer d'abord sans images
         phone: phone,
         condition: _selectedCondition,
-        brand: _brandController.text.trim().isEmpty ? null : _brandController.text.trim(),
+        brand: _brandController.text.trim().isEmpty
+            ? null
+            : _brandController.text.trim(),
         insuranceAmount: insuranceAmount,
         endTime: _endTime,
       );
@@ -198,7 +293,12 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         if (!mounted) return;
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(createResponse.message ?? AppLocalizations.of(context)!.error_create_auction)),
+          SnackBar(
+            content: Text(
+              createResponse.message ??
+                  AppLocalizations.of(context)!.error_create_auction,
+            ),
+          ),
         );
         return;
       }
@@ -209,7 +309,9 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         if (!mounted) return;
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.error_create_auction)),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.error_create_auction),
+          ),
         );
         return;
       }
@@ -220,7 +322,9 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         _uploadProgress = 0.0;
       });
 
-      debugPrint('[Upload] auction_id=$auctionId images=${_selectedImageFiles.length}');
+      debugPrint(
+        '[Upload] auction_id=$auctionId images=${_selectedImageFiles.length}',
+      );
       final uploadedUrls = await _r2UploadService.uploadAuctionXFiles(
         auctionId: auctionId,
         images: _selectedImageFiles,
@@ -239,7 +343,11 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       if (uploadedUrls.isEmpty) {
         // L'enchère est créée mais sans images
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enchère créée mais les images n\'ont pas pu être uploadées')),
+          const SnackBar(
+            content: Text(
+              'Enchère créée mais les images n\'ont pas pu être uploadées',
+            ),
+          ),
         );
       }
 
@@ -250,11 +358,18 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
 
       if (response.success) {
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const AuctionPendingApprovalPage()),
+          MaterialPageRoute(
+            builder: (context) => const AuctionPendingApprovalPage(),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.message ?? AppLocalizations.of(context)!.error_create_auction)),
+          SnackBar(
+            content: Text(
+              response.message ??
+                  AppLocalizations.of(context)!.error_create_auction,
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -266,120 +381,339 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     }
   }
 
+  /// Soumet la demande via le workflow de révision `auction_requests`
+  /// (POST /requests/auctions, ou PUT /requests/auctions/:id en édition).
+  /// [status] : "draft" pour enregistrer sans soumettre, "pending" pour
+  /// soumettre (ou resoumettre après rejet/brouillon).
+  Future<void> _submitRequest({required String status}) async {
+    if (_isLoading || _isSavingDraft) return;
+    final l10n = AppLocalizations.of(context)!;
+    final name = _nameController.text.trim();
+    final description = _descriptionController.text.trim();
+    final price = double.tryParse(_priceController.text);
+
+    if (name.isEmpty || price == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.error_fill_required_fields)));
+      return;
+    }
+
+    // Un brouillon peut avoir une description incomplète pour l'instant,
+    // mais dès qu'on soumet réellement (status pending) elle doit être valide.
+    if (status != 'draft' && !_validateDescription()) return;
+    if (description.isNotEmpty && description.length > _descriptionMaxLength) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.error_description_too_long),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSavingDraft = true);
+
+    try {
+      final existingId = widget.existingRequest?['id']?.toString();
+      final response = existingId != null
+          ? await _requestApi.updateAuctionRequest(
+              id: existingId,
+              categoryId: _selectedMainCategoryId,
+              locationId: _selectedLocationId,
+              titleAr: name,
+              descriptionAr: description,
+              startPrice: price,
+              insuranceAmount: double.tryParse(_insuranceController.text),
+              endDate: _endTime,
+              status: status,
+            )
+          : await _requestApi.createAuctionRequest(
+              categoryId: _selectedMainCategoryId ?? 0,
+              locationId: _selectedLocationId ?? 0,
+              titleAr: name,
+              descriptionAr: description,
+              startPrice: price,
+              insuranceAmount: double.tryParse(_insuranceController.text),
+              endDate: _endTime,
+              status: status,
+            );
+
+      if (!mounted) return;
+      setState(() => _isSavingDraft = false);
+
+      if (response.success) {
+        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              status == 'draft'
+                  ? l10n.label_save_as_draft
+                  : l10n.status_pending,
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.message ?? l10n.error_create_auction),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSavingDraft = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.error_connection)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
-          title: Text(
-            AppLocalizations.of(context)!.text_89,
-            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : Colors.black,
+      backgroundColor: isDarkMode
+          ? const Color(0xFF121212)
+          : const Color(0xFFFBFBFB),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        title: Text(
+          AppLocalizations.of(context)!.text_89,
+          style: TextStyle(
+            fontFamily: 'Plus Jakarta Sans',
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: isDarkMode ? Colors.white : Colors.black,
+          ),
+        ),
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios,
+            color: isDarkMode ? Colors.white : Colors.black,
+            size: 20,
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              AppLocalizations.of(context)!.text_90,
+              style: TextStyle(
+                fontFamily: 'Plus Jakarta Sans',
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: isDarkMode ? Colors.white : Colors.black,
+              ),
             ),
-          ),
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios, color: isDarkMode ? Colors.white : Colors.black, size: 20),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                AppLocalizations.of(context)!.text_90,
-                style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : Colors.black,
-                ),
-              ),
-              const SizedBox(height: 32),
-              
-              _buildLabel(context, AppLocalizations.of(context)!.text_91),
-              _buildTextField(context, controller: _nameController, hint: AppLocalizations.of(context)!.text_92),
-              
-              const SizedBox(height: 24),
-              _buildLabel(context, AppLocalizations.of(context)!.text_93),
-              _buildTextField(context, controller: _descriptionController, hint: AppLocalizations.of(context)!.text_94, maxLines: 3, icon: Icons.description_outlined),
-              
-              const SizedBox(height: 24),
-              _buildLabel(context, AppLocalizations.of(context)!.text_40),
-              _buildTextField(context, controller: _phoneController, hint: AppLocalizations.of(context)!.text_95, icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
-              
-              const SizedBox(height: 24),
-              _buildLabel(context, AppLocalizations.of(context)!.text_96),
-              _buildTextField(context, controller: _priceController, hint: AppLocalizations.of(context)!.text_97, icon: Icons.attach_money_outlined, keyboardType: TextInputType.number, suffixText: 'MRU'),
+            const SizedBox(height: 32),
 
-              const SizedBox(height: 24),
-              _buildLabel(context, 'مبلغ التأمين'),
-              _buildTextField(context, controller: _insuranceController, hint: 'أدخل مبلغ التأمين المطلوب', icon: Icons.shield_outlined, keyboardType: TextInputType.number, suffixText: 'MRU'),
+            _buildLabel(context, AppLocalizations.of(context)!.text_91),
+            _buildTextField(
+              context,
+              controller: _nameController,
+              hint: AppLocalizations.of(context)!.text_92,
+            ),
 
-              const SizedBox(height: 24),
-              _buildLabel(context, AppLocalizations.of(context)!.text_98),
-              _buildCategorySelector(context, value: _selectedMainCategory, icon: Icons.category_outlined, onTap: () => _showCategorySheet(context, true)),
-              
-              const SizedBox(height: 24),
-              _buildLabel(context, AppLocalizations.of(context)!.text_99),
-              _buildCategorySelector(context, value: _selectedSubCategory, icon: Icons.grid_view_outlined, onTap: () => _showCategorySheet(context, false)),
-              
-              const SizedBox(height: 24),
-              _buildLabel(context, AppLocalizations.of(context)!.text_100),
-              _buildCategorySelector(context, value: _selectedCity, icon: Icons.location_on_outlined, onTap: () => _showCitySheet(context)),
-              
-              const SizedBox(height: 24),
-              _buildLabel(context, 'حالة المنتج'),
-              _buildConditionSelector(context),
-
-              const SizedBox(height: 24),
-              _buildLabel(context, 'الماركة (اختياري)'),
-              _buildTextField(context, controller: _brandController, hint: 'مثال: Samsung، Toyota...', icon: Icons.local_offer_outlined),
-
-              const SizedBox(height: 24),
-              _buildLabel(context, 'تاريخ انتهاء المزاد'),
-              _buildDateSelector(context),
-              
-              const SizedBox(height: 32),
-              _buildLabel(context, AppLocalizations.of(context)!.text_101),
-              _buildMediaSection(context),
-              
-              const SizedBox(height: 48),
-              
-              // Submit Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submitAd,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0081FF),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            const SizedBox(height: 24),
+            _buildLabel(context, AppLocalizations.of(context)!.text_93),
+            _buildTextField(
+              context,
+              controller: _descriptionController,
+              hint: AppLocalizations.of(context)!.text_94,
+              maxLines: 3,
+              icon: Icons.description_outlined,
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (_descriptionController.text.isNotEmpty &&
+                    _descriptionController.text.trim().length <
+                        _descriptionMinLength)
+                  Expanded(
+                    child: Text(
+                      AppLocalizations.of(context)!.error_description_too_short,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  )
+                else
+                  const Spacer(),
+                Text(
+                  '${_descriptionController.text.length}/$_descriptionMaxLength',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color:
+                        _descriptionController.text.length >
+                            _descriptionMaxLength
+                        ? Colors.red
+                        : Colors.grey,
                   ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          AppLocalizations.of(context)!.text_102,
-                          style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
                 ),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+            _buildLabel(context, AppLocalizations.of(context)!.text_40),
+            _buildTextField(
+              context,
+              controller: _phoneController,
+              hint: AppLocalizations.of(context)!.text_95,
+              icon: Icons.phone_outlined,
+              keyboardType: TextInputType.phone,
+            ),
+
+            const SizedBox(height: 24),
+            _buildLabel(context, AppLocalizations.of(context)!.text_96),
+            _buildTextField(
+              context,
+              controller: _priceController,
+              hint: AppLocalizations.of(context)!.text_97,
+              icon: Icons.attach_money_outlined,
+              keyboardType: TextInputType.number,
+              suffixText: 'MRU',
+            ),
+
+            const SizedBox(height: 24),
+            _buildLabel(context, 'مبلغ التأمين'),
+            _buildTextField(
+              context,
+              controller: _insuranceController,
+              hint: 'أدخل مبلغ التأمين المطلوب',
+              icon: Icons.shield_outlined,
+              keyboardType: TextInputType.number,
+              suffixText: 'MRU',
+            ),
+
+            const SizedBox(height: 24),
+            _buildLabel(context, AppLocalizations.of(context)!.text_98),
+            _buildCategorySelector(
+              context,
+              value: _selectedMainCategory,
+              icon: Icons.category_outlined,
+              onTap: () => _showCategorySheet(context, true),
+            ),
+
+            const SizedBox(height: 24),
+            _buildLabel(context, AppLocalizations.of(context)!.text_99),
+            _buildCategorySelector(
+              context,
+              value: _selectedSubCategory,
+              icon: Icons.grid_view_outlined,
+              onTap: () => _showCategorySheet(context, false),
+            ),
+
+            const SizedBox(height: 24),
+            _buildLabel(context, AppLocalizations.of(context)!.text_100),
+            _buildCategorySelector(
+              context,
+              value: _selectedCity,
+              icon: Icons.location_on_outlined,
+              onTap: () => _showCitySheet(context),
+            ),
+
+            const SizedBox(height: 24),
+            _buildLabel(context, 'حالة المنتج'),
+            _buildConditionSelector(context),
+
+            const SizedBox(height: 24),
+            _buildLabel(context, 'الماركة (اختياري)'),
+            _buildTextField(
+              context,
+              controller: _brandController,
+              hint: 'مثال: Samsung، Toyota...',
+              icon: Icons.local_offer_outlined,
+            ),
+
+            const SizedBox(height: 24),
+            _buildLabel(context, 'تاريخ انتهاء المزاد'),
+            _buildDateSelector(context),
+
+            const SizedBox(height: 32),
+            _buildLabel(context, AppLocalizations.of(context)!.text_101),
+            _buildMediaSection(context),
+
+            const SizedBox(height: 48),
+
+            // Submit Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _isLoading
+                    ? null
+                    : (_isEditingRequest
+                          ? () => _submitRequest(status: 'pending')
+                          : _submitAd),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0081FF),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                        AppLocalizations.of(context)!.text_102,
+                        style: TextStyle(
+                          fontFamily: 'Plus Jakarta Sans',
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
-              const SizedBox(height: 24),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+
+            // Save as draft (uses the auction_requests review workflow)
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton(
+                onPressed: _isSavingDraft
+                    ? null
+                    : () => _submitRequest(status: 'draft'),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF0081FF)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: _isSavingDraft
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF0081FF),
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        AppLocalizations.of(context)!.label_save_as_draft,
+                        style: const TextStyle(
+                          fontFamily: 'Plus Jakarta Sans',
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0081FF),
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildLabel(BuildContext context, String text) {
@@ -390,7 +724,8 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         children: [
           Text(
             text,
-            style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
+            style: TextStyle(
+              fontFamily: 'Plus Jakarta Sans',
               fontSize: 14,
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white70 : Colors.black87,
@@ -403,7 +738,8 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     );
   }
 
-  Widget _buildTextField(BuildContext context, {
+  Widget _buildTextField(
+    BuildContext context, {
     required TextEditingController controller,
     required String hint,
     int maxLines = 1,
@@ -432,12 +768,28 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         textAlign: TextAlign.right,
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 13),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          hintStyle: TextStyle(
+            fontFamily: 'Plus Jakarta Sans',
+            color: Colors.grey,
+            fontSize: 13,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
+          ),
           border: InputBorder.none,
-          prefixIcon: icon != null ? Icon(icon, color: const Color(0xFF0081FF).withOpacity(0.5), size: 20) : null,
+          prefixIcon: icon != null
+              ? Icon(
+                  icon,
+                  color: const Color(0xFF0081FF).withOpacity(0.5),
+                  size: 20,
+                )
+              : null,
           suffixText: suffixText,
-          suffixStyle: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+          suffixStyle: const TextStyle(
+            color: Colors.grey,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
@@ -483,14 +835,19 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         ),
         child: Row(
           children: [
-            Icon(Icons.calendar_today_outlined, color: const Color(0xFF0081FF).withOpacity(0.5), size: 20),
+            Icon(
+              Icons.calendar_today_outlined,
+              color: const Color(0xFF0081FF).withOpacity(0.5),
+              size: 20,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 _endTime != null
                     ? '${_endTime!.day}/${_endTime!.month}/${_endTime!.year}'
                     : 'اختر تاريخ الانتهاء...',
-                style: TextStyle(fontFamily: 'Plus Jakarta Sans',
+                style: TextStyle(
+                  fontFamily: 'Plus Jakarta Sans',
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: isDarkMode ? Colors.white : Colors.black,
@@ -519,16 +876,25 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
           labelStyle: TextStyle(
             fontFamily: 'Plus Jakarta Sans',
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black87),
+            color: selected
+                ? Colors.white
+                : (isDarkMode ? Colors.white70 : Colors.black87),
           ),
           backgroundColor: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
-          side: BorderSide(color: const Color(0xFF0081FF).withOpacity(selected ? 0 : 0.2)),
+          side: BorderSide(
+            color: const Color(0xFF0081FF).withOpacity(selected ? 0 : 0.2),
+          ),
         );
       }).toList(),
     );
   }
 
-  Widget _buildCategorySelector(BuildContext context, {required String? value, required IconData icon, required VoidCallback onTap}) {
+  Widget _buildCategorySelector(
+    BuildContext context, {
+    required String? value,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
@@ -548,19 +914,24 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         ),
         child: Row(
           children: [
-             Icon(icon, color: const Color(0xFF0081FF).withOpacity(0.5), size: 20),
-             const SizedBox(width: 12),
-             Expanded(
-               child: Text(
-                 value ?? 'اختر...',
-                 style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-                   fontSize: 14,
-                   fontWeight: FontWeight.w600,
-                   color: isDarkMode ? Colors.white : Colors.black,
-                 ),
-               ),
-             ),
-             const Icon(Icons.arrow_drop_down, color: Colors.grey),
+            Icon(
+              icon,
+              color: const Color(0xFF0081FF).withOpacity(0.5),
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                value ?? 'اختر...',
+                style: TextStyle(
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDarkMode ? Colors.white : Colors.black,
+                ),
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.grey),
           ],
         ),
       ),
@@ -584,9 +955,16 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
                 decoration: BoxDecoration(
                   color: isDarkMode ? Colors.white10 : Colors.grey[100],
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF0081FF).withOpacity(0.2), style: BorderStyle.solid),
+                  border: Border.all(
+                    color: const Color(0xFF0081FF).withOpacity(0.2),
+                    style: BorderStyle.solid,
+                  ),
                 ),
-                child: const Icon(Icons.add_a_photo_outlined, color: Color(0xFF0081FF), size: 32),
+                child: const Icon(
+                  Icons.add_a_photo_outlined,
+                  color: Color(0xFF0081FF),
+                  size: 32,
+                ),
               ),
             );
           }
@@ -604,9 +982,18 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
                         builder: (_, snap) => snap.hasData
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(16),
-                                child: Image.memory(snap.data!, width: 100, height: 100, fit: BoxFit.cover),
+                                child: Image.memory(
+                                  snap.data!,
+                                  width: 100,
+                                  height: 100,
+                                  fit: BoxFit.cover,
+                                ),
                               )
-                            : Container(width: 100, height: 100, color: Colors.grey[200]),
+                            : Container(
+                                width: 100,
+                                height: 100,
+                                color: Colors.grey[200],
+                              ),
                       )
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(16),
@@ -615,7 +1002,11 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
                           width: 100,
                           height: 100,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(width: 100, height: 100, color: Colors.grey[200]),
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 100,
+                            height: 100,
+                            color: Colors.grey[200],
+                          ),
                         ),
                       ),
               ),
@@ -634,7 +1025,11 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
                       color: Colors.red,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.close, color: Colors.white, size: 16),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                   ),
                 ),
               ),
@@ -672,17 +1067,17 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       });
     } catch (e) {
       debugPrint('Error picking images: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error selecting images: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error selecting images: $e')));
     }
   }
 
   void _showCitySheet(BuildContext context) {
     if (_locations.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('جاري تحميل المواقع...'))
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('جاري تحميل المواقع...')));
       return;
     }
     showModalBottomSheet(
@@ -693,23 +1088,37 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         title: AppLocalizations.of(context)!.text_103,
         items: _locations.map((l) => l.cityNameAr).cast<String>().toList(),
         onSelected: (val) {
-          setState(() => _selectedCity = val);
+          final matched = _locations.firstWhere(
+            (l) => l.cityNameAr == val,
+            orElse: () => Location(
+              id: 0,
+              cityNameAr: val,
+              cityNameFr: val,
+              areaNameAr: '',
+              areaNameFr: '',
+            ),
+          );
+          setState(() {
+            _selectedCity = val;
+            _selectedLocationId = matched.id == 0 ? null : matched.id;
+          });
           Navigator.of(context).pop();
         },
       ),
     );
   }
 
-
   void _showCategorySheet(BuildContext context, bool isMain) {
     if (_categories.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('جاري تحميل الفئات...'))
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('جاري تحميل الفئات...')));
       return;
     }
 
-    final parentCategories = _categories.where((c) => c.parentId == null).toList();
+    final parentCategories = _categories
+        .where((c) => c.parentId == null)
+        .toList();
 
     List<Category> displayItems;
     if (isMain) {
@@ -723,17 +1132,25 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
           (c) => c.nameAr == _selectedMainCategory && c.parentId == null,
           orElse: () => Category(id: 0, nameAr: '', nameFr: '', nameEn: ''),
         );
-        displayItems = parent.id == 0 ? [] : _categories.where((c) => c.parentId == parent.id).toList();
+        displayItems = parent.id == 0
+            ? []
+            : _categories.where((c) => c.parentId == parent.id).toList();
       } else {
-        displayItems = _categories.where((c) => c.parentId == parentId).toList();
+        displayItems = _categories
+            .where((c) => c.parentId == parentId)
+            .toList();
       }
-      debugPrint('[CreateAd] selectedCategoryId=$parentId selectedCategoryName=$_selectedMainCategory subcategories=${displayItems.length}');
-      debugPrint('[CreateAd] subcategory names: ${displayItems.map((c) => c.nameAr).toList()}');
+      debugPrint(
+        '[CreateAd] selectedCategoryId=$parentId selectedCategoryName=$_selectedMainCategory subcategories=${displayItems.length}',
+      );
+      debugPrint(
+        '[CreateAd] subcategory names: ${displayItems.map((c) => c.nameAr).toList()}',
+      );
     }
 
     if (!isMain && displayItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا توجد فئات فرعية لهذه الفئة'))
+        const SnackBar(content: Text('لا توجد فئات فرعية لهذه الفئة')),
       );
       return;
     }
@@ -743,12 +1160,15 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => _CategorySheet(
-        title: isMain ? AppLocalizations.of(context)!.text_98 : AppLocalizations.of(context)!.text_99,
+        title: isMain
+            ? AppLocalizations.of(context)!.text_98
+            : AppLocalizations.of(context)!.text_99,
         items: displayItems.map((c) => c.nameAr).toList(),
         onSelected: (val) {
           final selected = displayItems.firstWhere(
             (c) => c.nameAr == val,
-            orElse: () => Category(id: 0, nameAr: val, nameFr: val, nameEn: val),
+            orElse: () =>
+                Category(id: 0, nameAr: val, nameFr: val, nameEn: val),
           );
           setState(() {
             if (isMain) {
@@ -773,7 +1193,11 @@ class _CategorySheet extends StatefulWidget {
   final List<String> items;
   final Function(String) onSelected;
 
-  const _CategorySheet({required this.title, required this.items, required this.onSelected});
+  const _CategorySheet({
+    required this.title,
+    required this.items,
+    required this.onSelected,
+  });
 
   @override
   State<_CategorySheet> createState() => _CategorySheetState();
@@ -801,7 +1225,9 @@ class _CategorySheetState extends State<_CategorySheet> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      padding: EdgeInsetsDirectional.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsetsDirectional.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -810,11 +1236,22 @@ class _CategorySheetState extends State<_CategorySheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 12),
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           const SizedBox(height: 24),
           Text(
             widget.title,
-            style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontFamily: 'Plus Jakarta Sans',
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           Padding(
@@ -827,7 +1264,10 @@ class _CategorySheetState extends State<_CategorySheet> {
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
                 fillColor: isDarkMode ? Colors.black26 : Colors.grey[100],
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
               ),
             ),
           ),
@@ -838,7 +1278,14 @@ class _CategorySheetState extends State<_CategorySheet> {
               itemCount: _filtered.length,
               separatorBuilder: (context, index) => const Divider(height: 1),
               itemBuilder: (context, index) => ListTile(
-                title: Text(_filtered[index], textAlign: TextAlign.right, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.w500)),
+                title: Text(
+                  _filtered[index],
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontFamily: 'Plus Jakarta Sans',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 onTap: () => widget.onSelected(_filtered[index]),
               ),
             ),

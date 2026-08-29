@@ -1,5 +1,6 @@
 # Binaires compilés
-server
+/server
+/server.exe
 *.exe
 *.exe~
 *.dll
@@ -11,11 +12,6 @@ test/
 test-mazadpay-5f85f4f194e6.json
 scratch/
 bin/
-
-# Environnement
-.env
-.env.*
-!.env.example
 
 # Dépendances
 vendor/
@@ -43,16 +39,23 @@ register_test_sms/
 register_test_sms/*
 configs/*
 test_user_interface/
-.env
-.env.*
-*.env
 
 # Backups locaux générés par cmd/migrate_receipts --execute (contiennent d'anciennes
 # receipt_url — jamais commités).
 migrate_receipts_backup_*.txt
-.env.production.local
 
 # Identifiants de migration locaux (Migration Tooling Security Hardening) — .env.neon
-# est déjà couvert par .env.* ci-dessus, listé ici explicitement par clarté.
+# est déjà couvert par .env.* ci-dessous, listé ici explicitement par clarté.
 .env.neon
 migration.env
+
+# ── Environnement ────────────────────────────────────────────────
+# Ce bloc doit rester le DERNIER mot sur les fichiers .env*/*.env : aucune règle
+# .env*/*.env ne doit apparaître après lui, sinon elle annulerait l'exception
+# ci-dessous (les règles gitignore sont évaluées dans l'ordre du fichier, la
+# dernière correspondance l'emporte). *.env couvre aussi les noms sans point de
+# tête (ex: secrets.env, production.env, staging.env), pas seulement .env/.env.*.
+.env
+.env.*
+*.env
+!.env.example

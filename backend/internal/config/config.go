@@ -16,18 +16,24 @@ type Config struct {
 	Redis    RedisConfig
 	JWT      JWTConfig
 	R2       R2Config
-	Wablas  WablasConfig
+	Wablas   WablasConfig
 	Business BusinessConfig
 	Firebase FirebaseConfig
 }
 
 type AppConfig struct {
-	Env        string
-	Port       string
-	Name       string
-	DevOTPCode string // Code OTP de développement (ignoré en production)
+	Env                    string
+	Port                   string
+	Name                   string
+	DevOTPCode             string // Code OTP de développement (ignoré en production)
 	DefaultSuperAdminPhone string // Téléphone du super admin par défaut
 	DefaultSuperAdminPin   string // PIN du super admin par défaut
+	// CORSAllowedOrigins est la valeur BRUTE (non parsée) de CORS_ALLOWED_ORIGINS —
+	// une liste d'origines séparées par des virgules, ou vide. Le parsing/validation
+	// (rejet des espaces, doublons, wildcard, chemins/query, schémas non http(s)) vit
+	// dans cmd/server (ResolveAllowedOrigins), pas ici, pour rester testable sans
+	// dépendre du chargement de la config globale (voir cors.go).
+	CORSAllowedOrigins string
 }
 
 type DBConfig struct {
@@ -101,6 +107,7 @@ func Load() *Config {
 			// un PIN par défaut connu dans le code source est une porte dérobée).
 			DefaultSuperAdminPhone: getEnv("DEFAULT_SUPER_ADMIN_PHONE", ""),
 			DefaultSuperAdminPin:   getEnv("DEFAULT_SUPER_ADMIN_PIN", ""),
+			CORSAllowedOrigins:     getEnv("CORS_ALLOWED_ORIGINS", ""),
 		},
 		DB: DBConfig{
 			Host:            getEnv("DB_HOST", "localhost"),

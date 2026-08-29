@@ -41,8 +41,18 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 		return BadRequest(c, "Search query is too long (max 100 characters)")
 	}
 
+	// This endpoint has no auth middleware (see routes.go) — never let an
+	// anonymous caller pass an arbitrary ?status= value to enumerate
+	// pending/rejected/canceled auctions in bulk (International Auth /
+	// Product Review Phase). Only the publicly-safe statuses are honored;
+	// anything else silently falls back to "active".
+	requestedStatus := c.Query("status", "active")
+	if !services.PubliclyVisibleAuctionStatuses[requestedStatus] {
+		requestedStatus = "active"
+	}
+
 	f := repository.AuctionFilters{
-		Status: c.Query("status", "active"),
+		Status: requestedStatus,
 		Query:  searchQuery,
 		// L'app mobile envoie déjà page/limit (voir mobile/lib/services/auction_api.dart) ;
 		// on les relaie tels quels, le plafond de 100 est appliqué dans auction_repo.go.
@@ -125,6 +135,16 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 
 	auction, images, err := h.service.GetByID(c.Context(), id)
 	if err != nil {
+		return NotFound(c, "Auction")
+	}
+
+	// This endpoint has no auth middleware (see routes.go) — an anonymous
+	// caller must never see a pending/rejected/canceled auction by guessing
+	// or reusing its ID (International Auth / Product Review Phase). A
+	// logged-in seller viewing their own non-public auction, or an admin,
+	// should use the dedicated seller/admin detail endpoints instead, which
+	// are not filtered this way.
+	if !services.PubliclyVisibleAuctionStatuses[auction.Status] {
 		return NotFound(c, "Auction")
 	}
 

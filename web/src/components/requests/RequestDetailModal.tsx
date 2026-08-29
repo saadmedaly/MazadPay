@@ -1,10 +1,10 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Loader2, User, Calendar, DollarSign, Image as ImageIcon, FileText, CheckCircle, XCircle, MapPin } from 'lucide-react'
+import { Loader2, User, Calendar, DollarSign, Image as ImageIcon, FileText, CheckCircle, XCircle, MapPin, Pencil, AlertTriangle } from 'lucide-react'
 import { useAuctionRequestByID, useBannerRequestByID } from '@/hooks/useRequests'
 import type { AuctionRequest, BannerRequest } from '@/hooks/useRequests'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -16,6 +16,7 @@ interface RequestDetailModalProps {
   onApprove?: (id: string) => void
   onReject?: (id: string) => void
   onDelete?: (id: string) => void
+  onEdit?: (id: string) => void
 }
 
 export function RequestDetailModal({
@@ -25,7 +26,8 @@ export function RequestDetailModal({
   requestId,
   onApprove,
   onReject,
-  onDelete
+  onDelete,
+  onEdit
 }: RequestDetailModalProps) {
   const { data: auctionRequest, isLoading: isLoadingAuction } = useAuctionRequestByID(
     type === 'auction' ? requestId : null
@@ -37,16 +39,7 @@ export function RequestDetailModal({
   const isLoading = isLoadingAuction || isLoadingBanner
   const request = type === 'auction' ? auctionRequest : bannerRequest
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return <Badge className="bg-green-100 text-green-800">مقبول</Badge>
-      case 'rejected':
-        return <Badge className="bg-red-100 text-red-800">مرفوض</Badge>
-      default:
-        return <Badge className="bg-yellow-100 text-yellow-800">قيد الانتظار</Badge>
-    }
-  }
+  const getStatusBadge = (status: string) => <StatusBadge status={status} />
 
   const renderAuctionDetails = (req: AuctionRequest) => (
     <div className="space-y-6">
@@ -193,6 +186,16 @@ export function RequestDetailModal({
               </a>
             ))}
           </div>
+        </div>
+      )}
+
+      {req.status === 'rejected' && req.admin_notes && (
+        <div className="bg-red-100 border border-red-200 p-4 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-red-800" />
+            <p className="text-sm font-bold text-red-800">سبب الرفض</p>
+          </div>
+          <p className="text-red-800 whitespace-pre-wrap">{req.admin_notes}</p>
         </div>
       )}
 
@@ -349,9 +352,9 @@ export function RequestDetailModal({
         ) : (
           <>
             <Tabs defaultValue="details" className="mt-4">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className={`grid w-full ${(request.status === 'pending' || request.status === 'draft' || request.status === 'rejected') ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <TabsTrigger value="details">التفاصيل</TabsTrigger>
-                {request.status === 'pending' && (
+                {(request.status === 'pending' || request.status === 'draft' || request.status === 'rejected') && (
                   <TabsTrigger value="actions">الإجراءات</TabsTrigger>
                 )}
               </TabsList>
@@ -384,6 +387,25 @@ export function RequestDetailModal({
                         رفض الطلب
                       </Button>
                     </div>
+                  </div>
+                </TabsContent>
+              )}
+
+              {(request.status === 'draft' || request.status === 'rejected') && type === 'auction' && (
+                <TabsContent value="actions" className="mt-4">
+                  <div className="space-y-4">
+                    <p className="text-gray-600">
+                      {request.status === 'draft'
+                        ? 'يمكنك تعديل هذه المسودة قبل إرسالها للمراجعة.'
+                        : 'يمكنك تعديل هذا الطلب المرفوض وإعادة إرساله للمراجعة.'}
+                    </p>
+                    <Button
+                      onClick={() => onEdit?.(request.id)}
+                      className="bg-blue-600 hover:bg-blue-700 w-full"
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      تعديل الطلب
+                    </Button>
                   </div>
                 </TabsContent>
               )}
