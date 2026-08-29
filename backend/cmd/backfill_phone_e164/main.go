@@ -18,6 +18,19 @@
 // invalide) est journalisée et ignorée — jamais de panique ni d'arrêt du traitement
 // des lignes suivantes.
 //
+// Confidentialité (PII) : AUCUN numéro de téléphone complet (ni la colonne 'phone'
+// héritée, ni le phone_e164 calculé) n'est jamais imprimé en clair, sur AUCUN chemin —
+// dry-run, execute, ou erreur. Voir maskPhone() dans plan.go, appliqué systématiquement.
+//
+// Conflits : avant tout UPDATE, l'outil détecte deux catégories de collision sur
+// phone_e164 — (a) deux candidats du même lot se normalisant vers la même valeur, et
+// (b) un candidat se normalisant vers une valeur déjà présente sur un AUTRE utilisateur
+// déjà backfillé. TOUTES les lignes impliquées dans une collision (sans exception, sans
+// ordre de priorité par created_at/role/statut admin) sont marquées "conflict" et
+// EXCLUES de la mise à jour, en dry-run comme en execute. La résolution d'un conflit est
+// une décision opérationnelle séparée, hors du périmètre de cet outil automatique — voir
+// buildBackfillPlan() dans plan.go.
+//
 // Ne JAMAIS lancer --execute contre une base de données de production dans le cadre
 // de cette tâche : cet outil est livré construit et testé en dry-run uniquement.
 package main
@@ -30,13 +43,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/mazadpay/backend/internal/config"
-	"github.com/mazadpay/backend/internal/services"
 )
-
-type userRow struct {
-	ID    string `db:"id"`
-	Phone string `db:"phone"`
-}
 
 func main() {
 	execute := flag.Bool("execute", false, "Exécute le backfill réel (UPDATE en base). Sans ce flag : dry-run.")
@@ -54,10 +61,34 @@ func main() {
 	}
 	defer db.Close()
 
-	var rows []userRow
+	var rows []struct {
+		ID    string `db:"id"`
+		Phone string `db:"phone"`
+	}
 	err = db.Select(&rows, `SELECT id, phone FROM users WHERE phone_e164 IS NULL ORDER BY created_at`)
 	if err != nil {
 		log.Fatalf("Failed to query users: %v", err)
+	}
+
+	// Load already-normalized rows (phone_e164 IS NOT NULL) so a candidate colliding
+	// with an EXISTING row is also caught as a conflict, not just collisions within
+	// this batch.
+	var existingRows []struct {
+		ID   string `db:"id"`
+		E164 string `db:"phone_e164"`
+	}
+	err = db.Select(&existingRows, `SELECT id, phone_e164 FROM users WHERE phone_e164 IS NOT NULL`)
+	if err != nil {
+		log.Fatalf("Failed to query existing phone_e164 values: %v", err)
+	}
+	existing := make(existingE164Lookup, len(existingRows))
+	for _, r := range existingRows {
+		existing[r.ID] = r.E164
+	}
+
+	candidates := make([]candidate, 0, len(rows))
+	for _, r := range rows {
+		candidates = append(candidates, candidate{ID: r.ID, Phone: r.Phone})
 	}
 
 	fmt.Println("========================================")
@@ -69,39 +100,35 @@ func main() {
 	fmt.Printf("%d utilisateur(s) avec phone_e164 IS NULL\n", len(rows))
 	fmt.Println("========================================")
 
-	type planned struct {
-		id, e164, iso string
-	}
+	plan := buildBackfillPlan(candidates, existing)
 
-	var toUpdate []planned
-	skipped := 0
-
+	// phoneByID lets the per-entry log lines mask the ORIGINAL raw phone (not just
+	// the computed E.164), consistent with the previous log format but never
+	// unmasked.
+	phoneByID := make(map[string]string, len(rows))
 	for _, r := range rows {
-		masked := maskPhone(r.Phone)
-		shortID := shortID(r.ID)
-
-		e164, iso, err := services.NormalizeE164(r.Phone, "MR")
-		if err != nil {
-			skipped++
-			fmt.Printf("[SKIP unparseable] user=%s phone=%s error=%v\n", shortID, masked, err)
-			continue
-		}
-		if iso != "MR" {
-			// Un numéro pré-existant qui se normaliserait vers un autre pays serait
-			// suspect (aucun autre pays n'était jamais accepté avant cette
-			// migration) — on préfère l'ignorer plutôt que d'écrire une donnée
-			// probablement erronée, à examiner manuellement.
-			skipped++
-			fmt.Printf("[SKIP unexpected-region] user=%s phone=%s detected_region=%s (attendu MR)\n", shortID, masked, iso)
-			continue
-		}
-
-		fmt.Printf("[MIGRATABLE] user=%s phone=%s -> phone_e164=%s phone_country_iso=%s\n", shortID, masked, e164, iso)
-		toUpdate = append(toUpdate, planned{id: r.ID, e164: e164, iso: iso})
+		phoneByID[r.ID] = r.Phone
 	}
 
+	for _, p := range plan {
+		id := shortID(p.ID)
+		rawMasked := maskPhone(phoneByID[p.ID])
+		switch p.Status {
+		case "skip_unparseable":
+			fmt.Printf("[SKIP unparseable] user=%s phone=%s error=%v\n", id, rawMasked, p.Err)
+		case "skip_unexpected_region":
+			fmt.Printf("[SKIP unexpected-region] user=%s phone=%s detected_region=%s (attendu MR)\n", id, rawMasked, p.ISO)
+		case "conflict":
+			fmt.Printf("[CONFLICT] user=%s phone=%s -> phone_e164=%s (colluding with another row, needs manual resolution)\n", id, rawMasked, maskPhone(p.E164))
+		case "migratable":
+			fmt.Printf("[MIGRATABLE] user=%s phone=%s -> phone_e164=%s phone_country_iso=%s\n", id, rawMasked, maskPhone(p.E164), p.ISO)
+		}
+	}
+
+	s := summarize(plan)
 	fmt.Println("========================================")
-	fmt.Printf("Résumé : %d ligne(s) au total, %d migrable(s), %d ignorée(s)\n", len(rows), len(toUpdate), skipped)
+	fmt.Printf("Résumé : scanned=%d migratable=%d skipped_invalid=%d conflicts=%d\n",
+		s.Scanned, s.Migratable, s.SkippedInvalid, s.Conflicts)
 	fmt.Println("========================================")
 
 	if dryRun {
@@ -110,13 +137,18 @@ func main() {
 	}
 
 	successCount, failCount := 0, 0
-	for _, p := range toUpdate {
+	for _, p := range plan {
+		if p.Status != "migratable" {
+			// Conflicts and skips are NEVER written, in execute mode either — no
+			// exception, no priority ordering.
+			continue
+		}
 		_, err := db.Exec(
 			`UPDATE users SET phone_e164 = $1, phone_country_iso = $2 WHERE id = $3 AND phone_e164 IS NULL`,
-			p.e164, p.iso, p.id,
+			p.E164, p.ISO, p.ID,
 		)
 		if err != nil {
-			fmt.Printf("[FAIL db-update] user=%s: %v\n", shortID(p.id), err)
+			fmt.Printf("[FAIL db-update] user=%s: %v\n", shortID(p.ID), err)
 			failCount++
 			continue
 		}
@@ -124,22 +156,8 @@ func main() {
 	}
 
 	fmt.Println("========================================")
-	fmt.Printf("Backfill terminé : %d succès, %d échec(s).\n", successCount, failCount)
+	fmt.Printf("Backfill terminé : scanned=%d migratable=%d skipped_invalid=%d conflicts=%d updated=%d failed=%d\n",
+		s.Scanned, s.Migratable, s.SkippedInvalid, s.Conflicts, successCount, failCount)
 	fmt.Println("La colonne 'phone' héritée n'a pas été modifiée.")
-}
-
-// maskPhone masque un numéro pour les logs, cohérent avec models.User.MaskPhone().
-func maskPhone(phone string) string {
-	if len(phone) < 4 {
-		return "####"
-	}
-	return "####" + phone[len(phone)-4:]
-}
-
-// shortID retourne les 8 premiers caractères d'un UUID, jamais l'identifiant complet.
-func shortID(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
+	fmt.Println("Les conflits n'ont PAS été appliqués — résolution manuelle séparée requise.")
 }
