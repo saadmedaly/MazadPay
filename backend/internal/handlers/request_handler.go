@@ -52,12 +52,17 @@ func (h *RequestHandler) CreateAuctionRequest(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+
+	// UserID is always the authenticated caller, never client-supplied -- assigned
+	// here, before validation, so any user_id present in the request body (whether
+	// benign or a spoofing attempt naming a different user) is unconditionally
+	// discarded and cannot reach the service/repository layer.
+	req.ID = uuid.New()
+	req.UserID = userID
+
 	if err := h.validate.Struct(req); err != nil {
 		return BadRequest(c, err.Error())
 	}
-
-	req.ID = uuid.New()
-	req.UserID = userID
 
 	// Set default quantity if not provided
 	if req.Quantity == 0 {
@@ -313,12 +318,15 @@ func (h *RequestHandler) AdminCreateAuctionRequest(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+
+	// UserID is always the authenticated admin, never client-supplied -- assigned
+	// before validation for the same reason as CreateAuctionRequest above.
+	req.ID = uuid.New()
+	req.UserID = adminID
+
 	if err := h.validate.Struct(req); err != nil {
 		return BadRequest(c, err.Error())
 	}
-
-	req.ID = uuid.New()
-	req.UserID = adminID
 
 	if req.Quantity == 0 {
 		req.Quantity = 1
