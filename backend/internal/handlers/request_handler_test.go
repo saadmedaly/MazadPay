@@ -157,15 +157,19 @@ func TestDecimalAwareValidator_PrecisionEdgeCases(t *testing.T) {
 
 // fakeRequestService is a minimal services.RequestService fake used only to prove
 // the HTTP handler path (parsing -> binding -> validation -> service call) no longer
-// 500s on decimal.Decimal fields. It does not touch a real database.
+// 500s on decimal.Decimal fields, and to observe exactly which UserID reaches the
+// service layer (for the user-id spoofing regression test). It does not touch a
+// real database.
 type fakeRequestService struct {
 	services.RequestService
-	createCalled bool
-	createErr    error
+	createCalled   bool
+	createErr      error
+	receivedUserID uuid.UUID
 }
 
 func (f *fakeRequestService) CreateAuctionRequest(ctx context.Context, req *models.AuctionRequest) error {
 	f.createCalled = true
+	f.receivedUserID = req.UserID
 	return f.createErr
 }
 
@@ -189,12 +193,12 @@ func TestCreateAuctionRequest_HTTP_NoLongerReturns500OnDecimalFields(t *testing.
 		return h.CreateAuctionRequest(c)
 	})
 
-	// user_id is included in the body because h.validate.Struct(req) (which carries
-	// the "required" tag on models.AuctionRequest.UserID) runs before the handler
-	// overwrites req.UserID from the authenticated context -- pre-existing handler
-	// behavior, unrelated to and unchanged by this decimal-validation fix.
+	// No user_id in the body -- models.AuctionRequest.UserID still carries
+	// validate:"required" (see request.go), but the handler now assigns the
+	// authenticated UserID (see request_handler.go, CreateAuctionRequest) before
+	// validate.Struct runs, so a normal documented client payload succeeds without
+	// ever having to guess/send its own user id.
 	body := map[string]interface{}{
-		"user_id":          userID.String(),
 		"category_id":      4,
 		"title_ar":         "اختبار Staging",
 		"description_ar":   "وصف تجريبي آمن يزيد عن عشرة أحرف بدون سكريبت",
@@ -246,7 +250,6 @@ func TestCreateAuctionRequest_HTTP_StillRejectsInvalidPrice(t *testing.T) {
 	})
 
 	body := map[string]interface{}{
-		"user_id":          userID.String(),
 		"category_id":      4,
 		"title_ar":         "اختبار Staging",
 		"description_ar":   "وصف تجريبي آمن يزيد عن عشرة أحرف بدون سكريبت",
@@ -275,5 +278,252 @@ func TestCreateAuctionRequest_HTTP_StillRejectsInvalidPrice(t *testing.T) {
 	}
 	if fakeSvc.createCalled {
 		t.Fatal("expected an invalid price to be rejected before reaching the service layer, but the service was called")
+	}
+}
+
+// validAuctionRequestBody returns a well-formed create-auction-request JSON body
+// with no user_id field -- the documented client contract.
+func validAuctionRequestBody() map[string]interface{} {
+	return map[string]interface{}{
+		"category_id":      4,
+		"title_ar":         "اختبار Staging",
+		"description_ar":   "وصف تجريبي آمن يزيد عن عشرة أحرف بدون سكريبت",
+		"start_price":      100,
+		"min_increment":    10,
+		"insurance_amount": 0,
+		"start_date":       time.Now().Format(time.RFC3339),
+		"end_date":         time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+	}
+}
+
+func mustMarshal(t *testing.T, v interface{}) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("failed to marshal request body: %v", err)
+	}
+	return b
+}
+
+// TestCreateAuctionRequest_UserID_A_ValidPayloadWithoutUserIDSucceeds is regression
+// case A: an authenticated request with a valid, documented payload that omits
+// user_id entirely must not be rejected with a 400 for a missing UserID, and must
+// reach the service layer.
+func TestCreateAuctionRequest_UserID_A_ValidPayloadWithoutUserIDSucceeds(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/auctions", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateAuctionRequest(c)
+	})
+
+	payload := mustMarshal(t, validAuctionRequestBody())
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/auctions", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200 for a valid payload without user_id, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if !fakeSvc.createCalled {
+		t.Fatal("expected the request to reach the service layer, but it did not")
+	}
+	if fakeSvc.receivedUserID != userID {
+		t.Fatalf("expected service to receive the authenticated user id %s, got %s", userID, fakeSvc.receivedUserID)
+	}
+}
+
+// TestCreateAuctionRequest_UserID_B_JWTOverridesSpoofedBodyUserID is the mandatory
+// security regression case B: if the JWT/context authenticated user is A but the
+// request body names a different user_id (B), the service must receive A -- never
+// B. This proves a malicious client cannot create a request on another user's
+// behalf by supplying a different user_id in the body.
+func TestCreateAuctionRequest_UserID_B_JWTOverridesSpoofedBodyUserID(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	authenticatedUserID := uuid.New() // "A"
+	spoofedUserID := uuid.New()       // "B" -- attacker-supplied, must be ignored
+	app.Post("/v1/api/requests/auctions", func(c *fiber.Ctx) error {
+		c.Locals("user_id", authenticatedUserID)
+		return h.CreateAuctionRequest(c)
+	})
+
+	body := validAuctionRequestBody()
+	body["user_id"] = spoofedUserID.String()
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/auctions", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if !fakeSvc.createCalled {
+		t.Fatal("expected the request to reach the service layer, but it did not")
+	}
+	if fakeSvc.receivedUserID != authenticatedUserID {
+		t.Fatalf("SECURITY REGRESSION: service received user_id %s, expected the authenticated user %s (spoofed body value %s must be ignored)",
+			fakeSvc.receivedUserID, authenticatedUserID, spoofedUserID)
+	}
+}
+
+// TestCreateAuctionRequest_UserID_C_UnauthenticatedRequestRejected is regression
+// case C: with no authenticated user in context, the request must be rejected
+// (401) and must never reach the service layer.
+func TestCreateAuctionRequest_UserID_C_UnauthenticatedRequestRejected(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	app.Post("/v1/api/requests/auctions", func(c *fiber.Ctx) error {
+		// Deliberately not setting c.Locals("user_id", ...) to simulate a request
+		// that never passed authentication middleware.
+		return h.CreateAuctionRequest(c)
+	})
+
+	payload := mustMarshal(t, validAuctionRequestBody())
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/auctions", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 401 for an unauthenticated request, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if fakeSvc.createCalled {
+		t.Fatal("expected an unauthenticated request to never reach the service layer, but the service was called")
+	}
+}
+
+// TestCreateAuctionRequest_UserID_D_InvalidDecimalPricesStillRejected is regression
+// case D: removing the UserID validate tag must not weaken price validation --
+// invalid decimal prices must still return 400 and never reach the service layer.
+func TestCreateAuctionRequest_UserID_D_InvalidDecimalPricesStillRejected(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/auctions", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateAuctionRequest(c)
+	})
+
+	body := validAuctionRequestBody()
+	body["start_price"] = -5
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/auctions", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 400 for a negative start_price, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if fakeSvc.createCalled {
+		t.Fatal("expected an invalid price to be rejected before reaching the service layer, but the service was called")
+	}
+}
+
+// TestCreateAuctionRequest_UserID_E_ValidDecimalPayloadStillSucceeds is regression
+// case E: a fully valid payload (valid decimal prices, no user_id) must still
+// succeed after this fix -- no regression against the earlier decimal.Decimal fix.
+func TestCreateAuctionRequest_UserID_E_ValidDecimalPayloadStillSucceeds(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/auctions", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateAuctionRequest(c)
+	})
+
+	payload := mustMarshal(t, validAuctionRequestBody())
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/auctions", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if !fakeSvc.createCalled {
+		t.Fatal("expected the request to reach the service layer, but it did not")
+	}
+}
+
+// TestCreateAuctionRequest_UserID_F_TrustedUserIDNeverNilWhenAuthenticated is an
+// explicit defense-in-depth assertion: for any authenticated request, the UserID
+// that reaches validate.Struct (and therefore the service layer) must never be
+// uuid.Nil. models.AuctionRequest.UserID keeps validate:"required" specifically as
+// a safety net for this -- if a future change ever removed the
+// req.UserID = authenticatedUserID assignment before validation, this tag would
+// catch it (as HTTP 400, not a silent uuid.Nil reaching the database) rather than
+// relying solely on the handler's assignment ordering.
+func TestCreateAuctionRequest_UserID_F_TrustedUserIDNeverNilWhenAuthenticated(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/auctions", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateAuctionRequest(c)
+	})
+
+	payload := mustMarshal(t, validAuctionRequestBody())
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/auctions", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if !fakeSvc.createCalled {
+		t.Fatal("expected the request to reach the service layer, but it did not")
+	}
+	if fakeSvc.receivedUserID == uuid.Nil {
+		t.Fatal("SECURITY REGRESSION: the UserID reaching the service layer for an authenticated request is uuid.Nil")
 	}
 }
