@@ -50,10 +50,12 @@ migrate_receipts_backup_*.txt
 migration.env
 
 # ── Environnement ────────────────────────────────────────────────
-# Ce bloc doit rester le DERNIER mot sur les fichiers .env* : aucune règle .env*
-# ne doit apparaître après lui, sinon elle annulerait l'exception ci-dessous
-# (les règles gitignore sont évaluées dans l'ordre du fichier, la dernière
-# correspondance l'emporte).
+# Ce bloc doit rester le DERNIER mot sur les fichiers .env*/*.env : aucune règle
+# .env*/*.env ne doit apparaître après lui, sinon elle annulerait l'exception
+# ci-dessous (les règles gitignore sont évaluées dans l'ordre du fichier, la
+# dernière correspondance l'emporte). *.env couvre aussi les noms sans point de
+# tête (ex: secrets.env, production.env, staging.env), pas seulement .env/.env.*.
 .env
 .env.*
+*.env
 !.env.example
