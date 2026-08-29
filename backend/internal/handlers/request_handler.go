@@ -22,7 +22,7 @@ type RequestHandler struct {
 }
 
 func NewRequestHandler(svc services.RequestService, logger *zap.Logger) *RequestHandler {
-	return &RequestHandler{svc: svc, logger: logger, validate: validator.New()}
+	return &RequestHandler{svc: svc, logger: logger, validate: newDecimalAwareValidator()}
 }
 
 type ReviewRequest struct {
@@ -204,9 +204,9 @@ func (h *RequestHandler) GetAuctionRequests(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{
-		"data":  requests,
-		"total": total,
-		"page":  page,
+		"data":     requests,
+		"total":    total,
+		"page":     page,
 		"per_page": perPage,
 	})
 }
@@ -392,9 +392,9 @@ func (h *RequestHandler) GetBannerRequests(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{
-		"data":  requests,
-		"total": total,
-		"page":  page,
+		"data":     requests,
+		"total":    total,
+		"page":     page,
 		"per_page": perPage,
 	})
 }
@@ -432,9 +432,9 @@ func (h *RequestHandler) GetUserAuctionRequests(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{
-		"data":  requests,
-		"total": total,
-		"page":  page,
+		"data":     requests,
+		"total":    total,
+		"page":     page,
 		"per_page": perPage,
 	})
 }
@@ -457,9 +457,9 @@ func (h *RequestHandler) GetUserBannerRequests(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{
-		"data":  requests,
-		"total": total,
-		"page":  page,
+		"data":     requests,
+		"total":    total,
+		"page":     page,
 		"per_page": perPage,
 	})
 }
