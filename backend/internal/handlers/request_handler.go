@@ -208,8 +208,7 @@ func (h *RequestHandler) GetAuctionRequests(c *fiber.Ctx) error {
 		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, fiber.Map{
-		"data":     requests,
+	return PaginatedOK(c, requests, fiber.Map{
 		"total":    total,
 		"page":     page,
 		"per_page": perPage,
@@ -399,8 +398,7 @@ func (h *RequestHandler) GetBannerRequests(c *fiber.Ctx) error {
 		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, fiber.Map{
-		"data":     requests,
+	return PaginatedOK(c, requests, fiber.Map{
 		"total":    total,
 		"page":     page,
 		"per_page": perPage,

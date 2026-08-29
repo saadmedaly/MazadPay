@@ -165,12 +165,31 @@ type fakeRequestService struct {
 	createCalled   bool
 	createErr      error
 	receivedUserID uuid.UUID
+
+	auctionRequestsResult []models.AuctionRequest
+	auctionRequestsTotal  int
+	auctionRequestsErr    error
+
+	bannerRequestsResult []models.BannerRequest
+	bannerRequestsTotal  int
+	bannerRequestsErr    error
 }
 
 func (f *fakeRequestService) CreateAuctionRequest(ctx context.Context, req *models.AuctionRequest) error {
 	f.createCalled = true
 	f.receivedUserID = req.UserID
 	return f.createErr
+}
+
+// auctionRequestsResult and bannerRequestsResult let a test control exactly what
+// GetAuctionRequests/GetBannerRequests return, for the response-contract regression
+// tests below.
+func (f *fakeRequestService) GetAuctionRequests(ctx context.Context, status string, userID *uuid.UUID, dateFrom, dateTo *time.Time, categoryID, locationID *int, minPrice, maxPrice *float64, sortBy, sortOrder string, page, perPage int) ([]models.AuctionRequest, int, error) {
+	return f.auctionRequestsResult, f.auctionRequestsTotal, f.auctionRequestsErr
+}
+
+func (f *fakeRequestService) GetBannerRequests(ctx context.Context, status string, userID *uuid.UUID, dateFrom, dateTo *time.Time, sortBy, sortOrder string, page, perPage int) ([]models.BannerRequest, int, error) {
+	return f.bannerRequestsResult, f.bannerRequestsTotal, f.bannerRequestsErr
 }
 
 // TestCreateAuctionRequest_HTTP_NoLongerReturns500OnDecimalFields is the HTTP-level
@@ -525,5 +544,156 @@ func TestCreateAuctionRequest_UserID_F_TrustedUserIDNeverNilWhenAuthenticated(t 
 	}
 	if fakeSvc.receivedUserID == uuid.Nil {
 		t.Fatal("SECURITY REGRESSION: the UserID reaching the service layer for an authenticated request is uuid.Nil")
+	}
+}
+
+// TestGetAuctionRequests_ResponseContract is the regression test for the Staging
+// crash "Uncaught TypeError: H?.filter is not a function" on the Admin /requests
+// page. Root cause: GetAuctionRequests used to call OK(c, fiber.Map{"data": requests,
+// "total": total, ...}), which double-wrapped the array one level too deep
+// ({"success":true,"data":{"data":[...], "total":...}}) versus what the frontend
+// expected ({"success":true,"data":[...], "meta":{...}}). This test asserts the wire
+// JSON shape directly: top-level "data" must be the array itself, pagination fields
+// must live under "meta", and no nested "data.data" must exist.
+func TestGetAuctionRequests_ResponseContract(t *testing.T) {
+	fakeSvc := &fakeRequestService{
+		auctionRequestsResult: []models.AuctionRequest{
+			{ID: uuid.New(), CategoryID: 4, TitleAr: "طلب اختبار"},
+		},
+		auctionRequestsTotal: 1,
+	}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	app.Get("/v1/api/admin/requests/auctions", h.GetAuctionRequests)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/api/admin/requests/auctions?page=1&per_page=20", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatalf("failed to parse response JSON: %v, body: %s", err, body)
+	}
+
+	if success, ok := parsed["success"].(bool); !ok || !success {
+		t.Fatalf(`expected top-level "success": true, got: %v`, parsed["success"])
+	}
+
+	dataField, ok := parsed["data"]
+	if !ok {
+		t.Fatal(`expected top-level "data" field, none found`)
+	}
+	dataArray, ok := dataField.([]interface{})
+	if !ok {
+		t.Fatalf(`expected top-level "data" to be a JSON array (matching frontend AuctionRequest[]), got %T: %v`, dataField, dataField)
+	}
+	if len(dataArray) != 1 {
+		t.Fatalf("expected 1 item in data array, got %d", len(dataArray))
+	}
+
+	// The exact bug: data must NOT itself contain a nested "data" key.
+	if dataObj, ok := dataArray[0].(map[string]interface{}); ok {
+		if _, hasNestedData := dataObj["data"]; hasNestedData {
+			t.Fatal(`REGRESSION: response "data" array element unexpectedly contains a nested "data" key -- double-wrapping bug is back`)
+		}
+	}
+
+	meta, ok := parsed["meta"].(map[string]interface{})
+	if !ok {
+		t.Fatalf(`expected top-level "meta" object with pagination fields, got: %v`, parsed["meta"])
+	}
+	if total, ok := meta["total"].(float64); !ok || int(total) != 1 {
+		t.Fatalf(`expected meta.total == 1, got: %v`, meta["total"])
+	}
+	if _, ok := meta["page"]; !ok {
+		t.Fatal(`expected meta.page to be present`)
+	}
+	if _, ok := meta["per_page"]; !ok {
+		t.Fatal(`expected meta.per_page to be present`)
+	}
+
+	// Confirm no top-level "total"/"page"/"per_page" leaked outside meta (the old,
+	// pre-fix shape put them alongside "data" instead of inside "meta").
+	for _, leaked := range []string{"total", "page", "per_page"} {
+		if _, exists := parsed[leaked]; exists {
+			t.Fatalf(`REGRESSION: top-level %q found outside "meta" -- old response shape is back`, leaked)
+		}
+	}
+}
+
+// TestGetBannerRequests_ResponseContract is the identical regression test for
+// GET /v1/api/admin/requests/banners, which had the same double-wrapping bug.
+func TestGetBannerRequests_ResponseContract(t *testing.T) {
+	fakeSvc := &fakeRequestService{
+		bannerRequestsResult: []models.BannerRequest{
+			{ID: uuid.New(), TitleAr: "بانر اختبار"},
+		},
+		bannerRequestsTotal: 1,
+	}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	app.Get("/v1/api/admin/requests/banners", h.GetBannerRequests)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/api/admin/requests/banners?page=1&per_page=20", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatalf("failed to parse response JSON: %v, body: %s", err, body)
+	}
+
+	dataField, ok := parsed["data"]
+	if !ok {
+		t.Fatal(`expected top-level "data" field, none found`)
+	}
+	dataArray, ok := dataField.([]interface{})
+	if !ok {
+		t.Fatalf(`expected top-level "data" to be a JSON array (matching frontend BannerRequest[]), got %T: %v`, dataField, dataField)
+	}
+	if len(dataArray) != 1 {
+		t.Fatalf("expected 1 item in data array, got %d", len(dataArray))
+	}
+
+	meta, ok := parsed["meta"].(map[string]interface{})
+	if !ok {
+		t.Fatalf(`expected top-level "meta" object with pagination fields, got: %v`, parsed["meta"])
+	}
+	if total, ok := meta["total"].(float64); !ok || int(total) != 1 {
+		t.Fatalf(`expected meta.total == 1, got: %v`, meta["total"])
+	}
+
+	for _, leaked := range []string{"total", "page", "per_page"} {
+		if _, exists := parsed[leaked]; exists {
+			t.Fatalf(`REGRESSION: top-level %q found outside "meta" -- old response shape is back`, leaked)
+		}
 	}
 }

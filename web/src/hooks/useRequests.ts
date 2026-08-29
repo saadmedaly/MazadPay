@@ -97,7 +97,11 @@ export const useAuctionRequests = (
   return useQuery({
     queryKey: ['auction-requests', filters, page, perPage],
     queryFn: async () => {
-      const response = await client.get<{ data: AuctionRequest[]; total: number; page: number; per_page: number }>('/v1/api/admin/requests/auctions', {
+      const response = await client.get<{
+        success: boolean
+        data: AuctionRequest[]
+        meta: { total: number; page: number; per_page: number }
+      }>('/v1/api/admin/requests/auctions', {
         params: {
           ...filters,
           page,
@@ -106,10 +110,10 @@ export const useAuctionRequests = (
       })
 
       return {
-        data: response.data.data || [],
-        total: response.data.total,
-        page: response.data.page,
-        perPage: response.data.per_page
+        data: response.data.data,
+        total: response.data.meta.total,
+        page: response.data.meta.page,
+        perPage: response.data.meta.per_page
       }
     }
   })
@@ -185,14 +189,18 @@ export const useBannerRequests = (status: string = '', page: number = 1, perPage
   return useQuery({
     queryKey: ['banner-requests', status, page, perPage],
     queryFn: async () => {
-      const response = await client.get<{ data: BannerRequest[]; total: number; page: number; per_page: number }>('/v1/api/admin/requests/banners', {
+      const response = await client.get<{
+        success: boolean
+        data: BannerRequest[]
+        meta: { total: number; page: number; per_page: number }
+      }>('/v1/api/admin/requests/banners', {
         params: { status, page, per_page: perPage }
       })
       return {
-        data: response.data.data || [],
-        total: response.data.total,
-        page: response.data.page,
-        perPage: response.data.per_page
+        data: response.data.data,
+        total: response.data.meta.total,
+        page: response.data.meta.page,
+        perPage: response.data.meta.per_page
       }
     }
   })
