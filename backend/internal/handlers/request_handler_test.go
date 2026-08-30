@@ -173,12 +173,33 @@ type fakeRequestService struct {
 	bannerRequestsResult []models.BannerRequest
 	bannerRequestsTotal  int
 	bannerRequestsErr    error
+
+	updateCalled         bool
+	updateErr            error
+	updateReceivedUserID uuid.UUID
+
+	adminUpdateCalled bool
+	adminUpdateErr    error
 }
 
 func (f *fakeRequestService) CreateAuctionRequest(ctx context.Context, req *models.AuctionRequest) error {
 	f.createCalled = true
 	f.receivedUserID = req.UserID
 	return f.createErr
+}
+
+// UpdateAuctionRequest/AdminUpdateAuctionRequest let a test observe exactly which
+// userID parameter reaches the service layer (for UpdateAuctionRequest's
+// user-id-spoofing regression tests below) and control whether the call succeeds.
+func (f *fakeRequestService) UpdateAuctionRequest(ctx context.Context, id uuid.UUID, userID uuid.UUID, updates *models.AuctionRequest) error {
+	f.updateCalled = true
+	f.updateReceivedUserID = userID
+	return f.updateErr
+}
+
+func (f *fakeRequestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest) error {
+	f.adminUpdateCalled = true
+	return f.adminUpdateErr
 }
 
 // auctionRequestsResult and bannerRequestsResult let a test control exactly what
@@ -637,6 +658,201 @@ func TestGetAuctionRequests_ResponseContract(t *testing.T) {
 
 // TestGetBannerRequests_ResponseContract is the identical regression test for
 // GET /v1/api/admin/requests/banners, which had the same double-wrapping bug.
+func TestUpdateAuctionRequest_A_ValidPayloadWithoutUserIDSucceeds(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Put("/v1/api/requests/auctions/:id", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.UpdateAuctionRequest(c)
+	})
+
+	payload := mustMarshal(t, validAuctionRequestBody())
+	req := httptest.NewRequest(http.MethodPut, "/v1/api/requests/auctions/"+uuid.New().String(), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200 for a valid payload without user_id, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if !fakeSvc.updateCalled {
+		t.Fatal("expected the request to reach the service layer, but it did not")
+	}
+	if fakeSvc.updateReceivedUserID != userID {
+		t.Fatalf("expected service to receive the authenticated user id %s, got %s", userID, fakeSvc.updateReceivedUserID)
+	}
+}
+
+func TestUpdateAuctionRequest_B_JWTOverridesSpoofedBodyUserID(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	authenticatedUserID := uuid.New()
+	spoofedUserID := uuid.New()
+	app.Put("/v1/api/requests/auctions/:id", func(c *fiber.Ctx) error {
+		c.Locals("user_id", authenticatedUserID)
+		return h.UpdateAuctionRequest(c)
+	})
+
+	body := validAuctionRequestBody()
+	body["user_id"] = spoofedUserID.String()
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPut, "/v1/api/requests/auctions/"+uuid.New().String(), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if !fakeSvc.updateCalled {
+		t.Fatal("expected the request to reach the service layer, but it did not")
+	}
+	if fakeSvc.updateReceivedUserID != authenticatedUserID {
+		t.Fatalf("SECURITY REGRESSION: service received user_id %s, expected the authenticated user %s (spoofed body value %s must be ignored)",
+			fakeSvc.updateReceivedUserID, authenticatedUserID, spoofedUserID)
+	}
+}
+
+func TestUpdateAuctionRequest_C_UnauthenticatedRequestRejected(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	app.Put("/v1/api/requests/auctions/:id", func(c *fiber.Ctx) error {
+		return h.UpdateAuctionRequest(c)
+	})
+
+	payload := mustMarshal(t, validAuctionRequestBody())
+	req := httptest.NewRequest(http.MethodPut, "/v1/api/requests/auctions/"+uuid.New().String(), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 401 for an unauthenticated request, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if fakeSvc.updateCalled {
+		t.Fatal("expected an unauthenticated request to never reach the service layer, but the service was called")
+	}
+}
+
+func TestUpdateAuctionRequest_D_InvalidDecimalPricesStillRejected(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Put("/v1/api/requests/auctions/:id", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.UpdateAuctionRequest(c)
+	})
+
+	body := validAuctionRequestBody()
+	body["start_price"] = -5
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPut, "/v1/api/requests/auctions/"+uuid.New().String(), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 400 for a negative start_price, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if fakeSvc.updateCalled {
+		t.Fatal("expected an invalid price to be rejected before reaching the service layer, but the service was called")
+	}
+}
+
+func TestUpdateAuctionRequest_E_RejectedRequestReshapeSucceedsWithoutClientUserID(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Put("/v1/api/requests/auctions/:id", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.UpdateAuctionRequest(c)
+	})
+
+	body := validAuctionRequestBody()
+	body["description_ar"] = "Updated description for resubmit verification testing purposes only"
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPut, "/v1/api/requests/auctions/"+uuid.New().String(), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200 for a valid resubmit-shaped update, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if !fakeSvc.updateCalled {
+		t.Fatal("expected the request to reach the service layer, but it did not")
+	}
+}
+
+func TestAdminUpdateAuctionRequest_ValidPayloadWithoutUserIDSucceeds(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	adminID := uuid.New()
+	app.Put("/v1/api/admin/requests/auctions/:id", func(c *fiber.Ctx) error {
+		c.Locals("user_id", adminID)
+		return h.AdminUpdateAuctionRequest(c)
+	})
+
+	payload := mustMarshal(t, validAuctionRequestBody())
+	req := httptest.NewRequest(http.MethodPut, "/v1/api/admin/requests/auctions/"+uuid.New().String(), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if !fakeSvc.adminUpdateCalled {
+		t.Fatal("expected the request to reach the service layer, but it did not")
+	}
+}
+
 func TestGetBannerRequests_ResponseContract(t *testing.T) {
 	fakeSvc := &fakeRequestService{
 		bannerRequestsResult: []models.BannerRequest{
