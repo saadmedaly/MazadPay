@@ -585,7 +585,7 @@ export function KYCPage() {
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full bg-surface-bg border border-surface-border rounded-xl p-3 text-xs text-white focus:outline-none focus:border-mazad-primary min-h-[100px]"
+                className="w-full bg-surface-border border border-surface-border rounded-xl p-3 text-xs text-white placeholder:text-surface-muted focus:outline-none focus:border-mazad-primary min-h-[100px]"
                 placeholder={reviewTarget?.status === 'approved' ? 'مثال: تم التحقق من البيانات' : 'مثال: البيانات غير كافية...'}
               />
               {reviewTarget?.status === 'rejected' && !notes.trim() && (
@@ -650,7 +650,7 @@ export function KYCPage() {
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full bg-surface-bg border border-surface-border rounded-xl p-3 text-xs text-white focus:outline-none focus:border-mazad-primary min-h-[100px]"
+                  className="w-full bg-surface-border border border-surface-border rounded-xl p-3 text-xs text-white placeholder:text-surface-muted focus:outline-none focus:border-mazad-primary min-h-[100px]"
                   placeholder={bulkAction === 'approve' ? 'مثال: تم التحقق من البيانات' : 'مثال: البيانات غير كافية...'}
                 />
                 {bulkAction === 'reject' && !notes.trim() && (
