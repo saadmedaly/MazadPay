@@ -273,6 +273,14 @@ func (h *RequestHandler) UpdateAuctionRequest(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+
+	// UserID is always the authenticated caller, never client-supplied -- assigned
+	// before validation so any user_id present in the body is unconditionally
+	// discarded. Not used for ownership here (svc.UpdateAuctionRequest checks
+	// ownership against the userID parameter below, not req.UserID), but keeping it
+	// trusted-only avoids relying on the client to satisfy the required tag.
+	req.UserID = userID
+
 	if err := h.validate.Struct(req); err != nil {
 		return BadRequest(c, err.Error())
 	}
@@ -291,10 +299,22 @@ func (h *RequestHandler) AdminUpdateAuctionRequest(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request ID")
 	}
 
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
 	var req models.AuctionRequest
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+
+	// UserID is never read for ownership here (AdminUpdateAuctionRequest bypasses
+	// ownership by design, and applyAuctionRequestUpdates never copies UserID) --
+	// assigned only to satisfy the required validation tag without trusting body
+	// input, same reasoning as UpdateAuctionRequest above.
+	req.UserID = adminID
+
 	if err := h.validate.Struct(req); err != nil {
 		return BadRequest(c, err.Error())
 	}
