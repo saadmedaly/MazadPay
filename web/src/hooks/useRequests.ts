@@ -238,8 +238,8 @@ export const useAuctionRequestByID = (id: string | null) => {
     queryKey: ['auction-request', id],
     queryFn: async () => {
       if (!id) return null
-      const response = await client.get<AuctionRequest>(`/v1/api/admin/requests/auctions/${id}`)
-      return response.data
+      const response = await client.get<{ success: boolean; data: AuctionRequest }>(`/v1/api/admin/requests/auctions/${id}`)
+      return response.data.data
     },
     enabled: !!id
   })
@@ -250,8 +250,8 @@ export const useBannerRequestByID = (id: string | null) => {
     queryKey: ['banner-request', id],
     queryFn: async () => {
       if (!id) return null
-      const response = await client.get<BannerRequest>(`/v1/api/admin/requests/banners/${id}`)
-      return response.data
+      const response = await client.get<{ success: boolean; data: BannerRequest }>(`/v1/api/admin/requests/banners/${id}`)
+      return response.data.data
     },
     enabled: !!id
   })
