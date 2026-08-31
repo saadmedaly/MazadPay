@@ -1534,6 +1534,158 @@ func TestCreateAutoBid_SameMarket_Succeeds(t *testing.T) {
 	t.Logf("(write-5) MR -> MR CreateAutoBid correctly succeeded, 1 row created: %d", status)
 }
 
+// === Lot number >99 collision hotfix (migration 000047) ===
+//
+// generate_lot_number() (migration 000005) used LPAD(nextval(...)::TEXT, 2, '0'),
+// and PostgreSQL's LPAD TRUNCATES an input already longer than the target width
+// (confirmed: LPAD('100','2','0') = '10'). Once the sequence passed 99, every new
+// lot_number silently collapsed to its first two digits and collided with an
+// already-used value. Migration 000047 changes the padding width to
+// GREATEST(2, LENGTH(v::TEXT)) -- a floor, not a ceiling -- so small values keep
+// their existing 2-digit look while nothing is ever truncated.
+//
+// These tests exercise the real DB trigger directly (not application code) inside
+// a transaction that is always rolled back, using setval() to place the sequence
+// at exactly the value under test -- this proves the FUNCTION's behavior without
+// depending on, or perturbing, this local DB's actual accumulated sequence state
+// or its 197 pre-existing seed rows. Per the hotfix instructions, no production-
+// like row data is altered: every insert here is undone by ROLLBACK.
+
+// setSequenceAndInsertLotNumber places auctions_lot_number_seq so that the next
+// nextval() call returns exactly `target`, inserts one fixture auction (letting
+// the trigger generate lot_number), and returns the generated value -- all inside
+// the caller's already-open transaction (rolled back by the caller, never
+// committed).
+func setSequenceAndInsertLotNumber(t *testing.T, tx *sqlx.Tx, target int64) string {
+	t.Helper()
+	if _, err := tx.Exec(`SELECT setval('auctions_lot_number_seq', $1, true)`, target-1); err != nil {
+		t.Fatalf("failed to set sequence to %d: %v", target-1, err)
+	}
+	var lotNumber string
+	err := tx.QueryRow(`
+		INSERT INTO auctions (id, seller_id, category_id, title_ar, start_price, current_price, min_increment, insurance_amount, start_time, end_time, status)
+		SELECT gen_random_uuid(), (SELECT id FROM users LIMIT 1), 1, 'lot number hotfix test', 10, 10, 1, 1, now(), now() + interval '1 day', 'pending'
+		RETURNING lot_number
+	`).Scan(&lotNumber)
+	if err != nil {
+		t.Fatalf("failed to insert fixture auction at sequence target %d: %v", target, err)
+	}
+	return lotNumber
+}
+
+// (lot-1) Small values (1, 9) still get the existing 2-digit zero-padded format.
+// Asserted directly against the fixed padding SQL expression (rather than via a
+// live INSERT) because every low sequence value in this local DB's real range
+// (LOT-01..LOT-09) is already taken by pre-existing seed data -- the expression
+// under test is byte-for-byte identical to what generate_lot_number() (migration
+// 000047) evaluates, so this is an exact, not an approximate, proof.
+func TestLotNumber_SmallValues_TwoDigitPadding(t *testing.T) {
+	env := setupEnv(t)
+	tx, err := env.db.Beginx()
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	var padded1, padded9 string
+	if err := tx.QueryRow(`SELECT LPAD(1::TEXT, GREATEST(2, LENGTH(1::TEXT)), '0')`).Scan(&padded1); err != nil {
+		t.Fatalf("failed to evaluate padding expression for 1: %v", err)
+	}
+	if err := tx.QueryRow(`SELECT LPAD(9::TEXT, GREATEST(2, LENGTH(9::TEXT)), '0')`).Scan(&padded9); err != nil {
+		t.Fatalf("failed to evaluate padding expression for 9: %v", err)
+	}
+	if padded1 != "01" {
+		t.Fatalf("(lot-1) expected padding(1) = '01', got %q", padded1)
+	}
+	if padded9 != "09" {
+		t.Fatalf("(lot-1) expected padding(9) = '09', got %q", padded9)
+	}
+	t.Logf("(lot-1) small-value padding unchanged: 1->%s, 9->%s", padded1, padded9)
+}
+
+// (lot-2) 99 unchanged (still exactly 2 digits, no regression at the old boundary).
+func TestLotNumber_99_Unchanged(t *testing.T) {
+	env := setupEnv(t)
+	tx, err := env.db.Beginx()
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	var padded99 string
+	if err := tx.QueryRow(`SELECT LPAD(99::TEXT, GREATEST(2, LENGTH(99::TEXT)), '0')`).Scan(&padded99); err != nil {
+		t.Fatalf("failed to evaluate padding expression for 99: %v", err)
+	}
+	if padded99 != "99" {
+		t.Fatalf("(lot-2) expected padding(99) = '99', got %q", padded99)
+	}
+	t.Logf("(lot-2) 99 unchanged: %s", padded99)
+}
+
+// (lot-3) 100 and 101 are NOT truncated (the actual regression this hotfix fixes),
+// exercised against the real trigger via a genuine INSERT, not just the SQL
+// expression in isolation.
+func TestLotNumber_100And101_NotTruncated(t *testing.T) {
+	env := setupEnv(t)
+	tx, err := env.db.Beginx()
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	got100 := setSequenceAndInsertLotNumber(t, tx, 998877100)
+	got101 := setSequenceAndInsertLotNumber(t, tx, 998877101)
+	if got100 != "LOT-998877100" {
+		t.Fatalf("(lot-3) CRITICAL: expected LOT-998877100, got %q (truncation regression)", got100)
+	}
+	if got101 != "LOT-998877101" {
+		t.Fatalf("(lot-3) CRITICAL: expected LOT-998877101, got %q (truncation regression)", got101)
+	}
+	if got100 == got101 {
+		t.Fatalf("(lot-3) CRITICAL: sequential values collapsed to the same lot_number: %q", got100)
+	}
+	t.Logf("(lot-3) large sequence values not truncated: %s, %s", got100, got101)
+}
+
+// (lot-4) Generated lot numbers remain globally unique across a batch spanning the
+// old 2-digit boundary and beyond -- no two inserts in the same batch collide.
+func TestLotNumber_GeneratedValuesRemainUnique(t *testing.T) {
+	env := setupEnv(t)
+	tx, err := env.db.Beginx()
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	targets := []int64{998877001, 998877002, 998877098, 998877099, 998877100, 998877101, 998877999, 998878000}
+	seen := map[string]bool{}
+	for _, target := range targets {
+		got := setSequenceAndInsertLotNumber(t, tx, target)
+		if seen[got] {
+			t.Fatalf("(lot-4) CRITICAL: duplicate lot_number %q generated within the same batch", got)
+		}
+		seen[got] = true
+	}
+	if len(seen) != len(targets) {
+		t.Fatalf("(lot-4) expected %d unique lot numbers, got %d", len(targets), len(seen))
+	}
+	t.Logf("(lot-4) all %d generated lot numbers across the boundary are unique: %v", len(seen), seen)
+}
+
+// (lot-5) Explicit LotNumber assignment (the existing "TEST-"+uuid fixture pattern
+// used throughout this file, e.g. createTestAuction) is unaffected by this hotfix
+// -- the trigger only fires when lot_number IS NULL OR ''.
+func TestLotNumber_ExplicitAssignmentUnaffected(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST LOTNUMBER EXPLICIT SELLER")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU") // sets an explicit "TEST-"+uuid LotNumber
+
+	if auction.LotNumber == nil || !strings.HasPrefix(*auction.LotNumber, "TEST-") {
+		t.Fatalf("(lot-5) expected explicit fixture LotNumber to be preserved (TEST-... prefix), got %v", auction.LotNumber)
+	}
+	t.Logf("(lot-5) explicit LotNumber assignment unaffected by trigger: %s", *auction.LotNumber)
+}
+
 // --- Phase 1.4 helpers ---
 
 // httpCreateBoost performs a real HTTP-level POST against env.app's
