@@ -33,6 +33,14 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   bool _isLoading = true;
   String? _selectedCategoryId;
 
+  // Active/Ended status filter tabs (client feedback A12, restored after
+  // they disappeared). The backend's auction list endpoint already supports
+  // a `status` query param (repository.AuctionFilters.Status, used directly
+  // by AuctionRepo.ListPaginated), so this drives a real server-side filter
+  // via _auctionApi.getAuctions(status: ...) rather than a client-only
+  // approximation.
+  String _statusFilter = 'active'; // 'active' | 'ended'
+
   // Pagination variables
   int _currentPage = 1;
   bool _hasMoreData = true;
@@ -176,7 +184,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       final response = await _auctionApi.getAuctions(
         page: _currentPage,
         limit: 20,
-        status: 'active',
+        status: _statusFilter,
         categoryId: _selectedCategoryId,
         minPrice: _minPrice > 0 ? _minPrice.toInt() : null,
         maxPrice: _maxPrice < 1000000 ? _maxPrice.toInt() : null,
@@ -200,9 +208,14 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
             totalCount = responseData['total'] ?? responseData['count'];
           }
 
+          // Extra client-side end_time safety net only applies to the
+          // "active" tab -- for "ended" it would incorrectly filter out
+          // every result, since those auctions' end_time is in the past by
+          // definition.
           final newAuctions = auctionList
               .map((item) => item as Map<String, dynamic>)
               .where((a) {
+                if (_statusFilter != 'active') return true;
                 final endTimeStr = a['end_time']?.toString();
                 if (endTimeStr == null) return true;
                 final endTime = DateTime.tryParse(endTimeStr);
@@ -545,6 +558,64 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     );
   }
 
+  Widget _buildStatusTab(
+    BuildContext context,
+    bool isDarkMode, {
+    required String value,
+    required String label,
+  }) {
+    final isSelected = _statusFilter == value;
+    return GestureDetector(
+      onTap: () {
+        if (_statusFilter == value) return;
+        setState(() => _statusFilter = value);
+        _loadAuctions();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: isSelected ? primaryBlue : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              color: isSelected
+                  ? Colors.white
+                  : (isDarkMode ? Colors.white70 : Colors.black87),
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getStatusTabLabel(BuildContext context, {required bool active}) {
+    final locale = Localizations.localeOf(context).languageCode;
+    if (active) {
+      switch (locale) {
+        case 'fr':
+          return 'Actives';
+        case 'en':
+          return 'Active';
+        default:
+          return 'مزايدات نشطة';
+      }
+    }
+    switch (locale) {
+      case 'fr':
+        return 'Terminées';
+      case 'en':
+        return 'Ended';
+      default:
+        return 'مزايدات منتهية';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -761,6 +832,39 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                         ),
                       ),
                     ],
+                  ),
+                ),
+
+                // Active / Ended status filter tabs (client feedback A12)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 4.0),
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: primaryBlue.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatusTab(
+                            context,
+                            isDarkMode,
+                            value: 'active',
+                            label: _getStatusTabLabel(context, active: true),
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildStatusTab(
+                            context,
+                            isDarkMode,
+                            value: 'ended',
+                            label: _getStatusTabLabel(context, active: false),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 

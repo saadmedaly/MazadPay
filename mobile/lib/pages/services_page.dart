@@ -1,6 +1,5 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:mezadpay/pages/delivery_details_page.dart';
 
 class ServicesPage extends StatelessWidget {
   const ServicesPage({super.key});
@@ -76,12 +75,10 @@ class ServicesPage extends StatelessWidget {
                 return _buildServiceCard(
                   context,
                   svc,
-                  onTap: svc.title == 'توصيل'
-                      ? () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const DeliveryDetailsPage()),
-                          )
-                      : null,
+                  // "Delivery Details" page removed from user flow (client
+                  // feedback A5) -- no other flow referenced it, so it was
+                  // safe to delete entirely along with this navigation entry.
+                  onTap: null,
                 );
               },
             ),

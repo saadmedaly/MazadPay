@@ -206,6 +206,9 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "insurance_not_set":
 		logger.Warn("Bid rejected: auction has no insurance_amount set", logFields...)
 		return Fail(c, 422, "insurance_not_set", "لا يمكن المزايدة على هذا المزاد لأن مبلغ التأمين غير محدد")
+	case "request_insurance_not_set":
+		logger.Warn("Request approval rejected: insurance_amount not set by admin", logFields...)
+		return Fail(c, 422, "request_insurance_not_set", "يجب تحديد مبلغ التأمين قبل الموافقة على الطلب")
 	case "insufficient_for_insurance":
 		logger.Info("Bid rejected: balance below insurance_amount", logFields...)
 		return Fail(c, 422, "insufficient_for_insurance", "رصيدك غير كافٍ لتغطية مبلغ التأمين")

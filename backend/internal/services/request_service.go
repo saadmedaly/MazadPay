@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/microcosm-cc/bluemonday"
@@ -129,6 +130,16 @@ func (s *requestService) CreateAuctionRequest(ctx context.Context, req *models.A
 		return err
 	}
 
+	// Client feedback A7 : insurance_amount n'est plus un champ du formulaire
+	// utilisateur (seul le staff/admin le définit pendant la revue, via
+	// AdminUpdateAuctionRequest). Écrasé à zéro ici, sans exception, pour qu'un
+	// appelant qui enverrait tout de même insurance_amount dans le corps JSON
+	// (intentionnellement ou via un client obsolète) ne puisse jamais le fixer de
+	// façon autoritaire -- même politique que MarketCountryISO/CurrencyCode
+	// ci-dessus. ReviewAuctionRequest refuse ensuite toute approbation tant qu'un
+	// admin n'a pas explicitement défini une valeur > 0.
+	req.InsuranceAmount = decimal.Zero
+
 	sanitizeDescriptions(req)
 
 	if err := s.repo.CreateAuctionRequest(ctx, req); err != nil {
@@ -207,6 +218,18 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 	// "pending".
 	if req.Status != "pending" {
 		return ErrRequestAlreadyReviewed
+	}
+
+	// Client feedback A7 follow-up : le formulaire utilisateur ne collecte plus
+	// insurance_amount (l'utilisateur ne doit jamais le définir de façon autoritaire --
+	// seul le staff/admin le fait pendant la revue, via AdminUpdateAuctionRequest).
+	// Sans cette garde, approuver une demande dont insurance_amount est resté à sa
+	// valeur zéro par défaut créerait un auction "active" sur lequel bid_service.go
+	// (ErrInsuranceNotSet, audit V03) bloquerait ensuite TOUS les enchérisseurs --
+	// un auction publié mais structurellement inutilisable. Vérifié ici,
+	// indépendamment de toute validation frontend admin, avant de créer l'auction.
+	if status == "approved" && !req.InsuranceAmount.GreaterThan(decimal.Zero) {
+		return apperr.ErrRequestInsuranceNotSet
 	}
 
 	// Begin transaction
@@ -324,6 +347,13 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 // utilisé par UpdateAuctionRequest et AdminUpdateAuctionRequest pour ne jamais laisser
 // l'appelant écraser des champs de gouvernance (user_id, id, timestamps, review fields)
 // directement.
+// applyAuctionRequestUpdates deliberately does NOT copy InsuranceAmount --
+// client feedback A7: the user must never be able to authoritatively set
+// insurance (whether creating or editing/resubmitting a request), only the
+// admin can, via AdminUpdateAuctionRequest, which applies it separately below
+// after this shared helper runs. This keeps UpdateAuctionRequest (the
+// owner-only edit/resubmit path) safe from a malicious/stale payload
+// regardless of what insurance_amount value it contains.
 func applyAuctionRequestUpdates(existing, updates *models.AuctionRequest) {
 	existing.CategoryID = updates.CategoryID
 	existing.LocationID = updates.LocationID
@@ -335,7 +365,6 @@ func applyAuctionRequestUpdates(existing, updates *models.AuctionRequest) {
 	existing.DescriptionEn = updates.DescriptionEn
 	existing.StartPrice = updates.StartPrice
 	existing.MinIncrement = updates.MinIncrement
-	existing.InsuranceAmount = updates.InsuranceAmount
 	existing.ReservePrice = updates.ReservePrice
 	existing.BuyNowPrice = updates.BuyNowPrice
 	existing.StartDate = updates.StartDate
@@ -407,6 +436,11 @@ func (s *requestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.
 	// UpdateAuctionRequest. Le statut lui-même n'est pas modifié ici : ReviewAuctionRequest
 	// reste le seul chemin pour approuver/rejeter.
 	applyAuctionRequestUpdates(existing, updates)
+	// Client feedback A7 : contrairement à applyAuctionRequestUpdates (partagée avec le
+	// chemin utilisateur, qui ne touche jamais insurance_amount), l'admin EST autorisé à
+	// définir le montant de l'assurance ici -- c'est le seul chemin légitime pour le
+	// faire avant que ReviewAuctionRequest n'exige une valeur > 0 pour approuver.
+	existing.InsuranceAmount = updates.InsuranceAmount
 	sanitizeDescriptions(existing)
 
 	return s.repo.UpdateAuctionRequest(ctx, existing)

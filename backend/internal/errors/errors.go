@@ -41,6 +41,18 @@ var (
 	ErrSelfBid                = errors.New("cannot_bid_own_auction")
 	ErrInsuranceNotSet        = errors.New("insurance_not_set")        // audit V03 : insurance_amount <= 0
 	ErrInsufficientForInsurance = errors.New("insufficient_for_insurance") // audit V03 : balance < insurance_amount
+	// ErrRequestInsuranceNotSet (client feedback A7 follow-up): distinct from
+	// ErrInsuranceNotSet above (which fires at bid time) -- this fires at
+	// REQUEST-APPROVAL time. The user-facing create/request form no longer
+	// collects insurance_amount (client requirement: staff/admin decides it
+	// during review, never the user) -- so a request approved without an
+	// admin having first set a valid insurance_amount via
+	// AdminUpdateAuctionRequest would otherwise create a live "active"
+	// auction that ErrInsuranceNotSet then blocks EVERY bidder from, with no
+	// way for the seller/admin to notice until a bidder complains. Caught
+	// earlier, at approval time, with a distinct code so the admin UI can
+	// show the right message at the right step.
+	ErrRequestInsuranceNotSet = errors.New("request_insurance_not_set")
 	// ErrCrossMarketBid (migration 000046, country-scoped currency V1) : le
 	// bidder et l'auction n'appartiennent pas au même marché (account_country_iso
 	// != market_country_iso). Vérifié par COUNTRY, jamais par égalité de devise

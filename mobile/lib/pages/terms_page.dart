@@ -235,9 +235,6 @@ class _TermsPageState extends State<TermsPage> {
       _bulletPoint(
         AppLocalizations.of(context)!.text_341,
       ),
-      _bulletPoint(
-        AppLocalizations.of(context)!.text_342,
-      ),
     ];
   }
 

@@ -1,5 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:mezadpay/pages/create_ad_start_page.dart';
@@ -84,6 +86,33 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   bool _isLoadingBanners = true;
 
+  // ── Banner carousel (client feedback A2): auto-advance every 5s, loop
+  // back to the first slide, while still allowing manual swipe via the
+  // existing PageView. Timer is created/cancelled alongside the banner
+  // list so it never fires with a stale slide count, and is always
+  // cancelled in dispose() to avoid leaking (and calling setState after
+  // unmount).
+  final PageController _bannerPageController = PageController();
+  Timer? _bannerTimer;
+  int _bannerPage = 0;
+
+  void _startBannerAutoScroll(int slideCount) {
+    _bannerTimer?.cancel();
+    if (slideCount <= 1) return;
+    _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted || !_bannerPageController.hasClients) {
+        timer.cancel();
+        return;
+      }
+      final nextPage = (_bannerPage + 1) % slideCount;
+      _bannerPageController.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
   final SponsorApi _sponsorApi = SponsorApi();
 
   List<Map<String, dynamic>> _sponsors = [];
@@ -118,6 +147,14 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     _checkFirstTimeLocation();
 
+  }
+
+  @override
+  void dispose() {
+    _bannerTimer?.cancel();
+    _bannerTimer = null;
+    _bannerPageController.dispose();
+    super.dispose();
   }
 
 
@@ -594,28 +631,30 @@ class _HomePageState extends ConsumerState<HomePage> {
           _banners = cachedBanners;
           _isLoadingBanners = false;
         });
+        _startBannerAutoScroll(_banners.isEmpty ? 1 : _banners.length);
       }
-      
+
       final response = await _bannerApi.getBanners();
-      
+
       if (response.success && response.data != null) {
         final List<dynamic> bannerList = response.data!;
         debugPrint('Loaded ${bannerList.length} banners');
-        
+
         final activeBanners = bannerList
             .map((item) => item as Map<String, dynamic>)
             .where((banner) => banner['is_active'] == true)
             .toList();
-            
+
         await CacheService.instance.cacheBanners(activeBanners);
-        
+
         debugPrint('Active banners: ${activeBanners.length}');
-        
+
         if (!mounted) return;
         setState(() {
           _banners = activeBanners;
           _isLoadingBanners = false;
         });
+        _startBannerAutoScroll(_banners.isEmpty ? 1 : _banners.length);
       } else {
         debugPrint('Failed to load banners: ${response.message}');
         if (_banners.isEmpty && mounted) {
@@ -1177,17 +1216,28 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
-              // Hero Banner (Announcement Carousel)
+              // Hero Banner (Announcement Carousel) — auto-advances every 5s
+              // and loops back to slide 0, while manual swipe still works via
+              // the same PageController (client feedback A2).
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: AspectRatio(
                   aspectRatio: 16 / 7,
-                  child: PageView(
-                    children: _isLoadingBanners
-                        ? [_buildBannerCard(isDarkMode)]
-                        : _banners.isEmpty
-                            ? [_buildBannerCard(isDarkMode)]
-                            : _banners.map((banner) => _buildDynamicBannerCard(banner, isDarkMode)).toList(),
+                  child: Builder(
+                    builder: (context) {
+                      final slides = _isLoadingBanners
+                          ? [_buildBannerCard(isDarkMode)]
+                          : _banners.isEmpty
+                              ? [_buildBannerCard(isDarkMode)]
+                              : _banners
+                                  .map((banner) => _buildDynamicBannerCard(banner, isDarkMode))
+                                  .toList();
+                      return PageView(
+                        controller: _bannerPageController,
+                        onPageChanged: (index) => _bannerPage = index,
+                        children: slides,
+                      );
+                    },
                   ),
                 ),
               ),

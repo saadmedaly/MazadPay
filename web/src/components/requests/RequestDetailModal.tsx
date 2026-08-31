@@ -42,7 +42,13 @@ export function RequestDetailModal({
 
   const getStatusBadge = (status: string) => <StatusBadge status={status} />
 
-  const renderAuctionDetails = (req: AuctionRequest) => (
+  const renderAuctionDetails = (req: AuctionRequest) => {
+    // Client feedback A7 follow-up: mirrors the backend's approval gate
+    // (ReviewAuctionRequest rejects with request_insurance_not_set when
+    // insurance_amount <= 0) so the admin sees the same rule here before
+    // clicking Approve, not just as a failed request afterward.
+    const hasInsurance = Number(req.insurance_amount) > 0
+    return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -122,7 +128,32 @@ export function RequestDetailModal({
           </div>
           <p className="text-lg font-bold text-orange-700">{formatPrice(req.min_increment, req.currency_code)}</p>
         </div>
+
+        {/* Client feedback A7 follow-up: insurance is staff/admin-only -- the
+            user-side form never collects it, so it must be visible here so the
+            admin can see/fix it (via "تعديل الطلب", which already carries the
+            field) before approving. Backend independently rejects approval
+            with insurance_amount <= 0 regardless of what's shown here. */}
+        <div className={`p-4 rounded-lg ${hasInsurance ? 'bg-teal-50' : 'bg-red-50 border border-red-200'}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <DollarSign className={`w-4 h-4 ${hasInsurance ? 'text-teal-600' : 'text-red-600'}`} />
+            <p className="text-sm text-gray-600">مبلغ التأمين</p>
+          </div>
+          <p className={`text-lg font-bold ${hasInsurance ? 'text-teal-700' : 'text-red-700'}`}>
+            {hasInsurance ? formatPrice(req.insurance_amount, req.currency_code) : 'غير محدد'}
+          </p>
+        </div>
       </div>
+
+      {!hasInsurance && req.status === 'pending' && (
+        <div className="bg-red-100 border border-red-200 p-4 rounded-lg flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-800 mt-0.5 shrink-0" />
+          <p className="text-sm text-red-800">
+            لم يتم تحديد مبلغ التأمين لهذا الطلب. يجب على الإدارة تحديد مبلغ تأمين صالح (أكبر من صفر) قبل الموافقة،
+            وإلا سيتم رفض الموافقة تلقائياً. استخدم زر "تعديل الطلب" لتحديد المبلغ.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-lg">
@@ -219,7 +250,8 @@ export function RequestDetailModal({
         )}
       </div>
     </div>
-  )
+    )
+  }
 
   const renderBannerDetails = (req: BannerRequest) => (
     <div className="space-y-6">
@@ -383,23 +415,49 @@ export function RequestDetailModal({
                 <TabsContent value="actions" className="mt-4">
                   <div className="space-y-4">
                     <p className="text-gray-600">اختر الإجراء المناسب لهذا الطلب:</p>
-                    <div className="flex gap-3">
-                      <Button
-                        onClick={() => onApprove?.(request.id)}
-                        className="bg-green-600 hover:bg-green-700 flex-1"
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        قبول الطلب
-                      </Button>
-                      <Button
-                        onClick={() => onReject?.(request.id)}
-                        variant="destructive"
-                        className="flex-1"
-                      >
-                        <XCircle className="w-4 h-4 mr-2" />
-                        رفض الطلب
-                      </Button>
-                    </div>
+                    {/* Client feedback A7 follow-up: block Approve client-side when
+                        insurance is missing on an auction request, mirroring the
+                        backend's ReviewAuctionRequest gate -- offer Edit instead so
+                        the admin can set it (AdminUpdateAuctionRequest) without a
+                        failed-approval round trip. Backend still enforces this
+                        independently either way. */}
+                    {type === 'auction' && !(Number((request as AuctionRequest).insurance_amount) > 0) ? (
+                      <div className="flex gap-3">
+                        <Button
+                          onClick={() => onEdit?.(request.id)}
+                          className="bg-blue-600 hover:bg-blue-700 flex-1"
+                        >
+                          <Pencil className="w-4 h-4 mr-2" />
+                          تحديد مبلغ التأمين وتعديل الطلب
+                        </Button>
+                        <Button
+                          onClick={() => onReject?.(request.id)}
+                          variant="destructive"
+                          className="flex-1"
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          رفض الطلب
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-3">
+                        <Button
+                          onClick={() => onApprove?.(request.id)}
+                          className="bg-green-600 hover:bg-green-700 flex-1"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          قبول الطلب
+                        </Button>
+                        <Button
+                          onClick={() => onReject?.(request.id)}
+                          variant="destructive"
+                          className="flex-1"
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          رفض الطلب
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
               )}

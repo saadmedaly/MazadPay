@@ -9,9 +9,9 @@ import '../models/bid.dart';
 import '../widgets/bid_action_sheet.dart';
 import '../widgets/auction_description_section.dart';
 import '../pages/auction_history_page.dart';
+import 'all_auctions_page.dart';
 import '../providers/favorites_provider.dart';
 import '../services/auction_api.dart';
-import 'home_page.dart';
 import '../services/bid_api.dart';
 import '../services/cache_service.dart';
 import '../services/auth_service.dart';
@@ -689,17 +689,28 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
+                    // Client feedback (countdown correction): the label/value
+                    // pairing here was previously shifted by one unit
+                    // (text_59 "Sec" shown under the days value, text_60
+                    // "Min" under hours, text_61 "Hour" under minutes) with
+                    // no seconds displayed at all despite _timeLeft already
+                    // being second-accurate. Fixed to the correct labels and
+                    // a real seconds column reusing the same Timer.periodic.
                     _buildTimerUnit(
-                      AppLocalizations.of(context)!.text_59,
+                      AppLocalizations.of(context)!.day,
                       _timeLeft.inDays.toString().padLeft(2, '0'),
                     ),
                     _buildTimerUnit(
-                      AppLocalizations.of(context)!.text_60,
+                      AppLocalizations.of(context)!.text_61,
                       (_timeLeft.inHours % 24).toString().padLeft(2, '0'),
                     ),
                     _buildTimerUnit(
-                      AppLocalizations.of(context)!.text_61,
+                      AppLocalizations.of(context)!.text_60,
                       (_timeLeft.inMinutes % 60).toString().padLeft(2, '0'),
+                    ),
+                    _buildTimerUnit(
+                      AppLocalizations.of(context)!.text_59,
+                      (_timeLeft.inSeconds % 60).toString().padLeft(2, '0'),
                     ),
                   ],
                 ),
@@ -707,7 +718,13 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
 
               const SizedBox(height: 24),
 
-              // Stats Section - Encheres et Visites
+              // Stats Section - Description et Visites
+              // The "عدد المزايدين"/"عدد المزايدات" (bid count) box used to
+              // live here, duplicating the count already shown next to
+              // "مشاهدة كل المزايدين" in _buildBidHistorySection below. It is
+              // replaced with the auction's actual product description
+              // (client feedback A9); null/empty description hides this
+              // half of the row gracefully instead of showing a blank box.
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -717,17 +734,9 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ),
                 child: Row(
                   children: [
-                    // Nombre d'enchères
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => AuctionHistoryPage(
-                              auctionId: auction.id,
-                              auctionData: auction,
-                            ),
-                          ),
-                        ),
+                    // Product description (replaces duplicate bid-count box)
+                    if (auction.description.trim().isNotEmpty)
+                      Expanded(
                         child: Row(
                           children: [
                             Container(
@@ -739,48 +748,39 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(
-                                Icons.gavel,
+                                Icons.description_outlined,
                                 color: Color(0xFF0081FF),
                                 size: 20,
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${auction.bidderCount}',
-                                    style: const TextStyle(
-                                      fontFamily: 'Plus Jakarta Sans',
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0081FF),
-                                    ),
-                                  ),
-                                  Text(
-                                    AppLocalizations.of(context)!.text_78,
-                                    style: TextStyle(
-                                      fontFamily: 'Plus Jakarta Sans',
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
+                              child: Text(
+                                auction.description.trim(),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontFamily: 'Plus Jakarta Sans',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDarkMode
+                                      ? Colors.white
+                                      : Colors.black87,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ),
 
-                    // Separator
-                    Container(
-                      width: 1,
-                      height: 40,
-                      color: Colors.grey.withValues(alpha: 0.3),
-                    ),
+                    // Separator (only when both sides have content)
+                    if (auction.description.trim().isNotEmpty)
+                      Container(
+                        width: 1,
+                        height: 40,
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        color: Colors.grey.withValues(alpha: 0.3),
+                      ),
 
                     // Nombre de visiteurs
                     Expanded(
@@ -1672,10 +1672,14 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               ),
               GestureDetector(
                 onTap: () {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (context) => const HomePage()),
-                    (route) => false,
+                  // "View All" (عرض الكل) next to "Similar Auctions" now opens
+                  // the real Active Auctions listing page (with category
+                  // filters + search), instead of bouncing back to Home
+                  // (client feedback A8).
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AllAuctionsPage(),
+                    ),
                   );
                 },
                 child: Container(
