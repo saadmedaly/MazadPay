@@ -79,7 +79,18 @@ func (h *NotificationHandler) List(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list notifications"})
 	}
 
-	return c.JSON(fiber.Map{"data": notifications})
+	// Real-device Staging diagnosis (NOTIFICATIONS root cause): this endpoint
+	// used to return {"data": notifications} with no "success" field, unlike
+	// every other endpoint (which goes through OK(), always {"success":
+	// true, "data": ...}). mobile/lib/models/api_response.dart's
+	// ApiResponse.fromJson defaults success to FALSE when the key is absent
+	// (`json['success'] as bool? ?? false`), and notifications_page.dart only
+	// populates the list `if (response.success && response.data != null)` --
+	// so broadcasts/notifications were always genuinely persisted (confirmed
+	// by Admin's correct sent count and the new SendBroadcast fix), but the
+	// mobile screen silently discarded a perfectly valid response and showed
+	// the empty state every time. OK() fixes the exact contract mismatch.
+	return OK(c, notifications)
 }
 
 func (h *NotificationHandler) MarkAllAsRead(c *fiber.Ctx) error {
@@ -138,7 +149,10 @@ func (h *NotificationHandler) AdminList(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list notifications"})
 	}
 
-	return c.JSON(fiber.Map{"data": notifications})
+	// Consistency fix alongside List() above -- web admin's useFetchAdminNotifications
+	// reads response.data.data directly and never checked .success, so this was not
+	// user-visibly broken, but every other endpoint uses OK() and this one should too.
+	return OK(c, notifications)
 }
 
 type SendNotificationRequest struct {

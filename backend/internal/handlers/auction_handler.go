@@ -148,13 +148,34 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 		return NotFound(c, "Auction")
 	}
 
+	// Real-device Staging diagnosis (My Auctions "خطأ في تحميل المزاد"): resolve
+	// the caller once, up front, so both the status check and the market check
+	// below can recognize an owner/admin -- previously this endpoint's caller
+	// lookup only existed inside the market-isolation check further down, so a
+	// seller viewing their OWN pending/draft/rejected auction (e.g. right after
+	// creating it, before admin approval) always 404'd here, even though the
+	// mobile app's AuctionDetailsPage has no other endpoint to call and was
+	// linked to from My Auctions regardless of status. The referenced "dedicated
+	// seller/admin detail endpoint" in the comment this replaces never actually
+	// existed anywhere in routes.go.
+	var callerID uuid.UUID
+	var callerUser *models.User
+	callerMarket := models.DefaultAccountCountryISO
+	if uid, err := middleware.GetUserID(c); err == nil {
+		callerID = uid
+		if user, err := h.userRepo.FindByID(c.Context(), uid); err == nil {
+			callerUser = user
+			callerMarket = user.EffectiveAccountCountryISO()
+		}
+	}
+	isOwner := callerUser != nil && auction.SellerID == callerID
+	isAdmin := callerUser != nil && (callerUser.Role == "admin" || callerUser.IsSuperAdmin)
+
 	// This endpoint has no auth middleware (see routes.go) — an anonymous
 	// caller must never see a pending/rejected/canceled auction by guessing
-	// or reusing its ID (International Auth / Product Review Phase). A
-	// logged-in seller viewing their own non-public auction, or an admin,
-	// should use the dedicated seller/admin detail endpoints instead, which
-	// are not filtered this way.
-	if !services.PubliclyVisibleAuctionStatuses[auction.Status] {
+	// or reusing its ID (International Auth / Product Review Phase). The
+	// owner of the auction, or an admin, may view it regardless of status.
+	if !services.PubliclyVisibleAuctionStatuses[auction.Status] && !isOwner && !isAdmin {
 		return NotFound(c, "Auction")
 	}
 
@@ -163,14 +184,11 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 	// blocked -- 404, not a "wrong market" disclosure, matching this endpoint's
 	// existing convention for any other inaccessible auction (see status check
 	// above). Anonymous caller -> DefaultAccountCountryISO ('MR'), consistent with
-	// List()'s public-listing default.
-	callerMarket := models.DefaultAccountCountryISO
-	if userID, err := middleware.GetUserID(c); err == nil {
-		if user, err := h.userRepo.FindByID(c.Context(), userID); err == nil {
-			callerMarket = user.EffectiveAccountCountryISO()
-		}
-	}
-	if callerMarket != auction.EffectiveMarketCountryISO() {
+	// List()'s public-listing default. The owner/admin exemption above already
+	// covers status; market isolation still applies to everyone (an owner's own
+	// auction is always in their own market by construction, so this never
+	// actually blocks a legitimate owner in practice).
+	if callerMarket != auction.EffectiveMarketCountryISO() && !isAdmin {
 		return NotFound(c, "Auction")
 	}
 
