@@ -41,6 +41,19 @@ var (
 	ErrSelfBid                = errors.New("cannot_bid_own_auction")
 	ErrInsuranceNotSet        = errors.New("insurance_not_set")        // audit V03 : insurance_amount <= 0
 	ErrInsufficientForInsurance = errors.New("insufficient_for_insurance") // audit V03 : balance < insurance_amount
+	// ErrCrossMarketBid (migration 000046, country-scoped currency V1) : le
+	// bidder et l'auction n'appartiennent pas au même marché (account_country_iso
+	// != market_country_iso). Vérifié par COUNTRY, jamais par égalité de devise
+	// seule — plusieurs pays partagent une devise (ex: SN/CI = XOF) mais doivent
+	// rester des marchés distincts.
+	ErrCrossMarketBid = errors.New("cross_market_bid_not_allowed")
+	// ErrWalletCurrencyMismatch (migration 000046) : la devise du wallet du
+	// bidder ne correspond pas à la devise de l'auction — garde-fou financier
+	// supplémentaire, ne devrait normalement jamais se déclencher si
+	// ErrCrossMarketBid est correctement vérifié en premier (un wallet est
+	// toujours dans la devise du marché du compte), mais vérifié explicitement
+	// par sécurité/défense en profondeur avant tout gel de caution.
+	ErrWalletCurrencyMismatch = errors.New("wallet_currency_mismatch")
 
 	// Finance
 	ErrInsufficientBalance = errors.New("insufficient_balance")

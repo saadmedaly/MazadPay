@@ -13,6 +13,22 @@ type Wallet struct {
 	FrozenAmount decimal.Decimal `db:"frozen_amount" json:"frozen_amount"`
 	Version      int             `db:"version"       json:"version"`
 	UpdatedAt    time.Time       `db:"updated_at"    json:"updated_at"`
+	// CurrencyCode (migration 000046): the wallet's single, immutable
+	// denomination for this V1 -- set once at wallet-creation time from the
+	// owner's account market, never changed afterward (no multi-currency
+	// wallets in this release). Nullable for wallets created before migration
+	// 000046; EffectiveCurrencyCode below is the fallback-aware accessor.
+	CurrencyCode *string `db:"currency_code" json:"currency_code,omitempty"`
+}
+
+// EffectiveCurrencyCode falls back to DefaultCurrencyCode for wallets
+// predating migration 000046. Callers (bid/deposit/withdraw logic) must use
+// this, never CurrencyCode directly.
+func (w *Wallet) EffectiveCurrencyCode() string {
+	if w.CurrencyCode != nil && *w.CurrencyCode != "" {
+		return *w.CurrencyCode
+	}
+	return DefaultCurrencyCode
 }
 
 type Transaction struct {
@@ -46,6 +62,21 @@ type Transaction struct {
 	Description      *string          `db:"description"        json:"description"`
 	FailureReason    *string          `db:"failure_reason"     json:"failure_reason"`
 	CreatedAt        time.Time        `db:"created_at"         json:"created_at"`
+	// CurrencyCode (migration 000046): stamped at transaction-creation time from
+	// the wallet's currency, so this historical record remains correctly
+	// denominated even if the user's account market changes later. Nullable for
+	// transactions predating migration 000046 (fallback: DefaultCurrencyCode).
+	CurrencyCode *string `db:"currency_code" json:"currency_code,omitempty"`
+}
+
+// EffectiveCurrencyCode falls back to DefaultCurrencyCode for transactions predating
+// migration 000046. Callers displaying/exporting a transaction's currency must use this,
+// never CurrencyCode directly.
+func (t *Transaction) EffectiveCurrencyCode() string {
+	if t.CurrencyCode != nil && *t.CurrencyCode != "" {
+		return *t.CurrencyCode
+	}
+	return DefaultCurrencyCode
 }
 
 type WalletHold struct {

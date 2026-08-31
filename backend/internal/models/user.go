@@ -37,6 +37,36 @@ type User struct {
 	// alongside the legacy Phone field (kept populated for backward compatibility).
 	PhoneE164       *string `db:"phone_e164"        json:"phone_e164"`
 	PhoneCountryISO *string `db:"phone_country_iso" json:"phone_country_iso"`
+	// AccountCountryISO (migration 000046) is the canonical, explicit MazadPay
+	// account market -- distinct from PhoneCountryISO (phone-number-region
+	// metadata only) and from the legacy, overloaded CountryCode column
+	// (historically a dial code). Nil for legacy users; EffectiveAccountCountryISO
+	// below is the fallback-aware accessor callers should use instead of reading
+	// this field directly.
+	AccountCountryISO *string `db:"account_country_iso" json:"account_country_iso"`
+}
+
+// DefaultAccountCountryISO is the runtime fallback market for any user whose
+// AccountCountryISO is NULL (all pre-international-auth legacy accounts) --
+// MazadPay's only market before this feature. No Production backfill write is
+// required for this: the fallback is applied at read time everywhere a user's
+// effective market/currency is needed.
+const DefaultAccountCountryISO = "MR"
+
+// DefaultCurrencyCode is the runtime fallback currency for legacy users/
+// auctions with no explicit currency_code (NULL) -- MazadPay's only currency
+// (Mauritanian Ouguiya, current ISO-4217 code) before this feature.
+const DefaultCurrencyCode = "MRU"
+
+// EffectiveAccountCountryISO returns the user's account market, falling back
+// to DefaultAccountCountryISO for legacy users with no explicit selection.
+// Callers (auction/bid/wallet logic) must use this, never AccountCountryISO
+// directly, so the NULL-legacy case is never silently mishandled.
+func (u *User) EffectiveAccountCountryISO() string {
+	if u.AccountCountryISO != nil && *u.AccountCountryISO != "" {
+		return *u.AccountCountryISO
+	}
+	return DefaultAccountCountryISO
 }
 
  func (u *User) MaskPhone() string {

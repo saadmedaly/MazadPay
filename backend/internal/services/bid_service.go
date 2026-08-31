@@ -74,6 +74,19 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 			return apperr.ErrBidTooLow
 		}
 
+		// 2b. Country-scoped market check (migration 000046, V1) — the bidder and
+		// the auction MUST belong to the same market (account_country_iso ==
+		// market_country_iso). Checked by COUNTRY, never by currency alone: two
+		// countries can share a currency (e.g. SN/CI both use XOF) but must
+		// remain separate markets — see errors.ErrCrossMarketBid.
+		bidder, err := s.userRepo.FindByID(ctx, userID)
+		if err != nil {
+			return apperr.ErrNotFound
+		}
+		if bidder.EffectiveAccountCountryISO() != auction.EffectiveMarketCountryISO() {
+			return apperr.ErrCrossMarketBid
+		}
+
 		// 3. Vérification et gel de la caution (insurance_amount) — audit de sécurité V03
 		// (durci suite à un contournement constaté en production : tous les auctions actifs
 		// avaient insurance_amount = 0, ce qui désactivait complètement la protection).
@@ -94,6 +107,15 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 			wallet, err := s.walletRepo.FindForUpdate(ctx, tx, userID)
 			if err != nil {
 				return err
+			}
+			// Defense-in-depth (migration 000046): the wallet's currency must
+			// match the auction's currency before any freeze/comparison. Should
+			// never trigger in practice given the ErrCrossMarketBid check above
+			// (a wallet is always denominated in its owner's account market's
+			// currency), but verified explicitly per financial-safety
+			// requirements rather than assumed.
+			if wallet.EffectiveCurrencyCode() != auction.EffectiveCurrencyCode() {
+				return apperr.ErrWalletCurrencyMismatch
 			}
 			if wallet.Balance.LessThan(auction.InsuranceAmount) {
 				return apperr.ErrInsufficientForInsurance

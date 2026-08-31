@@ -33,6 +33,14 @@ type AuctionRequest struct {
 	CreatedAt       time.Time       `db:"created_at"         json:"created_at"`
 	UpdatedAt       time.Time       `db:"updated_at"         json:"updated_at"`
 	Quantity        int             `db:"quantity"          json:"quantity"` // Nombre d'items (défaut: 1)
+	// MarketCountryISO/CurrencyCode (migration 000046) are always server-derived
+	// from the authenticated requester's account market, never client-supplied
+	// -- assigned by the handler before validation, same trust pattern as
+	// UserID (see request_handler.go CreateAuctionRequest). No validate tag:
+	// requiring it here would force a client to guess a value it never
+	// legitimately controls.
+	MarketCountryISO *string `db:"market_country_iso" json:"market_country_iso,omitempty"`
+	CurrencyCode     *string `db:"currency_code"      json:"currency_code,omitempty"`
 
 	// Relations
 	User *User `db:"-" json:"user,omitempty"`

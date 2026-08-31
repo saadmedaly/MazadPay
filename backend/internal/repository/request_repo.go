@@ -72,15 +72,15 @@ func (r *requestRepo) CreateAuctionRequest(ctx context.Context, req *models.Auct
 			user_id, category_id, location_id, title_ar, title_fr, title_en,
 			description_ar, description_fr, description_en, start_price, min_increment,
 			insurance_amount, reserve_price, buy_now_price, start_date, end_date,
-			images, status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			images, status, market_country_iso, currency_code
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		RETURNING id, created_at
 	`
 	return r.db.QueryRowContext(ctx, query,
 		req.UserID, req.CategoryID, req.LocationID, req.TitleAr, req.TitleFr, req.TitleEn,
 		req.DescriptionAr, req.DescriptionFr, req.DescriptionEn, req.StartPrice, req.MinIncrement,
 		req.InsuranceAmount, req.ReservePrice, req.BuyNowPrice, req.StartDate, req.EndDate,
-		req.Images, req.Status,
+		req.Images, req.Status, req.MarketCountryISO, req.CurrencyCode,
 	).Scan(&req.ID, &req.CreatedAt)
 }
 
@@ -195,7 +195,8 @@ func (r *requestRepo) GetAuctionRequests(ctx context.Context, status string, use
 		var req models.AuctionRequest
 		var user models.User
 		// Voir commentaire équivalent dans GetAuctionRequestByID : 'quantity' (migration
-		// 000033) apparaît en dernière position dans ar.*, après updated_at.
+		// 000033), puis market_country_iso/currency_code (migration 000046) apparaissent
+		// en dernière position dans ar.*, après updated_at.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 			&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -204,6 +205,7 @@ func (r *requestRepo) GetAuctionRequests(ctx context.Context, status string, use
 			&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 			&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
+			&req.MarketCountryISO, &req.CurrencyCode,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {
@@ -231,6 +233,8 @@ func (r *requestRepo) GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (
 	// among ar.* columns, after updated_at, not in its "logical" position next to the
 	// other fields. Missing this Scan slot here previously caused "sql: expected N
 	// destination arguments in Scan, not N-1" once quantity actually existed in the DB.
+	// Same reasoning applies to market_country_iso/currency_code (migration 000046,
+	// ALTER TABLE ... ADD COLUMN) — appended after quantity, physically last.
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 		&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -239,6 +243,7 @@ func (r *requestRepo) GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (
 		&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 		&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 		&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
+		&req.MarketCountryISO, &req.CurrencyCode,
 		&user.ID, &user.Phone, &user.FullName, &user.Role,
 	)
 	if err != nil {
@@ -338,7 +343,8 @@ func (r *requestRepo) GetUserAuctionRequests(ctx context.Context, userID uuid.UU
 		var req models.AuctionRequest
 		var user models.User
 		// Voir commentaire équivalent dans GetAuctionRequestByID : 'quantity' (migration
-		// 000033) apparaît en dernière position dans ar.*, après updated_at.
+		// 000033), puis market_country_iso/currency_code (migration 000046) apparaissent
+		// en dernière position dans ar.*, après updated_at.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 			&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -347,6 +353,7 @@ func (r *requestRepo) GetUserAuctionRequests(ctx context.Context, userID uuid.UU
 			&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 			&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
+			&req.MarketCountryISO, &req.CurrencyCode,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {

@@ -52,7 +52,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
 	walletSvc := services.NewWalletService(db, walletRepo, txRepo, notifSvc, auditSvc, logger)
 	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc)
-	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, auditSvc, notifSvc, logger)
+	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger)
 	reportSvc := services.NewReportService(txRepo)
 
 
@@ -75,10 +75,10 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	apiV2 := app.Group("/v2/api")
 
 	// Handlers
-	wsHandler := handlers.NewWSHandler(hub, authSvc, logger)
+	wsHandler := handlers.NewWSHandler(hub, authSvc, auctionRepo, userRepo, logger)
 
 	adminWSHandler := handlers.NewAdminWSHandler(adminHub, cfg.JWT.Secret, logger)
-	bidHandler := handlers.NewBidHandler(bidSvc, logger)
+	bidHandler := handlers.NewBidHandler(bidSvc, auctionRepo, userRepo, logger)
 	userHandler := handlers.NewUserHandler(userSvc, logger)
 	adminHandler := handlers.NewAdminHandler(adminSvc, reportSvc, logger, rdb)
 	bannerHandler := handlers.NewBannerHandler(contentSvc, logger)
@@ -93,10 +93,10 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	// New handlers with services
 	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodSvc, logger)
 	paymentMethodHandler.SetAuditService(auditSvc)
-	auctionBoostHandler := handlers.NewAuctionBoostHandler(auctionBoostSvc, logger)
+	auctionBoostHandler := handlers.NewAuctionBoostHandler(auctionBoostSvc, auctionRepo, userRepo, logger)
 	deliveryDriverHandler := handlers.NewDeliveryDriverHandler(deliveryDriverSvc, logger)
 	deliveryDriverHandler.SetAuditService(auditSvc)
-	bidAutoBidHandler := handlers.NewBidAutoBidHandler(bidAutoBidSvc, logger)
+	bidAutoBidHandler := handlers.NewBidAutoBidHandler(bidAutoBidSvc, auctionRepo, userRepo, logger)
 	sponsorHandler := handlers.NewSponsorHandler(sponsorSvc, logger)
 	sponsorHandler.SetAuditService(auditSvc)
 	ratingHandler := handlers.NewRatingHandler(ratingSvc, logger)
@@ -112,7 +112,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	// Routes registration
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
 	setupAuthRoutesV2(apiV2, authSvc, rdb, cfg, logger)
-	setupAuctionRoutes(api, auctionSvc, bidHandler, userHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
+	setupAuctionRoutes(api, auctionSvc, bidHandler, userHandler, mediaSvc, userRepo, cfg.JWT.Secret, logger, rdb)
 	setupUserRoutes(api, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupAdminRoutes(api, adminHandler, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupBannerRoutes(api, bannerHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
@@ -203,9 +203,9 @@ func setupAuthRoutesV2(api fiber.Router, authSvc services.AuthService, rdb *redi
 	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
 }
 
-func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bidHandler *handlers.BidHandler, userHandler *handlers.UserHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bidHandler *handlers.BidHandler, userHandler *handlers.UserHandler, mediaSvc services.MediaService, userRepo repository.UserRepository, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
-	h := handlers.NewAuctionHandler(auctionSvc, logger)
+	h := handlers.NewAuctionHandler(auctionSvc, userRepo, logger)
 
 	// Rate limiting public endpoints (Public Endpoints / Scraping Protection).
 	// Toutes fail-open (false) : ce ne sont pas des routes financières/auth, un

@@ -20,13 +20,15 @@ import (
 
 type AuctionHandler struct {
 	service  services.AuctionService
+	userRepo repository.UserRepository
 	logger   *zap.Logger
 	validate *validator.Validate
 }
 
-func NewAuctionHandler(svc services.AuctionService, logger *zap.Logger) *AuctionHandler {
+func NewAuctionHandler(svc services.AuctionService, userRepo repository.UserRepository, logger *zap.Logger) *AuctionHandler {
 	return &AuctionHandler{
 		service:  svc,
+		userRepo: userRepo,
 		logger:   logger,
 		validate: validator.New(),
 	}
@@ -62,9 +64,19 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 	if catID := c.QueryInt("category_id", 0); catID > 0 {
 		f.CategoryID = catID
 	}
+	// Country-scoped market (migration 000046, V1): the public listing must never
+	// silently expose auctions from another market. Authenticated caller -> their
+	// own account market; anonymous caller -> DefaultAccountCountryISO ('MR'),
+	// matching the pre-migration app's implicit MR-only behavior, per explicit
+	// product decision (do not expose e.g. future TN/MA auctions to old MR-only
+	// clients just because this endpoint has no auth requirement).
+	f.MarketCountryISO = models.DefaultAccountCountryISO
 	// Pass user ID so expired auctions are hidden from non-owners
 	if userID, err := middleware.GetUserID(c); err == nil {
 		f.UserID = &userID
+		if user, err := h.userRepo.FindByID(c.Context(), userID); err == nil {
+			f.MarketCountryISO = user.EffectiveAccountCountryISO()
+		}
 	}
 
 	auctions, err := h.service.List(c.Context(), f)
@@ -145,6 +157,22 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 	// should use the dedicated seller/admin detail endpoints instead, which
 	// are not filtered this way.
 	if !services.PubliclyVisibleAuctionStatuses[auction.Status] {
+		return NotFound(c, "Auction")
+	}
+
+	// Country-scoped market isolation (migration 000046, V1): a cross-market caller
+	// must never see auction detail by ID, even though bidding is independently
+	// blocked -- 404, not a "wrong market" disclosure, matching this endpoint's
+	// existing convention for any other inaccessible auction (see status check
+	// above). Anonymous caller -> DefaultAccountCountryISO ('MR'), consistent with
+	// List()'s public-listing default.
+	callerMarket := models.DefaultAccountCountryISO
+	if userID, err := middleware.GetUserID(c); err == nil {
+		if user, err := h.userRepo.FindByID(c.Context(), userID); err == nil {
+			callerMarket = user.EffectiveAccountCountryISO()
+		}
+	}
+	if callerMarket != auction.EffectiveMarketCountryISO() {
 		return NotFound(c, "Auction")
 	}
 
@@ -487,6 +515,23 @@ func (h *AuctionHandler) GetSellerContact(c *fiber.Ctx) error {
 	auction, _, err := h.service.GetByID(c.Context(), id)
 	if err != nil {
 		return MapError(c, h.logger, err)
+	}
+
+	// Country-scoped market isolation (migration 000046, V1): this route already
+	// requires JWT auth (see routes.go) -- no anonymous branch needed, unlike
+	// GetByID/History. 404, not a "wrong market" disclosure, matching this handler's
+	// established convention -- checked BEFORE the phone number is read/masked below,
+	// so no seller contact data is ever computed for a denied caller.
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	user, err := h.userRepo.FindByID(c.Context(), userID)
+	if err != nil {
+		return NotFound(c, "Auction")
+	}
+	if user.EffectiveAccountCountryISO() != auction.EffectiveMarketCountryISO() {
+		return NotFound(c, "Auction")
 	}
 
 	phone := ""

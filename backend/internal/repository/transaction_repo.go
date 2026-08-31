@@ -74,7 +74,7 @@ const explicitTxJoinQuery = `
 		t.id, t.user_id, t.auction_id, t.type, t.amount, t.gateway, t.status,
 		t.reference, t.receipt_url, t.admin_notes, t.reviewed_by, t.reviewed_at,
 		t.wallet_hold_id, t.receipt_image_temp, t.payment_method, t.fee_amount,
-		t.net_amount, t.description, t.failure_reason, t.created_at,
+		t.net_amount, t.description, t.failure_reason, t.created_at, t.currency_code,
 		u.full_name AS user_full_name, u.phone AS user_phone
 	FROM transactions t
 	LEFT JOIN users u ON u.id = t.user_id
@@ -89,7 +89,7 @@ func scanTxJoinRow(row *sqlx.Row) (*models.Transaction, error) {
 		&tx.ID, &tx.UserID, &tx.AuctionID, &tx.Type, &tx.Amount, &tx.Gateway, &tx.Status,
 		&tx.Reference, &tx.ReceiptURL, &tx.AdminNotes, &tx.ReviewedBy, &tx.ReviewedAt,
 		&tx.WalletHoldID, &tx.ReceiptImageTemp, &tx.PaymentMethod, &tx.FeeAmount,
-		&tx.NetAmount, &tx.Description, &tx.FailureReason, &tx.CreatedAt,
+		&tx.NetAmount, &tx.Description, &tx.FailureReason, &tx.CreatedAt, &tx.CurrencyCode,
 		&tx.UserFullName, &tx.UserPhone,
 	)
 	return &tx, err
@@ -118,10 +118,10 @@ func (r *transactionRepo) Create(ctx context.Context, tx *models.Transaction) er
 	_, err := r.db.NamedExecContext(ctx, `
 		INSERT INTO transactions
 			(id, user_id, auction_id, type, amount, gateway, status, reference,
-			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id)
+			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id, currency_code)
 		VALUES
 			(:id, :user_id, :auction_id, :type, :amount, :gateway, :status, :reference,
-			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id)
+			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id, :currency_code)
 	`, tx)
 	return err
 }
@@ -133,10 +133,10 @@ func (r *transactionRepo) CreateTx(ctx context.Context, dbtx *sqlx.Tx, tx *model
 	_, err := dbtx.NamedExecContext(ctx, `
 		INSERT INTO transactions
 			(id, user_id, auction_id, type, amount, gateway, status, reference,
-			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id)
+			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id, currency_code)
 		VALUES
 			(:id, :user_id, :auction_id, :type, :amount, :gateway, :status, :reference,
-			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id)
+			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id, :currency_code)
 	`, tx)
 	return err
 }
@@ -189,10 +189,17 @@ func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status
 
 	// Credit wallet on deposit approval — only if not already completed (prevents double-credit)
 	if status == "completed" && tx.Type == "deposit" && tx.Status != "completed" {
-		// Ensure wallet row exists (users created before wallet auto-creation had no row)
+		// Ensure wallet row exists (users created before wallet auto-creation had no row).
+		// currency_code derivation matches wallet_repo.go's GetByUserID -- see comment
+		// there (migration 000046).
 		if _, err := dbtx.ExecContext(ctx,
-			`INSERT INTO wallets (user_id, balance, frozen_amount, version, updated_at)
-			 VALUES ($1, 0, 0, 1, now())
+			`INSERT INTO wallets (user_id, balance, frozen_amount, version, updated_at, currency_code)
+			 VALUES ($1, 0, 0, 1, now(), COALESCE(
+			     (SELECT c.currency_code FROM users u
+			        JOIN countries c ON c.code = u.account_country_iso
+			        WHERE u.id = $1),
+			     'MRU'
+			 ))
 			 ON CONFLICT (user_id) DO NOTHING`,
 			tx.UserID); err != nil {
 			return err

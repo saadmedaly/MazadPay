@@ -5,18 +5,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
+	"github.com/mazadpay/backend/internal/repository"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
 type BidAutoBidHandler struct {
-	svc    services.BidAutoBidService
-	logger *zap.Logger
+	svc         services.BidAutoBidService
+	auctionRepo repository.AuctionRepository
+	userRepo    repository.UserRepository
+	logger      *zap.Logger
 }
 
-func NewBidAutoBidHandler(svc services.BidAutoBidService, logger *zap.Logger) *BidAutoBidHandler {
-	return &BidAutoBidHandler{svc: svc, logger: logger}
+func NewBidAutoBidHandler(svc services.BidAutoBidService, auctionRepo repository.AuctionRepository, userRepo repository.UserRepository, logger *zap.Logger) *BidAutoBidHandler {
+	return &BidAutoBidHandler{svc: svc, auctionRepo: auctionRepo, userRepo: userRepo, logger: logger}
 }
 
 // CreateAutoBid - POST /api/auctions/:id/auto-bid
@@ -29,6 +32,24 @@ func (h *BidAutoBidHandler) CreateAutoBid(c *fiber.Ctx) error {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c)
+	}
+
+	// Country-scoped market isolation (migration 000046, V1): an auto-bid record must
+	// never be creatable against an auction outside the caller's own effective market
+	// -- same invariant as PlaceBid's country check, checked BEFORE any auto-bid row
+	// is written, so a cross-market auto-bid config can never exist to later be
+	// updated/cancelled by UpdateAutoBid/CancelAutoBid (those are safe by
+	// construction as long as this check holds). Trusted sources only.
+	auction, err := h.auctionRepo.FindByID(c.Context(), auctionID)
+	if err != nil {
+		return NotFound(c, "Auction")
+	}
+	user, err := h.userRepo.FindByID(c.Context(), userID)
+	if err != nil {
+		return NotFound(c, "Auction")
+	}
+	if user.EffectiveAccountCountryISO() != auction.EffectiveMarketCountryISO() {
+		return NotFound(c, "Auction")
 	}
 
 	type Request struct {

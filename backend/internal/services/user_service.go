@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/redis/go-redis/v9"
@@ -141,16 +142,55 @@ func (s *userService) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	return s.repo.Delete(ctx, id)
 }
 
+// AddFavorite enforces country-scoped market isolation (migration 000046, V1): a user
+// may only favorite an auction in their own effective market -- otherwise a cross-market
+// auction ID could be added to favorites and surfaced back to the user despite the list/
+// detail endpoints excluding it. 404 (via apperr.ErrNotFound), not a "wrong market"
+// disclosure, matching auction_handler.go GetByID's convention for inaccessible auctions.
 func (s *userService) AddFavorite(ctx context.Context, userID, auctionID uuid.UUID) error {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+	if err != nil {
+		return apperr.ErrNotFound
+	}
+	if user.EffectiveAccountCountryISO() != auction.EffectiveMarketCountryISO() {
+		return apperr.ErrNotFound
+	}
 	return s.favoriteRepo.Add(ctx, userID, auctionID)
 }
 
+// RemoveFavorite is intentionally NOT market-scoped: a user must always be able to
+// remove their own existing favorite relation (e.g. cleanup of a stale row from before
+// this check existed), and removal reveals no auction details -- only that a
+// (user_id, auction_id) pair no longer exists.
 func (s *userService) RemoveFavorite(ctx context.Context, userID, auctionID uuid.UUID) error {
 	return s.favoriteRepo.Remove(ctx, userID, auctionID)
 }
 
+// ListFavorites filters out any favorited auction outside the caller's effective market
+// (migration 000046, V1) -- defense-in-depth against stale rows predating the AddFavorite
+// guard above, or any other path that could otherwise have created a cross-market
+// favorite. Never discloses the excluded auction's existence, just omits it.
 func (s *userService) ListFavorites(ctx context.Context, userID uuid.UUID) ([]models.Auction, error) {
-	return s.favoriteRepo.ListByUserID(ctx, userID)
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	auctions, err := s.favoriteRepo.ListByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	market := user.EffectiveAccountCountryISO()
+	filtered := make([]models.Auction, 0, len(auctions))
+	for _, a := range auctions {
+		if a.EffectiveMarketCountryISO() == market {
+			filtered = append(filtered, a)
+		}
+	}
+	return filtered, nil
 }
 
 func (s *userService) ListMyAuctions(ctx context.Context, userID uuid.UUID) ([]models.Auction, error) {

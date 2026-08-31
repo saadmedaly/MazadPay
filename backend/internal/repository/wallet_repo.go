@@ -46,10 +46,23 @@ func (r *walletRepo) GetByUserID(ctx context.Context, userID uuid.UUID) (*models
     if err == nil {
         return &w, nil
     }
-    // No wallet row yet — create one with zero balance then return it
+    // No wallet row yet — create one with zero balance then return it.
+    // currency_code (migration 000046) is derived once, at creation time, from
+    // the owner's account market (users.account_country_iso -> countries.
+    // currency_code), falling back to the legacy DefaultCurrencyCode ('MRU')
+    // when either the user's market or that country's currency is unset (all
+    // pre-international-auth accounts) -- matches models.User/Wallet's
+    // EffectiveAccountCountryISO/EffectiveCurrencyCode runtime fallback so a
+    // newly created wallet's stamped currency always agrees with what the
+    // application layer would otherwise assume for that user.
     _, err = r.db.ExecContext(ctx,
-        `INSERT INTO wallets (user_id, balance, frozen_amount, version, updated_at)
-         VALUES ($1, 0, 0, 1, now())
+        `INSERT INTO wallets (user_id, balance, frozen_amount, version, updated_at, currency_code)
+         VALUES ($1, 0, 0, 1, now(), COALESCE(
+             (SELECT c.currency_code FROM users u
+                JOIN countries c ON c.code = u.account_country_iso
+                WHERE u.id = $1),
+             'MRU'
+         ))
          ON CONFLICT (user_id) DO NOTHING`,
         userID)
     if err != nil {
