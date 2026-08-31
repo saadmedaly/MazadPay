@@ -223,12 +223,12 @@ func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bi
 	api.Get("/locations/:countryId", publicListLimit, cache5min, h.GetLocationsByCountry)
 	// Pas de cache sur les mazads : les prix/statuts doivent apparaître sans délai
 	api.Get("/auctions", publicListLimit, auctionSearchLimit, h.List)
-	api.Get("/auctions/:id", auctionDetailLimit, h.GetByID)
+	api.Get("/auctions/:id", auctionDetailLimit, middleware.OptionalJWT(jwtSecret, rdb), h.GetByID)
 	api.Post("/auctions/:id/view", viewLimit, middleware.OptionalJWT(jwtSecret, rdb), h.IncrementView)
 	api.Get("/report-reasons", publicListLimit, cache5min, h.GetReportReasons)
 
 	// Bids (Public history)
-	api.Get("/auctions/:id/bids", auctionDetailLimit, bidHandler.History)
+	api.Get("/auctions/:id/bids", auctionDetailLimit, middleware.OptionalJWT(jwtSecret, rdb), bidHandler.History)
 
 	// Protected routes with media service injection
 	auctions := api.Group("/auctions", jwtMiddleware)
