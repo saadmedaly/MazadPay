@@ -7,6 +7,7 @@ import '../models/api_response.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import 'account_page.dart';
+import 'notifications_page.dart';
 
 class AccountProfilePage extends ConsumerStatefulWidget {
   const AccountProfilePage({super.key});
@@ -337,6 +338,27 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
 
                     _buildSettingTile(context, AppLocalizations.of(context)!.text_45, Icons.lock_outline, isDarkMode, onTap: () => _showChangePasswordModal(context)),
                     _buildSettingTile(context, AppLocalizations.of(context)!.text_46, Icons.language, isDarkMode, trailing: AppLocalizations.of(context)!.text_47, onTap: () => AppModals.showLanguageModal(context)),
+                    // Staging blocker fix (item 10/16 follow-up): the row
+                    // below is a PREFERENCE TOGGLE only (enable/disable
+                    // future notifications) -- it never opened the actual
+                    // Notification Center, and Staging testing found no
+                    // other reachable entry point was obvious enough to the
+                    // client. Home/Account tab bells already navigate to
+                    // NotificationsPage (home_page.dart, account_shell_page.
+                    // dart), but per the client's explicit ask this adds a
+                    // second, clearly-labeled entry right here so the
+                    // preference and the history are visibly two different
+                    // things, not one overloaded control.
+                    _buildSettingTile(
+                      context,
+                      'سجل الإشعارات',
+                      Icons.notifications_active_outlined,
+                      isDarkMode,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const NotificationsPage()),
+                      ),
+                    ),
                     _buildSettingTile(context, AppLocalizations.of(context)!.text_48, Icons.notifications_outlined, isDarkMode, hasSwitch: true, switchValue: _notificationsEnabled, onSwitchChanged: _toggleNotifications),
 
                     const SizedBox(height: 32),

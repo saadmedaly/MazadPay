@@ -85,6 +85,17 @@ type UserRepository interface {
 	UpdateKYCStatus(ctx context.Context, userID uuid.UUID, status string) error
 	GetUserSettings(ctx context.Context, userID uuid.UUID) (*models.UserSettings, error)
 	UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings interface{}) error
+
+	// ListAllActiveUserIDs (Staging blocker fix, item 10/16): returns every
+	// active user's ID, independent of whether they have a push token
+	// registered. SendBroadcast (notification_service.go) previously
+	// iterated GetAllActiveTokens instead -- a user with no push token (or a
+	// deactivated one) never received an in-app notification row at all,
+	// only users with a live FCM token did. Broadcast must persist a
+	// notification for every intended target user; FCM delivery is a
+	// secondary, best-effort channel on top of that, not a prerequisite for
+	// the in-app row existing.
+	ListAllActiveUserIDs(ctx context.Context) ([]uuid.UUID, error)
 }
 
 type userRepo struct {
@@ -93,6 +104,12 @@ type userRepo struct {
 
 func NewUserRepository(db *sqlx.DB) UserRepository {
 	return &userRepo{db: db}
+}
+
+func (r *userRepo) ListAllActiveUserIDs(ctx context.Context) ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	err := r.db.SelectContext(ctx, &ids, `SELECT id FROM users WHERE is_active = true`)
+	return ids, err
 }
 
 func (r *userRepo) FindByPhone(ctx context.Context, phone string) (*models.User, error) {

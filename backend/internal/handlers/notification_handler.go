@@ -245,14 +245,18 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 	// Priority: broadcast > specific user > admins
 	if req.Broadcast {
 		// Send to all users
-		if err := h.svc.SendBroadcast(c.Context(), req.Title, message, req.Type, req.Data); err != nil {
+		targetUsers, sent, failed, err := h.svc.SendBroadcast(c.Context(), req.Title, message, req.Type, req.Data)
+		if err != nil {
 			h.logger.Error("broadcast failed", zap.Error(err))
 			return MapError(c, h.logger, err)
 		}
 		if h.auditSvc != nil {
 			detailsJSON := models.JSONB{
-				"title": shortTitle,
-				"type":  req.Type,
+				"title":        shortTitle,
+				"type":         req.Type,
+				"target_users": targetUsers,
+				"sent":         sent,
+				"failed":       failed,
 			}
 			if auditErr := h.auditSvc.Log(c.Context(), adminID, "notification_broadcast_sent", "notification", nil,
 				"title="+shortTitle+" type="+req.Type,
@@ -266,7 +270,17 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 				}
 			}
 		}
-		return OK(c, fiber.Map{"message": "Notification sent to all users", "type": "broadcast"})
+		// Client feedback item 16: surface a real outcome (sent/failed/
+		// persisted) instead of a bare success message -- "sent" always
+		// implies the in-app row was persisted (see SendPush/SendBroadcast).
+		return OK(c, fiber.Map{
+			"message":      "Notification sent to all users",
+			"type":         "broadcast",
+			"target_users": targetUsers,
+			"sent":         sent,
+			"persisted":    sent,
+			"failed":       failed,
+		})
 	}
 
 	if req.UserID != "" {

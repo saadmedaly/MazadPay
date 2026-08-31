@@ -20,7 +20,13 @@ type NotificationService interface {
 	SendLocalizedPush(ctx context.Context, userID uuid.UUID, notificationType, language string, params map[string]string, data map[string]string) error
 	NotifyAdmins(ctx context.Context, title, body string, data map[string]string) error
 	NotifyAdminsLocalized(ctx context.Context, notificationType string, params map[string]string, data map[string]string) error
-	SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) error
+	// SendBroadcast returns (targetUsers, sent, failed, err) so the Admin
+	// caller can report a real outcome (client feedback item 16: "add a
+	// clear result: sent/failed/persisted") instead of a bare success/error.
+	// "sent" here means SendPush succeeded for that user, which always
+	// includes DB persistence (see SendPush) -- FCM delivery on top of that
+	// is attempted per-user but never fails the persisted count.
+	SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) (targetUsers, sent, failed int, err error)
 	ListNotifications(ctx context.Context, userID uuid.UUID, limit int) ([]models.Notification, error)
 	MarkAllAsRead(ctx context.Context, userID uuid.UUID) error
 	MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
@@ -166,26 +172,43 @@ func (s *notificationService) NotifyAdmins(ctx context.Context, title, body stri
 	return nil
 }
 
-func (s *notificationService) SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) error {
-	// Get all users with active push tokens
-	tokens, err := s.repo.GetAllActiveTokens(ctx)
+func (s *notificationService) SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) (int, int, int, error) {
+	// Staging blocker fix (client feedback item 10/16 follow-up): this used
+	// to iterate GetAllActiveTokens (push_tokens rows) instead of actual
+	// users -- a user with no push token registered (or a deactivated one)
+	// never got an in-app notification row created at all, since SendPush
+	// was only ever invoked for token owners. That meant a broadcast that
+	// showed as "sent" in Admin could be completely invisible in a target
+	// user's mobile Notifications list whenever their device had no live
+	// FCM token, which is exactly what Staging testing observed. Persistence
+	// must not depend on FCM: iterate every active user once (so one
+	// broadcast never creates more than one row per user even if they have
+	// multiple push-token rows across devices), and let SendPush's own
+	// token lookup handle FCM delivery as a secondary, best-effort channel.
+	userIDs, err := s.userRepo.ListAllActiveUserIDs(ctx)
 	if err != nil {
-		s.logger.Error("failed to get active tokens", zap.Error(err))
-		return err
+		s.logger.Error("failed to list active users for broadcast", zap.Error(err))
+		return 0, 0, 0, err
 	}
 
-	if len(tokens) == 0 {
-		s.logger.Info("no active tokens found for broadcast")
-		return nil
+	if len(userIDs) == 0 {
+		s.logger.Info("no active users found for broadcast")
+		return 0, 0, 0, nil
 	}
 
-	// Send to all tokens in batches
-	for _, token := range tokens {
-		_ = s.SendPush(ctx, token.UserID, title, body, notifType, data)
+	sent := 0
+	failed := 0
+	for _, userID := range userIDs {
+		if err := s.SendPush(ctx, userID, title, body, notifType, data); err != nil {
+			failed++
+			s.logger.Warn("broadcast: failed to deliver to user", zap.String("user_id", userID.String()), zap.Error(err))
+			continue
+		}
+		sent++
 	}
 
-	s.logger.Info("broadcast sent", zap.Int("count", len(tokens)))
-	return nil
+	s.logger.Info("broadcast persisted/sent", zap.Int("target_users", len(userIDs)), zap.Int("sent", sent), zap.Int("failed", failed))
+	return len(userIDs), sent, failed, nil
 }
 
 func (s *notificationService) ListNotifications(ctx context.Context, userID uuid.UUID, limit int) ([]models.Notification, error) {
