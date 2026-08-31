@@ -31,7 +31,10 @@ func (h *UserHandler) GetMe(c *fiber.Ctx) error {
 	if err != nil {
 		return MapError(c, h.logger, err)
 	}
-	return OK(c, MaskUserPhone(user))
+	// Client feedback Phase B item 17: a user viewing their own profile must
+	// see their own full phone number -- MaskUserPhone was fixed to actually
+	// mask (see its doc comment), so GetMe now uses SelfResponseUser instead.
+	return OK(c, SelfResponseUser(user))
 }
 
 func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {

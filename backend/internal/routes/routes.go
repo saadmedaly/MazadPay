@@ -57,7 +57,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 
 	// Create and start auction scheduler for notifications
-	auctionScheduler := services.NewAuctionScheduler(auctionRepo, notifSvc, userRepo, rdb, logger)
+	auctionScheduler := services.NewAuctionScheduler(db, auctionRepo, bidRepo, notifSvc, userRepo, rdb, logger)
 
 	// New services from migration 000031
 	paymentMethodSvc := services.NewPaymentMethodService(db)
@@ -172,7 +172,13 @@ func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, adminHandle
 
 	// Protected routes
 	auth.Post("/logout", jwtMiddleware, h.Logout)
-	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
+	// Client feedback Phase B item 6: change-password had no rate limit at all
+	// (contrast with login/register/reset-password above, all rate-limited by
+	// phone+IP) -- a logged-in attacker with a stolen JWT could otherwise brute
+	// force old_pin unthrottled. RateLimitByUser mirrors the pattern already
+	// used for deposit/withdraw/receipt (see setupWalletRoutes).
+	changePasswordRateLimit := middleware.RateLimitByUser(rdb, 3600, 5, logger, true, "")
+	auth.Put("/change-password", jwtMiddleware, changePasswordRateLimit, h.ChangePassword)
 }
 
 // setupAuthRoutesV2 enregistre le contrat d'authentification STRICT (country_iso
@@ -200,7 +206,8 @@ func setupAuthRoutesV2(api fiber.Router, authSvc services.AuthService, rdb *redi
 	auth.Post("/reset-password", rateLimitByIP, rateLimitByPhone, h.ResetPassword)
 
 	auth.Post("/logout", jwtMiddleware, h.Logout)
-	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
+	changePasswordRateLimit := middleware.RateLimitByUser(rdb, 3600, 5, logger, true, "")
+	auth.Put("/change-password", jwtMiddleware, changePasswordRateLimit, h.ChangePassword)
 }
 
 func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bidHandler *handlers.BidHandler, userHandler *handlers.UserHandler, mediaSvc services.MediaService, userRepo repository.UserRepository, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {

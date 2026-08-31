@@ -30,31 +30,34 @@ class AuctionWinnerPage extends ConsumerWidget {
                   children: [
                     _buildHeader(context),
                     const SizedBox(height: 20),
-                    Text(
-                      AppLocalizations.of(context)!.text_81,
-                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-                        fontSize: 40,
-                        fontWeight: FontWeight.w900,
-                        color: const Color(0xFF135BEC),
-                      ),
-                    ),
-                    Text(
-                      AppLocalizations.of(context)!.text_82,
-                      style: TextStyle(fontFamily: 'Plus Jakarta Sans', 
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.white : Colors.black87,
+                    // Phase B final check (client feedback item 11): the client
+                    // explicitly requires the single phrase "مبروك، ربحت
+                    // المزاد" -- this used to be split across two separate
+                    // Text widgets ("مبروك!" then "ربحت المزاد" on its own
+                    // line), which read as two lines, not the required
+                    // single congratulatory sentence. Combined into one Text
+                    // matching the required wording exactly.
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        'مبروك، ربحت المزاد',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontFamily: 'Plus Jakarta Sans',
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: isDarkMode ? Colors.white : Colors.black87,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 40),
                     
                     _buildWinningAmountBox(auction, isDarkMode),
                     const SizedBox(height: 32),
-                    
+
                     _buildProductCard(auction, isDarkMode),
                     const SizedBox(height: 32),
-                    
-                    _buildWinnerSummary(context, isDarkMode),
+
+                    _buildWinnerSummary(context, auction, isDarkMode),
                     
                     const SizedBox(height: 40),
                     _buildFooterAction(context, isDarkMode),
@@ -186,7 +189,7 @@ class AuctionWinnerPage extends ConsumerWidget {
      );
   }
 
-  Widget _buildWinnerSummary(BuildContext context, bool isDarkMode) {
+  Widget _buildWinnerSummary(BuildContext context, Auction auction, bool isDarkMode) {
     return Container(
       width: 350,
       padding: const EdgeInsets.all(20),
@@ -206,12 +209,27 @@ class AuctionWinnerPage extends ConsumerWidget {
              child: const Center(child: Icon(Icons.emoji_events, color: Color(0xFFFFCC00), size: 40)),
            ),
            const SizedBox(width: 16),
-           Column(
-             crossAxisAlignment: CrossAxisAlignment.start,
-             children: [
-                Text(AppLocalizations.of(context)!.text_83, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold)),
-                Text(AppLocalizations.of(context)!.text_84, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey)),
-             ],
+           Expanded(
+             child: Column(
+               crossAxisAlignment: CrossAxisAlignment.start,
+               children: [
+                  // Phase B final check (client feedback item 11): this used
+                  // to show a hardcoded static name ("محمد احمد سيديا") and a
+                  // generic "الفائز الاول بالمزاد" label to every winner
+                  // regardless of who they actually are or what they won --
+                  // fake content, not real backend data. Replaced with the
+                  // real auction title (already loaded on this page via
+                  // auctionNotifierProvider, the same data already fixed to
+                  // carry a real backend-persisted winner_id in Phase B).
+                  Text(
+                    auction.title.isNotEmpty ? auction.title : AppLocalizations.of(context)!.text_84,
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(AppLocalizations.of(context)!.text_84, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey)),
+               ],
+             ),
            ),
         ],
       ),

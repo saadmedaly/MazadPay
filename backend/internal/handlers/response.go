@@ -46,8 +46,37 @@ type ResponseUser struct {
 	LastLoginAt          *string `json:"last_login_at"`
 }
 
-// MaskUserPhone retourne un User avec le téléphone masqué
+// MaskUserPhone retourne un User avec le téléphone masqué (format ####xxxx,
+// même convention que GetSellerContact dans auction_handler.go) -- pour tout
+// endpoint PUBLIC/CUSTOMER qui expose un profil autre que le sien (ex.
+// UserHandler.Search). Client feedback Phase B item 17: avant ce correctif, le
+// nom de cette fonction était trompeur -- elle copiait user.Phone tel quel
+// (ligne Phone: user.Phone, jamais masqué), donc Search exposait déjà le
+// numéro complet de n'importe quel utilisateur à n'importe quel appelant
+// authentifié malgré le commentaire "Mask phone numbers for privacy" à son
+// site d'appel.
+//
+// NE PAS utiliser cette fonction pour :
+//   - GetMe (l'utilisateur consultant son PROPRE profil -- il doit voir son
+//     numéro complet, voir user_handler.go GetMe qui construit sa propre
+//     réponse sans passer par MaskUserPhone)
+//   - les endpoints Admin (AdminHandler.ListUsers/GetUserByID renvoient déjà
+//     models.User brut, protégés par le middleware AdminOnly -- volontaire,
+//     voir item 17 : Admin doit voir le numéro complet)
 func MaskUserPhone(user *models.User) *ResponseUser {
+	return buildResponseUser(user, true)
+}
+
+// SelfResponseUser returns a ResponseUser with the FULL phone number, for a
+// user viewing their own profile only (UserHandler.GetMe). Client feedback
+// Phase B item 17: separated out from MaskUserPhone so fixing that function
+// to actually mask (see its doc comment) doesn't also mask a user's own
+// number to themselves.
+func SelfResponseUser(user *models.User) *ResponseUser {
+	return buildResponseUser(user, false)
+}
+
+func buildResponseUser(user *models.User, mask bool) *ResponseUser {
 	if user == nil {
 		return nil
 	}
@@ -67,9 +96,24 @@ func MaskUserPhone(user *models.User) *ResponseUser {
 		createdAtStr = &s
 	}
 
+	phone := user.Phone
+	if mask {
+		phone = user.MaskPhone()
+	}
+
+	// createdAtStr is only nil when user.CreatedAt.IsZero() (see above) --
+	// guarded here since it was previously dereferenced unconditionally
+	// (*createdAtStr), a latent nil-pointer panic for any caller with a
+	// zero-value CreatedAt (e.g. a hand-built models.User in a test, or any
+	// future code path that doesn't load it from the DB).
+	createdAt := ""
+	if createdAtStr != nil {
+		createdAt = *createdAtStr
+	}
+
 	return &ResponseUser{
 		ID:                   user.ID.String(),
-		Phone:                user.Phone,
+		Phone:                phone,
 		FullName:             user.FullName,
 		Email:                user.Email,
 		ProfilePicURL:        user.ProfilePicURL,
@@ -85,7 +129,7 @@ func MaskUserPhone(user *models.User) *ResponseUser {
 		Role:                 user.Role,
 		IsVerified:           user.IsVerified,
 		ProfileCompleted:     user.ProfileCompleted,
-		CreatedAt:            *createdAtStr,
+		CreatedAt:            createdAt,
 		LastLoginAt:          lastLoginStr,
 	}
 }

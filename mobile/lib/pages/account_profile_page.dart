@@ -22,6 +22,13 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
   String _errorMessage = '';
   String _successMessage = '';
   Map<String, dynamic> _userData = {};
+  // Client feedback Phase B item 6: mirrors users.notifications_enabled --
+  // the backend endpoint (PUT /users/me/notification-prefs) and mobile API
+  // client (UserApi.updateNotificationPrefs) already existed and worked; only
+  // the Account page switch itself was dead (hardcoded value:true,
+  // onChanged:(_){}). No new preference system needed here.
+  bool _notificationsEnabled = true;
+  bool _isTogglingNotifications = false;
   
   // Controllers pour les champs éditables
   final _fullNameController = TextEditingController();
@@ -61,6 +68,7 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
           _phoneController.text = _userData['phone']?.toString() ?? '';
           _emailController.text = _userData['email']?.toString() ?? '';
           _cityController.text = _userData['city']?.toString() ?? '';
+          _notificationsEnabled = _userData['notifications_enabled'] ?? true;
           _isLoading = false;
         });
       } else {
@@ -327,9 +335,9 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
                     Text(AppLocalizations.of(context)!.text_44, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 16),
 
-                    _buildSettingTile(context, AppLocalizations.of(context)!.text_45, Icons.lock_outline, isDarkMode),
+                    _buildSettingTile(context, AppLocalizations.of(context)!.text_45, Icons.lock_outline, isDarkMode, onTap: () => _showChangePasswordModal(context)),
                     _buildSettingTile(context, AppLocalizations.of(context)!.text_46, Icons.language, isDarkMode, trailing: AppLocalizations.of(context)!.text_47, onTap: () => AppModals.showLanguageModal(context)),
-                    _buildSettingTile(context, AppLocalizations.of(context)!.text_48, Icons.notifications_outlined, isDarkMode, hasSwitch: true),
+                    _buildSettingTile(context, AppLocalizations.of(context)!.text_48, Icons.notifications_outlined, isDarkMode, hasSwitch: true, switchValue: _notificationsEnabled, onSwitchChanged: _toggleNotifications),
 
                     const SizedBox(height: 32),
 
@@ -410,7 +418,53 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
     );
   }
 
-  Widget _buildSettingTile(BuildContext context, String title, IconData icon, bool isDarkMode, {String? trailing, bool hasSwitch = false, VoidCallback? onTap}) {
+  // Client feedback Phase B item 6: the "Change Password" tile above had no
+  // onTap at all (dead UI), even though the backend endpoint and the mobile
+  // provider/API layer (authNotifierProvider.changePassword ->
+  // AuthApi.changePassword -> PUT /auth/change-password) were already fully
+  // implemented and working. This wires the existing tile to a bottom sheet
+  // matching AppModals.showLanguageModal's visual style, rather than building
+  // a whole new page or reinventing the password-reset (OTP) flow.
+  Future<void> _toggleNotifications(bool newValue) async {
+    if (_isTogglingNotifications) return;
+    final previous = _notificationsEnabled;
+    setState(() {
+      _notificationsEnabled = newValue;
+      _isTogglingNotifications = true;
+    });
+
+    final response = await _userApi.updateNotificationPrefs(
+      preferences: {'enabled': newValue},
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isTogglingNotifications = false;
+      if (!response.success) {
+        // Revert on failure -- never leave the switch showing a state the
+        // backend didn't actually persist.
+        _notificationsEnabled = previous;
+      }
+    });
+  }
+
+  void _showChangePasswordModal(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom),
+        child: const _ChangePasswordSheet(),
+      ),
+    );
+  }
+
+  Widget _buildSettingTile(BuildContext context, String title, IconData icon, bool isDarkMode, {String? trailing, bool hasSwitch = false, VoidCallback? onTap, bool switchValue = true, ValueChanged<bool>? onSwitchChanged}) {
     return Container(
       margin: const EdgeInsetsDirectional.only(bottom: 10),
       decoration: BoxDecoration(
@@ -431,8 +485,8 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
         trailing: hasSwitch
             ? Switch(
-                value: true,
-                onChanged: (_) {},
+                value: switchValue,
+                onChanged: onSwitchChanged,
                 activeThumbColor: const Color(0xFF0084FF),
               )
             : trailing != null
@@ -446,6 +500,217 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
                   )
                 : Icon(Icons.arrow_back_ios, size: 14, color: Colors.grey[400]),
         onTap: onTap,
+      ),
+    );
+  }
+}
+
+/// Change Password bottom sheet for the currently logged-in user (client
+/// feedback Phase B item 6). Backend contract: PUT /auth/change-password with
+/// {old_pin, new_pin} — the backend independently verifies old_pin, enforces
+/// its own PIN-strength/length rules (min 8 chars, see auth_handler.go
+/// ChangePasswordRequest), and returns a safe validation error rather than a
+/// 500/panic on any failure (invalid current password, weak new password).
+/// This sheet never logs password values, only generic success/failure text.
+class _ChangePasswordSheet extends ConsumerStatefulWidget {
+  const _ChangePasswordSheet();
+
+  @override
+  ConsumerState<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
+}
+
+class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentController = TextEditingController();
+  final _newController = TextEditingController();
+  final _confirmController = TextEditingController();
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+  bool _isSubmitting = false;
+  String? _errorMessage;
+  bool _success = false;
+
+  @override
+  void dispose() {
+    _currentController.dispose();
+    _newController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    final ok = await ref.read(authNotifierProvider.notifier).changePassword(
+          oldPin: _currentController.text,
+          newPin: _newController.text,
+        );
+
+    if (!mounted) return;
+
+    if (ok) {
+      setState(() {
+        _isSubmitting = false;
+        _success = true;
+      });
+      await Future.delayed(const Duration(milliseconds: 900));
+      if (mounted) Navigator.of(context).pop();
+    } else {
+      final apiError = ref.read(authNotifierProvider).error;
+      setState(() {
+        _isSubmitting = false;
+        // Safe, generic messages only -- never echo the raw password value or
+        // a backend stack trace. The backend's own message (current_password
+        // incorrect / validation error) is already localized/safe, so it is
+        // shown as-is when present.
+        _errorMessage = apiError?.isNotEmpty == true
+            ? apiError
+            : 'تعذر تغيير كلمة المرور. يرجى المحاولة مرة أخرى.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+
+    String t(String ar, String fr, String en) {
+      if (isArabic) return ar;
+      final locale = Localizations.localeOf(context).languageCode;
+      return locale == 'fr' ? fr : en;
+    }
+
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t('تغيير كلمة المرور', 'Changer le mot de passe', 'Change Password'),
+                style: TextStyle(
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : Colors.black,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _passwordField(
+                controller: _currentController,
+                label: t('كلمة المرور الحالية', 'Mot de passe actuel', 'Current password'),
+                obscure: _obscureCurrent,
+                onToggle: () => setState(() => _obscureCurrent = !_obscureCurrent),
+                validator: (v) => (v == null || v.isEmpty)
+                    ? t('مطلوب', 'Requis', 'Required')
+                    : null,
+                isDarkMode: isDarkMode,
+              ),
+              const SizedBox(height: 12),
+              _passwordField(
+                controller: _newController,
+                label: t('كلمة المرور الجديدة', 'Nouveau mot de passe', 'New password'),
+                obscure: _obscureNew,
+                onToggle: () => setState(() => _obscureNew = !_obscureNew),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return t('مطلوب', 'Requis', 'Required');
+                  if (v.length < 8) {
+                    return t('8 أحرف على الأقل', 'Au moins 8 caractères', 'At least 8 characters');
+                  }
+                  return null;
+                },
+                isDarkMode: isDarkMode,
+              ),
+              const SizedBox(height: 12),
+              _passwordField(
+                controller: _confirmController,
+                label: t('تأكيد كلمة المرور الجديدة', 'Confirmer le nouveau mot de passe', 'Confirm new password'),
+                obscure: _obscureConfirm,
+                onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return t('مطلوب', 'Requis', 'Required');
+                  if (v != _newController.text) {
+                    return t('كلمتا المرور غير متطابقتين', 'Les mots de passe ne correspondent pas', 'Passwords do not match');
+                  }
+                  return null;
+                },
+                isDarkMode: isDarkMode,
+              ),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                ),
+              if (_success)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    t('تم تغيير كلمة المرور بنجاح', 'Mot de passe changé avec succès', 'Password changed successfully'),
+                    style: const TextStyle(color: Colors.green, fontSize: 12),
+                  ),
+                ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isSubmitting || _success ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0084FF),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          t('حفظ', 'Enregistrer', 'Save'),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _passwordField({
+    required TextEditingController controller,
+    required String label,
+    required bool obscure,
+    required VoidCallback onToggle,
+    required String? Function(String?) validator,
+    required bool isDarkMode,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscure,
+      validator: validator,
+      style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.grey[500], fontSize: 12),
+        filled: true,
+        fillColor: isDarkMode ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        suffixIcon: IconButton(
+          icon: Icon(obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: Colors.grey),
+          onPressed: onToggle,
+        ),
       ),
     );
   }

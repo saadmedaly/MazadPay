@@ -87,12 +87,8 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 	// Transform auctions to include images array instead of comma-separated string
 	var response []fiber.Map
 	for _, auction := range auctions {
-		// Cap end_time to start_time + 24h for display (does not modify DB)
-		cappedEndTime := auction.EndTime
-		maxAllowedEnd := auction.StartTime.Add(24 * time.Hour)
-		if cappedEndTime.After(maxAllowedEnd) {
-			cappedEndTime = maxAllowedEnd
-		}
+		// Client feedback Phase B item 15: end_time is no longer capped for
+		// display -- auctions can legitimately run longer than 24h now.
 		response = append(response, fiber.Map{
 			"id":               auction.ID,
 			"seller_id":        auction.SellerID,
@@ -111,7 +107,7 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 			"insurance_amount": auction.InsuranceAmount,
 			"reserve_price":    auction.ReservePrice,
 			"start_time":       auction.StartTime,
-			"end_time":         cappedEndTime,
+			"end_time":         auction.EndTime,
 			"status":           auction.Status,
 			"lot_number":       auction.LotNumber,
 			"views":            auction.Views,
@@ -178,12 +174,8 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 		return NotFound(c, "Auction")
 	}
 
-	// Cap end_time to start_time + 24h for display (does not modify DB)
-	cappedEnd := auction.EndTime
-	if maxEnd := auction.StartTime.Add(24 * time.Hour); cappedEnd.After(maxEnd) {
-		cappedEnd = maxEnd
-	}
-
+	// Client feedback Phase B item 15: end_time is no longer capped for
+	// display -- auctions can legitimately run longer than 24h now.
 	return OK(c, fiber.Map{
 		"auction": fiber.Map{
 			"id":               auction.ID,
@@ -203,7 +195,7 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 			"insurance_amount": auction.InsuranceAmount,
 			"reserve_price":    auction.ReservePrice,
 			"start_time":       auction.StartTime,
-			"end_time":         cappedEnd,
+			"end_time":         auction.EndTime,
 			"status":           auction.Status,
 			"lot_number":       auction.LotNumber,
 			"views":            auction.Views,
@@ -359,15 +351,18 @@ func (h *AuctionHandler) Create(c *fiber.Ctx) error {
 		startTimePtr = &st
 	}
 
-	// enforce max 24-hour auction duration
+	// Client feedback Phase B item 15: the 24h max-duration cap is removed --
+	// multi-day auctions (48h, 72h, several days) must now be allowed. The
+	// only remaining constraint is end_time > start_time, which the previous
+	// code never actually checked on its own (a bad end_time <= start_time
+	// would have been silently overwritten by the old cap instead of
+	// rejected) -- checked explicitly here now that the cap no longer masks it.
 	effectiveStart := time.Now()
 	if startTimePtr != nil {
 		effectiveStart = *startTimePtr
 	}
-	maxEnd := effectiveStart.Add(24 * time.Hour)
-	if endTime.After(maxEnd) {
-		endTime = maxEnd
-		h.logger.Info("[Create Auction] end_time capped to 24h", zap.Time("capped_end_time", endTime))
+	if !endTime.After(effectiveStart) {
+		return BadRequest(c, "end_time must be after start_time")
 	}
 
 	// auto-compute min_increment if zero
