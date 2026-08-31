@@ -42,16 +42,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
       setState(() {
         _isLoading = false;
+        // NotificationsApi.getNotifications() now returns ApiResponse<List<dynamic>>
+        // directly (see notifications_api.dart) -- the backend's "data" field is
+        // always a bare array, never a nested Map, so no runtime type branching
+        // is needed here anymore.
         if (response.success && response.data != null) {
-          final dynamic responseData = response.data!;
-          List<dynamic> notificationList = [];
-          // La réponse peut être directement une liste ou un objet avec 'data' ou 'notifications'
-          if (responseData is List) {
-            notificationList = responseData;
-          } else if (responseData is Map<String, dynamic>) {
-            notificationList = (responseData['notifications'] ?? responseData['data'] ?? []) as List<dynamic>;
-          }
-          _notifications = notificationList.map((item) => item as Map<String, dynamic>).toList();
+          _notifications = response.data!.map((item) => item as Map<String, dynamic>).toList();
         }
       });
     } catch (e) {

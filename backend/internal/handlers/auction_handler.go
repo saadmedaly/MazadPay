@@ -184,11 +184,20 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 	// blocked -- 404, not a "wrong market" disclosure, matching this endpoint's
 	// existing convention for any other inaccessible auction (see status check
 	// above). Anonymous caller -> DefaultAccountCountryISO ('MR'), consistent with
-	// List()'s public-listing default. The owner/admin exemption above already
-	// covers status; market isolation still applies to everyone (an owner's own
-	// auction is always in their own market by construction, so this never
-	// actually blocks a legitimate owner in practice).
-	if callerMarket != auction.EffectiveMarketCountryISO() && !isAdmin {
+	// List()'s public-listing default.
+	//
+	// Live Staging DB proof (client feedback, round 3): the previous version of
+	// this comment claimed "an owner's own auction is always in their own market
+	// by construction, so this never actually blocks a legitimate owner in
+	// practice" -- that assumption was wrong and was the actual, data-confirmed
+	// cause of the "خطأ في تحميل المزاد" failure. A TN seller's auction that
+	// predates migration 000046 has market_country_iso/currency_code = NULL in
+	// the DB; EffectiveMarketCountryISO() falls back to DefaultAccountCountryISO
+	// ("MR") for such a row, while the TN owner's own callerMarket is "TN" --
+	// "TN" != "MR" tripped this check even though isOwner was already true,
+	// 404-ing the seller out of their own active auction. The owner exemption
+	// must cover market isolation too, not just the status check above.
+	if callerMarket != auction.EffectiveMarketCountryISO() && !isAdmin && !isOwner {
 		return NotFound(c, "Auction")
 	}
 

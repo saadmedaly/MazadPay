@@ -234,3 +234,102 @@ func TestAuctionGetByID_E_LegacyNullMarketRowsStillWork(t *testing.T) {
 		}
 	}
 }
+
+// TestAuctionGetByID_TNOwner_LegacyNullMarketAuction_ReturnsOK is the
+// regression test for the exact case proven by live Staging DB data (client
+// feedback, round 3): a TN seller's auction predates migration 000046 and has
+// market_country_iso/currency_code = NULL. EffectiveMarketCountryISO() falls
+// back to DefaultAccountCountryISO ("MR") for such a row -- so the previous
+// code (isOwner exempted the status check, but NOT the market-isolation
+// check below it) 404'd the TN owner out of their own active auction,
+// because "TN" (their real market) != "MR" (the row's NULL-fallback market).
+// This was the confirmed root cause of "خطأ في تحميل المزاد" on My Auctions.
+func TestAuctionGetByID_TNOwner_LegacyNullMarketAuction_ReturnsOK(t *testing.T) {
+	sellerID := uuid.New()
+	auctionID := uuid.New()
+	tn := "TN"
+
+	auction := &models.Auction{
+		ID:           auctionID,
+		SellerID:     sellerID,
+		Status:       "active",
+		StartPrice:   decimal.NewFromInt(100),
+		CurrentPrice: decimal.NewFromInt(100),
+		StartTime:    time.Now(),
+		EndTime:      time.Now().Add(24 * time.Hour),
+		// MarketCountryISO/CurrencyCode intentionally nil -- legacy row.
+	}
+
+	auctionSvc := &fakeAuctionServiceForGetByID{auction: auction}
+	userRepo := &fakeUserRepoForGetByID{users: map[uuid.UUID]*models.User{
+		sellerID: {ID: sellerID, Role: "user", AccountCountryISO: &tn},
+	}}
+	h := NewAuctionHandler(auctionSvc, userRepo, zap.NewNop())
+
+	app := fiber.New()
+	app.Get("/v1/api/auctions/:id", func(c *fiber.Ctx) error {
+		c.Locals("user_id", sellerID)
+		return h.GetByID(c)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/api/auctions/"+auctionID.String(), nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected the TN owner to retrieve their own legacy null-market active auction (HTTP 200), got %d, body: %s", resp.StatusCode, body)
+	}
+}
+
+// TestAuctionGetByID_TNNonOwner_LegacyNullMarketAuction_StillBlocked proves
+// the fix is narrow: a DIFFERENT TN user (not the seller) viewing the same
+// legacy NULL-market auction must still be blocked by the existing MR-fallback
+// market policy -- the owner exemption must not leak into a general
+// "NULL-market auctions are visible cross-market" loosening.
+func TestAuctionGetByID_TNNonOwner_LegacyNullMarketAuction_StillBlocked(t *testing.T) {
+	sellerID := uuid.New()
+	otherTNUserID := uuid.New()
+	auctionID := uuid.New()
+	tn := "TN"
+
+	auction := &models.Auction{
+		ID:           auctionID,
+		SellerID:     sellerID,
+		Status:       "active",
+		StartPrice:   decimal.NewFromInt(100),
+		CurrentPrice: decimal.NewFromInt(100),
+		StartTime:    time.Now(),
+		EndTime:      time.Now().Add(24 * time.Hour),
+		// MarketCountryISO/CurrencyCode intentionally nil -- legacy row,
+		// EffectiveMarketCountryISO() resolves to "MR".
+	}
+
+	auctionSvc := &fakeAuctionServiceForGetByID{auction: auction}
+	userRepo := &fakeUserRepoForGetByID{users: map[uuid.UUID]*models.User{
+		otherTNUserID: {ID: otherTNUserID, Role: "user", AccountCountryISO: &tn},
+	}}
+	h := NewAuctionHandler(auctionSvc, userRepo, zap.NewNop())
+
+	app := fiber.New()
+	app.Get("/v1/api/auctions/:id", func(c *fiber.Ctx) error {
+		c.Locals("user_id", otherTNUserID)
+		return h.GetByID(c)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/api/auctions/"+auctionID.String(), nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// TN caller vs. the legacy row's MR fallback -> still cross-market ->
+	// still blocked, matching the existing (unchanged) market isolation policy.
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("SECURITY REGRESSION: expected a non-owner TN caller to still be blocked from a legacy null-market (MR-fallback) auction, got %d", resp.StatusCode)
+	}
+}
