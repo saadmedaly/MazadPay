@@ -23,6 +23,18 @@ type TransactionRepository interface {
 	GetPendingCount(ctx context.Context) (int, error)
 	GetWeeklySum(ctx context.Context) (float64, error)
 	GetDailyRevenueChart(ctx context.Context) ([]map[string]interface{}, error)
+	// GetStatsByCurrency/GetWeeklySumByCurrency/GetDailyRevenueChartByCurrency
+	// (migration 000046, Phase 2): currency-grouped variants of the above --
+	// rows can legitimately span multiple currencies (MRU/TND/MAD/XOF/...), so
+	// these never blend amounts of different currencies into one sum. Legacy
+	// transactions with NULL currency_code are grouped under DefaultCurrencyCode
+	// (COALESCE), matching Transaction.EffectiveCurrencyCode(). Additive: the
+	// single-currency methods above are kept for backward compatibility with
+	// any caller that still wants the raw blended figure (documented/accepted
+	// only while MazadPay's live data remains single-market).
+	GetStatsByCurrency(ctx context.Context) (map[string]float64, map[string]float64, error) // Total, Today -- keyed by currency
+	GetWeeklySumByCurrency(ctx context.Context) (map[string]float64, error)
+	GetDailyRevenueChartByCurrency(ctx context.Context) ([]map[string]interface{}, error)
 }
 
 type transactionRepo struct {
@@ -252,6 +264,111 @@ func (r *transactionRepo) GetWeeklySum(ctx context.Context) (float64, error) {
 	var sum float64
 	err := r.db.GetContext(ctx, &sum, "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE status = 'completed' AND created_at >= now() - interval '7 days'")
 	return sum, err
+}
+
+// GetStatsByCurrency mirrors GetStats but groups by COALESCE(currency_code, 'MRU')
+// instead of summing every currency into one blended figure (migration 000046,
+// Phase 2 -- financial reporting must never silently mix currencies).
+func (r *transactionRepo) GetStatsByCurrency(ctx context.Context) (map[string]float64, map[string]float64, error) {
+	total := make(map[string]float64)
+	today := make(map[string]float64)
+
+	rows, err := r.db.QueryxContext(ctx, `
+		SELECT COALESCE(currency_code, 'MRU') as currency, COALESCE(SUM(amount), 0) as amount
+		FROM transactions WHERE status = 'completed'
+		GROUP BY COALESCE(currency_code, 'MRU')
+	`)
+	if err != nil {
+		return nil, nil, err
+	}
+	for rows.Next() {
+		var currency string
+		var amount float64
+		if err := rows.Scan(&currency, &amount); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		total[currency] = amount
+	}
+	rows.Close()
+
+	rows2, err := r.db.QueryxContext(ctx, `
+		SELECT COALESCE(currency_code, 'MRU') as currency, COALESCE(SUM(amount), 0) as amount
+		FROM transactions WHERE status = 'completed' AND created_at >= CURRENT_DATE
+		GROUP BY COALESCE(currency_code, 'MRU')
+	`)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows2.Close()
+	for rows2.Next() {
+		var currency string
+		var amount float64
+		if err := rows2.Scan(&currency, &amount); err != nil {
+			return nil, nil, err
+		}
+		today[currency] = amount
+	}
+	return total, today, nil
+}
+
+// GetWeeklySumByCurrency mirrors GetWeeklySum but grouped by currency (migration
+// 000046, Phase 2).
+func (r *transactionRepo) GetWeeklySumByCurrency(ctx context.Context) (map[string]float64, error) {
+	sums := make(map[string]float64)
+	rows, err := r.db.QueryxContext(ctx, `
+		SELECT COALESCE(currency_code, 'MRU') as currency, COALESCE(SUM(amount), 0) as amount
+		FROM transactions WHERE status = 'completed' AND created_at >= now() - interval '7 days'
+		GROUP BY COALESCE(currency_code, 'MRU')
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var currency string
+		var amount float64
+		if err := rows.Scan(&currency, &amount); err != nil {
+			return nil, err
+		}
+		sums[currency] = amount
+	}
+	return sums, nil
+}
+
+// GetDailyRevenueChartByCurrency mirrors GetDailyRevenueChart but adds a
+// "currency" column and groups by (day, currency) instead of blending every
+// currency's amount into one daily total (migration 000046, Phase 2).
+func (r *transactionRepo) GetDailyRevenueChartByCurrency(ctx context.Context) ([]map[string]interface{}, error) {
+	var data []map[string]interface{}
+	query := `
+		SELECT
+			TO_CHAR(d, 'YYYY-MM-DD') as date,
+			COALESCE(t.currency_code, 'MRU') as currency,
+			COALESCE(SUM(t.amount), 0) as amount
+		FROM
+			generate_series(now() - interval '29 days', now(), interval '1 day') d
+		LEFT JOIN
+			transactions t ON t.created_at::date = d::date AND t.status = 'completed'
+		GROUP BY
+			d, COALESCE(t.currency_code, 'MRU')
+		ORDER BY
+			d ASC
+	`
+	rows, err := r.db.QueryxContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		m := make(map[string]interface{})
+		if err := rows.MapScan(m); err != nil {
+			return nil, err
+		}
+		data = append(data, m)
+	}
+	return data, nil
 }
 
 func (r *transactionRepo) GetDailyRevenueChart(ctx context.Context) ([]map[string]interface{}, error) {

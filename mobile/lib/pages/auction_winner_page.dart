@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auction_provider.dart';
 import '../models/auction.dart';
+import '../utils/money_formatter.dart';
 
 class AuctionWinnerPage extends ConsumerWidget {
   final String auctionId;
@@ -127,7 +128,7 @@ class AuctionWinnerPage extends ConsumerWidget {
                const Icon(Icons.check_circle, color: Color(0xFF00C58D), size: 32),
                const SizedBox(width: 12),
                Text(
-                 '${auction.currentPrice.toStringAsFixed(0)} أوقية',
+                 MoneyFormatter.format(auction.currentPrice, auction.currencyCode),
                  style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 28, fontWeight: FontWeight.w900, color: Colors.black),
                ),
             ],

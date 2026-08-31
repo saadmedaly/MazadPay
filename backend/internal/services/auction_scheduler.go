@@ -103,6 +103,7 @@ func (s *AuctionScheduler) checkEndedAuctions(ctx context.Context) {
 		params := map[string]string{
 			"auctionTitle": auction.TitleAr,
 			"finalPrice":  auction.CurrentPrice.String(),
+			"currency":    auction.EffectiveCurrencyCode(),
 		}
 		data := map[string]string{
 			"type":      "auction_ended",
@@ -131,6 +132,7 @@ func (s *AuctionScheduler) checkEndedAuctions(ctx context.Context) {
 					winnerParams := map[string]string{
 						"auctionTitle": auction.TitleAr,
 						"finalPrice":  auction.CurrentPrice.String(),
+						"currency":    auction.EffectiveCurrencyCode(),
 					}
 					winnerData := map[string]string{
 						"type":      "auction_won",

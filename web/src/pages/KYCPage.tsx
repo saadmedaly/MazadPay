@@ -13,7 +13,7 @@ import {
   useBulkReviewAuctionRequests, useBulkDeleteAuctionRequests,
   useBulkReviewBannerRequests, useBulkDeleteBannerRequests
 } from '@/hooks/useRequests'
-import { formatDate, shortID } from '@/lib/formatters'
+import { formatDate, formatPrice, shortID } from '@/lib/formatters'
 import type { AuctionRequest, BannerRequest } from '@/hooks/useRequests'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -118,7 +118,7 @@ export function KYCPage() {
     {
       header: 'السعر',
       accessorKey: 'start_price',
-      cell: ({ getValue }) => <span className="text-xs text-surface-muted font-mono">{getValue<string>()} MRU</span>
+      cell: ({ getValue, row }) => <span className="text-xs text-surface-muted font-mono">{formatPrice(getValue<string>(), (row.original as AuctionRequest).currency_code)}</span>
     },
     {
       header: 'تاريخ البدء',

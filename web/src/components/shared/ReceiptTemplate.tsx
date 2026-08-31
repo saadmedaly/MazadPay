@@ -112,7 +112,7 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
           </div>
 
           <div style={{ fontSize: '32px', fontWeight: 800, color: '#0084FF', marginBottom: '24px' }}>
-            {formatPrice(parseFloat(txn.amount))}
+            {formatPrice(parseFloat(txn.amount), txn.currency_code)}
           </div>
 
           {/* Détails */}

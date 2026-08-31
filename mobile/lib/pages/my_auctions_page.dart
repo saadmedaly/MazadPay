@@ -11,6 +11,7 @@ import 'edit_auction_page.dart';
 import '../services/auction_api.dart';
 import '../services/cache_service.dart';
 import '../services/api_service.dart';
+import '../utils/money_formatter.dart';
 
 class MyAuctionsPage extends ConsumerStatefulWidget {
   const MyAuctionsPage({super.key});
@@ -700,6 +701,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
     final startPriceRaw = auction['start_price'] ?? '0';
     final currentPrice = double.tryParse(currentPriceRaw.toString())?.toStringAsFixed(0) ?? currentPriceRaw.toString();
     final startPrice = double.tryParse(startPriceRaw.toString())?.toStringAsFixed(0) ?? startPriceRaw.toString();
+    final auctionCurrencyCode = auction['currency_code']?.toString();
 
     final endTime = auction['end_time']?.toString() ?? auction['ends_at']?.toString() ?? '';
     final status = auction['status']?.toString() ?? 'active';
@@ -888,7 +890,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
                       Row(
                         children: [
                           Text(
-                            '$currentPrice MRU',
+                            MoneyFormatter.format(double.tryParse(currentPrice) ?? 0, auctionCurrencyCode),
                             style: const TextStyle(
                               fontFamily: 'Plus Jakarta Sans',
                               fontSize: 16,
@@ -920,7 +922,7 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
 
                       // Prix de départ
                       Text(
-                        'السعر الابتدائي: $startPrice MRU',
+                        'السعر الابتدائي: ${MoneyFormatter.format(double.tryParse(startPrice) ?? 0, auctionCurrencyCode)}',
                         style: TextStyle(
                           fontFamily: 'Plus Jakarta Sans',
                           fontSize: 12,

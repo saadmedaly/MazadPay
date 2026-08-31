@@ -17,14 +17,31 @@ import { MetricCard } from '@/components/shared/MetricCard'
 
 import { useState } from 'react'
 
+// Each revenue-chart row now carries its own `currency` field (backend
+// GetDailyRevenueChartByCurrency, migration 000046 Phase 2) instead of
+// blending every currency's amount into one figure -- render it explicitly
+// rather than assuming a single global currency.
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
+  const point = payload[0]?.payload
   return (
     <div className="bg-surface-card border border-surface-border rounded-lg p-3 text-xs shadow-2xl">
       <p className="text-surface-muted mb-1 font-medium">{label}</p>
-      <p className="text-white font-mono font-bold text-sm">{formatPrice(payload[0].value)}</p>
+      <p className="text-white font-mono font-bold text-sm">{formatPrice(payload[0].value, point?.currency)}</p>
     </div>
   )
+}
+
+// Renders a currency-grouped total (e.g. { MRU: 12000, TND: 340 }) as
+// "12,000 MRU / 340 TND" -- NEVER summed across currencies into one blended
+// figure (migration 000046, Phase 2 -- see DashboardStats.*_by_currency).
+function formatByCurrency(byCurrency: Record<string, number> | undefined, fallback: number): string {
+  if (!byCurrency || Object.keys(byCurrency).length === 0) {
+    return formatPrice(fallback)
+  }
+  const entries = Object.entries(byCurrency).filter(([, v]) => v !== 0)
+  if (entries.length === 0) return formatPrice(0)
+  return entries.map(([code, v]) => formatPrice(v, code)).join(' / ')
 }
 
 export function DashboardPage() {
@@ -81,7 +98,9 @@ export function DashboardPage() {
     },
     {
       label: 'الإيداعات (7 أيام)',
-      value: stats ? formatPrice(stats.week_deposits) : '—',
+      // Currency-grouped (never a blended sum across currencies) -- see
+      // formatByCurrency above and DashboardStats.week_deposits_by_currency.
+      value: stats ? formatByCurrency(stats.week_deposits_by_currency, stats.week_deposits) : '—',
       icon: TrendingUp,
       accent: 'blue' as const,
     },

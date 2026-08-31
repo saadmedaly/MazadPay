@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auction_api.dart';
+import '../utils/money_formatter.dart';
 
 class EditAuctionPage extends StatefulWidget {
   final Map<String, dynamic> auction;
@@ -100,7 +101,7 @@ class _EditAuctionPageState extends State<EditAuctionPage> {
             _label('الوصف'),
             _field(_descController, hint: 'وصف المزاد', maxLines: 4),
             const SizedBox(height: 20),
-            _label('السعر (MRU)'),
+            _label('السعر (${widget.auction['currency_code']?.toString() ?? MoneyFormatter.fallbackCurrencyCode})'),
             _field(_priceController, hint: 'السعر', keyboardType: TextInputType.number),
             const SizedBox(height: 8),
             Container(

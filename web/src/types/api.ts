@@ -65,6 +65,12 @@ export interface Auction {
   created_at: string
   rejection_reason?: string
   buy_now_price: string | null
+  // currency_code/market_country_iso (migration 000046, Phase 2): additive,
+  // may be absent (omitempty) on legacy rows predating the migration -- treat
+  // absence as DEFAULT_CURRENCY_CODE ('MRU'), mirroring backend
+  // Auction.EffectiveCurrencyCode()/EffectiveMarketCountryISO().
+  currency_code?: string | null
+  market_country_iso?: string | null
 }
 
 export interface Transaction {
@@ -86,6 +92,10 @@ export interface Transaction {
   // d'afficher le vrai nom de l'utilisateur au lieu de son UUID tronqué.
   user_full_name?: string | null
   user_phone?: string | null
+  // currency_code (migration 000046, Phase 2): additive, may be absent on
+  // legacy rows -- treat absence as DEFAULT_CURRENCY_CODE ('MRU'), mirroring
+  // backend Transaction.EffectiveCurrencyCode().
+  currency_code?: string | null
 }
 
 export interface Bid {
@@ -115,6 +125,15 @@ export interface DashboardStats {
   pending_kycs: number
   pending_auction_requests: number
   pending_banner_requests: number
+  // *_by_currency (migration 000046, Phase 2): currency-grouped breakdowns of
+  // the blended totals above, e.g. { MRU: 12000, TND: 340 }. Rows can span
+  // multiple currencies once MazadPay is multi-market -- the Admin UI MUST
+  // prefer these grouped figures over the single blended *_revenue/*_deposits
+  // fields above whenever more than one currency is present, and never
+  // present a blended sum across currencies as one real total.
+  total_revenue_by_currency?: Record<string, number>
+  today_revenue_by_currency?: Record<string, number>
+  week_deposits_by_currency?: Record<string, number>
 }
 
 export interface KYCVerification {

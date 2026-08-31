@@ -133,6 +133,8 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 			"city":             auction.CityNameAr,
 			"images":           auction.GetImagesArray(),
 			"created_at":       auction.CreatedAt,
+			"currency_code":      auction.EffectiveCurrencyCode(),
+			"market_country_iso": auction.EffectiveMarketCountryISO(),
 		})
 	}
 
@@ -222,6 +224,8 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 			"category":         auction.CategoryNameAr,
 			"city":             auction.CityNameAr,
 			"image_urls":       auction.GetImagesArray(),
+			"currency_code":      auction.EffectiveCurrencyCode(),
+			"market_country_iso": auction.EffectiveMarketCountryISO(),
 		},
 		"images": images,
 	})
@@ -1100,6 +1104,7 @@ func (h *AuctionHandler) GetWinner(c *fiber.Ctx) error {
 		"winner_name":      winner.FullName,
 		"winner_phone":     maskPhone(winner.Phone),
 		"winning_amount":   auction.CurrentPrice,
+		"currency_code":    auction.EffectiveCurrencyCode(),
 		"payment_deadline": auction.PaymentDeadline,
 		"auction_status":   auction.Status,
 	})

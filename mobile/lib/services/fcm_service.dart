@@ -547,85 +547,85 @@ class FCMService {
     'auction_won': {
       'ar': {
         'title': 'تهانينا! لقد فزت',
-        'body': 'مزاد "{auctionTitle}" - {finalPrice} MRU',
+        'body': 'مزاد "{auctionTitle}" - {finalPrice} {currency}',
       },
       'fr': {
         'title': 'Félicitations ! Vous avez gagné',
-        'body': 'Enchère "{auctionTitle}" - {finalPrice} MRU',
+        'body': 'Enchère "{auctionTitle}" - {finalPrice} {currency}',
       },
       'en': {
         'title': 'Congratulations! You won',
-        'body': 'Auction "{auctionTitle}" - {finalPrice} MRU',
+        'body': 'Auction "{auctionTitle}" - {finalPrice} {currency}',
       },
     },
     'auction_ended': {
       'ar': {
         'title': 'انتهى المزاد',
-        'body': 'تم بيع "{auctionTitle}" بـ {finalPrice} MRU',
+        'body': 'تم بيع "{auctionTitle}" بـ {finalPrice} {currency}',
       },
       'fr': {
         'title': 'Enchère terminée',
-        'body': '"{auctionTitle}" vendu pour {finalPrice} MRU',
+        'body': '"{auctionTitle}" vendu pour {finalPrice} {currency}',
       },
       'en': {
         'title': 'Auction ended',
-        'body': '"{auctionTitle}" sold for {finalPrice} MRU',
+        'body': '"{auctionTitle}" sold for {finalPrice} {currency}',
       },
     },
     'bid_outbid': {
       'ar': {
         'title': 'تم تجاوز مزايدتك!',
-        'body': 'تم تجاوز مزايدتك في مزاد "{auctionTitle}" بسعر {newPrice} MRU',
+        'body': 'تم تجاوز مزايدتك في مزاد "{auctionTitle}" بسعر {newPrice} {currency}',
       },
       'fr': {
         'title': 'Enchère dépassée !',
-        'body': 'Votre enchère sur "{auctionTitle}" a été dépassée à {newPrice} MRU',
+        'body': 'Votre enchère sur "{auctionTitle}" a été dépassée à {newPrice} {currency}',
       },
       'en': {
         'title': "You've been outbid!",
-        'body': 'Your bid on "{auctionTitle}" has been outbid at {newPrice} MRU',
+        'body': 'Your bid on "{auctionTitle}" has been outbid at {newPrice} {currency}',
       },
     },
     'deposit_confirmed': {
       'ar': {
         'title': '✅ تم تأكيد الإيداع',
-        'body': 'تم تأكيد إيداع {amount} MRU في محفظتك',
+        'body': 'تم تأكيد إيداع {amount} {currency} في محفظتك',
       },
       'fr': {
         'title': '✅ Dépôt confirmé',
-        'body': 'Votre dépôt de {amount} MRU a été confirmé',
+        'body': 'Votre dépôt de {amount} {currency} a été confirmé',
       },
       'en': {
         'title': '✅ Deposit confirmed',
-        'body': 'Your deposit of {amount} MRU has been confirmed',
+        'body': 'Your deposit of {amount} {currency} has been confirmed',
       },
     },
     'deposit_rejected': {
       'ar': {
         'title': '❌ تم رفض الإيداع',
-        'body': 'تم رفض إيداع {amount} MRU. السبب: {reason}',
+        'body': 'تم رفض إيداع {amount} {currency}. السبب: {reason}',
       },
       'fr': {
         'title': '❌ Dépôt refusé',
-        'body': 'Votre dépôt de {amount} MRU a été refusé. Raison: {reason}',
+        'body': 'Votre dépôt de {amount} {currency} a été refusé. Raison: {reason}',
       },
       'en': {
         'title': '❌ Deposit rejected',
-        'body': 'Your deposit of {amount} MRU was rejected. Reason: {reason}',
+        'body': 'Your deposit of {amount} {currency} was rejected. Reason: {reason}',
       },
     },
     'payment_received': {
       'ar': {
         'title': '💰 تم استلام الدفع',
-        'body': '{amount} MRU لمزاد "{auctionTitle}"',
+        'body': '{amount} {currency} لمزاد "{auctionTitle}"',
       },
       'fr': {
         'title': '💰 Paiement reçu',
-        'body': '{amount} MRU pour "{auctionTitle}"',
+        'body': '{amount} {currency} pour "{auctionTitle}"',
       },
       'en': {
         'title': '💰 Payment received',
-        'body': '{amount} MRU for "{auctionTitle}"',
+        'body': '{amount} {currency} for "{auctionTitle}"',
       },
     },
 

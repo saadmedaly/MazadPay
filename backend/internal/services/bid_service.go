@@ -214,6 +214,7 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 		_ = s.notifSvc.SendLocalizedPush(ctx, prevTopBid.UserID, "bid_outbid", language, map[string]string{
 			"auctionTitle": title,
 			"newPrice":     amount.String(),
+			"currency":     auction.EffectiveCurrencyCode(),
 		}, map[string]string{
 			"type":      "bid_outbid",
 			"auctionId": auctionID.String(),

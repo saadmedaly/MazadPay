@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auction_winner_page.dart';
 import '../services/auction_api.dart';
 import '../services/cache_service.dart';
+import '../utils/money_formatter.dart';
 
 class MyWinningsPage extends ConsumerStatefulWidget {
   const MyWinningsPage({super.key});
@@ -179,7 +180,10 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
               l10n.no_title;
     }
     
-    final price = '${winning['current_price'] ?? winning['final_price'] ?? winning['current_bid'] ?? 0} MRU';
+    final price = MoneyFormatter.format(
+      num.tryParse((winning['current_price'] ?? winning['final_price'] ?? winning['current_bid'] ?? 0).toString()) ?? 0,
+      winning['currency_code']?.toString(),
+    );
     final isPaid = winning['is_paid'] == true || winning['payment_status'] == 'paid';
 
     // Gestion des images

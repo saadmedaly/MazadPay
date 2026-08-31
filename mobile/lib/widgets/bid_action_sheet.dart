@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auction_provider_api.dart';
 import '../services/bid_api.dart';
+import '../utils/money_formatter.dart';
 
 class BidActionSheet extends ConsumerStatefulWidget {
   final String auctionId;
@@ -11,13 +12,19 @@ class BidActionSheet extends ConsumerStatefulWidget {
   final double minIncrement;
   final int bidCount;
   final String timeLeft;
+  /// ISO-4217 currency code of this specific auction (migration 000046,
+  /// Phase 2). Always the auction's own currency, never the viewer's
+  /// assumed currency -- cross-market auctions are already inaccessible
+  /// per Phase 1, but display must still reflect the auction's currency.
+  final String? currencyCode;
   const BidActionSheet({
-    super.key, 
+    super.key,
     required this.auctionId,
     required this.currentPrice,
     required this.minIncrement,
     required this.bidCount,
     required this.timeLeft,
+    this.currencyCode,
   });
 
   @override
@@ -79,7 +86,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
             children: [
                _buildInfoColumn('${widget.bidCount}', AppLocalizations.of(context)!.text_369, Colors.red),
                _buildVerticalDivider(),
-               _buildInfoColumn(widget.currentPrice.toStringAsFixed(0), AppLocalizations.of(context)!.text_370, Colors.black),
+               _buildInfoColumn(MoneyFormatter.format(widget.currentPrice, widget.currencyCode), AppLocalizations.of(context)!.text_370, Colors.black),
                _buildVerticalDivider(),
                _buildInfoColumn(widget.timeLeft, AppLocalizations.of(context)!.text_371, Colors.red),
             ],
@@ -102,7 +109,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
               Expanded(
                 child: Center(
                   child: Text(
-                    '${_bidAmount.toStringAsFixed(0)} أوقية',
+                    MoneyFormatter.format(_bidAmount, widget.currencyCode),
                     style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -124,7 +131,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
       children: [
         Text(AppLocalizations.of(context)!.text_368, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 32),
-        Text('${_bidAmount.toStringAsFixed(0)} أوقية', 
+        Text(MoneyFormatter.format(_bidAmount, widget.currencyCode),
             style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 28, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF))),
         const SizedBox(height: 16),
         Text(AppLocalizations.of(context)!.text_372, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16, color: Colors.grey)),
@@ -164,13 +171,42 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
               if (mounted) {
                 setState(() => _isLoading = false);
                 
-                String errorMessage = e.toString();
-                if (errorMessage.contains('insufficient_funds')) {
-                  errorMessage = 'Solde insuffisant pour placer cette enchère';
-                } else if (errorMessage.contains('self_bid')) {
-                  errorMessage = 'Vous ne pouvez pas enchérir sur votre propre enchère';
+                // Safe, localized, non-leaking messages for the actual Phase 1
+                // error codes (backend/internal/handlers/response.go MapError) --
+                // never surface the raw internal error string to the user.
+                final raw = e.toString();
+                String errorMessage;
+                final locale = Localizations.localeOf(context).languageCode;
+                if (raw.contains('insufficient_funds') || raw.contains('insufficient_balance')) {
+                  errorMessage = locale == 'ar'
+                      ? 'رصيدك غير كافٍ لإتمام هذه المزايدة'
+                      : (locale == 'fr' ? 'Solde insuffisant pour placer cette enchère' : 'Insufficient balance to place this bid');
+                } else if (raw.contains('self_bid') || raw.contains('cannot_bid_own_auction')) {
+                  errorMessage = locale == 'ar'
+                      ? 'لا يمكنك المزايدة على مزادك الخاص'
+                      : (locale == 'fr' ? 'Vous ne pouvez pas enchérir sur votre propre enchère' : 'You cannot bid on your own auction');
+                } else if (raw.contains('cross_market_bid_not_allowed')) {
+                  errorMessage = locale == 'ar'
+                      ? 'لا يمكن المزايدة على مزادات من سوق دولة أخرى'
+                      : (locale == 'fr' ? "Impossible d'enchérir sur une enchère d'un autre marché" : 'You cannot bid on an auction from another market');
+                } else if (raw.contains('wallet_currency_mismatch')) {
+                  errorMessage = locale == 'ar'
+                      ? 'تعذر إتمام العملية بسبب عدم تطابق العملة'
+                      : (locale == 'fr' ? 'Opération impossible : devise incompatible' : 'Unable to complete: currency mismatch');
+                } else if (raw.contains('bid_too_low')) {
+                  errorMessage = locale == 'ar'
+                      ? 'مبلغ المزايدة منخفض جدًا'
+                      : (locale == 'fr' ? "Le montant de l'enchère est trop bas" : 'Bid amount is too low');
+                } else if (raw.contains('auction_ended') || raw.contains('auction_not_active')) {
+                  errorMessage = locale == 'ar'
+                      ? 'هذا المزاد لم يعد نشطًا'
+                      : (locale == 'fr' ? "Cette enchère n'est plus active" : 'This auction is no longer active');
+                } else {
+                  errorMessage = locale == 'ar'
+                      ? 'تعذر إتمام المزايدة، حاول مرة أخرى'
+                      : (locale == 'fr' ? "Impossible de placer l'enchère, réessayez" : 'Could not place bid, please try again');
                 }
-                
+
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(errorMessage),

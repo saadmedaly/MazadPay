@@ -7,6 +7,7 @@ import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/auction_details_page.dart';
 import '../services/auction_api.dart';
 import '../services/category_api.dart';
+import '../utils/money_formatter.dart';
 
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
@@ -353,7 +354,9 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                         children: [
                           // Prix
                           Text(
-                            locale == 'ar' ? 'السعر (MRU)' : (locale == 'fr' ? 'Prix (MRU)' : 'Price (MRU)'),
+                            locale == 'ar'
+                                ? 'السعر'
+                                : (locale == 'fr' ? 'Prix' : 'Price'),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -367,8 +370,8 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                             max: 1000000,
                             divisions: 100,
                             labels: RangeLabels(
-                              '${_priceRange.start.toInt()} MRU',
-                              '${_priceRange.end.toInt()} MRU',
+                              MoneyFormatter.formatAmountOnly(_priceRange.start.toInt(), null),
+                              MoneyFormatter.formatAmountOnly(_priceRange.end.toInt(), null),
                             ),
                             onChanged: (values) {
                               setModalState(() {
@@ -382,11 +385,11 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                '${_priceRange.start.toInt()} MRU',
+                                MoneyFormatter.format(_priceRange.start.toInt(), null),
                                 style: TextStyle(color: isDarkMode ? Colors.grey.shade400 : Colors.grey),
                               ),
                               Text(
-                                '${_priceRange.end.toInt()} MRU',
+                                MoneyFormatter.format(_priceRange.end.toInt(), null),
                                 style: TextStyle(color: isDarkMode ? Colors.grey.shade400 : Colors.grey),
                               ),
                             ],
@@ -1040,7 +1043,10 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                     const SizedBox(height: 1),
                     // Price
                     Text(
-                      "${auction['current_price'] ?? auction['current_bid'] ?? auction['price'] ?? 0} MRU",
+                      MoneyFormatter.format(
+                        num.tryParse((auction['current_price'] ?? auction['current_bid'] ?? auction['price'] ?? 0).toString()) ?? 0,
+                        auction['currency_code']?.toString(),
+                      ),
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,

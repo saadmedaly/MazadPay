@@ -3,6 +3,7 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:mezadpay/pages/create_ad_form_page.dart';
 import 'package:mezadpay/pages/create_banner_request_page.dart';
 import 'package:mezadpay/services/request_api.dart';
+import 'package:mezadpay/utils/money_formatter.dart';
 
 class RequestsPage extends StatefulWidget {
   const RequestsPage({super.key});
@@ -328,7 +329,10 @@ class _RequestsPageState extends State<RequestsPage>
                 ),
                 if (req['amount'] != null)
                   Text(
-                    '${req['amount']} MRU',
+                    MoneyFormatter.format(
+                      num.tryParse(req['amount'].toString()) ?? 0,
+                      req['currency_code']?.toString(),
+                    ),
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF0081FF),

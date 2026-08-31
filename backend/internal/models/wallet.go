@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,6 +30,20 @@ func (w *Wallet) EffectiveCurrencyCode() string {
 		return *w.CurrencyCode
 	}
 	return DefaultCurrencyCode
+}
+
+// MarshalJSON ensures currency_code is ALWAYS present when *Wallet is
+// serialized directly (e.g. handlers.OK(c, wallet)), using EffectiveCurrencyCode
+// for legacy pre-migration-000046 wallets instead of omitting the key.
+func (w Wallet) MarshalJSON() ([]byte, error) {
+	type alias Wallet
+	return json.Marshal(struct {
+		alias
+		CurrencyCode string `json:"currency_code"`
+	}{
+		alias:        alias(w),
+		CurrencyCode: w.EffectiveCurrencyCode(),
+	})
 }
 
 type Transaction struct {
@@ -77,6 +92,21 @@ func (t *Transaction) EffectiveCurrencyCode() string {
 		return *t.CurrencyCode
 	}
 	return DefaultCurrencyCode
+}
+
+// MarshalJSON ensures currency_code is ALWAYS present when *Transaction is
+// serialized directly (e.g. handlers.OK/PaginatedOK(c, tx(s))), using
+// EffectiveCurrencyCode for legacy pre-migration-000046 transactions instead
+// of omitting the key.
+func (t Transaction) MarshalJSON() ([]byte, error) {
+	type alias Transaction
+	return json.Marshal(struct {
+		alias
+		CurrencyCode string `json:"currency_code"`
+	}{
+		alias:        alias(t),
+		CurrencyCode: t.EffectiveCurrencyCode(),
+	})
 }
 
 type WalletHold struct {

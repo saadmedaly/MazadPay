@@ -23,6 +23,7 @@ import '../models/bid.dart' as model_bid;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../utils/time_utils.dart';
+import '../utils/money_formatter.dart';
 
 class AuctionDetailsPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -551,7 +552,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${auction.currentPrice.toStringAsFixed(0)} MRU',
+                  MoneyFormatter.format(auction.currentPrice, auction.currencyCode),
                   style: const TextStyle(
                     fontFamily: 'Plus Jakarta Sans',
                     color: Colors.white,
@@ -585,7 +586,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${auction.minIncrement.toStringAsFixed(0)} MRU',
+                  MoneyFormatter.format(auction.minIncrement, auction.currencyCode),
                   style: const TextStyle(
                     fontFamily: 'Plus Jakarta Sans',
                     color: Color(0xFF0081FF),
@@ -1515,6 +1516,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       context,
       auctionId: widget.auctionId,
       currentPrice: currentPrice,
+      currencyCode: auction.currencyCode,
     );
   }
 
@@ -1592,6 +1594,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                               minIncrement: minIncrement,
                               bidCount: bidCount,
                               timeLeft: timeLeftStr,
+                              currencyCode: auction.currencyCode,
                             ),
                           );
                         },
@@ -1925,7 +1928,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${auction.currentPrice.toStringAsFixed(0)} MRU',
+                    MoneyFormatter.format(auction.currentPrice, auction.currencyCode),
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 10,

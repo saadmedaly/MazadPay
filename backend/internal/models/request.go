@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +45,41 @@ type AuctionRequest struct {
 
 	// Relations
 	User *User `db:"-" json:"user,omitempty"`
+}
+
+// EffectiveMarketCountryISO/EffectiveCurrencyCode fall back to
+// DefaultAccountCountryISO/DefaultCurrencyCode for requests predating
+// migration 000046 (MarketCountryISO/CurrencyCode NULL). Callers must use
+// these, never the raw fields directly.
+func (r *AuctionRequest) EffectiveMarketCountryISO() string {
+	if r.MarketCountryISO != nil && *r.MarketCountryISO != "" {
+		return *r.MarketCountryISO
+	}
+	return DefaultAccountCountryISO
+}
+
+func (r *AuctionRequest) EffectiveCurrencyCode() string {
+	if r.CurrencyCode != nil && *r.CurrencyCode != "" {
+		return *r.CurrencyCode
+	}
+	return DefaultCurrencyCode
+}
+
+// MarshalJSON ensures currency_code/market_country_iso are ALWAYS present
+// when *AuctionRequest is serialized directly (e.g. handlers.OK/PaginatedOK),
+// using the Effective* fallback for legacy pre-migration-000046 rows instead
+// of omitting the key.
+func (r AuctionRequest) MarshalJSON() ([]byte, error) {
+	type alias AuctionRequest
+	return json.Marshal(struct {
+		alias
+		MarketCountryISO string `json:"market_country_iso"`
+		CurrencyCode     string `json:"currency_code"`
+	}{
+		alias:            alias(r),
+		MarketCountryISO: r.EffectiveMarketCountryISO(),
+		CurrencyCode:     r.EffectiveCurrencyCode(),
+	})
 }
 
 type BannerRequest struct {

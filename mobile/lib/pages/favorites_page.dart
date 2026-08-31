@@ -5,6 +5,7 @@ import 'package:mezadpay/providers/favorites_provider.dart';
 import 'package:mezadpay/services/favorites_service.dart';
 import 'package:mezadpay/services/api_service.dart';
 import 'auction_details_page.dart';
+import '../utils/money_formatter.dart';
 
 class FavoritesPage extends ConsumerStatefulWidget {
   const FavoritesPage({super.key});
@@ -260,7 +261,10 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '$price MRU',
+                  MoneyFormatter.format(
+                    num.tryParse(price.toString()) ?? 0,
+                    auction['currency_code']?.toString(),
+                  ),
                   style: const TextStyle(
                     fontFamily: 'Plus Jakarta Sans',
                     fontSize: 16,

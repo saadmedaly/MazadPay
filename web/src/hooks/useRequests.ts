@@ -47,6 +47,11 @@ export interface AuctionRequest {
     full_name?: string
     role: string
   }
+  // currency_code/market_country_iso (migration 000046, Phase 2): additive,
+  // may be absent on legacy rows -- treat absence as 'MRU' (DEFAULT_CURRENCY_CODE),
+  // mirroring backend AuctionRequest.EffectiveCurrencyCode()/EffectiveMarketCountryISO().
+  currency_code?: string | null
+  market_country_iso?: string | null
 }
 
 export interface BannerRequest {

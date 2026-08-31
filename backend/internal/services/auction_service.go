@@ -947,6 +947,7 @@ func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 			params := map[string]string{
 				"auctionTitle": a.TitleAr,
 				"finalPrice":   a.CurrentPrice.String(),
+				"currency":     a.EffectiveCurrencyCode(),
 			}
 			data := map[string]string{
 				"type":       "auction_ended",
@@ -971,6 +972,7 @@ func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 						winnerParams := map[string]string{
 							"auctionTitle": a.TitleAr,
 							"finalPrice":   a.CurrentPrice.String(),
+							"currency":     a.EffectiveCurrencyCode(),
 						}
 						winnerData := map[string]string{
 							"type":       "auction_won",

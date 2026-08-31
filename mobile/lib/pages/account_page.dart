@@ -7,6 +7,7 @@ import 'favorites_page.dart';
 import 'my_winnings_page.dart';
 import 'withdraw_page.dart';
 import '../services/wallet_api.dart';
+import '../utils/money_formatter.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -19,6 +20,8 @@ class _AccountPageState extends State<AccountPage> {
   bool _showBalance = false;
   final WalletApi _walletApi = WalletApi();
   double _balance = 0.0;
+  // Wallet's own currency (migration 000046, Phase 2) -- never assume MRU.
+  String? _currencyCode;
 
   @override
   void initState() {
@@ -147,6 +150,7 @@ class _AccountPageState extends State<AccountPage> {
           } else {
             _balance = 0.0;
           }
+          _currencyCode = response.data!['currency_code']?.toString();
         }
       });
     } catch (e) {
@@ -233,7 +237,7 @@ class _AccountPageState extends State<AccountPage> {
                             Text(
                               _showBalance
                                   ? '••••••'
-                                  : '${_balance.toStringAsFixed(2)} MRU',
+                                  : MoneyFormatter.format(_balance, _currencyCode),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 24,

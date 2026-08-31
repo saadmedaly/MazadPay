@@ -121,6 +121,28 @@ func (a *Auction) EffectiveCurrencyCode() string {
 	return DefaultCurrencyCode
 }
 
+// MarshalJSON ensures currency_code/market_country_iso are ALWAYS present in
+// any response that serializes *Auction (or []Auction) directly -- e.g. via
+// handlers.OK/Created/PaginatedOK -- using the Effective* fallback for legacy
+// pre-migration-000046 rows, instead of silently omitting the key (the raw
+// field's `omitempty` tag would otherwise drop it for NULL rows). Handlers
+// that hand-build a fiber.Map already call Effective* explicitly and are
+// unaffected by this method.
+func (a Auction) MarshalJSON() ([]byte, error) {
+	type alias Auction
+	currency := a.EffectiveCurrencyCode()
+	market := a.EffectiveMarketCountryISO()
+	return json.Marshal(struct {
+		alias
+		MarketCountryISO string `json:"market_country_iso"`
+		CurrencyCode     string `json:"currency_code"`
+	}{
+		alias:            alias(a),
+		MarketCountryISO: market,
+		CurrencyCode:     currency,
+	})
+}
+
 type AuctionImage struct {
 	ID           int       `db:"id"           json:"id"`
 	AuctionID    uuid.UUID `db:"auction_id"   json:"auction_id"`

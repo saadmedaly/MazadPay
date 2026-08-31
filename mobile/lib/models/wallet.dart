@@ -6,6 +6,10 @@ class Wallet {
   final double frozenAmount;
   final int version;
   final DateTime updatedAt;
+  /// ISO-4217 currency code of this wallet (migration 000046, Phase 2).
+  /// Additive/nullable -- always display via MoneyFormatter, which falls
+  /// back to MRU only when null (legacy wallet predating migration 000046).
+  final String? currencyCode;
 
   Wallet({
     required this.userId,
@@ -13,6 +17,7 @@ class Wallet {
     required this.frozenAmount,
     required this.version,
     required this.updatedAt,
+    this.currencyCode,
   });
 
   factory Wallet.fromJson(Map<String, dynamic> json) {
@@ -24,6 +29,7 @@ class Wallet {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : DateTime.now(),
+      currencyCode: json['currency_code']?.toString(),
     );
   }
 
@@ -34,6 +40,7 @@ class Wallet {
       'frozen_amount': frozenAmount,
       'version': version,
       'updated_at': updatedAt.toIso8601String(),
+      'currency_code': currencyCode,
     };
   }
 
@@ -91,6 +98,10 @@ class Transaction {
   final String? description;
   final String? failureReason;
   final DateTime createdAt;
+  /// ISO-4217 currency code of this transaction (migration 000046, Phase 2).
+  /// Additive/nullable -- always display via MoneyFormatter, which falls
+  /// back to MRU only when null (legacy transaction).
+  final String? currencyCode;
 
   Transaction({
     required this.id,
@@ -113,6 +124,7 @@ class Transaction {
     this.description,
     this.failureReason,
     required this.createdAt,
+    this.currencyCode,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
@@ -145,6 +157,7 @@ class Transaction {
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
+      currencyCode: json['currency_code']?.toString(),
     );
   }
 
@@ -170,6 +183,7 @@ class Transaction {
       'description': description,
       'failure_reason': failureReason,
       'created_at': createdAt.toIso8601String(),
+      'currency_code': currencyCode,
     };
   }
 
