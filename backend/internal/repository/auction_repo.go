@@ -455,7 +455,7 @@ func (r *auctionRepo) GetCountries(ctx context.Context) ([]models.Country, error
 	var countries []models.Country
 	err := r.db.SelectContext(ctx, &countries, `
         SELECT id, code, country_code, name_ar, name_fr, name_en, flag_emoji, is_active, created_at,
-               phone_min_length, phone_max_length
+               phone_min_length, phone_max_length, currency_code
         FROM countries
         WHERE is_active = TRUE
         ORDER BY name_ar ASC
