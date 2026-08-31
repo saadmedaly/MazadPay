@@ -44,6 +44,11 @@ class AuctionModel {
   final String? categoryNameAr;
   final String? cityNameAr;
   final List<AuctionImage> images;
+  /// ISO-4217 currency code for this auction (migration 000046, Phase 2).
+  /// Additive/nullable -- always display via MoneyFormatter, which falls
+  /// back to MRU only when null (legacy/old-cached response).
+  final String? currencyCode;
+  final String? marketCountryIso;
 
   // Propriétés calculées
   final bool isUserHighestBidder;
@@ -92,6 +97,8 @@ class AuctionModel {
     this.cityNameAr,
     this.images = const [],
     this.isUserHighestBidder = false,
+    this.currencyCode,
+    this.marketCountryIso,
   });
 
   factory AuctionModel.fromJson(Map<String, dynamic> json) {
@@ -158,6 +165,8 @@ class AuctionModel {
           .map((e) => AuctionImage.fromJson(e as Map<String, dynamic>))
           .toList(),
       isUserHighestBidder: json['is_user_highest_bidder'] ?? false,
+      currencyCode: json['currency_code']?.toString(),
+      marketCountryIso: json['market_country_iso']?.toString(),
     );
   }
 
@@ -206,6 +215,8 @@ class AuctionModel {
       'city': cityNameAr,
       'images': images.map((e) => e.toJson()).toList(),
       'is_user_highest_bidder': isUserHighestBidder,
+      'currency_code': currencyCode,
+      'market_country_iso': marketCountryIso,
     };
   }
 
@@ -314,6 +325,8 @@ class AuctionModel {
     String? cityNameAr,
     List<AuctionImage>? images,
     bool? isUserHighestBidder,
+    String? currencyCode,
+    String? marketCountryIso,
   }) {
     return AuctionModel(
       id: id ?? this.id,
@@ -359,6 +372,8 @@ class AuctionModel {
       cityNameAr: cityNameAr ?? this.cityNameAr,
       images: images ?? this.images,
       isUserHighestBidder: isUserHighestBidder ?? this.isUserHighestBidder,
+      currencyCode: currencyCode ?? this.currencyCode,
+      marketCountryIso: marketCountryIso ?? this.marketCountryIso,
     );
   }
 }

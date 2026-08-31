@@ -209,6 +209,12 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "insufficient_for_insurance":
 		logger.Info("Bid rejected: balance below insurance_amount", logFields...)
 		return Fail(c, 422, "insufficient_for_insurance", "رصيدك غير كافٍ لتغطية مبلغ التأمين")
+	case "cross_market_bid_not_allowed":
+		logger.Info("Bid rejected: bidder and auction markets differ", logFields...)
+		return Fail(c, 422, "cross_market_bid_not_allowed", "لا يمكن المزايدة على مزادات من سوق دولة أخرى")
+	case "wallet_currency_mismatch":
+		logger.Error("Bid rejected: wallet/auction currency mismatch (should not occur if market check passed)", logFields...)
+		return Fail(c, 422, "wallet_currency_mismatch", "تعذر إتمام العملية بسبب عدم تطابق العملة")
 	case "otp_expired":
 		logger.Info("OTP expired", logFields...)
 		return Fail(c, 422, "otp_expired", "OTP has expired")

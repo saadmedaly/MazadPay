@@ -2,6 +2,8 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/payment_success_page.dart';
+import 'package:mezadpay/utils/money_formatter.dart';
+import 'package:mezadpay/services/wallet_api.dart';
 
 class PaymentDetailsPage extends StatefulWidget {
   final String methodName;
@@ -18,6 +20,32 @@ class PaymentDetailsPage extends StatefulWidget {
 class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
   bool _receiptUploaded = false;
   String? _uploadedImagePath;
+  final WalletApi _walletApi = WalletApi();
+  // The fee shown on this screen is paid into the user's own wallet, so the
+  // wallet's own currency_code (same source withdraw_page.dart uses) is the
+  // correct trusted context here -- never a hardcoded literal. Null until
+  // loaded; MoneyFormatter falls back to MRU only for that brief window /
+  // on load failure, matching the app-wide legacy-fallback convention.
+  String? _currencyCode;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrency();
+  }
+
+  Future<void> _loadCurrency() async {
+    try {
+      final response = await _walletApi.getBalance();
+      if (response.success && response.data != null && mounted) {
+        setState(() {
+          _currencyCode = response.data!['currency_code']?.toString();
+        });
+      }
+    } catch (_) {
+      // Silent: MoneyFormatter's own fallback covers this.
+    }
+  }
 
   void _showImagePicker(BuildContext context) {
     showModalBottomSheet(
@@ -228,7 +256,10 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                     children: [
                       const Icon(Icons.sync_alt, size: 24),
                       Text(
-                        '100 MRU',
+                        // Static placeholder amount on this mock payment-details
+                        // screen (not bound to a real transaction) -- uses the
+                        // shared fallback ISO code rather than a hardcoded literal.
+                        MoneyFormatter.format(100, _currencyCode),
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey[800]),
                       ),
                     ],
@@ -272,11 +303,11 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                       ],
                     ),
                     const Divider(height: 32),
-                    _buildDetailRow(AppLocalizations.of(context)!.text_272, '100MRU', isValueBold: true),
+                    _buildDetailRow(AppLocalizations.of(context)!.text_272, MoneyFormatter.format(100, _currencyCode), isValueBold: true),
                     const SizedBox(height: 16),
                     _buildDetailRow(AppLocalizations.of(context)!.text_273, '36601175', isValueBold: true),
                     const SizedBox(height: 16),
-                    _buildDetailRow('إجمالي المبلغ للدفع عبر ${widget.methodName}', '100MRU', isValueBold: true, isLarge: true),
+                    _buildDetailRow('إجمالي المبلغ للدفع عبر ${widget.methodName}', MoneyFormatter.format(100, _currencyCode), isValueBold: true, isLarge: true),
                   ],
                 ),
               ),

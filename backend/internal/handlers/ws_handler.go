@@ -1,25 +1,29 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 	"github.com/google/uuid"
 	"github.com/mazadpay/backend/internal/models"
+	"github.com/mazadpay/backend/internal/repository"
 	"github.com/mazadpay/backend/internal/services"
 	ws "github.com/mazadpay/backend/internal/websocket"
 	"go.uber.org/zap"
 )
 
 type WSHandler struct {
-	hub     *ws.Hub
-	authSvc services.AuthService
-	logger  *zap.Logger
+	hub         *ws.Hub
+	authSvc     services.AuthService
+	auctionRepo repository.AuctionRepository
+	userRepo    repository.UserRepository
+	logger      *zap.Logger
 }
 
-func NewWSHandler(hub *ws.Hub, authSvc services.AuthService, logger *zap.Logger) *WSHandler {
-	return &WSHandler{hub: hub, authSvc: authSvc, logger: logger}
+func NewWSHandler(hub *ws.Hub, authSvc services.AuthService, auctionRepo repository.AuctionRepository, userRepo repository.UserRepository, logger *zap.Logger) *WSHandler {
+	return &WSHandler{hub: hub, authSvc: authSvc, auctionRepo: auctionRepo, userRepo: userRepo, logger: logger}
 }
 
 
@@ -62,6 +66,16 @@ func (h *WSHandler) HandleAuction(c *websocket.Conn) {
 		return
 	}
 
+	// Country-scoped market isolation (migration 000046, V1) -- see
+	// AuthorizeSubscription's doc comment for the full rationale.
+	if ok := h.AuthorizeSubscription(context.Background(), auctionID, userID); !ok {
+		h.logger.Info("WebSocket cross-market or invalid subscription rejected",
+			zap.String("auction_id", auctionID.String()), zap.String("user_id", userID))
+		c.WriteMessage(websocket.TextMessage, []byte(`{"error": "not found"}`))
+		c.Close()
+		return
+	}
+
 	h.logger.Info("WebSocket client connected",
 		zap.String("auction_id", auctionID.String()),
 		zap.String("user_id", userID))
@@ -76,6 +90,33 @@ func (h *WSHandler) HandleAuction(c *websocket.Conn) {
 
 	go client.WritePump()
 	client.ReadPump() // bloquant jusqu'à déconnexion
+}
+
+// AuthorizeSubscription enforces country-scoped market isolation (migration 000046, V1)
+// for a WebSocket auction subscription: the subscriber must belong to the same market
+// as the auction, checked by COUNTRY equality only -- never by currency (SN/CI both use
+// XOF but are separate markets, see bid_service.go PlaceBid for the same rule enforced
+// at bid time). Both the auction and the subscriber's account are loaded from trusted
+// server-side sources (auctionRepo, userRepo keyed by the JWT-derived userID) -- nothing
+// here is client-supplied. Returns false on any lookup failure (not-found auction,
+// malformed/unknown user id) or on a market mismatch -- callers must reject the
+// connection silently (no "wrong market" detail) on false, consistent with the REST
+// detail/bid-history endpoints. Exported (not just inlined in HandleAuction) so it can
+// be exercised directly by tests without a live WebSocket connection.
+func (h *WSHandler) AuthorizeSubscription(ctx context.Context, auctionID uuid.UUID, userIDStr string) bool {
+	auction, err := h.auctionRepo.FindByID(ctx, auctionID)
+	if err != nil {
+		return false
+	}
+	uid, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return false
+	}
+	user, err := h.userRepo.FindByID(ctx, uid)
+	if err != nil {
+		return false
+	}
+	return user.EffectiveAccountCountryISO() == auction.EffectiveMarketCountryISO()
 }
 
 // validateJWT extrait et valide le userID depuis le token JWT

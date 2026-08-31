@@ -245,6 +245,16 @@ func (s *authService) Register(ctx context.Context, phone, pin, fullName, email,
 		IsVerified:      isVerified,
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
+		// AccountCountryISO (migration 000046): the canonical MazadPay account
+		// market, set explicitly from the client-supplied, server-validated
+		// country_iso (required, len=2, see auth_handler.go RegisterRequest) --
+		// NOT from isoRegion (phone-number-region metadata, see PhoneCountryISO
+		// above). These should agree in practice (NormalizeE164 validates the
+		// phone specifically for the claimed countryISO region), but are
+		// structurally distinct fields serving distinct purposes; account market
+		// must reflect what the user explicitly selected, not what was detected
+		// from their phone number.
+		AccountCountryISO: stringPtr(countryISO),
 	}
 
 	return s.userRepo.Create(ctx, user)
@@ -307,6 +317,12 @@ func (s *authService) RegisterLegacy(ctx context.Context, phone, pin, fullName, 
 		IsVerified:   isVerified,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
+		// AccountCountryISO (migration 000046): isoRegion is already known and
+		// reliable here (from ValidCountryCodesLegacy, the closed 4-country
+		// legacy set), so the account market is set explicitly rather than left
+		// NULL-to-fallback -- more precise than the generic MR-only fallback for
+		// the 3 legacy non-MR countries (SN/MA/TN).
+		AccountCountryISO: &isoRegion,
 	}
 
 	// Best-effort seulement : ne bloque jamais l'inscription, voir commentaire de

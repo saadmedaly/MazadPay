@@ -11,6 +11,7 @@ import '../services/cache_service.dart';
 import '../services/request_api.dart';
 import '../models/category.dart';
 import '../utils/description_validation.dart';
+import '../utils/money_formatter.dart';
 
 class CreateAdFormPage extends StatefulWidget {
   /// Requête existante (brouillon ou rejetée) à éditer et resoumettre via
@@ -580,7 +581,12 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               hint: AppLocalizations.of(context)!.text_97,
               icon: Icons.attach_money_outlined,
               keyboardType: TextInputType.number,
-              suffixText: 'MRU',
+              // The market/currency for this auction request is derived
+              // server-side from the user's country (Phase 2, migration
+              // 000046) -- it is not known/selectable client-side before
+              // submission, so this suffix is display-only and uses the
+              // shared fallback code, never a user-editable currency field.
+              suffixText: MoneyFormatter.fallbackCurrencyCode,
             ),
 
             const SizedBox(height: 24),
@@ -591,7 +597,12 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               hint: 'أدخل مبلغ التأمين المطلوب',
               icon: Icons.shield_outlined,
               keyboardType: TextInputType.number,
-              suffixText: 'MRU',
+              // The market/currency for this auction request is derived
+              // server-side from the user's country (Phase 2, migration
+              // 000046) -- it is not known/selectable client-side before
+              // submission, so this suffix is display-only and uses the
+              // shared fallback code, never a user-editable currency field.
+              suffixText: MoneyFormatter.fallbackCurrencyCode,
             ),
 
             const SizedBox(height: 24),

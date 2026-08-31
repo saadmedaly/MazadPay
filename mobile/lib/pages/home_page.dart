@@ -41,6 +41,7 @@ import 'package:mezadpay/providers/location_provider.dart';
 import 'package:mezadpay/providers/home_provider.dart';
 import 'package:mezadpay/models/auction.dart';
 import 'package:mezadpay/utils/time_utils.dart';
+import 'package:mezadpay/utils/money_formatter.dart';
 
 
 
@@ -1810,7 +1811,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final isFavorite = favoritesAsync.value?.contains(auction.id) ?? false;
     final id = auction.id;
     final title = auction.title;
-    final price = '${auction.currentPrice.toStringAsFixed(0)} MRU';
+    final price = MoneyFormatter.format(auction.currentPrice, auction.currencyCode);
     final bidCount = auction.bidderCount;
     final time = TimeUtils.formatDuration(context, auction.endTime.difference(DateTime.now()));
     final imageUrl = auction.imageUrls.isNotEmpty ? auction.imageUrls[0] : 'assets/corolla.png';

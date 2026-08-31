@@ -79,7 +79,7 @@ export function TransactionDetailPage() {
             {[
               { label: 'رقم المعاملة',  value: <span className="font-mono font-bold">{shortID(txn.id)}</span>,    icon: null },
               { label: 'المستخدم',    value: <span className="font-bold cursor-pointer hover:text-mazad-primary transition-colors" onClick={() => navigate(`/users/${txn.user_id}`)}>{txn.user_full_name || txn.user_phone || shortID(txn.user_id)}</span>, icon: User },
-              { label: 'المبلغ',      value: <span className="font-bold text-mazad-accent text-2xl">{formatPrice(parseFloat(txn.amount))}</span>, icon: CreditCard },
+              { label: 'المبلغ',      value: <span className="font-bold text-mazad-accent text-2xl">{formatPrice(parseFloat(txn.amount), txn.currency_code)}</span>, icon: CreditCard },
               { label: 'بوابة الدفع',   value: txn.gateway ? (GATEWAY_LABELS[txn.gateway] ?? txn.gateway) : '—', icon: null },
               { label: 'التاريخ',      value: <span className="font-medium">{formatDate(txn.created_at)}</span>, icon: Calendar },
               { label: 'الحالة',       value: <StatusBadge status={txn.status} />, icon: null },
@@ -193,7 +193,7 @@ export function TransactionDetailPage() {
       <ConfirmDialog
         open={confirmAction === 'approve'}
         onOpenChange={(v) => !v && setConfirmAction(null)}
-        title={`هل أنت متأكد من الموافقة على مبلغ ${formatPrice(parseFloat(txn.amount))}؟`}
+        title={`هل أنت متأكد من الموافقة على مبلغ ${formatPrice(parseFloat(txn.amount), txn.currency_code)}؟`}
         description="هذا الإجراء سيقوم بشحن محفظة المستخدم فوراً ولا يمكن التراجع عنه."
         confirmLabel="تأكيد الموافقة"
         variant="success"

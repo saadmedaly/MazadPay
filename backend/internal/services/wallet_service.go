@@ -55,6 +55,17 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 	if amount.LessThanOrEqual(decimal.Zero) {
 		return nil, apperr.ErrBadRequest
 	}
+	// currency_code (migration 000046): stamped from the user's own wallet currency --
+	// never from client input, never re-derived from the user's current account market
+	// at read time -- a deposit is a standalone historical financial record and must
+	// stay correctly denominated even if account_country_iso changes later. GetByUserID
+	// auto-creates the wallet (with its own currency stamped from account market) on
+	// first call, so this is always populated for a non-legacy transaction.
+	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	currencyCode := wallet.EffectiveCurrencyCode()
 	tx := &models.Transaction{
 		ID:                 uuid.New(),
 		UserID:             userID,
@@ -64,6 +75,7 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 		Status:             "pending",
 		PaymentMethod:      &paymentMethod,
 		ReceiptImageTemp:   &receiptImageTemp,
+		CurrencyCode:       &currencyCode,
 	}
 	if err := s.txRepo.Create(ctx, tx); err != nil {
 		return nil, err
@@ -113,16 +125,28 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 		return nil, apperr.ErrBadRequest
 	}
 
+	// currency_code (migration 000046): same reasoning as InitiateDeposit above --
+	// stamped from the user's own wallet currency, never from client input. Read
+	// before the transaction begins (GetByUserID also auto-creates the wallet if
+	// missing); the wallet's currency_code is immutable after creation so there is no
+	// TOCTOU concern reading it outside the FreezeForWithdraw transaction below.
+	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	currencyCode := wallet.EffectiveCurrencyCode()
+
 	txModel := &models.Transaction{
-		ID:      uuid.New(),
-		UserID:  userID,
-		Type:    "withdraw",
-		Amount:  amount,
-		Gateway: &gateway,
-		Status:  "pending_review",
+		ID:           uuid.New(),
+		UserID:       userID,
+		Type:         "withdraw",
+		Amount:       amount,
+		Gateway:      &gateway,
+		Status:       "pending_review",
+		CurrencyCode: &currencyCode,
 	}
 
-	err := database.WithTransaction(s.db, func(tx *sqlx.Tx) error {
+	err = database.WithTransaction(s.db, func(tx *sqlx.Tx) error {
 		// Gèle le montant : balance -= amount, frozen_amount += amount (atomique,
 		// échoue avec ErrInsufficientBalance si balance < amount).
 		if err := s.walletRepo.FreezeForWithdraw(ctx, tx, userID, amount); err != nil {

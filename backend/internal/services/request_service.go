@@ -82,16 +82,18 @@ type requestService struct {
 	repo                repository.RequestRepository
 	auctionRepo         repository.AuctionRepository
 	contentRepo         repository.ContentRepository
+	userRepo            repository.UserRepository
 	auditSvc            AuditService
 	notificationService NotificationService
 	logger              *zap.Logger
 }
 
-func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, auditSvc AuditService, notificationService NotificationService, logger *zap.Logger) RequestService {
+func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, userRepo repository.UserRepository, auditSvc AuditService, notificationService NotificationService, logger *zap.Logger) RequestService {
 	return &requestService{
 		repo:                repo,
 		auctionRepo:         auctionRepo,
 		contentRepo:         contentRepo,
+		userRepo:            userRepo,
 		auditSvc:            auditSvc,
 		notificationService: notificationService,
 		logger:              logger,
@@ -118,6 +120,15 @@ func (s *requestService) CreateAuctionRequest(ctx context.Context, req *models.A
 		req.Status = "pending"
 	}
 
+	// Country-scoped market (migration 000046, V1) : market_country_iso/currency_code
+	// sont TOUJOURS dérivés côté serveur du compte du demandeur authentifié, jamais
+	// acceptés depuis le client -- même politique de confiance que UserID (voir
+	// request_handler.go). Les valeurs éventuellement déjà présentes sur req (ex.
+	// injectées par erreur par un appelant) sont écrasées ici sans exception.
+	if err := s.stampRequestMarket(ctx, req); err != nil {
+		return err
+	}
+
 	sanitizeDescriptions(req)
 
 	if err := s.repo.CreateAuctionRequest(ctx, req); err != nil {
@@ -133,6 +144,28 @@ func (s *requestService) CreateAuctionRequest(ctx context.Context, req *models.A
 			req.TitleAr,
 		)
 	}
+
+	return nil
+}
+
+// stampRequestMarket dérive market_country_iso/currency_code depuis le compte du
+// demandeur authentifié (req.UserID, déjà assigné par le handler avant cet appel --
+// voir request_handler.go) et les écrit sur req, en écrasant toute valeur déjà
+// présente. Ne fait jamais confiance au client pour ces champs (même politique que
+// UserID) : migration 000046, règle "COUNTRY is the market boundary, NOT currency".
+func (s *requestService) stampRequestMarket(ctx context.Context, req *models.AuctionRequest) error {
+	user, err := s.userRepo.FindByID(ctx, req.UserID)
+	if err != nil {
+		return err
+	}
+	marketISO := user.EffectiveAccountCountryISO()
+	req.MarketCountryISO = &marketISO
+
+	currencyCode := models.DefaultCurrencyCode
+	if country, err := s.auctionRepo.GetCountryByCode(ctx, marketISO); err == nil && country.CurrencyCode != nil && *country.CurrencyCode != "" {
+		currencyCode = *country.CurrencyCode
+	}
+	req.CurrencyCode = &currencyCode
 
 	return nil
 }
@@ -221,6 +254,13 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 			Views:           0,
 			BidderCount:     0,
 			CreatedAt:       time.Now(),
+			// MarketCountryISO/CurrencyCode (migration 000046): preserved verbatim
+			// from the approved request, stamped once at request-creation time --
+			// never re-derived from the seller's current account here, so an
+			// auction's market/currency never silently drifts if the seller's
+			// account_country_iso changes after submission.
+			MarketCountryISO: req.MarketCountryISO,
+			CurrencyCode:     req.CurrencyCode,
 		}
 
 		if err := s.auctionRepo.Create(ctx, tx, auction); err != nil {

@@ -29,6 +29,11 @@ class Auction {
   final String? city;
   final Map<String, dynamic>? itemDetails;
   final DateTime? startTime;
+  /// ISO-4217 currency code for this auction (migration 000046, Phase 2).
+  /// Additive/nullable: an old cached response may not carry it -- always
+  /// display via MoneyFormatter, which falls back to MRU only when null.
+  final String? currencyCode;
+  final String? marketCountryIso;
 
   Auction({
     required this.id,
@@ -57,6 +62,8 @@ class Auction {
     this.city,
     this.itemDetails,
     this.startTime,
+    this.currencyCode,
+    this.marketCountryIso,
   });
 
   Auction copyWith({
@@ -86,6 +93,8 @@ class Auction {
     String? city,
     Map<String, dynamic>? itemDetails,
     DateTime? startTime,
+    String? currencyCode,
+    String? marketCountryIso,
   }) {
     return Auction(
       id: id ?? this.id,
@@ -114,6 +123,8 @@ class Auction {
       city: city ?? this.city,
       itemDetails: itemDetails ?? this.itemDetails,
       startTime: startTime ?? this.startTime,
+      currencyCode: currencyCode ?? this.currencyCode,
+      marketCountryIso: marketCountryIso ?? this.marketCountryIso,
     );
   }
 
@@ -164,6 +175,9 @@ class Auction {
       startTime: json['start_time'] != null
           ? DateTime.tryParse(json['start_time'].toString())
           : null,
+      // Additive, null-safe (Phase 2): absent on old cached responses.
+      currencyCode: json['currency_code']?.toString(),
+      marketCountryIso: json['market_country_iso']?.toString(),
     );
   }
 
@@ -189,6 +203,8 @@ class Auction {
       'year': year,
       'mileage': mileage,
       'model': model,
+      'currency_code': currencyCode,
+      'market_country_iso': marketCountryIso,
     };
   }
 }

@@ -39,43 +39,43 @@ var NotificationLocalizations = map[string]map[string]NotificationLocalization{
 	"auction_won": {
 		"ar": {
 			Title: "تهانينا! لقد فزت",
-			Body:  "مزاد \"{auctionTitle}\" - {finalPrice} MRU",
+			Body:  "مزاد \"{auctionTitle}\" - {finalPrice} {currency}",
 		},
 		"fr": {
 			Title: "Félicitations ! Vous avez gagné",
-			Body:  "Enchère \"{auctionTitle}\" - {finalPrice} MRU",
+			Body:  "Enchère \"{auctionTitle}\" - {finalPrice} {currency}",
 		},
 		"en": {
 			Title: "Congratulations! You won",
-			Body:  "Auction \"{auctionTitle}\" - {finalPrice} MRU",
+			Body:  "Auction \"{auctionTitle}\" - {finalPrice} {currency}",
 		},
 	},
 	"auction_ended": {
 		"ar": {
 			Title: "انتهى المزاد",
-			Body:  "تم بيع \"{auctionTitle}\" بـ {finalPrice} MRU",
+			Body:  "تم بيع \"{auctionTitle}\" بـ {finalPrice} {currency}",
 		},
 		"fr": {
 			Title: "Enchère terminée",
-			Body:  "\"{auctionTitle}\" vendu pour {finalPrice} MRU",
+			Body:  "\"{auctionTitle}\" vendu pour {finalPrice} {currency}",
 		},
 		"en": {
 			Title: "Auction ended",
-			Body:  "\"{auctionTitle}\" sold for {finalPrice} MRU",
+			Body:  "\"{auctionTitle}\" sold for {finalPrice} {currency}",
 		},
 	},
 	"payment_received": {
 		"ar": {
 			Title: "💰 تم استلام الدفع",
-			Body:  "{amount} MRU لمزاد \"{auctionTitle}\"",
+			Body:  "{amount} {currency} لمزاد \"{auctionTitle}\"",
 		},
 		"fr": {
 			Title: "💰 Paiement reçu",
-			Body:  "{amount} MRU pour \"{auctionTitle}\"",
+			Body:  "{amount} {currency} pour \"{auctionTitle}\"",
 		},
 		"en": {
 			Title: "💰 Payment received",
-			Body:  "{amount} MRU for \"{auctionTitle}\"",
+			Body:  "{amount} {currency} for \"{auctionTitle}\"",
 		},
 	},
 	"new_message": {
@@ -137,29 +137,29 @@ var NotificationLocalizations = map[string]map[string]NotificationLocalization{
 	"bid_outbid": {
 		"ar": {
 			Title: "تم تجاوز مزايدتك!",
-			Body:  "تم تجاوز مزايدتك في مزاد \"{auctionTitle}\" بسعر {newPrice} MRU",
+			Body:  "تم تجاوز مزايدتك في مزاد \"{auctionTitle}\" بسعر {newPrice} {currency}",
 		},
 		"fr": {
 			Title: "Enchère dépassée !",
-			Body:  "Votre enchère sur \"{auctionTitle}\" a été dépassée à {newPrice} MRU",
+			Body:  "Votre enchère sur \"{auctionTitle}\" a été dépassée à {newPrice} {currency}",
 		},
 		"en": {
 			Title: "You've been outbid!",
-			Body:  "Your bid on \"{auctionTitle}\" has been outbid at {newPrice} MRU",
+			Body:  "Your bid on \"{auctionTitle}\" has been outbid at {newPrice} {currency}",
 		},
 	},
 	"auction_lost": {
 		"ar": {
 			Title: "لم تفز بالمزاد",
-			Body:  "للأسف، لم تفز بمزاد \"{auctionTitle}\". السعر النهائي: {finalPrice} MRU",
+			Body:  "للأسف، لم تفز بمزاد \"{auctionTitle}\". السعر النهائي: {finalPrice} {currency}",
 		},
 		"fr": {
 			Title: "Enchère perdue",
-			Body:  "Désolé, vous n'avez pas remporté l'enchère \"{auctionTitle}\". Prix final: {finalPrice} MRU",
+			Body:  "Désolé, vous n'avez pas remporté l'enchère \"{auctionTitle}\". Prix final: {finalPrice} {currency}",
 		},
 		"en": {
 			Title: "Auction lost",
-			Body:  "Sorry, you didn't win auction \"{auctionTitle}\". Final price: {finalPrice} MRU",
+			Body:  "Sorry, you didn't win auction \"{auctionTitle}\". Final price: {finalPrice} {currency}",
 		},
 	},
 	"banner_request": {
@@ -179,29 +179,29 @@ var NotificationLocalizations = map[string]map[string]NotificationLocalization{
 	"deposit_confirmed": {
 		"ar": {
 			Title: "✅ تم تأكيد الإيداع",
-			Body:  "تم تأكيد إيداع {amount} MRU في محفظتك",
+			Body:  "تم تأكيد إيداع {amount} {currency} في محفظتك",
 		},
 		"fr": {
 			Title: "✅ Dépôt confirmé",
-			Body:  "Votre dépôt de {amount} MRU a été confirmé",
+			Body:  "Votre dépôt de {amount} {currency} a été confirmé",
 		},
 		"en": {
 			Title: "✅ Deposit confirmed",
-			Body:  "Your deposit of {amount} MRU has been confirmed",
+			Body:  "Your deposit of {amount} {currency} has been confirmed",
 		},
 	},
 	"deposit_rejected": {
 		"ar": {
 			Title: "❌ تم رفض الإيداع",
-			Body:  "تم رفض إيداع {amount} MRU. السبب: {reason}",
+			Body:  "تم رفض إيداع {amount} {currency}. السبب: {reason}",
 		},
 		"fr": {
 			Title: "❌ Dépôt refusé",
-			Body:  "Votre dépôt de {amount} MRU a été refusé. Raison: {reason}",
+			Body:  "Votre dépôt de {amount} {currency} a été refusé. Raison: {reason}",
 		},
 		"en": {
 			Title: "❌ Deposit rejected",
-			Body:  "Your deposit of {amount} MRU was rejected. Reason: {reason}",
+			Body:  "Your deposit of {amount} {currency} was rejected. Reason: {reason}",
 		},
 	},
 }

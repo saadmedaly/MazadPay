@@ -7,6 +7,7 @@ import type { AuctionRequest, BannerRequest } from '@/hooks/useRequests'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import { formatPrice } from '@/lib/formatters'
 
 interface RequestDetailModalProps {
   isOpen: boolean
@@ -54,6 +55,18 @@ export function RequestDetailModal({
         {getStatusBadge(req.status)}
       </div>
 
+      {/* Market/currency (migration 000046, Phase 2): server-derived from the
+          requester's account market, shown here for admin visibility only --
+          never editable, and Admin stays global (no FX conversion). */}
+      {(req.market_country_iso || req.currency_code) && (
+        <div className="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg w-fit">
+          <MapPin className="w-4 h-4 text-indigo-600" />
+          <p className="text-sm text-indigo-700 font-medium">
+            السوق: {req.market_country_iso ?? '—'} · العملة: {req.currency_code ?? 'MRU'}
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gray-50 p-4 rounded-lg">
           <p className="text-sm text-gray-500 mb-1">العنوان (عربي)</p>
@@ -79,7 +92,7 @@ export function RequestDetailModal({
             <DollarSign className="w-4 h-4 text-blue-600" />
             <p className="text-sm text-gray-600">السعر الابتدائي</p>
           </div>
-          <p className="text-lg font-bold text-blue-700">{req.start_price} د.ج</p>
+          <p className="text-lg font-bold text-blue-700">{formatPrice(req.start_price, req.currency_code)}</p>
         </div>
 
         {req.reserve_price && (
@@ -88,7 +101,7 @@ export function RequestDetailModal({
               <DollarSign className="w-4 h-4 text-purple-600" />
               <p className="text-sm text-gray-600">سعر الاحتياط</p>
             </div>
-            <p className="text-lg font-bold text-purple-700">{req.reserve_price} د.ج</p>
+            <p className="text-lg font-bold text-purple-700">{formatPrice(req.reserve_price, req.currency_code)}</p>
           </div>
         )}
 
@@ -98,7 +111,7 @@ export function RequestDetailModal({
               <DollarSign className="w-4 h-4 text-green-600" />
               <p className="text-sm text-gray-600">سعر الشراء الفوري</p>
             </div>
-            <p className="text-lg font-bold text-green-700">{req.buy_now_price} د.ج</p>
+            <p className="text-lg font-bold text-green-700">{formatPrice(req.buy_now_price, req.currency_code)}</p>
           </div>
         )}
 
@@ -107,7 +120,7 @@ export function RequestDetailModal({
             <DollarSign className="w-4 h-4 text-orange-600" />
             <p className="text-sm text-gray-600">الحد الأدنى للزيادة</p>
           </div>
-          <p className="text-lg font-bold text-orange-700">{req.min_increment} د.ج</p>
+          <p className="text-lg font-bold text-orange-700">{formatPrice(req.min_increment, req.currency_code)}</p>
         </div>
       </div>
 

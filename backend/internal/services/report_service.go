@@ -36,7 +36,12 @@ func (s *reportServiceV2) ExportTransactionsCSV(ctx context.Context, status stri
 	writer := csv.NewWriter(&sb)
 
 	// Header
-	writer.Write([]string{"ID", "User ID", "Auction ID", "Type", "Amount", "Gateway", "Status", "Reference", "Date"})
+	// Currency (migration 000046, Phase 2): each row carries its own currency_code
+	// (EffectiveCurrencyCode fallback for legacy NULL rows) -- rows can legitimately
+	// span multiple currencies (MRU/TND/MAD/XOF/...), so the CSV never sums Amount
+	// across rows into one fake blended total; a reader must group by Currency
+	// themselves if they need per-currency subtotals.
+	writer.Write([]string{"ID", "User ID", "Auction ID", "Type", "Amount", "Currency", "Gateway", "Status", "Reference", "Date"})
 
 	for _, tx := range txs {
 		// Filter by date if provided (ideally done in SQL)
@@ -68,6 +73,7 @@ func (s *reportServiceV2) ExportTransactionsCSV(ctx context.Context, status stri
 			}(),
 			tx.Type,
 			tx.Amount.String(),
+			tx.EffectiveCurrencyCode(),
 			gateway,
 			tx.Status,
 			reference,
@@ -81,7 +87,11 @@ func (s *reportServiceV2) ExportTransactionsCSV(ctx context.Context, status stri
 }
 
 func (s *reportServiceV2) ExportRevenueCSV(ctx context.Context) (string, error) {
-	data, err := s.txRepo.GetDailyRevenueChart(ctx)
+	// Currency-grouped (migration 000046, Phase 2): revenue rows can legitimately
+	// span multiple currencies, so this export lists a separate row per
+	// (date, currency) instead of a single "Revenue (MRU)" column that would
+	// silently blend e.g. MRU and TND amounts into one fake figure.
+	data, err := s.txRepo.GetDailyRevenueChartByCurrency(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -89,11 +99,12 @@ func (s *reportServiceV2) ExportRevenueCSV(ctx context.Context) (string, error) 
 	var sb strings.Builder
 	writer := csv.NewWriter(&sb)
 
-	writer.Write([]string{"Date", "Revenue (MRU)"})
+	writer.Write([]string{"Date", "Currency", "Revenue"})
 
 	for _, d := range data {
 		writer.Write([]string{
 			fmt.Sprintf("%v", d["date"]),
+			fmt.Sprintf("%v", d["currency"]),
 			fmt.Sprintf("%v", d["amount"]),
 		})
 	}

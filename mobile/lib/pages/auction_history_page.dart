@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auction_provider_api.dart';
 import '../models/auction.dart';
 import '../services/auction_api.dart';
+import '../utils/money_formatter.dart';
 
 class AuctionHistoryPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -260,7 +261,7 @@ class _AuctionHistoryPageState extends ConsumerState<AuctionHistoryPage> {
                   if (history.isNotEmpty) {
                     debugPrint('First bid: ${history.first.bidderName}, ${history.first.amount}');
                   }
-                  return _buildBidList(context, history, isDarkMode);
+                  return _buildBidList(context, history, isDarkMode, auction?.currencyCode);
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (err, _) {
@@ -310,17 +311,9 @@ class _AuctionHistoryPageState extends ConsumerState<AuctionHistoryPage> {
     }
   }
 
-  String _getCurrencySymbol(BuildContext context) {
-    final locale = Localizations.localeOf(context).languageCode;
-    switch (locale) {
-      case 'ar':
-        return 'أوقية';
-      case 'fr':
-      case 'en':
-      default:
-        return 'MRU';
-    }
-  }
+  // Removed locale-derived currency symbol (Phase 2): amounts are now
+  // displayed via MoneyFormatter using the auction's own currency_code
+  // (ISO-4217 code, no exchange conversion), never guessed from locale.
 
   Widget _buildProductHeader(
     BuildContext context,
@@ -429,7 +422,7 @@ class _AuctionHistoryPageState extends ConsumerState<AuctionHistoryPage> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      '${auction.currentPrice.toStringAsFixed(0)} ${_getCurrencySymbol(context)}',
+                      MoneyFormatter.format(auction.currentPrice, auction.currencyCode),
                       style: const TextStyle(
                         fontFamily: 'Plus Jakarta Sans',
                         fontSize: 20,
@@ -456,6 +449,7 @@ class _AuctionHistoryPageState extends ConsumerState<AuctionHistoryPage> {
     BuildContext context,
     List<BidEntry> history,
     bool isDarkMode,
+    String? auctionCurrencyCode,
   ) {
     if (history.isEmpty) {
       return Column(
@@ -599,7 +593,7 @@ class _AuctionHistoryPageState extends ConsumerState<AuctionHistoryPage> {
                         ),
                       const SizedBox(height: 4),
                       Text(
-                        '${bid.amount.toStringAsFixed(0)} ${_getCurrencySymbol(context)}',
+                        MoneyFormatter.format(bid.amount, auctionCurrencyCode),
                         style: TextStyle(
                           fontFamily: 'Plus Jakarta Sans',
                           fontWeight: FontWeight.bold,

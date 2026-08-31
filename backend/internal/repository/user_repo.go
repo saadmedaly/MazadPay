@@ -136,8 +136,8 @@ func (r *userRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.User, er
 
 func (r *userRepo) Create(ctx context.Context, user *models.User) error {
 	_, err := r.db.NamedExecContext(ctx, `
-		INSERT INTO users (id, phone, phone_e164, phone_country_iso, password_hash, full_name, email, city, country_code, language_pref, role, is_verified)
-		VALUES (:id, :phone, :phone_e164, :phone_country_iso, :password_hash, :full_name, :email, :city, :country_code, :language_pref, :role, :is_verified)
+		INSERT INTO users (id, phone, phone_e164, phone_country_iso, account_country_iso, password_hash, full_name, email, city, country_code, language_pref, role, is_verified)
+		VALUES (:id, :phone, :phone_e164, :phone_country_iso, :account_country_iso, :password_hash, :full_name, :email, :city, :country_code, :language_pref, :role, :is_verified)
 	`, user)
 	return err
 }

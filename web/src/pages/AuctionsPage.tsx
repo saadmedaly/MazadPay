@@ -512,7 +512,7 @@ export function AuctionsPage() {
     {
       header: 'السعر الحالي',
       accessorKey: 'current_price',
-      cell: ({ getValue }) => <span className="font-mono font-bold text-mazad-accent">{formatPrice(parseFloat(getValue<string>()))}</span>
+      cell: ({ getValue, row }) => <span className="font-mono font-bold text-mazad-accent">{formatPrice(parseFloat(getValue<string>()), row.original.currency_code)}</span>
     },
     {
       header: 'تاريخ الانتهاء',
@@ -523,27 +523,27 @@ export function AuctionsPage() {
     {
       header: 'السعر الافتتاحي',
       accessorKey: 'start_price',
-      cell: ({ getValue }) => <span className="font-mono text-xs text-surface-muted">{formatPrice(parseFloat(getValue<string>()))}</span>
+      cell: ({ getValue, row }) => <span className="font-mono text-xs text-surface-muted">{formatPrice(parseFloat(getValue<string>()), row.original.currency_code)}</span>
     },
     {
       header: 'الحد الأدنى',
       accessorKey: 'min_increment',
-      cell: ({ getValue }) => <span className="font-mono text-xs text-surface-muted">{formatPrice(parseFloat(getValue<string>()))}</span>
+      cell: ({ getValue, row }) => <span className="font-mono text-xs text-surface-muted">{formatPrice(parseFloat(getValue<string>()), row.original.currency_code)}</span>
     },
     {
       header: 'التأمين',
       accessorKey: 'insurance_amount',
-      cell: ({ getValue }) => {
+      cell: ({ getValue, row }) => {
         const val = parseFloat(getValue<string>() || '0')
-        return <span className="font-mono text-xs text-surface-muted">{val > 0 ? formatPrice(val) : '-'}</span>
+        return <span className="font-mono text-xs text-surface-muted">{val > 0 ? formatPrice(val, row.original.currency_code) : '-'}</span>
       }
     },
     {
       header: 'الشراء المباشر',
       accessorKey: 'buy_now_price',
-      cell: ({ getValue }) => {
+      cell: ({ getValue, row }) => {
         const val = getValue<string | null>()
-        return <span className="font-mono text-xs text-emerald-400">{val ? formatPrice(parseFloat(val)) : '-'}</span>
+        return <span className="font-mono text-xs text-emerald-400">{val ? formatPrice(parseFloat(val), row.original.currency_code) : '-'}</span>
       }
     },
     {
@@ -793,7 +793,9 @@ export function AuctionsPage() {
           {/* Prices Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 border-t border-surface-border">
             <div className="space-y-2">
-              <label className="text-xs text-surface-muted font-bold block">السعر الافتتاحي (أوقية) <span className="text-red-500">*</span></label>
+              {/* Currency is derived server-side from the seller's market (migration 000046) --
+                  no fixed "أوقية" (MRU) label here since the target market may differ. */}
+              <label className="text-xs text-surface-muted font-bold block">السعر الافتتاحي <span className="text-red-500">*</span></label>
               <Input type="number" value={form.start_price || ''} onChange={e => setForm(f => ({...f, start_price: parseFloat(e.target.value) || 0}))} placeholder="0.00" />
             </div>
             <div className="space-y-2">

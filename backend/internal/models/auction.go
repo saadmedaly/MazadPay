@@ -79,6 +79,14 @@ type Auction struct {
 	BoostedUntil *time.Time `db:"boosted_until"    json:"boosted_until"`
 	VideoURL     *string    `db:"video_url"         json:"video_url"`
 	Quantity     int        `db:"quantity"         json:"quantity"` // Nombre d'items disponibles
+	// MarketCountryISO/CurrencyCode (migration 000046): stamped once at
+	// creation time from the seller's account market -- never re-derived from
+	// the seller later, so an auction's currency cannot silently change if the
+	// seller's own account market is ever edited afterward. Nullable for
+	// legacy/pre-migration rows; EffectiveMarketCountryISO/EffectiveCurrencyCode
+	// below are the fallback-aware accessors.
+	MarketCountryISO *string `db:"market_country_iso" json:"market_country_iso,omitempty"`
+	CurrencyCode     *string `db:"currency_code"      json:"currency_code,omitempty"`
 
 	// Joined Fields (Metadata)
 	CategoryNameAr *string `db:"category_name_ar" json:"category"`
@@ -92,6 +100,47 @@ func (a *Auction) GetImagesArray() []string {
 		return []string{}
 	}
 	return strings.Split(*a.ImageURLs, ",")
+}
+
+// EffectiveMarketCountryISO/EffectiveCurrencyCode fall back to
+// DefaultAccountCountryISO/its currency for legacy auctions predating
+// migration 000046 (MarketCountryISO/CurrencyCode NULL) -- MazadPay's only
+// market/currency before this feature. Callers (bid/wallet logic) must use
+// these, never the raw fields directly.
+func (a *Auction) EffectiveMarketCountryISO() string {
+	if a.MarketCountryISO != nil && *a.MarketCountryISO != "" {
+		return *a.MarketCountryISO
+	}
+	return DefaultAccountCountryISO
+}
+
+func (a *Auction) EffectiveCurrencyCode() string {
+	if a.CurrencyCode != nil && *a.CurrencyCode != "" {
+		return *a.CurrencyCode
+	}
+	return DefaultCurrencyCode
+}
+
+// MarshalJSON ensures currency_code/market_country_iso are ALWAYS present in
+// any response that serializes *Auction (or []Auction) directly -- e.g. via
+// handlers.OK/Created/PaginatedOK -- using the Effective* fallback for legacy
+// pre-migration-000046 rows, instead of silently omitting the key (the raw
+// field's `omitempty` tag would otherwise drop it for NULL rows). Handlers
+// that hand-build a fiber.Map already call Effective* explicitly and are
+// unaffected by this method.
+func (a Auction) MarshalJSON() ([]byte, error) {
+	type alias Auction
+	currency := a.EffectiveCurrencyCode()
+	market := a.EffectiveMarketCountryISO()
+	return json.Marshal(struct {
+		alias
+		MarketCountryISO string `json:"market_country_iso"`
+		CurrencyCode     string `json:"currency_code"`
+	}{
+		alias:            alias(a),
+		MarketCountryISO: market,
+		CurrencyCode:     currency,
+	})
 }
 
 type AuctionImage struct {
@@ -147,6 +196,21 @@ type Country struct {
 	// via these hints alone.
 	PhoneMinLength *int16 `db:"phone_min_length" json:"phone_min_length,omitempty"`
 	PhoneMaxLength *int16 `db:"phone_max_length" json:"phone_max_length,omitempty"`
+	// CurrencyCode (migration 000046): ISO-4217 code of this country's current
+	// legal-tender currency, nullable (a small number of pre-existing/invalid
+	// country rows -- e.g. 'TU', a duplicate/incorrect Tunisia entry not created
+	// by this migration -- deliberately have no currency assigned rather than a
+	// guessed one).
+	CurrencyCode *string `db:"currency_code" json:"currency_code,omitempty"`
+}
+
+// Currency (migration 000046) is the ISO-4217 reference table. MinorUnits is
+// the conventional number of decimal places for the currency (e.g. TND=3,
+// MRU=0, MAD=2) -- required for correct rounding/formatting.
+type Currency struct {
+	Code        string    `db:"code"         json:"code"`
+	MinorUnits  int16     `db:"minor_units"  json:"minor_units"`
+	CreatedAt   time.Time `db:"created_at"   json:"created_at"`
 }
 
 // New models from migration 000031

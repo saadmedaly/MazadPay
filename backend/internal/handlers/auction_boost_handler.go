@@ -5,19 +5,23 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
+	"github.com/mazadpay/backend/internal/repository"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
 type AuctionBoostHandler struct {
-	svc    services.AuctionBoostService
-	logger *zap.Logger
+	svc         services.AuctionBoostService
+	auctionRepo repository.AuctionRepository
+	userRepo    repository.UserRepository
+	logger      *zap.Logger
 }
 
-func NewAuctionBoostHandler(svc services.AuctionBoostService, logger *zap.Logger) *AuctionBoostHandler {
-	return &AuctionBoostHandler{svc: svc, logger: logger}
+func NewAuctionBoostHandler(svc services.AuctionBoostService, auctionRepo repository.AuctionRepository, userRepo repository.UserRepository, logger *zap.Logger) *AuctionBoostHandler {
+	return &AuctionBoostHandler{svc: svc, auctionRepo: auctionRepo, userRepo: userRepo, logger: logger}
 }
 
 // CreateBoost - POST /api/auctions/:id/boost
@@ -25,6 +29,28 @@ func (h *AuctionBoostHandler) CreateBoost(c *fiber.Ctx) error {
 	auctionID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return BadRequest(c, "Invalid auction ID")
+	}
+
+	// Country-scoped market isolation (migration 000046, V1): a customer write action
+	// must never be able to target an auction outside the caller's own effective
+	// market -- checked by COUNTRY equality only, never currency, same invariant as
+	// GetAuctionBoosts/PlaceBid. Trusted sources only: JWT-derived userID, the auction
+	// loaded from auctionRepo, the caller's account market from userRepo. 404, not a
+	// "wrong market" disclosure, matching this handler's read-side convention.
+	auction, err := h.auctionRepo.FindByID(c.Context(), auctionID)
+	if err != nil {
+		return NotFound(c, "Auction")
+	}
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	user, err := h.userRepo.FindByID(c.Context(), userID)
+	if err != nil {
+		return NotFound(c, "Auction")
+	}
+	if user.EffectiveAccountCountryISO() != auction.EffectiveMarketCountryISO() {
+		return NotFound(c, "Auction")
 	}
 
 	type Request struct {
@@ -75,6 +101,26 @@ func (h *AuctionBoostHandler) GetAuctionBoosts(c *fiber.Ctx) error {
 	auctionID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return BadRequest(c, "Invalid auction ID")
+	}
+
+	// Country-scoped market isolation (migration 000046, V1): this route already
+	// requires JWT auth (see routes.go) -- no anonymous branch needed. 404, not a
+	// "wrong market" disclosure, matching auction_handler.go's established
+	// convention. Checked before any boost data is fetched/returned.
+	auction, err := h.auctionRepo.FindByID(c.Context(), auctionID)
+	if err != nil {
+		return NotFound(c, "Auction")
+	}
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	user, err := h.userRepo.FindByID(c.Context(), userID)
+	if err != nil {
+		return NotFound(c, "Auction")
+	}
+	if user.EffectiveAccountCountryISO() != auction.EffectiveMarketCountryISO() {
+		return NotFound(c, "Auction")
 	}
 
 	boosts, err := h.svc.ListByAuction(c.Context(), auctionID)

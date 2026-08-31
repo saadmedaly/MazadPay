@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:mezadpay/services/auction_api.dart';
 import 'package:mezadpay/services/category_api.dart';
 import 'package:mezadpay/services/rating_api.dart';
+import 'package:mezadpay/utils/money_formatter.dart';
 
 
 class AppModals {
@@ -399,7 +400,7 @@ class AppModals {
     );
   }
 
-  static void showAutoBidModal(BuildContext context, {required String auctionId, required double currentPrice}) {
+  static void showAutoBidModal(BuildContext context, {required String auctionId, required double currentPrice, String? currencyCode}) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final maxBidController = TextEditingController();
     final incrementController = TextEditingController();
@@ -443,7 +444,7 @@ class AppModals {
               _buildTextField(
                 context,
                 controller: maxBidController,
-                label: 'Enchère maximum (MRU)',
+                label: 'Enchère maximum (${currencyCode ?? MoneyFormatter.fallbackCurrencyCode})',
                 hint: 'Ex: 50000',
                 icon: Icons.account_balance_wallet_outlined,
                 isDarkMode: isDarkMode,

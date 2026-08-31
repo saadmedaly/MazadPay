@@ -1,6 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import '../services/wallet_api.dart';
+import '../utils/money_formatter.dart';
 
 
 class WithdrawPage extends StatefulWidget {
@@ -22,6 +23,8 @@ class _WithdrawPageState extends State<WithdrawPage> {
   final WalletApi _walletApi = WalletApi();
   bool _isLoading = false;
   double _balance = 0.0;
+  // Wallet's own currency (migration 000046, Phase 2) -- never assume MRU.
+  String? _currencyCode;
 
   @override
   void initState() {
@@ -42,6 +45,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
           } else {
             _balance = 0.0;
           }
+          _currencyCode = response.data!['currency_code']?.toString();
         });
       }
     } catch (e) {
@@ -154,7 +158,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
                 textAlign: TextAlign.left,
                 decoration: InputDecoration(
                   hintText: '00.00',
-                  suffixText: 'MRU',
+                  suffixText: _currencyCode ?? MoneyFormatter.fallbackCurrencyCode,
                   filled: true,
                   fillColor: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -208,7 +212,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
           Text(AppLocalizations.of(context)!.text_349, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey[600], fontSize: 14)),
           const SizedBox(height: 8),
           Text(
-            '${_balance.toStringAsFixed(2)} MRU',
+            MoneyFormatter.format(_balance, _currencyCode),
             style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 32, fontWeight: FontWeight.bold, color: const Color(0xFF0081FF)),
           ),
         ],

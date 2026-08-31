@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/shared/Modal'
 import { Label } from '@/components/ui/label'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { formatPrice, DEFAULT_CURRENCY_CODE } from '@/lib/formatters'
 import {
   useAuctionBoosts,
   useCreateBoost,
@@ -134,7 +135,11 @@ export function AuctionBoostsPage() {
     {
       header: 'Montant',
       accessorKey: 'amount',
-      cell: ({ getValue }) => <span className="font-medium">{getValue<number>() ? `${getValue<number>()} MRU` : '-'}</span>
+      // AuctionBoost is a platform fee not scoped to any auction's market
+      // currency by the backend model (no currency_code field) -- displayed
+      // in the shared fallback code via formatPrice rather than an ad-hoc
+      // "X MRU" string, pending a backend Phase 3 to scope boost currency.
+      cell: ({ getValue }) => <span className="font-medium">{getValue<number>() ? formatPrice(getValue<number>()) : '-'}</span>
     },
     {
       header: 'Statut',
@@ -253,7 +258,7 @@ export function AuctionBoostsPage() {
           </div>
 
           <div>
-            <Label htmlFor="amount">المبلغ (MRU)</Label>
+            <Label htmlFor="amount">المبلغ ({DEFAULT_CURRENCY_CODE})</Label>
             <Input
               id="amount"
               type="number"

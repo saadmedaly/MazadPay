@@ -13,18 +13,24 @@ package integrationtest
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/mazadpay/backend/internal/config"
 	"github.com/mazadpay/backend/internal/database"
 	apperr "github.com/mazadpay/backend/internal/errors"
+	"github.com/mazadpay/backend/internal/handlers"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/mazadpay/backend/internal/services"
+	ws "github.com/mazadpay/backend/internal/websocket"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -41,10 +47,18 @@ type testEnv struct {
 	userRepo    repository.UserRepository
 	auctionRepo repository.AuctionRepository
 	reqRepo     repository.RequestRepository
+	walletRepo  repository.WalletRepository
+	bidRepo     repository.BidRepository
 
-	authSvc services.AuthService
-	reqSvc  services.RequestService
-	auctSvc services.AuctionService
+	authSvc     services.AuthService
+	reqSvc      services.RequestService
+	auctSvc     services.AuctionService
+	bidSvc      services.BidService
+	userSvc     services.UserService
+	auctHandler *handlers.AuctionHandler
+	bidHandler  *handlers.BidHandler
+	wsHandler   *handlers.WSHandler
+	app         *fiber.App
 }
 
 func setupEnv(t *testing.T) *testEnv {
@@ -76,21 +90,85 @@ func setupEnv(t *testing.T) *testEnv {
 	reqRepo := repository.NewRequestRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
+	walletRepo := repository.NewWalletRepository(db)
+	bidRepo := repository.NewBidRepository(db)
+	favoriteRepo := repository.NewFavoriteRepository(db)
+	kycRepo := repository.NewKYCRepository(db)
 
 	notifSvc := services.NewNotificationService(notifRepo, userRepo, "", "", logger, nil)
 	auditSvc := services.NewAuditService(auditRepo)
 	mediaSvc := services.NewMediaService(cfg, logger)
 
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, "development", "", nil, 4, cfg.Redis.OTPTTLMinutes, rdb, logger)
-	auctSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, nil, auditSvc, logger)
-	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, auditSvc, notifSvc, logger)
+	auctSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger)
+	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger)
+	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, noopHub{})
+	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
+
+	auctHandler := handlers.NewAuctionHandler(auctSvc, userRepo, logger)
+	bidHandler := handlers.NewBidHandler(bidSvc, auctionRepo, userRepo, logger)
+	wsHandler := handlers.NewWSHandler(ws.NewHub(logger), authSvc, auctionRepo, userRepo, logger)
+	boostSvc := services.NewAuctionBoostService(db)
+	boostHandler := handlers.NewAuctionBoostHandler(boostSvc, auctionRepo, userRepo, logger)
+	walletSvcForAutoBid := services.NewWalletService(db, walletRepo, repository.NewTransactionRepository(db, walletRepo), nil, nil, logger)
+	autoBidSvc := services.NewBidAutoBidService(db, bidSvc, walletSvcForAutoBid)
+	autoBidHandler := handlers.NewBidAutoBidHandler(autoBidSvc, auctionRepo, userRepo, logger)
+
+	// Minimal fiber app for HTTP-level tests of handler-layer logic (e.g. GetByID's /
+	// History's market-isolation checks, which live in the handler layer, not the
+	// service) -- fakeAuth sets c.Locals("user_id") directly instead of running real
+	// JWT middleware, since these tests already hold a concrete userID from fixture
+	// setup.
+	app := fiber.New()
+	app.Get("/auctions/:id", fakeAuth(nil), auctHandler.GetByID)
+	app.Get("/auctions/:id/as/:userID", fakeAuthFromParam(), auctHandler.GetByID)
+	app.Get("/auctions/:id/bids", fakeAuth(nil), bidHandler.History)
+	app.Get("/auctions/:id/bids/as/:userID", fakeAuthFromParam(), bidHandler.History)
+	app.Get("/auctions/:id/seller-contact/as/:userID", fakeAuthFromParam(), auctHandler.GetSellerContact)
+	app.Get("/auctions/:id/boosts/as/:userID", fakeAuthFromParam(), boostHandler.GetAuctionBoosts)
+	app.Post("/auctions/:id/boost/as/:userID", fakeAuthFromParam(), boostHandler.CreateBoost)
+	app.Post("/auctions/:id/auto-bid/as/:userID", fakeAuthFromParam(), autoBidHandler.CreateAutoBid)
 
 	return &testEnv{
 		db: db, rdb: rdb, logger: logger,
-		userRepo: userRepo, auctionRepo: auctionRepo, reqRepo: reqRepo,
-		authSvc: authSvc, reqSvc: reqSvc, auctSvc: auctSvc,
+		userRepo: userRepo, auctionRepo: auctionRepo, reqRepo: reqRepo, walletRepo: walletRepo, bidRepo: bidRepo,
+		authSvc: authSvc, reqSvc: reqSvc, auctSvc: auctSvc, bidSvc: bidSvc, userSvc: userSvc,
+		auctHandler: auctHandler, bidHandler: bidHandler, wsHandler: wsHandler, app: app,
 	}
 }
+
+// fakeAuth is a stand-in for middleware.JWT in tests: sets the caller's user_id local
+// directly (test already holds a concrete userID from fixture setup, no need to mint and
+// parse a real JWT). Passing nil means "unauthenticated" (anonymous request).
+func fakeAuth(userID *uuid.UUID) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if userID != nil {
+			c.Locals("user_id", *userID)
+		}
+		return c.Next()
+	}
+}
+
+// fakeAuthFromParam reads the caller's user_id from a :userID URL param (used by the
+// /auctions/:id/as/:userID test-only route below) so a single route can be exercised as
+// different callers without registering a new route per fixture user.
+func fakeAuthFromParam() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if raw := c.Params("userID"); raw != "" {
+			if uid, err := uuid.Parse(raw); err == nil {
+				c.Locals("user_id", uid)
+			}
+		}
+		return c.Next()
+	}
+}
+
+// noopHub satisfies services.AuctionHub for tests that never need real WebSocket
+// broadcasts (bidSvc.PlaceBid calls Broadcast unconditionally on success).
+type noopHub struct{}
+
+func (noopHub) Broadcast(auctionID uuid.UUID, event models.WSEvent)                        {}
+func (noopHub) BroadcastToUser(auctionID uuid.UUID, userID string, event models.WSEvent) {}
 
 // uniquePhone returns a national number that is genuinely VALID for the given region
 // (libphonenumber validates it against that region's numbering plan — see
@@ -597,6 +675,1161 @@ func TestAdminCreateAndApprove_ResultsInPublicAuction(t *testing.T) {
 	t.Logf("(n) admin create+approve flow resulted in publicly-visible auction, status=%q", auction.Status)
 }
 
+// === Country-scoped currency (migration 000046, Phase 1) ===
+//
+// Business rule under test throughout this section (per explicit product decision):
+// market identity = account_country_iso equality. NEVER currency equality alone --
+// SN and CI both use XOF but are separate markets (see case (E) below).
+
+// (A) MR request creation -> correct market/currency stamped server-side.
+func TestAuctionRequest_MarketCurrency_MR(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST CURRENCY SELLER MR") // MR via createTestUser
+
+	req := newAuctionRequest(seller.ID, "currency-mr-"+uuid.New().String()[:6])
+	if err := env.reqSvc.CreateAuctionRequest(ctx, req); err != nil {
+		t.Fatalf("CreateAuctionRequest failed: %v", err)
+	}
+	if req.MarketCountryISO == nil || *req.MarketCountryISO != "MR" {
+		t.Fatalf("expected market_country_iso=MR, got %v", req.MarketCountryISO)
+	}
+	wantCurrency := currencyOf(t, env, "MR")
+	if req.CurrencyCode == nil || *req.CurrencyCode != wantCurrency {
+		t.Fatalf("expected currency_code=%s, got %v", wantCurrency, req.CurrencyCode)
+	}
+	if wantCurrency != "MRU" {
+		t.Fatalf("sanity check failed: countries.currency_code for MR must be MRU (not the stale CLDR MRO), got %s", wantCurrency)
+	}
+	t.Logf("(A) MR request stamped market=%s currency=%s", *req.MarketCountryISO, *req.CurrencyCode)
+}
+
+// (B) TN request creation -> correct market/currency (distinct from MR).
+func TestAuctionRequest_MarketCurrency_TN(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUserWithCountry(t, env, "TEST CURRENCY SELLER TN", "TN")
+
+	req := newAuctionRequest(seller.ID, "currency-tn-"+uuid.New().String()[:6])
+	if err := env.reqSvc.CreateAuctionRequest(ctx, req); err != nil {
+		t.Fatalf("CreateAuctionRequest failed: %v", err)
+	}
+	if req.MarketCountryISO == nil || *req.MarketCountryISO != "TN" {
+		t.Fatalf("expected market_country_iso=TN, got %v", req.MarketCountryISO)
+	}
+	wantCurrency := currencyOf(t, env, "TN")
+	if req.CurrencyCode == nil || *req.CurrencyCode != wantCurrency {
+		t.Fatalf("expected currency_code=%s, got %v", wantCurrency, req.CurrencyCode)
+	}
+	if wantCurrency != "TND" {
+		t.Fatalf("sanity check failed: countries.currency_code for TN must be TND, got %s", wantCurrency)
+	}
+	t.Logf("(B) TN request stamped market=%s currency=%s", *req.MarketCountryISO, *req.CurrencyCode)
+}
+
+// (C) Client attempting to spoof market_country_iso/currency_code in the request body
+// must be ignored -- the service always overwrites with the server-derived values.
+func TestAuctionRequest_MarketCurrency_ClientSpoofIgnored(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST CURRENCY SELLER SPOOF") // MR
+
+	spoofedMarket := "FR"
+	spoofedCurrency := "EUR"
+	req := newAuctionRequest(seller.ID, "currency-spoof-"+uuid.New().String()[:6])
+	req.MarketCountryISO = &spoofedMarket
+	req.CurrencyCode = &spoofedCurrency
+
+	if err := env.reqSvc.CreateAuctionRequest(ctx, req); err != nil {
+		t.Fatalf("CreateAuctionRequest failed: %v", err)
+	}
+	if req.MarketCountryISO == nil || *req.MarketCountryISO != "MR" {
+		t.Fatalf("client-supplied market_country_iso=FR was NOT overridden -- got %v, want MR (security regression)", req.MarketCountryISO)
+	}
+	if req.CurrencyCode == nil || *req.CurrencyCode == "EUR" {
+		t.Fatalf("client-supplied currency_code=EUR was NOT overridden -- got %v (security regression)", req.CurrencyCode)
+	}
+
+	var row struct {
+		MarketCountryISO *string `db:"market_country_iso"`
+		CurrencyCode     *string `db:"currency_code"`
+	}
+	if err := env.db.GetContext(ctx, &row, `SELECT market_country_iso, currency_code FROM auction_requests WHERE id = $1`, req.ID); err != nil {
+		t.Fatalf("failed to read back row: %v", err)
+	}
+	if row.MarketCountryISO == nil || *row.MarketCountryISO != "MR" {
+		t.Fatalf("persisted market_country_iso is spoofed value, got %v", row.MarketCountryISO)
+	}
+	t.Logf("(C) client-supplied market=FR/currency=EUR correctly discarded, persisted market=%s currency=%s", *row.MarketCountryISO, *row.CurrencyCode)
+}
+
+// (D) MR bidder on MR auction: allowed.
+func TestPlaceBid_SameMarket_Allowed(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BID SELLER D")
+	bidder := createTestUser(t, env, "TEST BID BIDDER D")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	bid, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
+	if err != nil {
+		t.Fatalf("(D) expected same-market (MR->MR) bid to succeed, got error: %v", err)
+	}
+	t.Logf("(D) MR bidder -> MR auction bid succeeded: %s", bid.ID)
+}
+
+// (E) TN bidder on MR auction: rejected (cross-market, even though both may resolve to
+// distinct currencies here -- the primary case for currency-sharing markets is (F)/SN-CI).
+func TestPlaceBid_CrossMarket_Rejected(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BID SELLER E")
+	bidder := createTestUserWithCountry(t, env, "TEST BID BIDDER E", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
+	if err == nil {
+		t.Fatalf("(E) expected TN bidder on MR auction to be rejected, got nil error")
+	}
+	if err != apperr.ErrCrossMarketBid {
+		t.Fatalf("(E) expected ErrCrossMarketBid, got %v", err)
+	}
+	t.Logf("(E) TN bidder -> MR auction correctly rejected: %v", err)
+}
+
+// (F) SN bidder on CI auction: rejected DESPITE both markets sharing the same currency
+// (XOF) -- this is the security/financially-critical case explicitly flagged: market
+// identity must be decided by COUNTRY, never by currency equality.
+func TestPlaceBid_SharedCurrencyDifferentMarket_Rejected(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	snCurrency := currencyOf(t, env, "SN")
+	ciCurrency := currencyOf(t, env, "CI")
+	if snCurrency != ciCurrency {
+		t.Fatalf("test precondition failed: SN and CI must share a currency (both XOF) for this test to be meaningful, got SN=%s CI=%s", snCurrency, ciCurrency)
+	}
+
+	seller := createTestUserWithCountry(t, env, "TEST BID SELLER F CI", "CI")
+	bidder := createTestUserWithCountry(t, env, "TEST BID BIDDER F SN", "SN")
+	auction := createTestAuction(t, env, seller.ID, "CI", ciCurrency)
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
+	if err == nil {
+		t.Fatalf("(F) CRITICAL: expected SN bidder on CI auction to be rejected despite shared currency %s, got nil error", ciCurrency)
+	}
+	if err != apperr.ErrCrossMarketBid {
+		t.Fatalf("(F) expected ErrCrossMarketBid, got %v", err)
+	}
+	t.Logf("(F) SN bidder -> CI auction correctly rejected despite shared currency %s: %v", ciCurrency, err)
+}
+
+// (G) Legacy user row (account_country_iso IS NULL, predating migration 000046)
+// bidding on a legacy auction (market_country_iso IS NULL) -- both fall back to
+// DefaultAccountCountryISO ('MR') and must be treated as the same market.
+func TestPlaceBid_LegacyNullFallback_TreatedAsMR(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST BID SELLER G LEGACY")
+	bidder := createTestUser(t, env, "TEST BID BIDDER G LEGACY")
+
+	// Force both rows' new columns back to NULL to simulate pre-migration data.
+	if _, err := env.db.ExecContext(ctx, `UPDATE users SET account_country_iso = NULL WHERE id = $1`, bidder.ID); err != nil {
+		t.Fatalf("failed to null out bidder account_country_iso: %v", err)
+	}
+
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET market_country_iso = NULL, currency_code = NULL WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to null out auction market_country_iso/currency_code: %v", err)
+	}
+
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+	// Also null out the wallet's currency_code to simulate a pre-migration wallet.
+	if _, err := env.db.ExecContext(ctx, `UPDATE wallets SET currency_code = NULL WHERE user_id = $1`, bidder.ID); err != nil {
+		t.Fatalf("failed to null out wallet currency_code: %v", err)
+	}
+
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
+	if err != nil {
+		t.Fatalf("(G) expected legacy NULL bidder/auction (both falling back to MR/MRU) to succeed, got: %v", err)
+	}
+	t.Logf("(G) legacy NULL user + NULL auction correctly treated as same MR/MRU market")
+}
+
+// (H) Wallet/auction currency mismatch is rejected even within a nominally allowed
+// same-market bid (defense-in-depth check in PlaceBid, see bid_service.go).
+func TestPlaceBid_WalletCurrencyMismatch_Rejected(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BID SELLER H")
+	bidder := createTestUser(t, env, "TEST BID BIDDER H") // MR account, wallet will be MRU
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	// Corrupt the wallet's currency_code directly to simulate an inconsistent state that
+	// should never occur in practice but must still be caught (financial-safety
+	// requirement, see bid_service.go comment on this exact check).
+	if _, err := env.db.ExecContext(ctx, `UPDATE wallets SET currency_code = 'EUR' WHERE user_id = $1`, bidder.ID); err != nil {
+		t.Fatalf("failed to corrupt wallet currency_code: %v", err)
+	}
+
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
+	if err == nil {
+		t.Fatalf("(H) expected wallet/auction currency mismatch to be rejected, got nil error")
+	}
+	if err != apperr.ErrWalletCurrencyMismatch {
+		t.Fatalf("(H) expected ErrWalletCurrencyMismatch, got %v", err)
+	}
+	t.Logf("(H) wallet currency EUR vs auction currency MRU correctly rejected: %v", err)
+}
+
+// (I) Approving a request preserves/stamps the same market_country_iso/currency_code on
+// the resulting auction -- never re-derived dynamically from the seller's current account.
+func TestReviewAuctionRequest_ApprovePreservesMarketCurrency(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUserWithCountry(t, env, "TEST APPROVE MARKET SELLER I", "TN")
+	admin := createTestAdmin(t, env, "TEST APPROVE MARKET ADMIN I")
+
+	req := newAuctionRequest(seller.ID, "approve-market-"+uuid.New().String()[:6])
+	if err := env.reqSvc.CreateAuctionRequest(ctx, req); err != nil {
+		t.Fatalf("CreateAuctionRequest failed: %v", err)
+	}
+	if req.MarketCountryISO == nil || *req.MarketCountryISO != "TN" {
+		t.Fatalf("precondition failed: request market_country_iso should be TN, got %v", req.MarketCountryISO)
+	}
+
+	// Simulate the seller's account market changing AFTER submission but BEFORE
+	// approval -- the auction must still carry the ORIGINAL request market, not the
+	// seller's now-current one.
+	if _, err := env.db.ExecContext(ctx, `UPDATE users SET account_country_iso = 'MA' WHERE id = $1`, seller.ID); err != nil {
+		t.Fatalf("failed to simulate seller account market change: %v", err)
+	}
+
+	if err := env.reqSvc.ReviewAuctionRequest(ctx, req.ID, "approved", "ok", admin.ID); err != nil {
+		t.Fatalf("ReviewAuctionRequest(approved) failed: %v", err)
+	}
+
+	var auction models.Auction
+	if err := env.db.GetContext(ctx, &auction, `SELECT * FROM auctions WHERE seller_id = $1 AND title_ar = $2`, seller.ID, req.TitleAr); err != nil {
+		t.Fatalf("expected an auction row to exist after approval: %v", err)
+	}
+	if auction.MarketCountryISO == nil || *auction.MarketCountryISO != "TN" {
+		t.Fatalf("(I) expected auction market_country_iso=TN (preserved from request at submission time), got %v (seller's account market was changed to MA after submission)", auction.MarketCountryISO)
+	}
+	t.Logf("(I) auction correctly preserved original request market=%s despite seller's account market later changing to MA", *auction.MarketCountryISO)
+}
+
+// === Phase 1.1 blocker fixes ===
+
+// (J) TN wallet transaction (deposit) is stamped with the TN account's currency (TND),
+// not left NULL and not defaulted to MRU.
+func TestInitiateDeposit_TNWallet_StampsTND(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	walletSvc := newWalletSvc(env)
+
+	user := createTestUserWithCountry(t, env, "TEST DEPOSIT TN J", "TN")
+
+	txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(100), "bank_transfer", "bank_transfer", "")
+	if err != nil {
+		t.Fatalf("InitiateDeposit failed: %v", err)
+	}
+	if txn.CurrencyCode == nil || *txn.CurrencyCode != "TND" {
+		t.Fatalf("(J) expected deposit transaction currency_code=TND, got %v", txn.CurrencyCode)
+	}
+
+	var stored string
+	if err := env.db.GetContext(ctx, &stored, `SELECT currency_code FROM transactions WHERE id = $1`, txn.ID); err != nil {
+		t.Fatalf("failed to read back transaction currency_code: %v", err)
+	}
+	if stored != "TND" {
+		t.Fatalf("(J) persisted transactions.currency_code=%q, want TND", stored)
+	}
+	t.Logf("(J) TN deposit correctly stamped currency_code=TND")
+}
+
+// (K) MR wallet transaction (withdrawal) is stamped with MRU.
+func TestRequestWithdraw_MRWallet_StampsMRU(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	walletSvc := newWalletSvc(env)
+
+	user := createTestUser(t, env, "TEST WITHDRAW MR K") // MR
+	creditWallet(t, env, user.ID, decimal.NewFromInt(500))
+
+	txn, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(100), "bank_transfer")
+	if err != nil {
+		t.Fatalf("RequestWithdraw failed: %v", err)
+	}
+	if txn.CurrencyCode == nil || *txn.CurrencyCode != "MRU" {
+		t.Fatalf("(K) expected withdraw transaction currency_code=MRU, got %v", txn.CurrencyCode)
+	}
+	t.Logf("(K) MR withdrawal correctly stamped currency_code=MRU")
+}
+
+// (L) Client cannot spoof transaction currency: InitiateDeposit/RequestWithdraw take no
+// currency parameter at all in their service signatures -- structurally impossible to
+// pass one in. This test proves the currency stamped always matches the wallet's own
+// currency regardless of the raw amount/gateway/payment-method strings supplied,
+// confirming there is no code path treating any caller-supplied string as a currency.
+func TestTransactionCurrency_ClientCannotSpoof(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	walletSvc := newWalletSvc(env)
+
+	user := createTestUserWithCountry(t, env, "TEST SPOOF CURRENCY L", "MA")
+
+	// Even a gateway/payment_method string that looks like a currency code must have no
+	// effect on the stamped currency_code -- these fields are never interpreted as such.
+	txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(50), "EUR", "USD", "")
+	if err != nil {
+		t.Fatalf("InitiateDeposit failed: %v", err)
+	}
+	if txn.CurrencyCode == nil || *txn.CurrencyCode != "MAD" {
+		t.Fatalf("(L) expected currency_code derived from account market (MAD) regardless of gateway/payment_method strings, got %v", txn.CurrencyCode)
+	}
+	t.Logf("(L) gateway=EUR/payment_method=USD had no effect; correctly stamped MAD from account market")
+}
+
+// (M) Wallet/transaction monetary context cannot silently diverge: a wallet's stamped
+// currency_code never changes after creation even if the owner's account_country_iso is
+// later modified -- a transaction created afterward still uses the wallet's original,
+// immutable currency (matching wallet_repo.go's write-once design), not the new market.
+func TestWalletTransactionCurrency_CannotDiverge(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	walletSvc := newWalletSvc(env)
+
+	user := createTestUser(t, env, "TEST DIVERGE M") // MR -> wallet currency MRU
+	// Force wallet creation now, while account market is still MR.
+	if _, err := env.walletRepo.GetByUserID(ctx, user.ID); err != nil {
+		t.Fatalf("failed to ensure wallet exists: %v", err)
+	}
+
+	// Simulate the account market changing after the wallet already exists.
+	if _, err := env.db.ExecContext(ctx, `UPDATE users SET account_country_iso = 'TN' WHERE id = $1`, user.ID); err != nil {
+		t.Fatalf("failed to simulate account market change: %v", err)
+	}
+
+	var walletCurrency string
+	if err := env.db.GetContext(ctx, &walletCurrency, `SELECT currency_code FROM wallets WHERE user_id = $1`, user.ID); err != nil {
+		t.Fatalf("failed to read wallet currency: %v", err)
+	}
+	if walletCurrency != "MRU" {
+		t.Fatalf("(M) expected wallet currency_code to remain MRU (immutable, write-once at creation) despite account market changing to TN, got %s", walletCurrency)
+	}
+
+	creditWallet(t, env, user.ID, decimal.NewFromInt(200))
+	txn, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(50), "bank_transfer")
+	if err != nil {
+		t.Fatalf("RequestWithdraw failed: %v", err)
+	}
+	if txn.CurrencyCode == nil || *txn.CurrencyCode != "MRU" {
+		t.Fatalf("(M) expected new transaction to use the wallet's original immutable currency MRU (not the new account market TN's TND), got %v", txn.CurrencyCode)
+	}
+	t.Logf("(M) wallet currency stayed MRU after account market changed to TN; new transaction correctly used MRU, not TND")
+}
+
+// (N) Legacy NULL historical transaction (predating migration 000046) remains safely
+// readable via EffectiveCurrencyCode(), falling back to MRU.
+func TestTransaction_LegacyNullCurrency_ReadsSafely(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	user := createTestUser(t, env, "TEST LEGACY TX N")
+	txID := uuid.New()
+	if _, err := env.db.ExecContext(ctx, `
+		INSERT INTO transactions (id, user_id, type, amount, status, currency_code)
+		VALUES ($1, $2, 'deposit', 100, 'pending', NULL)
+	`, txID, user.ID); err != nil {
+		t.Fatalf("failed to insert legacy NULL-currency transaction fixture: %v", err)
+	}
+
+	var tx models.Transaction
+	if err := env.db.GetContext(ctx, &tx, `SELECT * FROM transactions WHERE id = $1`, txID); err != nil {
+		t.Fatalf("failed to read back legacy transaction: %v", err)
+	}
+	if tx.CurrencyCode != nil {
+		t.Fatalf("(N) precondition failed: expected raw CurrencyCode nil for legacy fixture, got %v", tx.CurrencyCode)
+	}
+	if got := tx.EffectiveCurrencyCode(); got != "MRU" {
+		t.Fatalf("(N) expected EffectiveCurrencyCode() fallback to MRU for legacy NULL transaction, got %q", got)
+	}
+	t.Logf("(N) legacy NULL-currency transaction reads safely via EffectiveCurrencyCode() -> MRU")
+}
+
+// (O) MR user -> MR auction detail succeeds (HTTP 200).
+func TestAuctionDetail_SameMarket_Succeeds(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST DETAIL SELLER O")
+	viewer := createTestUser(t, env, "TEST DETAIL VIEWER O") // MR
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'active' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to activate fixture auction: %v", err)
+	}
+
+	status := httpGetAuctionDetail(t, env, auction.ID, &viewer.ID)
+	if status != 200 {
+		t.Fatalf("(O) expected 200 for MR viewer -> MR auction, got %d", status)
+	}
+	t.Logf("(O) MR viewer -> MR auction detail: %d", status)
+}
+
+// (P) TN user -> MR auction detail denied (404, not a disclosure).
+func TestAuctionDetail_CrossMarket_Denied(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST DETAIL SELLER P")
+	viewer := createTestUserWithCountry(t, env, "TEST DETAIL VIEWER P", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'active' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to activate fixture auction: %v", err)
+	}
+
+	status := httpGetAuctionDetail(t, env, auction.ID, &viewer.ID)
+	if status != 404 {
+		t.Fatalf("(P) CRITICAL: expected 404 for TN viewer -> MR auction (market isolation bypass by ID), got %d", status)
+	}
+	t.Logf("(P) TN viewer -> MR auction detail correctly denied: %d", status)
+}
+
+// (Q) Anonymous -> MR auction succeeds (anonymous effective market = MR).
+func TestAuctionDetail_Anonymous_MRSucceeds(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST DETAIL SELLER Q")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'active' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to activate fixture auction: %v", err)
+	}
+
+	status := httpGetAuctionDetail(t, env, auction.ID, nil)
+	if status != 200 {
+		t.Fatalf("(Q) expected 200 for anonymous -> MR auction, got %d", status)
+	}
+	t.Logf("(Q) anonymous -> MR auction detail: %d", status)
+}
+
+// (R) Anonymous -> TN auction denied (anonymous effective market = MR, not TN).
+func TestAuctionDetail_Anonymous_TNDenied(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUserWithCountry(t, env, "TEST DETAIL SELLER R", "TN")
+	auction := createTestAuction(t, env, seller.ID, "TN", "TND")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'active' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to activate fixture auction: %v", err)
+	}
+
+	status := httpGetAuctionDetail(t, env, auction.ID, nil)
+	if status != 404 {
+		t.Fatalf("(R) expected 404 for anonymous -> TN auction (old-client-compatible MR-only default), got %d", status)
+	}
+	t.Logf("(R) anonymous -> TN auction detail correctly denied: %d", status)
+}
+
+// (S) User cannot add a cross-market auction to favorites.
+func TestAddFavorite_CrossMarket_Denied(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVORITE SELLER S")
+	user := createTestUserWithCountry(t, env, "TEST FAVORITE USER S", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	err := env.userSvc.AddFavorite(ctx, user.ID, auction.ID)
+	if err == nil {
+		t.Fatalf("(S) expected error adding cross-market (TN user, MR auction) favorite, got nil")
+	}
+	if err != apperr.ErrNotFound {
+		t.Fatalf("(S) expected ErrNotFound, got %v", err)
+	}
+
+	var count int
+	if err := env.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM user_favorites WHERE user_id = $1 AND auction_id = $2`, user.ID, auction.ID); err != nil {
+		t.Fatalf("count query failed: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("(S) expected no favorite row to be created, found %d", count)
+	}
+	t.Logf("(S) cross-market favorite correctly rejected: %v", err)
+}
+
+// (T) Favorites listing never returns an auction outside the caller's effective market,
+// even for a stale row created before the AddFavorite guard existed (defense-in-depth).
+func TestListFavorites_ExcludesCrossMarket(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	sellerMR := createTestUser(t, env, "TEST FAVLIST SELLER MR T")
+	sellerTN := createTestUserWithCountry(t, env, "TEST FAVLIST SELLER TN T", "TN")
+	user := createTestUser(t, env, "TEST FAVLIST USER T") // MR
+
+	mrAuction := createTestAuction(t, env, sellerMR.ID, "MR", "MRU")
+	tnAuction := createTestAuction(t, env, sellerTN.ID, "TN", "TND")
+
+	if err := env.userSvc.AddFavorite(ctx, user.ID, mrAuction.ID); err != nil {
+		t.Fatalf("AddFavorite(same-market) failed: %v", err)
+	}
+	// Bypass the AddFavorite guard directly at the repo level to simulate a stale
+	// cross-market row predating this fix.
+	if _, err := env.db.ExecContext(ctx, `INSERT INTO user_favorites (user_id, auction_id) VALUES ($1, $2)`, user.ID, tnAuction.ID); err != nil {
+		t.Fatalf("failed to insert stale cross-market favorite fixture: %v", err)
+	}
+
+	favorites, err := env.userSvc.ListFavorites(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ListFavorites failed: %v", err)
+	}
+	for _, a := range favorites {
+		if a.ID == tnAuction.ID {
+			t.Fatalf("(T) CRITICAL: cross-market TN auction leaked into MR user's favorites list")
+		}
+	}
+	found := false
+	for _, a := range favorites {
+		if a.ID == mrAuction.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("(T) expected same-market MR favorite to still be present, got %d favorites", len(favorites))
+	}
+	t.Logf("(T) favorites list correctly excluded stale cross-market TN favorite, kept MR favorite (%d total)", len(favorites))
+}
+
+// === Phase 1.2 final isolation fixes ===
+
+// (bid-history A) MR authenticated viewer -> MR auction bids succeeds.
+func TestBidHistory_SameMarket_Succeeds(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BIDHIST SELLER A")
+	viewer := createTestUser(t, env, "TEST BIDHIST VIEWER A") // MR
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'active' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to activate fixture auction: %v", err)
+	}
+
+	status := httpGetBidHistory(t, env, auction.ID, &viewer.ID)
+	if status != 200 {
+		t.Fatalf("(bid-history A) expected 200 for MR viewer -> MR auction bids, got %d", status)
+	}
+	t.Logf("(bid-history A) MR viewer -> MR auction bids: %d", status)
+}
+
+// (bid-history B) TN authenticated viewer -> MR auction bids denied.
+func TestBidHistory_CrossMarket_Denied(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BIDHIST SELLER B")
+	viewer := createTestUserWithCountry(t, env, "TEST BIDHIST VIEWER B", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'active' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to activate fixture auction: %v", err)
+	}
+
+	status := httpGetBidHistory(t, env, auction.ID, &viewer.ID)
+	if status != 404 {
+		t.Fatalf("(bid-history B) CRITICAL: expected 404 for TN viewer -> MR auction bids (market isolation bypass by ID), got %d", status)
+	}
+	t.Logf("(bid-history B) TN viewer -> MR auction bids correctly denied: %d", status)
+}
+
+// (bid-history C) Anonymous -> MR auction bids succeeds (anonymous effective market = MR).
+func TestBidHistory_Anonymous_MRSucceeds(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BIDHIST SELLER C")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'active' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to activate fixture auction: %v", err)
+	}
+
+	status := httpGetBidHistory(t, env, auction.ID, nil)
+	if status != 200 {
+		t.Fatalf("(bid-history C) expected 200 for anonymous -> MR auction bids, got %d", status)
+	}
+	t.Logf("(bid-history C) anonymous -> MR auction bids: %d", status)
+}
+
+// (bid-history D) Anonymous -> TN auction bids denied.
+func TestBidHistory_Anonymous_TNDenied(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUserWithCountry(t, env, "TEST BIDHIST SELLER D", "TN")
+	auction := createTestAuction(t, env, seller.ID, "TN", "TND")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'active' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to activate fixture auction: %v", err)
+	}
+
+	status := httpGetBidHistory(t, env, auction.ID, nil)
+	if status != 404 {
+		t.Fatalf("(bid-history D) expected 404 for anonymous -> TN auction bids, got %d", status)
+	}
+	t.Logf("(bid-history D) anonymous -> TN auction bids correctly denied: %d", status)
+}
+
+// (bid-history E) Knowing the auction ID alone is insufficient to bypass market
+// isolation: a TN viewer who knows a real, active MR auction's ID still gets 404, and
+// the response carries no distinguishing "cross market" detail (same 404 shape as an
+// unknown/non-existent ID).
+func TestBidHistory_IDKnowledgeInsufficientToBypass(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BIDHIST SELLER E")
+	viewer := createTestUserWithCountry(t, env, "TEST BIDHIST VIEWER E", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'active' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to activate fixture auction: %v", err)
+	}
+
+	crossMarketStatus := httpGetBidHistory(t, env, auction.ID, &viewer.ID)
+	nonExistentStatus := httpGetBidHistory(t, env, uuid.New(), &viewer.ID)
+	if crossMarketStatus != nonExistentStatus {
+		t.Fatalf("(bid-history E) cross-market response (%d) distinguishable from non-existent-ID response (%d) -- disclosure risk", crossMarketStatus, nonExistentStatus)
+	}
+	if crossMarketStatus != 404 {
+		t.Fatalf("(bid-history E) expected both to be 404, got %d", crossMarketStatus)
+	}
+	t.Logf("(bid-history E) real cross-market auction ID and a random non-existent ID both correctly return %d, indistinguishable", crossMarketStatus)
+}
+
+// (ws-1) WebSocket subscription: MR user -> MR auction authorized.
+func TestWSAuthorizeSubscription_SameMarket_Allowed(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST WS SELLER 1")
+	viewer := createTestUser(t, env, "TEST WS VIEWER 1") // MR
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	if ok := env.wsHandler.AuthorizeSubscription(ctx, auction.ID, viewer.ID.String()); !ok {
+		t.Fatalf("(ws-1) expected MR viewer -> MR auction WS subscription to be authorized")
+	}
+	t.Logf("(ws-1) MR -> MR WebSocket subscription correctly authorized")
+}
+
+// (ws-2) WebSocket subscription: TN user -> MR auction rejected.
+func TestWSAuthorizeSubscription_CrossMarket_Rejected(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST WS SELLER 2")
+	viewer := createTestUserWithCountry(t, env, "TEST WS VIEWER 2", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	if ok := env.wsHandler.AuthorizeSubscription(ctx, auction.ID, viewer.ID.String()); ok {
+		t.Fatalf("(ws-2) expected TN viewer -> MR auction WS subscription to be rejected")
+	}
+	t.Logf("(ws-2) TN -> MR WebSocket subscription correctly rejected")
+}
+
+// (ws-3) SECURITY-CRITICAL: SN user -> CI auction rejected DESPITE both using XOF --
+// WebSocket market isolation must be decided by country equality alone, exactly like
+// PlaceBid's cross-market check, never by currency equality.
+func TestWSAuthorizeSubscription_SharedCurrencyDifferentMarket_Rejected(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	snCurrency := currencyOf(t, env, "SN")
+	ciCurrency := currencyOf(t, env, "CI")
+	if snCurrency != ciCurrency {
+		t.Fatalf("test precondition failed: SN and CI must share a currency for this test to be meaningful, got SN=%s CI=%s", snCurrency, ciCurrency)
+	}
+
+	seller := createTestUserWithCountry(t, env, "TEST WS SELLER 3 CI", "CI")
+	subscriber := createTestUserWithCountry(t, env, "TEST WS SUBSCRIBER 3 SN", "SN")
+	auction := createTestAuction(t, env, seller.ID, "CI", ciCurrency)
+
+	if ok := env.wsHandler.AuthorizeSubscription(ctx, auction.ID, subscriber.ID.String()); ok {
+		t.Fatalf("(ws-3) CRITICAL: expected SN subscriber -> CI auction WS subscription to be rejected despite shared currency %s", ciCurrency)
+	}
+	t.Logf("(ws-3) SN -> CI WebSocket subscription correctly rejected despite shared currency %s", ciCurrency)
+}
+
+// === Phase 1.3 final two-endpoint fixes ===
+// Both /seller-contact and /boosts already require JWT auth (jwtMiddleware in
+// routes.go) -- no anonymous-access branch exists or is required for either.
+
+// (seller-contact 1) MR user -> MR auction seller contact succeeds.
+func TestSellerContact_SameMarket_Succeeds(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST SELLERCONTACT SELLER 1")
+	viewer := createTestUser(t, env, "TEST SELLERCONTACT VIEWER 1") // MR
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	status, body := httpGetSellerContact(t, env, auction.ID, viewer.ID)
+	if status != 200 {
+		t.Fatalf("(seller-contact 1) expected 200 for MR viewer -> MR auction, got %d", status)
+	}
+	if !strings.Contains(body, "phone") {
+		t.Fatalf("(seller-contact 1) expected a phone field in the successful response, got %q", body)
+	}
+	t.Logf("(seller-contact 1) MR -> MR seller-contact: %d", status)
+}
+
+// (seller-contact 2) TN user -> MR auction seller contact denied, AND no seller
+// contact payload (not even masked) leaks in the denial response.
+func TestSellerContact_CrossMarket_DeniedNoLeak(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST SELLERCONTACT SELLER 2")
+	viewer := createTestUserWithCountry(t, env, "TEST SELLERCONTACT VIEWER 2", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if err := setAuctionPhoneContact(t, env, auction.ID, "22345678"); err != nil {
+		t.Fatalf("failed to set fixture phone_contact: %v", err)
+	}
+
+	status, body := httpGetSellerContact(t, env, auction.ID, viewer.ID)
+	if status != 404 {
+		t.Fatalf("(seller-contact 2) CRITICAL: expected 404 for TN viewer -> MR auction seller-contact, got %d", status)
+	}
+	if strings.Contains(body, "phone") || strings.Contains(body, "####") {
+		t.Fatalf("(seller-contact 2) CRITICAL: denial response leaked phone/contact data: %q", body)
+	}
+	t.Logf("(seller-contact 2) TN -> MR seller-contact correctly denied with no data leak: %d %q", status, body)
+}
+
+// (seller-contact 3) Knowing the auction ID is insufficient to bypass isolation: the
+// cross-market response is indistinguishable from a non-existent-ID response.
+func TestSellerContact_IDKnowledgeInsufficientToBypass(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST SELLERCONTACT SELLER 3")
+	viewer := createTestUserWithCountry(t, env, "TEST SELLERCONTACT VIEWER 3", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	crossMarketStatus, _ := httpGetSellerContact(t, env, auction.ID, viewer.ID)
+	nonExistentStatus, _ := httpGetSellerContact(t, env, uuid.New(), viewer.ID)
+	if crossMarketStatus != nonExistentStatus || crossMarketStatus != 404 {
+		t.Fatalf("(seller-contact 3) expected both cross-market (%d) and non-existent (%d) to be indistinguishable 404s", crossMarketStatus, nonExistentStatus)
+	}
+	t.Logf("(seller-contact 3) real cross-market ID and random ID both correctly return %d, indistinguishable", crossMarketStatus)
+}
+
+// (boosts 1) MR user -> MR auction boosts succeeds.
+func TestAuctionBoosts_SameMarket_Succeeds(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST BOOSTS SELLER 1")
+	viewer := createTestUser(t, env, "TEST BOOSTS VIEWER 1") // MR
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	status := httpGetAuctionBoosts(t, env, auction.ID, viewer.ID)
+	if status != 200 {
+		t.Fatalf("(boosts 1) expected 200 for MR viewer -> MR auction boosts, got %d", status)
+	}
+	t.Logf("(boosts 1) MR -> MR boosts: %d", status)
+}
+
+// (boosts 2) TN user -> MR auction boosts denied.
+func TestAuctionBoosts_CrossMarket_Denied(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST BOOSTS SELLER 2")
+	viewer := createTestUserWithCountry(t, env, "TEST BOOSTS VIEWER 2", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	status := httpGetAuctionBoosts(t, env, auction.ID, viewer.ID)
+	if status != 404 {
+		t.Fatalf("(boosts 2) CRITICAL: expected 404 for TN viewer -> MR auction boosts, got %d", status)
+	}
+	t.Logf("(boosts 2) TN -> MR boosts correctly denied: %d", status)
+}
+
+// === Phase 1.4 final write isolation ===
+
+// (write-1) TN user cannot create a boost for an MR auction.
+func TestCreateBoost_CrossMarket_Denied(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST CREATEBOOST SELLER 1")
+	buyer := createTestUserWithCountry(t, env, "TEST CREATEBOOST BUYER 1", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	status := httpCreateBoost(t, env, auction.ID, buyer.ID)
+	if status != 404 {
+		t.Fatalf("(write-1) CRITICAL: expected 404 for TN user creating a boost on an MR auction, got %d", status)
+	}
+
+	count := countBoostsForAuction(t, env, auction.ID)
+	if count != 0 {
+		t.Fatalf("(write-1) expected no boost row to be created, found %d", count)
+	}
+	t.Logf("(write-1) TN -> MR CreateBoost correctly denied, no row created: %d", status)
+}
+
+// (write-2) MR user CAN create a boost for an MR auction (same-market action still works).
+func TestCreateBoost_SameMarket_Succeeds(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST CREATEBOOST SELLER 2")
+	buyer := createTestUser(t, env, "TEST CREATEBOOST BUYER 2") // MR
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	status := httpCreateBoost(t, env, auction.ID, buyer.ID)
+	if status != 200 {
+		t.Fatalf("(write-2) expected 200 for MR user creating a boost on an MR auction, got %d", status)
+	}
+
+	count := countBoostsForAuction(t, env, auction.ID)
+	if count != 1 {
+		t.Fatalf("(write-2) expected exactly 1 boost row to be created, found %d", count)
+	}
+	t.Logf("(write-2) MR -> MR CreateBoost correctly succeeded, 1 row created: %d", status)
+}
+
+// (write-3) TN user cannot create an auto-bid for an MR auction.
+func TestCreateAutoBid_CrossMarket_Denied(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST CREATEAUTOBID SELLER 3")
+	buyer := createTestUserWithCountry(t, env, "TEST CREATEAUTOBID BUYER 3", "TN")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	status := httpCreateAutoBid(t, env, auction.ID, buyer.ID)
+	if status != 404 {
+		t.Fatalf("(write-3) CRITICAL: expected 404 for TN user creating an auto-bid on an MR auction, got %d", status)
+	}
+
+	count := countAutoBidsForAuction(t, env, auction.ID)
+	if count != 0 {
+		t.Fatalf("(write-3) expected no auto-bid row to be created, found %d", count)
+	}
+	t.Logf("(write-3) TN -> MR CreateAutoBid correctly denied, no row created: %d", status)
+}
+
+// (write-4) SN user cannot create an auto-bid for a CI auction, despite both using XOF --
+// security-critical case, country equality only, never currency.
+func TestCreateAutoBid_SharedCurrencyDifferentMarket_Denied(t *testing.T) {
+	env := setupEnv(t)
+	snCurrency := currencyOf(t, env, "SN")
+	ciCurrency := currencyOf(t, env, "CI")
+	if snCurrency != ciCurrency {
+		t.Fatalf("test precondition failed: SN and CI must share a currency, got SN=%s CI=%s", snCurrency, ciCurrency)
+	}
+
+	seller := createTestUserWithCountry(t, env, "TEST CREATEAUTOBID SELLER 4 CI", "CI")
+	buyer := createTestUserWithCountry(t, env, "TEST CREATEAUTOBID BUYER 4 SN", "SN")
+	auction := createTestAuction(t, env, seller.ID, "CI", ciCurrency)
+
+	status := httpCreateAutoBid(t, env, auction.ID, buyer.ID)
+	if status != 404 {
+		t.Fatalf("(write-4) CRITICAL: expected 404 for SN user creating an auto-bid on a CI auction despite shared currency %s, got %d", ciCurrency, status)
+	}
+	t.Logf("(write-4) SN -> CI CreateAutoBid correctly denied despite shared currency %s: %d", ciCurrency, status)
+}
+
+// (write-5) MR user CAN create an auto-bid for an MR auction (same-market action still works).
+func TestCreateAutoBid_SameMarket_Succeeds(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST CREATEAUTOBID SELLER 5")
+	buyer := createTestUser(t, env, "TEST CREATEAUTOBID BUYER 5") // MR
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	status := httpCreateAutoBid(t, env, auction.ID, buyer.ID)
+	if status != 200 {
+		t.Fatalf("(write-5) expected 200 for MR user creating an auto-bid on an MR auction, got %d", status)
+	}
+
+	count := countAutoBidsForAuction(t, env, auction.ID)
+	if count != 1 {
+		t.Fatalf("(write-5) expected exactly 1 auto-bid row to be created, found %d", count)
+	}
+	t.Logf("(write-5) MR -> MR CreateAutoBid correctly succeeded, 1 row created: %d", status)
+}
+
+// === Lot number >99 collision hotfix (migration 000047) ===
+//
+// generate_lot_number() (migration 000005) used LPAD(nextval(...)::TEXT, 2, '0'),
+// and PostgreSQL's LPAD TRUNCATES an input already longer than the target width
+// (confirmed: LPAD('100','2','0') = '10'). Once the sequence passed 99, every new
+// lot_number silently collapsed to its first two digits and collided with an
+// already-used value. Migration 000047 changes the padding width to
+// GREATEST(2, LENGTH(v::TEXT)) -- a floor, not a ceiling -- so small values keep
+// their existing 2-digit look while nothing is ever truncated.
+//
+// These tests exercise the real DB trigger directly (not application code) inside
+// a transaction that is always rolled back, using setval() to place the sequence
+// at exactly the value under test -- this proves the FUNCTION's behavior without
+// depending on, or perturbing, this local DB's actual accumulated sequence state
+// or its 197 pre-existing seed rows. Per the hotfix instructions, no production-
+// like row data is altered: every insert here is undone by ROLLBACK.
+
+// setSequenceAndInsertLotNumber places auctions_lot_number_seq so that the next
+// nextval() call returns exactly `target`, inserts one fixture auction (letting
+// the trigger generate lot_number), and returns the generated value -- all inside
+// the caller's already-open transaction (rolled back by the caller, never
+// committed).
+func setSequenceAndInsertLotNumber(t *testing.T, tx *sqlx.Tx, target int64) string {
+	t.Helper()
+	if _, err := tx.Exec(`SELECT setval('auctions_lot_number_seq', $1, true)`, target-1); err != nil {
+		t.Fatalf("failed to set sequence to %d: %v", target-1, err)
+	}
+	var lotNumber string
+	err := tx.QueryRow(`
+		INSERT INTO auctions (id, seller_id, category_id, title_ar, start_price, current_price, min_increment, insurance_amount, start_time, end_time, status)
+		SELECT gen_random_uuid(), (SELECT id FROM users LIMIT 1), 1, 'lot number hotfix test', 10, 10, 1, 1, now(), now() + interval '1 day', 'pending'
+		RETURNING lot_number
+	`).Scan(&lotNumber)
+	if err != nil {
+		t.Fatalf("failed to insert fixture auction at sequence target %d: %v", target, err)
+	}
+	return lotNumber
+}
+
+// (lot-1) Small values (1, 9) still get the existing 2-digit zero-padded format.
+// Asserted directly against the fixed padding SQL expression (rather than via a
+// live INSERT) because every low sequence value in this local DB's real range
+// (LOT-01..LOT-09) is already taken by pre-existing seed data -- the expression
+// under test is byte-for-byte identical to what generate_lot_number() (migration
+// 000047) evaluates, so this is an exact, not an approximate, proof.
+func TestLotNumber_SmallValues_TwoDigitPadding(t *testing.T) {
+	env := setupEnv(t)
+	tx, err := env.db.Beginx()
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	var padded1, padded9 string
+	if err := tx.QueryRow(`SELECT LPAD(1::TEXT, GREATEST(2, LENGTH(1::TEXT)), '0')`).Scan(&padded1); err != nil {
+		t.Fatalf("failed to evaluate padding expression for 1: %v", err)
+	}
+	if err := tx.QueryRow(`SELECT LPAD(9::TEXT, GREATEST(2, LENGTH(9::TEXT)), '0')`).Scan(&padded9); err != nil {
+		t.Fatalf("failed to evaluate padding expression for 9: %v", err)
+	}
+	if padded1 != "01" {
+		t.Fatalf("(lot-1) expected padding(1) = '01', got %q", padded1)
+	}
+	if padded9 != "09" {
+		t.Fatalf("(lot-1) expected padding(9) = '09', got %q", padded9)
+	}
+	t.Logf("(lot-1) small-value padding unchanged: 1->%s, 9->%s", padded1, padded9)
+}
+
+// (lot-2) 99 unchanged (still exactly 2 digits, no regression at the old boundary).
+func TestLotNumber_99_Unchanged(t *testing.T) {
+	env := setupEnv(t)
+	tx, err := env.db.Beginx()
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	var padded99 string
+	if err := tx.QueryRow(`SELECT LPAD(99::TEXT, GREATEST(2, LENGTH(99::TEXT)), '0')`).Scan(&padded99); err != nil {
+		t.Fatalf("failed to evaluate padding expression for 99: %v", err)
+	}
+	if padded99 != "99" {
+		t.Fatalf("(lot-2) expected padding(99) = '99', got %q", padded99)
+	}
+	t.Logf("(lot-2) 99 unchanged: %s", padded99)
+}
+
+// (lot-3) 100 and 101 are NOT truncated (the actual regression this hotfix fixes),
+// exercised against the real trigger via a genuine INSERT, not just the SQL
+// expression in isolation.
+func TestLotNumber_100And101_NotTruncated(t *testing.T) {
+	env := setupEnv(t)
+	tx, err := env.db.Beginx()
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	got100 := setSequenceAndInsertLotNumber(t, tx, 998877100)
+	got101 := setSequenceAndInsertLotNumber(t, tx, 998877101)
+	if got100 != "LOT-998877100" {
+		t.Fatalf("(lot-3) CRITICAL: expected LOT-998877100, got %q (truncation regression)", got100)
+	}
+	if got101 != "LOT-998877101" {
+		t.Fatalf("(lot-3) CRITICAL: expected LOT-998877101, got %q (truncation regression)", got101)
+	}
+	if got100 == got101 {
+		t.Fatalf("(lot-3) CRITICAL: sequential values collapsed to the same lot_number: %q", got100)
+	}
+	t.Logf("(lot-3) large sequence values not truncated: %s, %s", got100, got101)
+}
+
+// (lot-4) Generated lot numbers remain globally unique across a batch spanning the
+// old 2-digit boundary and beyond -- no two inserts in the same batch collide.
+func TestLotNumber_GeneratedValuesRemainUnique(t *testing.T) {
+	env := setupEnv(t)
+	tx, err := env.db.Beginx()
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	targets := []int64{998877001, 998877002, 998877098, 998877099, 998877100, 998877101, 998877999, 998878000}
+	seen := map[string]bool{}
+	for _, target := range targets {
+		got := setSequenceAndInsertLotNumber(t, tx, target)
+		if seen[got] {
+			t.Fatalf("(lot-4) CRITICAL: duplicate lot_number %q generated within the same batch", got)
+		}
+		seen[got] = true
+	}
+	if len(seen) != len(targets) {
+		t.Fatalf("(lot-4) expected %d unique lot numbers, got %d", len(targets), len(seen))
+	}
+	t.Logf("(lot-4) all %d generated lot numbers across the boundary are unique: %v", len(seen), seen)
+}
+
+// (lot-5) Explicit LotNumber assignment (the existing "TEST-"+uuid fixture pattern
+// used throughout this file, e.g. createTestAuction) is unaffected by this hotfix
+// -- the trigger only fires when lot_number IS NULL OR ''.
+func TestLotNumber_ExplicitAssignmentUnaffected(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST LOTNUMBER EXPLICIT SELLER")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU") // sets an explicit "TEST-"+uuid LotNumber
+
+	if auction.LotNumber == nil || !strings.HasPrefix(*auction.LotNumber, "TEST-") {
+		t.Fatalf("(lot-5) expected explicit fixture LotNumber to be preserved (TEST-... prefix), got %v", auction.LotNumber)
+	}
+	t.Logf("(lot-5) explicit LotNumber assignment unaffected by trigger: %s", *auction.LotNumber)
+}
+
+// --- Phase 1.4 helpers ---
+
+// httpCreateBoost performs a real HTTP-level POST against env.app's
+// POST /auctions/:id/boost/as/:userID test route (backed by the real
+// boostHandler.CreateBoost), with a minimal valid boost payload.
+func httpCreateBoost(t *testing.T, env *testEnv, auctionID, callerID uuid.UUID) int {
+	t.Helper()
+	path := fmt.Sprintf("/auctions/%s/boost/as/%s", auctionID, callerID)
+	body := fmt.Sprintf(`{"boost_type":"featured","start_at":%q,"end_at":%q}`,
+		time.Now().Format(time.RFC3339), time.Now().Add(24*time.Hour).Format(time.RFC3339))
+	req := httptest.NewRequest("POST", path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+// httpCreateAutoBid performs a real HTTP-level POST against env.app's
+// POST /auctions/:id/auto-bid/as/:userID test route (backed by the real
+// autoBidHandler.CreateAutoBid), with a minimal valid payload.
+func httpCreateAutoBid(t *testing.T, env *testEnv, auctionID, callerID uuid.UUID) int {
+	t.Helper()
+	path := fmt.Sprintf("/auctions/%s/auto-bid/as/%s", auctionID, callerID)
+	body := `{"max_amount":500}`
+	req := httptest.NewRequest("POST", path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func countBoostsForAuction(t *testing.T, env *testEnv, auctionID uuid.UUID) int {
+	t.Helper()
+	var n int
+	if err := env.db.GetContext(context.Background(), &n, `SELECT COUNT(*) FROM auction_boosts WHERE auction_id = $1`, auctionID); err != nil {
+		t.Fatalf("failed to count boosts: %v", err)
+	}
+	return n
+}
+
+func countAutoBidsForAuction(t *testing.T, env *testEnv, auctionID uuid.UUID) int {
+	t.Helper()
+	var n int
+	if err := env.db.GetContext(context.Background(), &n, `SELECT COUNT(*) FROM bid_auto_bids WHERE auction_id = $1`, auctionID); err != nil {
+		t.Fatalf("failed to count auto-bids: %v", err)
+	}
+	return n
+}
+
+// --- Phase 1.3 helpers ---
+
+func setAuctionPhoneContact(t *testing.T, env *testEnv, auctionID uuid.UUID, phone string) error {
+	t.Helper()
+	_, err := env.db.ExecContext(context.Background(), `UPDATE auctions SET phone_contact = $1 WHERE id = $2`, phone, auctionID)
+	return err
+}
+
+// httpGetSellerContact performs a real HTTP-level request against env.app's
+// GET /auctions/:id/seller-contact/as/:userID test route (backed by the real
+// auctHandler.GetSellerContact). Returns the status code and raw response body (to
+// allow asserting the denial response contains no seller-contact data).
+func httpGetSellerContact(t *testing.T, env *testEnv, auctionID, callerID uuid.UUID) (int, string) {
+	t.Helper()
+	path := fmt.Sprintf("/auctions/%s/seller-contact/as/%s", auctionID, callerID)
+	req := httptest.NewRequest("GET", path, nil)
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(bodyBytes)
+}
+
+// httpGetAuctionBoosts performs a real HTTP-level request against env.app's
+// GET /auctions/:id/boosts/as/:userID test route (backed by the real
+// boostHandler.GetAuctionBoosts).
+func httpGetAuctionBoosts(t *testing.T, env *testEnv, auctionID, callerID uuid.UUID) int {
+	t.Helper()
+	path := fmt.Sprintf("/auctions/%s/boosts/as/%s", auctionID, callerID)
+	req := httptest.NewRequest("GET", path, nil)
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+// --- Phase 1.2 helpers ---
+
+// httpGetBidHistory performs a real HTTP-level request against env.app's
+// GET /auctions/:id/bids route (backed by the real bidHandler.History, exercising the
+// market-isolation check added in Phase 1.2). callerID nil means anonymous.
+func httpGetBidHistory(t *testing.T, env *testEnv, auctionID uuid.UUID, callerID *uuid.UUID) int {
+	t.Helper()
+	var path string
+	if callerID != nil {
+		path = fmt.Sprintf("/auctions/%s/bids/as/%s", auctionID, callerID)
+	} else {
+		path = fmt.Sprintf("/auctions/%s/bids", auctionID)
+	}
+	req := httptest.NewRequest("GET", path, nil)
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+// --- Phase 1.1 helpers ---
+
+func newWalletSvc(env *testEnv) services.WalletService {
+	return services.NewWalletService(env.db, env.walletRepo, repository.NewTransactionRepository(env.db, env.walletRepo), nil, nil, env.logger)
+}
+
+// httpGetAuctionDetail performs a real HTTP-level request against env.app's
+// GET /auctions/:id route (backed by the real auctHandler.GetByID, exercising the
+// market-isolation check that lives in the handler layer, not the service). callerID
+// nil means an anonymous (unauthenticated) request.
+func httpGetAuctionDetail(t *testing.T, env *testEnv, auctionID uuid.UUID, callerID *uuid.UUID) int {
+	t.Helper()
+	var path string
+	if callerID != nil {
+		path = fmt.Sprintf("/auctions/%s/as/%s", auctionID, callerID)
+	} else {
+		path = fmt.Sprintf("/auctions/%s", auctionID)
+	}
+	req := httptest.NewRequest("GET", path, nil)
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
 // --- helpers ---
 
 func countUsers(t *testing.T, env *testEnv) int {
@@ -633,6 +1866,96 @@ func createTestAdmin(t *testing.T, env *testEnv, fullName string) *models.User {
 	}
 	u.Role = "admin"
 	return u
+}
+
+// createTestUserWithCountry inserts a fixture user directly (bypassing Register/
+// NormalizeE164's phone-validity requirements) with an explicit account_country_iso --
+// used for country-scoped-market tests (migration 000046) covering markets whose real
+// dialing plans aren't otherwise exercised by uniquePhone (e.g. SN, CI).
+func createTestUserWithCountry(t *testing.T, env *testEnv, fullName, countryISO string) *models.User {
+	t.Helper()
+	ctx := context.Background()
+	hash, err := bcrypt.GenerateFromPassword([]byte("StrongPass123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("bcrypt hash generation failed: %v", err)
+	}
+	unique := uniqueName(fullName)
+	id := uuid.New()
+	phone := "TESTFIXTURE" + id.String()[:8]
+	_, err = env.db.ExecContext(ctx, `
+		INSERT INTO users (id, phone, password_hash, full_name, role, is_active, is_verified, language_pref, account_country_iso)
+		VALUES ($1, $2, $3, $4, 'user', true, true, 'ar', $5)
+	`, id, phone, string(hash), unique, countryISO)
+	if err != nil {
+		t.Fatalf("failed to insert fixture user with country %s: %v", countryISO, err)
+	}
+	var u models.User
+	if err := env.db.Get(&u, `SELECT * FROM users WHERE id = $1`, id); err != nil {
+		t.Fatalf("failed to read back fixture user: %v", err)
+	}
+	return &u
+}
+
+// currencyOf looks up countries.currency_code for a given ISO-2 code, failing the test
+// if not found -- avoids hardcoding currency assumptions duplicated from the migration.
+func currencyOf(t *testing.T, env *testEnv, countryISO string) string {
+	t.Helper()
+	var code string
+	if err := env.db.Get(&code, `SELECT currency_code FROM countries WHERE code = $1`, countryISO); err != nil {
+		t.Fatalf("failed to look up currency_code for country %s: %v", countryISO, err)
+	}
+	return code
+}
+
+// createTestAuction inserts a minimal active auction directly, with an explicit
+// market_country_iso/currency_code and insurance_amount, for bidding tests that need a
+// pre-existing auction rather than going through the request->approve flow.
+func createTestAuction(t *testing.T, env *testEnv, sellerID uuid.UUID, marketISO, currencyCode string) *models.Auction {
+	t.Helper()
+	ctx := context.Background()
+	// LotNumber must be unique per row (auctions.lot_number has a unique constraint) --
+	// left unset this defaulted to "" for every fixture auction, which worked only by
+	// accident while a given test run created at most one such fixture; Phase 1.3 added
+	// enough createTestAuction call sites in a single `go test` invocation to collide.
+	lotNumber := "TEST-" + uuid.New().String()[:8]
+	a := &models.Auction{
+		ID:               uuid.New(),
+		SellerID:         sellerID,
+		CategoryID:       mkCategoryID(),
+		TitleAr:          "مزاد اختبار سوق " + marketISO + " " + uuid.New().String()[:6],
+		LotNumber:        &lotNumber,
+		StartPrice:       decimal.NewFromInt(100),
+		CurrentPrice:     decimal.NewFromInt(100),
+		MinIncrement:     decimal.NewFromInt(10),
+		InsuranceAmount:  decimal.NewFromInt(20),
+		ReservePrice:     decimal.NewFromInt(100),
+		StartTime:        time.Now().Add(-1 * time.Hour),
+		EndTime:          time.Now().Add(48 * time.Hour),
+		Status:           "active",
+		MarketCountryISO: &marketISO,
+		CurrencyCode:     &currencyCode,
+	}
+	if err := env.auctionRepo.Create(ctx, nil, a); err != nil {
+		t.Fatalf("failed to create fixture auction: %v", err)
+	}
+	if err := env.db.GetContext(ctx, a, `SELECT * FROM auctions WHERE id = $1`, a.ID); err != nil {
+		t.Fatalf("failed to read back fixture auction: %v", err)
+	}
+	return a
+}
+
+// creditWallet gives a user's auto-created wallet enough balance to cover a bid's
+// insurance hold, bypassing the deposit-review flow (not under test here).
+func creditWallet(t *testing.T, env *testEnv, userID uuid.UUID, amount decimal.Decimal) {
+	t.Helper()
+	ctx := context.Background()
+	// Ensure the wallet row exists (and gets its currency_code stamped) first.
+	if _, err := env.walletRepo.GetByUserID(ctx, userID); err != nil {
+		t.Fatalf("failed to ensure wallet exists for user %s: %v", userID, err)
+	}
+	if _, err := env.db.ExecContext(ctx, `UPDATE wallets SET balance = balance + $1 WHERE user_id = $2`, amount, userID); err != nil {
+		t.Fatalf("failed to credit wallet for user %s: %v", userID, err)
+	}
 }
 
 var _ = fmt.Sprintf // keep fmt import if unused paths change

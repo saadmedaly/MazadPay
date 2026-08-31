@@ -398,7 +398,7 @@ export function UserDetailPage() {
                   {
                     header: 'السعر الحالي',
                     accessorKey: 'current_price',
-                    cell: ({ getValue }) => <span className="text-mazad-accent font-bold">{formatPrice(getValue<string>())}</span>,
+                    cell: ({ getValue, row }) => <span className="text-mazad-accent font-bold">{formatPrice(getValue<string>(), (row.original as { currency_code?: string | null }).currency_code)}</span>,
                   },
                   {
                     header: 'الحالة',
@@ -434,7 +434,7 @@ export function UserDetailPage() {
                   {
                     header: 'المبلغ',
                     accessorKey: 'amount',
-                    cell: ({ getValue }) => <span className="text-emerald-400 font-bold">{formatPrice(getValue<string>())}</span>,
+                    cell: ({ getValue, row }) => <span className="text-emerald-400 font-bold">{formatPrice(getValue<string>(), (row.original as { currency_code?: string | null }).currency_code)}</span>,
                   },
                   {
                     header: 'الحالة',

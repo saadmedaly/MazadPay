@@ -22,6 +22,12 @@ type AuctionFilters struct {
 	SellerID   *uuid.UUID
 	WinnerID   *uuid.UUID
 	UserID     *uuid.UUID
+	// MarketCountryISO (migration 000046, V1 country-scoped market): when set,
+	// restricts the listing to auctions whose market_country_iso equals this value
+	// (legacy NULL rows are treated as DefaultAccountCountryISO, matching
+	// Auction.EffectiveMarketCountryISO). Empty string = no market filtering
+	// (admin/cross-market views). Never derive this from currency alone.
+	MarketCountryISO string
 	// Page/PerPage : pagination du listing public GET /auctions (Public Endpoints /
 	// Scraping Protection — évite qu'un seul appel ne retourne la table entière).
 	// 0 = valeur non fournie, la couche handler applique les valeurs par défaut/clamp.
@@ -138,6 +144,15 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 		args = append(args, f.CategoryID)
 		i++
 	}
+	if f.MarketCountryISO != "" {
+		// Legacy rows (market_country_iso IS NULL, predating migration 000046) are
+		// treated as DefaultAccountCountryISO ('MR') here, matching
+		// Auction.EffectiveMarketCountryISO()'s fallback -- so a pre-migration MR
+		// auction still appears in the MR market listing.
+		where += fmt.Sprintf(" AND COALESCE(market_country_iso, '%s') = $%d", models.DefaultAccountCountryISO, i)
+		args = append(args, f.MarketCountryISO)
+		i++
+	}
 	// Always hide expired auctions from general listing
 	where += " AND end_time > NOW()"
 
@@ -196,11 +211,13 @@ func (r *auctionRepo) Create(ctx context.Context, tx *sqlx.Tx, a *models.Auction
         INSERT INTO auctions
             (id, seller_id, category_id, location_id, title_ar, title_fr, title_en, description_ar, description_fr, description_en,
              start_price, current_price, min_increment, insurance_amount,
-             start_time, end_time, status, lot_number, phone_contact, item_details, buy_now_price)
+             start_time, end_time, status, lot_number, phone_contact, item_details, buy_now_price,
+             market_country_iso, currency_code)
         VALUES
             (:id, :seller_id, :category_id, :location_id, :title_ar, :title_fr, :title_en, :description_ar, :description_fr, :description_en,
              :start_price, :current_price, :min_increment, :insurance_amount,
-             :start_time, :end_time, :status, :lot_number, :phone_contact, :item_details, :buy_now_price)
+             :start_time, :end_time, :status, :lot_number, :phone_contact, :item_details, :buy_now_price,
+             :market_country_iso, :currency_code)
     `
 	if tx != nil {
 		_, err := tx.NamedExecContext(ctx, query, a)
@@ -438,7 +455,7 @@ func (r *auctionRepo) GetCountries(ctx context.Context) ([]models.Country, error
 	var countries []models.Country
 	err := r.db.SelectContext(ctx, &countries, `
         SELECT id, code, country_code, name_ar, name_fr, name_en, flag_emoji, is_active, created_at,
-               phone_min_length, phone_max_length
+               phone_min_length, phone_max_length, currency_code
         FROM countries
         WHERE is_active = TRUE
         ORDER BY name_ar ASC
@@ -449,8 +466,8 @@ func (r *auctionRepo) GetCountries(ctx context.Context) ([]models.Country, error
 func (r *auctionRepo) GetCountryByCode(ctx context.Context, code string) (*models.Country, error) {
 	var country models.Country
 	err := r.db.GetContext(ctx, &country, `
-        SELECT id, code, country_code, name_ar, name_fr, name_en, flag_emoji, is_active, created_at 
-        FROM countries 
+        SELECT id, code, country_code, name_ar, name_fr, name_en, flag_emoji, is_active, created_at, currency_code
+        FROM countries
         WHERE code = $1 AND is_active = TRUE
     `, code)
 	if err != nil {

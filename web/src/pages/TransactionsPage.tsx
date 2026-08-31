@@ -59,7 +59,7 @@ export function TransactionsPage() {
     {
       header: 'المبلغ',
       accessorKey: 'amount',
-      cell: ({ getValue }) => <span className="font-mono font-bold text-mazad-accent text-base">{formatPrice(parseFloat(getValue<string>()))}</span>
+      cell: ({ getValue, row }) => <span className="font-mono font-bold text-mazad-accent text-base">{formatPrice(parseFloat(getValue<string>()), row.original.currency_code)}</span>
     },
     {
       header: 'البوابة',

@@ -217,6 +217,20 @@ func (s *adminService) GetDashboardStats(ctx context.Context) (map[string]interf
 	if err != nil {
 		return nil, err
 	}
+	// total_revenue_by_currency/today_revenue_by_currency/week_deposits_by_currency
+	// (migration 000046, Phase 2): currency-grouped breakdowns alongside the legacy
+	// blended total_revenue/today_revenue/week_deposits fields above -- kept
+	// additively for old-client compatibility, but the Admin UI must prefer the
+	// *_by_currency fields once rows span more than one currency, never presenting
+	// the blended figure as if it were a single real total (see report_service.go).
+	totalRevenueByCurrency, todayRevenueByCurrency, err := s.txRepo.GetStatsByCurrency(ctx)
+	if err != nil {
+		return nil, err
+	}
+	weekDepositsByCurrency, err := s.txRepo.GetWeeklySumByCurrency(ctx)
+	if err != nil {
+		return nil, err
+	}
 	pendingReports, err := s.reportRepo.PendingCount(ctx)
 	if err != nil {
 		return nil, err
@@ -243,11 +257,17 @@ func (s *adminService) GetDashboardStats(ctx context.Context) (map[string]interf
 		"week_deposits":            weekDeposits,
 		"pending_auction_requests": pendingAuctionRequests,
 		"pending_banner_requests":  pendingBannerRequests,
+		"total_revenue_by_currency": totalRevenueByCurrency,
+		"today_revenue_by_currency": todayRevenueByCurrency,
+		"week_deposits_by_currency": weekDepositsByCurrency,
 	}, nil
 }
 
 func (s *adminService) GetRevenueChartData(ctx context.Context) ([]map[string]interface{}, error) {
-	return s.txRepo.GetDailyRevenueChart(ctx)
+	// Currency-grouped (migration 000046, Phase 2): each row now also carries a
+	// "currency" field instead of blending every currency's amount into one daily
+	// total. See GetDailyRevenueChartByCurrency in transaction_repo.go.
+	return s.txRepo.GetDailyRevenueChartByCurrency(ctx)
 }
 
 func (s *adminService) GetRecentActivity(ctx context.Context) ([]map[string]interface{}, error) {
@@ -270,7 +290,7 @@ func (s *adminService) GetRecentActivity(ctx context.Context) ([]map[string]inte
 		activities = append(activities, map[string]interface{}{
 			"id":          "tx_" + t.ID.String(),
 			"type":        "transaction",
-			"description": "عملية مالية جديدة بقيمة " + t.Amount.String() + " MRU",
+			"description": "عملية مالية جديدة بقيمة " + t.Amount.String() + " " + t.EffectiveCurrencyCode(),
 			"created_at":  t.CreatedAt,
 		})
 	}
@@ -711,7 +731,8 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 		notifType = "deposit_rejected"
 	}
 	params := map[string]string{
-		"amount": tx.Amount.String(),
+		"amount":   tx.Amount.String(),
+		"currency": tx.EffectiveCurrencyCode(),
 	}
 	if !approve {
 		params["reason"] = notes
