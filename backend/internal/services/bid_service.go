@@ -91,40 +91,52 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 		// (durci suite à un contournement constaté en production : tous les auctions actifs
 		// avaient insurance_amount = 0, ce qui désactivait complètement la protection).
 		//
-		// Nouvelle règle stricte : aucune mise sans caution définie. Si insurance_amount
-		// <= 0, l'enchère est refusée (l'auction doit être corrigé côté admin/création,
-		// voir CreateAuction/ValidateAuction). Il n'y a plus de "compatibilité silencieuse"
-		// avec les auctions à caution nulle.
-		if !auction.InsuranceAmount.GreaterThan(decimal.Zero) {
-			return apperr.ErrInsuranceNotSet
-		}
+		// Règle stricte inchangée pour toute enchère "required" (politique par défaut,
+		// voir Auction.InsuranceRequired -- défaut à true pour toute valeur vide/legacy) :
+		// aucune mise sans caution définie. Si insurance_amount <= 0, l'enchère est
+		// refusée. Il n'y a toujours aucune "compatibilité silencieuse" avec une caution
+		// nulle par accident ou absence de configuration.
+		//
+		// Insurance policy (migration 000048) : SEULE une politique "not_required"
+		// explicitement choisie par un admin (jamais un défaut, jamais un état
+		// accidentel -- voir AdminUpdateAuctionRequest/ReviewAuctionRequest) permet de
+		// sauter entièrement ce bloc. Dans ce cas, la mise est acceptée sans aucune
+		// caution gelée : la protection financière V03 (avoir "quelque chose à perdre")
+		// est délibérément absente pour cette enchère précise, par décision explicite de
+		// l'admin -- ce n'est PAS le même invariant de sécurité qu'une enchère "required",
+		// et ne doit jamais être présenté comme équivalent.
+		if auction.InsuranceRequired() {
+			if !auction.InsuranceAmount.GreaterThan(decimal.Zero) {
+				return apperr.ErrInsuranceNotSet
+			}
 
-		existingHold, err := s.walletRepo.FindActiveHold(ctx, tx, userID, auctionID)
-		if err != nil && err != sql.ErrNoRows {
-			return err
-		}
-		if existingHold == nil {
-			wallet, err := s.walletRepo.FindForUpdate(ctx, tx, userID)
-			if err != nil {
+			existingHold, err := s.walletRepo.FindActiveHold(ctx, tx, userID, auctionID)
+			if err != nil && err != sql.ErrNoRows {
 				return err
 			}
-			// Defense-in-depth (migration 000046): the wallet's currency must
-			// match the auction's currency before any freeze/comparison. Should
-			// never trigger in practice given the ErrCrossMarketBid check above
-			// (a wallet is always denominated in its owner's account market's
-			// currency), but verified explicitly per financial-safety
-			// requirements rather than assumed.
-			if wallet.EffectiveCurrencyCode() != auction.EffectiveCurrencyCode() {
-				return apperr.ErrWalletCurrencyMismatch
-			}
-			if wallet.Balance.LessThan(auction.InsuranceAmount) {
-				return apperr.ErrInsufficientForInsurance
-			}
-			if err := s.walletRepo.DebitFreezeBalance(ctx, tx, userID, auction.InsuranceAmount, wallet.Version); err != nil {
-				return err
-			}
-			if err := s.walletRepo.CreateHold(ctx, tx, userID, auctionID, auction.InsuranceAmount); err != nil {
-				return err
+			if existingHold == nil {
+				wallet, err := s.walletRepo.FindForUpdate(ctx, tx, userID)
+				if err != nil {
+					return err
+				}
+				// Defense-in-depth (migration 000046): the wallet's currency must
+				// match the auction's currency before any freeze/comparison. Should
+				// never trigger in practice given the ErrCrossMarketBid check above
+				// (a wallet is always denominated in its owner's account market's
+				// currency), but verified explicitly per financial-safety
+				// requirements rather than assumed.
+				if wallet.EffectiveCurrencyCode() != auction.EffectiveCurrencyCode() {
+					return apperr.ErrWalletCurrencyMismatch
+				}
+				if wallet.Balance.LessThan(auction.InsuranceAmount) {
+					return apperr.ErrInsufficientForInsurance
+				}
+				if err := s.walletRepo.DebitFreezeBalance(ctx, tx, userID, auction.InsuranceAmount, wallet.Version); err != nil {
+					return err
+				}
+				if err := s.walletRepo.CreateHold(ctx, tx, userID, auctionID, auction.InsuranceAmount); err != nil {
+					return err
+				}
 			}
 		}
 

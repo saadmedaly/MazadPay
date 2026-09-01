@@ -418,11 +418,21 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 		status = "active"
 		// Un auction ne peut jamais devenir "active" sans caution définie (audit V03) :
 		// c'est cette valeur qui protège les enchérisseurs contre les mises sans fonds.
+		//
+		// Insurance policy audit (client feedback, verification round): this is a SECOND,
+		// separate admin approval surface from ReviewAuctionRequest (request_service.go)
+		// -- ValidateAuction transitions an `auctions` row already sitting at status
+		// 'pending' directly to 'active' (PUT /admin/auctions/:id/validate, used by
+		// AuctionsPage.tsx/AuctionDetailPage.tsx), a genuinely separate admin screen. It
+		// had the exact same insurance_amount > 0 check with no InsuranceRequired()
+		// exemption -- found only by an explicit repo-wide search for every remaining
+		// direct insurance_amount comparison, since this path is entirely independent of
+		// the auction_requests flow fixed elsewhere. Same fix, same rule.
 		existing, err := s.auctionRepo.FindByID(ctx, id)
 		if err != nil {
 			return apperr.ErrNotFound
 		}
-		if !existing.InsuranceAmount.GreaterThan(decimal.Zero) {
+		if existing.InsuranceRequired() && !existing.InsuranceAmount.GreaterThan(decimal.Zero) {
 			return apperr.ErrInsuranceNotSet
 		}
 	}

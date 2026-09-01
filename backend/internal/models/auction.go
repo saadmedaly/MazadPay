@@ -88,6 +88,13 @@ type Auction struct {
 	MarketCountryISO *string `db:"market_country_iso" json:"market_country_iso,omitempty"`
 	CurrencyCode     *string `db:"currency_code"      json:"currency_code,omitempty"`
 
+	// InsurancePolicy (migration 000048): see models.AuctionRequest's
+	// InsurancePolicy doc comment -- carried forward verbatim from the
+	// approved request (ReviewAuctionRequest) at auction-creation time, same
+	// pattern as InsuranceAmount itself. DB DEFAULT 'required', two states
+	// only. Use InsuranceRequired(), never this raw field.
+	InsurancePolicy string `db:"insurance_policy" json:"insurance_policy"`
+
 	// Joined Fields (Metadata)
 	CategoryNameAr *string `db:"category_name_ar" json:"category"`
 	CityNameAr     *string `db:"city_name_ar"     json:"city"`
@@ -112,6 +119,15 @@ func (a *Auction) EffectiveMarketCountryISO() string {
 		return *a.MarketCountryISO
 	}
 	return DefaultAccountCountryISO
+}
+
+// InsuranceRequired reports whether this auction currently requires a
+// positive insurance_amount to accept bids. Defaults safely to true
+// (required) for any empty/unexpected value, matching the DB column's
+// DEFAULT 'required' -- see models.AuctionRequest.InsuranceRequired for the
+// full rationale (V03 incident, this is the bid-time counterpart).
+func (a *Auction) InsuranceRequired() bool {
+	return a.InsurancePolicy != InsurancePolicyNotRequired
 }
 
 func (a *Auction) EffectiveCurrencyCode() string {

@@ -63,7 +63,15 @@ type RequestService interface {
 	// (draft ou rejected uniquement). isAdmin=true (via AdminUpdateAuctionRequest)
 	// contourne la vérification de propriété et la restriction de statut.
 	UpdateAuctionRequest(ctx context.Context, id uuid.UUID, userID uuid.UUID, updates *models.AuctionRequest) error
-	AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest) error
+	// AdminUpdateAuctionRequest applies an admin edit. insurancePolicy is a
+	// pointer specifically so "omitted from the request body" (nil) can be
+	// distinguished from "explicitly set to a value" -- a plain string field
+	// on updates can't express that distinction (client feedback: omitting
+	// insurance_policy from an update payload must PRESERVE the existing
+	// value, never silently reset a "not_required" request back to
+	// "required"). nil => leave the existing policy untouched; non-nil =>
+	// must be "required" or "not_required" (validated by the handler).
+	AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest, insurancePolicy *string) error
 	DeleteAuctionRequest(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error
 	BulkReviewAuctionRequests(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
 	BulkDeleteAuctionRequests(ctx context.Context, ids []uuid.UUID, deletedBy uuid.UUID) error
@@ -139,6 +147,14 @@ func (s *requestService) CreateAuctionRequest(ctx context.Context, req *models.A
 	// ci-dessus. ReviewAuctionRequest refuse ensuite toute approbation tant qu'un
 	// admin n'a pas explicitement défini une valeur > 0.
 	req.InsuranceAmount = decimal.Zero
+	// Insurance policy (migration 000048) : même politique de confiance --
+	// seul l'admin peut choisir "not_required" via AdminUpdateAuctionRequest,
+	// jamais l'utilisateur à la création. Écrasé explicitement à "required"
+	// ici (plutôt que de compter uniquement sur le DEFAULT 'required' de la
+	// colonne) pour que req.InsurancePolicy reflète la vraie valeur persistée
+	// immédiatement, y compris pour tout appelant qui inspecterait req après
+	// la création.
+	req.InsurancePolicy = models.InsurancePolicyRequired
 
 	sanitizeDescriptions(req)
 
@@ -220,15 +236,26 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 		return ErrRequestAlreadyReviewed
 	}
 
-	// Client feedback A7 follow-up : le formulaire utilisateur ne collecte plus
-	// insurance_amount (l'utilisateur ne doit jamais le définir de façon autoritaire --
-	// seul le staff/admin le fait pendant la revue, via AdminUpdateAuctionRequest).
-	// Sans cette garde, approuver une demande dont insurance_amount est resté à sa
-	// valeur zéro par défaut créerait un auction "active" sur lequel bid_service.go
-	// (ErrInsuranceNotSet, audit V03) bloquerait ensuite TOUS les enchérisseurs --
-	// un auction publié mais structurellement inutilisable. Vérifié ici,
-	// indépendamment de toute validation frontend admin, avant de créer l'auction.
-	if status == "approved" && !req.InsuranceAmount.GreaterThan(decimal.Zero) {
+	// Client feedback A7 follow-up, refined by the insurance_policy design
+	// (migration 000048) : le formulaire utilisateur ne collecte plus
+	// insurance_amount (l'utilisateur ne doit jamais le définir de façon
+	// autoritaire -- seul le staff/admin le fait pendant la revue, via
+	// AdminUpdateAuctionRequest). Sans cette garde, approuver une demande dont
+	// insurance_amount est resté à sa valeur zéro par défaut créerait un
+	// auction "active" sur lequel bid_service.go (ErrInsuranceNotSet, audit
+	// V03) bloquerait ensuite TOUS les enchérisseurs -- un auction publié mais
+	// structurellement inutilisable. Vérifié ici, indépendamment de toute
+	// validation frontend admin, avant de créer l'auction.
+	//
+	// req.InsuranceRequired() défaut à true (politique "required") pour toute
+	// valeur vide/inattendue -- donc CETTE garde reste pleinement active pour
+	// toute demande legacy ou n'ayant jamais eu de politique explicite. Elle ne
+	// s'efface QUE si un admin a explicitement mis insurance_policy =
+	// "not_required" via AdminUpdateAuctionRequest (lequel force aussi
+	// insurance_amount à zéro dans ce cas -- voir sa canonicalisation) :
+	// c'est le seul chemin légitime pour créer un auction "active" sans
+	// assurance, jamais un état par défaut ou accidentel.
+	if status == "approved" && req.InsuranceRequired() && !req.InsuranceAmount.GreaterThan(decimal.Zero) {
 		return apperr.ErrRequestInsuranceNotSet
 	}
 
@@ -269,6 +296,11 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 			CurrentPrice:    req.StartPrice,
 			MinIncrement:    req.MinIncrement,
 			InsuranceAmount: req.InsuranceAmount,
+			// InsurancePolicy (migration 000048): carried forward verbatim from
+			// the approved request, same pattern as InsuranceAmount itself --
+			// the policy decided during admin review is the one the live
+			// auction (and therefore PlaceBid) must honor.
+			InsurancePolicy: req.InsurancePolicy,
 			ReservePrice:    reservePrice,
 			BuyNowPrice:     req.BuyNowPrice,
 			StartTime:       req.StartDate,
@@ -425,7 +457,7 @@ func (s *requestService) UpdateAuctionRequest(ctx context.Context, id uuid.UUID,
 	return nil
 }
 
-func (s *requestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest) error {
+func (s *requestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest, insurancePolicy *string) error {
 	existing, err := s.repo.GetAuctionRequestByID(ctx, id)
 	if err != nil {
 		return err
@@ -441,6 +473,27 @@ func (s *requestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.
 	// définir le montant de l'assurance ici -- c'est le seul chemin légitime pour le
 	// faire avant que ReviewAuctionRequest n'exige une valeur > 0 pour approuver.
 	existing.InsuranceAmount = updates.InsuranceAmount
+
+	// Insurance policy (migration 000048) : insurancePolicy est un pointeur
+	// pour distinguer "absent du payload" (nil -> ne pas toucher existing.
+	// InsurancePolicy, qui vient d'être relu depuis la DB par GetAuctionRequestByID
+	// ci-dessus et porte donc déjà la valeur actuelle) de "explicitement fourni".
+	// Sans cette distinction, un appel qui omettrait insurance_policy remettrait
+	// silencieusement une demande "not_required" à "required" -- exigence client
+	// explicite : "omitted must preserve".
+	if insurancePolicy != nil {
+		existing.InsurancePolicy = *insurancePolicy
+	}
+
+	// Canonicalisation (client feedback, exigence #3) : un état "not_required +
+	// montant positif" ne doit jamais pouvoir être persisté -- si la politique
+	// est (ou devient) "not_required", le montant est forcé à zéro ici, sans
+	// exception, indépendamment de ce que l'admin a pu saisir dans le champ
+	// montant (ex. un montant laissé d'un ancien état "required").
+	if !existing.InsuranceRequired() {
+		existing.InsuranceAmount = decimal.Zero
+	}
+
 	sanitizeDescriptions(existing)
 
 	return s.repo.UpdateAuctionRequest(ctx, existing)

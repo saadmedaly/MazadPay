@@ -319,7 +319,28 @@ func (h *RequestHandler) AdminUpdateAuctionRequest(c *fiber.Ctx) error {
 		return BadRequest(c, err.Error())
 	}
 
-	if err := h.svc.AdminUpdateAuctionRequest(c.Context(), id, &req); err != nil {
+	// Insurance policy (migration 000048): parsed separately, as a pointer,
+	// specifically to distinguish "insurance_policy omitted from the JSON
+	// body" (nil) from "explicitly present" -- a plain string field on
+	// models.AuctionRequest can't express that distinction (BodyParser leaves
+	// a missing string field at its zero value "", indistinguishable from an
+	// explicit empty string). Client feedback requirement: omitting the field
+	// from an update payload must PRESERVE the existing value, never silently
+	// reset a "not_required" request back to "required".
+	var policyBody struct {
+		InsurancePolicy *string `json:"insurance_policy"`
+	}
+	if err := c.BodyParser(&policyBody); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if policyBody.InsurancePolicy != nil {
+		v := *policyBody.InsurancePolicy
+		if v != models.InsurancePolicyRequired && v != models.InsurancePolicyNotRequired {
+			return BadRequest(c, "insurance_policy must be 'required' or 'not_required'")
+		}
+	}
+
+	if err := h.svc.AdminUpdateAuctionRequest(c.Context(), id, &req, policyBody.InsurancePolicy); err != nil {
 		return MapError(c, h.logger, err)
 	}
 

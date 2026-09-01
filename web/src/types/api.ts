@@ -71,6 +71,10 @@ export interface Auction {
   // Auction.EffectiveCurrencyCode()/EffectiveMarketCountryISO().
   currency_code?: string | null
   market_country_iso?: string | null
+  // insurance_policy (migration 000048): 'required' | 'not_required'. May be
+  // absent on very old cached responses -- treat missing as 'required',
+  // never as 'not_required' (matches backend Auction.InsuranceRequired()).
+  insurance_policy?: 'required' | 'not_required'
 }
 
 export interface Transaction {

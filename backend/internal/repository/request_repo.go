@@ -195,8 +195,9 @@ func (r *requestRepo) GetAuctionRequests(ctx context.Context, status string, use
 		var req models.AuctionRequest
 		var user models.User
 		// Voir commentaire équivalent dans GetAuctionRequestByID : 'quantity' (migration
-		// 000033), puis market_country_iso/currency_code (migration 000046) apparaissent
-		// en dernière position dans ar.*, après updated_at.
+		// 000033), market_country_iso/currency_code (migration 000046), puis
+		// insurance_policy (migration 000048) apparaissent en dernière position dans
+		// ar.*, après updated_at, dans l'ordre physique d'ajout des colonnes.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 			&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -205,7 +206,7 @@ func (r *requestRepo) GetAuctionRequests(ctx context.Context, status string, use
 			&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 			&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
-			&req.MarketCountryISO, &req.CurrencyCode,
+			&req.MarketCountryISO, &req.CurrencyCode, &req.InsurancePolicy,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {
@@ -233,8 +234,21 @@ func (r *requestRepo) GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (
 	// among ar.* columns, after updated_at, not in its "logical" position next to the
 	// other fields. Missing this Scan slot here previously caused "sql: expected N
 	// destination arguments in Scan, not N-1" once quantity actually existed in the DB.
-	// Same reasoning applies to market_country_iso/currency_code (migration 000046,
-	// ALTER TABLE ... ADD COLUMN) — appended after quantity, physically last.
+	// Same reasoning applies to market_country_iso/currency_code (migration 000046) and
+	// insurance_policy (migration 000048) — appended after quantity, physically last.
+	//
+	// Insurance policy audit (client feedback, verification round): before this fix,
+	// insurance_policy was MISSING from this Scan call entirely -- Go's database/sql
+	// requires exactly one destination per selected column, but this positional Scan
+	// silently left req.InsurancePolicy at its zero value ("") on every load, REGARDLESS
+	// of what was actually persisted. Since InsuranceRequired() treats "" as required
+	// (safe by design for an unrecognized value), this meant: (a) a persisted
+	// 'not_required' request could never actually be approved (ReviewAuctionRequest
+	// always saw it as required, since it calls this exact method), and (b)
+	// AdminUpdateAuctionRequest's "omit insurance_policy -> preserve existing value"
+	// guarantee was silently broken, since "existing" was never actually loaded with the
+	// real persisted value in the first place. This was a real production-breaking gap
+	// in the feature as first implemented, caught by a dedicated verification pass.
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 		&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -243,7 +257,7 @@ func (r *requestRepo) GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (
 		&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 		&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 		&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
-		&req.MarketCountryISO, &req.CurrencyCode,
+		&req.MarketCountryISO, &req.CurrencyCode, &req.InsurancePolicy,
 		&user.ID, &user.Phone, &user.FullName, &user.Role,
 	)
 	if err != nil {
@@ -283,15 +297,21 @@ func (r *requestRepo) UpdateAuctionRequest(ctx context.Context, req *models.Auct
 			description_ar = $6, description_fr = $7, description_en = $8,
 			start_price = $9, min_increment = $10, insurance_amount = $11,
 			reserve_price = $12, buy_now_price = $13, start_date = $14, end_date = $15,
-			images = $16, status = $17, quantity = $18, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $19
+			images = $16, status = $17, quantity = $18, insurance_policy = $19,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = $20
 	`
+	// req.InsurancePolicy here is whatever the service layer left on the
+	// in-memory struct after applyAuctionRequestUpdates -- which was loaded
+	// fresh from this same row before any mutation, so an update that never
+	// touches InsurancePolicy naturally preserves the existing DB value
+	// rather than resetting it (client feedback: "omitted must preserve").
 	_, err := r.db.ExecContext(ctx, query,
 		req.CategoryID, req.LocationID, req.TitleAr, req.TitleFr, req.TitleEn,
 		req.DescriptionAr, req.DescriptionFr, req.DescriptionEn,
 		req.StartPrice, req.MinIncrement, req.InsuranceAmount,
 		req.ReservePrice, req.BuyNowPrice, req.StartDate, req.EndDate,
-		req.Images, req.Status, req.Quantity, req.ID,
+		req.Images, req.Status, req.Quantity, req.InsurancePolicy, req.ID,
 	)
 	return err
 }
@@ -343,8 +363,9 @@ func (r *requestRepo) GetUserAuctionRequests(ctx context.Context, userID uuid.UU
 		var req models.AuctionRequest
 		var user models.User
 		// Voir commentaire équivalent dans GetAuctionRequestByID : 'quantity' (migration
-		// 000033), puis market_country_iso/currency_code (migration 000046) apparaissent
-		// en dernière position dans ar.*, après updated_at.
+		// 000033), market_country_iso/currency_code (migration 000046), puis
+		// insurance_policy (migration 000048) apparaissent en dernière position dans
+		// ar.*, après updated_at, dans l'ordre physique d'ajout des colonnes.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 			&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -353,7 +374,7 @@ func (r *requestRepo) GetUserAuctionRequests(ctx context.Context, userID uuid.UU
 			&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 			&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
-			&req.MarketCountryISO, &req.CurrencyCode,
+			&req.MarketCountryISO, &req.CurrencyCode, &req.InsurancePolicy,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {

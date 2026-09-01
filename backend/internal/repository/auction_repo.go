@@ -210,12 +210,12 @@ func (r *auctionRepo) Create(ctx context.Context, tx *sqlx.Tx, a *models.Auction
 	query := `
         INSERT INTO auctions
             (id, seller_id, category_id, location_id, title_ar, title_fr, title_en, description_ar, description_fr, description_en,
-             start_price, current_price, min_increment, insurance_amount,
+             start_price, current_price, min_increment, insurance_amount, insurance_policy,
              start_time, end_time, status, lot_number, phone_contact, item_details, buy_now_price,
              market_country_iso, currency_code)
         VALUES
             (:id, :seller_id, :category_id, :location_id, :title_ar, :title_fr, :title_en, :description_ar, :description_fr, :description_en,
-             :start_price, :current_price, :min_increment, :insurance_amount,
+             :start_price, :current_price, :min_increment, :insurance_amount, :insurance_policy,
              :start_time, :end_time, :status, :lot_number, :phone_contact, :item_details, :buy_now_price,
              :market_country_iso, :currency_code)
     `

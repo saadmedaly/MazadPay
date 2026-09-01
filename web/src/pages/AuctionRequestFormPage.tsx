@@ -26,6 +26,11 @@ interface FormState {
   start_price: string
   min_increment: string
   insurance_amount: string
+  // insurance_policy (migration 000048): 'required' | 'not_required'.
+  // Defaults to 'required' -- never pre-selects "no insurance" so an admin
+  // must take a deliberate action to disable it, matching the backend's DB
+  // DEFAULT 'required' and preventing an accidental no-deposit auction.
+  insurance_policy: 'required' | 'not_required'
   reserve_price: string
   buy_now_price: string
   start_date: string
@@ -42,6 +47,7 @@ const EMPTY_FORM: FormState = {
   start_price: '',
   min_increment: '',
   insurance_amount: '',
+  insurance_policy: 'required',
   reserve_price: '',
   buy_now_price: '',
   start_date: '',
@@ -91,6 +97,9 @@ export function AuctionRequestFormPage() {
       start_price: existing.start_price?.toString() || '',
       min_increment: existing.min_increment?.toString() || '',
       insurance_amount: existing.insurance_amount?.toString() || '',
+      // Missing/unexpected value -> 'required', never 'not_required' (see
+      // AuctionRequest.insurance_policy doc comment).
+      insurance_policy: existing.insurance_policy === 'not_required' ? 'not_required' : 'required',
       reserve_price: existing.reserve_price?.toString() || '',
       buy_now_price: existing.buy_now_price?.toString() || '',
       start_date: toLocalInputValue(existing.start_date),
@@ -113,7 +122,14 @@ export function AuctionRequestFormPage() {
     if (!form.category_id) errs.category_id = 'التصنيف مطلوب'
     if (!form.start_price || Number(form.start_price) <= 0) errs.start_price = 'السعر الابتدائي مطلوب'
     if (!form.min_increment || Number(form.min_increment) <= 0) errs.min_increment = 'الحد الأدنى للزيادة مطلوب'
-    if (!form.insurance_amount || Number(form.insurance_amount) < 0) errs.insurance_amount = 'مبلغ التأمين مطلوب'
+    // insurance_amount is only required (and must be > 0) when the admin has
+    // chosen the 'required' policy -- an explicit 'not_required' auction may
+    // have no amount at all (migration 000048).
+    if (form.insurance_policy === 'required') {
+      if (!form.insurance_amount || Number(form.insurance_amount) <= 0) errs.insurance_amount = 'مبلغ التأمين مطلوب ويجب أن يكون أكبر من صفر'
+    } else if (form.insurance_amount && Number(form.insurance_amount) < 0) {
+      errs.insurance_amount = 'مبلغ التأمين لا يمكن أن يكون سالبًا'
+    }
     if (!form.start_date) errs.start_date = 'تاريخ البدء مطلوب'
     if (!form.end_date) errs.end_date = 'تاريخ الانتهاء مطلوب'
     if (form.start_date && form.end_date && new Date(form.end_date) <= new Date(form.start_date)) {
@@ -135,7 +151,11 @@ export function AuctionRequestFormPage() {
       location_id: form.location_id || undefined,
       start_price: Number(form.start_price),
       min_increment: Number(form.min_increment),
-      insurance_amount: Number(form.insurance_amount),
+      // Canonicalized client-side too (defense in depth -- the backend
+      // enforces this independently in AdminUpdateAuctionRequest): a
+      // 'not_required' request is never sent with a stale positive amount.
+      insurance_amount: form.insurance_policy === 'not_required' ? 0 : Number(form.insurance_amount),
+      insurance_policy: form.insurance_policy,
       reserve_price: form.reserve_price ? Number(form.reserve_price) : null,
       buy_now_price: form.buy_now_price ? Number(form.buy_now_price) : null,
       start_date: new Date(form.start_date).toISOString(),
@@ -337,11 +357,35 @@ export function AuctionRequestFormPage() {
             <Input type="number" step="0.01" value={form.min_increment} onChange={e => setForm(f => ({ ...f, min_increment: e.target.value }))} />
             {errors.min_increment && <p className="text-xs text-red-400">{errors.min_increment}</p>}
           </div>
-          <div className="space-y-2">
-            <label className="text-xs text-surface-muted font-bold block">مبلغ التأمين <span className="text-red-500">*</span></label>
-            <Input type="number" step="0.01" value={form.insurance_amount} onChange={e => setForm(f => ({ ...f, insurance_amount: e.target.value }))} />
-            {errors.insurance_amount && <p className="text-xs text-red-400">{errors.insurance_amount}</p>}
+          <div className="space-y-2 md:col-span-3">
+            <label className="text-xs text-surface-muted font-bold block">سياسة التأمين</label>
+            {/* insurance_policy (migration 000048): explicit toggle, defaults
+                to 'required' -- an admin must deliberately choose "بدون تأمين"
+                to disable it, never a silent/default state. */}
+            <div className="flex items-center gap-2">
+              {(['required', 'not_required'] as const).map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, insurance_policy: p, insurance_amount: p === 'not_required' ? '0' : f.insurance_amount }))}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                    form.insurance_policy === p
+                      ? 'bg-mazad-primary text-white border-mazad-primary shadow-lg shadow-mazad-primary/20'
+                      : 'bg-surface-card text-surface-muted border-surface-border hover:text-white'
+                  }`}
+                >
+                  {p === 'required' ? 'يتطلب تأمين' : 'بدون تأمين'}
+                </button>
+              ))}
+            </div>
           </div>
+          {form.insurance_policy === 'required' && (
+            <div className="space-y-2">
+              <label className="text-xs text-surface-muted font-bold block">مبلغ التأمين <span className="text-red-500">*</span></label>
+              <Input type="number" step="0.01" value={form.insurance_amount} onChange={e => setForm(f => ({ ...f, insurance_amount: e.target.value }))} />
+              {errors.insurance_amount && <p className="text-xs text-red-400">{errors.insurance_amount}</p>}
+            </div>
+          )}
           <div className="space-y-2">
             <label className="text-xs text-surface-muted font-bold block">سعر الاحتياط (اختياري)</label>
             <Input type="number" step="0.01" value={form.reserve_price} onChange={e => setForm(f => ({ ...f, reserve_price: e.target.value }))} />

@@ -197,7 +197,7 @@ func (f *fakeRequestService) UpdateAuctionRequest(ctx context.Context, id uuid.U
 	return f.updateErr
 }
 
-func (f *fakeRequestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest) error {
+func (f *fakeRequestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest, insurancePolicy *string) error {
 	f.adminUpdateCalled = true
 	return f.adminUpdateErr
 }

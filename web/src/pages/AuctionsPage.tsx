@@ -15,6 +15,7 @@ import {
 } from '@/hooks/useAuctions'
 import { useCategories, useLocations } from '@/hooks/useMetadata'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
+import { requestIsApprovableForInsurance } from '@/lib/insurancePolicy'
 import type { Auction } from '@/types/api'
 import type { AuctionPayload } from '@/api/auctions'
 import { fetchAuction, uploadAuctionImages } from '@/api/auctions'
@@ -629,12 +630,15 @@ export function AuctionsPage() {
             {auction.status === 'pending' && (<>
               <button
                 onClick={() => {
-                  // Le backend refuse désormais toute activation sans caution définie
-                  // (voir bid_service.go / admin_service.go — audit de sécurité V03).
-                  // On vérifie ici pour un retour immédiat, la vraie protection reste
-                  // côté serveur.
-                  if (!auction.insurance_amount || parseFloat(String(auction.insurance_amount)) <= 0) {
-                    toast.error('لا يمكن الموافقة على هذا المزاد لأن مبلغ التأمين غير محدد. عدّل المزاد أولاً وأدخل مبلغ تأمين أكبر من صفر.')
+                  // Le backend refuse désormais toute activation sans caution définie,
+                  // SAUF si insurance_policy a été explicitement mis à "not_required"
+                  // (voir bid_service.go / admin_service.go ValidateAuction — audit de
+                  // sécurité V03, affiné par la conception insurance_policy). On vérifie
+                  // ici pour un retour immédiat via le même helper partagé que
+                  // RequestDetailModal.tsx/KYCPage.tsx, la vraie protection reste côté
+                  // serveur.
+                  if (!requestIsApprovableForInsurance(auction)) {
+                    toast.error('لا يمكن الموافقة على هذا المزاد لأن مبلغ التأمين غير محدد. عدّل المزاد أولاً وأدخل مبلغ تأمين أكبر من صفر، أو حدد "بدون تأمين".')
                     return
                   }
                   setApproveId(auction.id)

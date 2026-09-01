@@ -43,8 +43,34 @@ type AuctionRequest struct {
 	MarketCountryISO *string `db:"market_country_iso" json:"market_country_iso,omitempty"`
 	CurrencyCode     *string `db:"currency_code"      json:"currency_code,omitempty"`
 
+	// InsurancePolicy (migration 000048): distinguishes an explicit admin
+	// decision "no insurance required" (InsurancePolicyNotRequired) from the
+	// accidental/default insurance_amount = 0 state that caused the V03
+	// incident (bid_service.go). Two states only, DB DEFAULT 'required' --
+	// every existing/legacy row and every new row that omits this field stays
+	// under today's exact protection unless an admin explicitly flips it. Use
+	// InsuranceRequired(), never this raw field, for any policy decision.
+	InsurancePolicy string `db:"insurance_policy" json:"insurance_policy" validate:"omitempty,oneof=required not_required"`
+
 	// Relations
 	User *User `db:"-" json:"user,omitempty"`
+}
+
+// InsurancePolicyRequired/InsurancePolicyNotRequired are the only two valid
+// values of InsurancePolicy (also enforced by the DB CHECK constraint,
+// migration 000048).
+const (
+	InsurancePolicyRequired    = "required"
+	InsurancePolicyNotRequired = "not_required"
+)
+
+// InsuranceRequired reports whether this request currently requires a
+// positive insurance_amount. Defaults safely to true (required) for any
+// empty/unexpected value, matching the DB column's DEFAULT 'required' --
+// callers must use this, never compare InsurancePolicy directly, so an
+// unrecognized value never accidentally reads as "no insurance needed".
+func (r *AuctionRequest) InsuranceRequired() bool {
+	return r.InsurancePolicy != InsurancePolicyNotRequired
 }
 
 // EffectiveMarketCountryISO/EffectiveCurrencyCode fall back to
