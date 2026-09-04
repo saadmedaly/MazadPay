@@ -103,13 +103,29 @@ func (r *auctionRepo) FindByIDTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID)
 	return r.findByIDInternal(ctx, tx, id)
 }
 
-// findByIDInternal is a helper that works with both DB and Tx
+// findByIDInternal is a helper that works with both DB and Tx.
+//
+// Image bug fix (client feedback, GET /auctions/:id serialization audit):
+// this query previously had no image_urls subquery at all, unlike FindAll/
+// ListPaginated -- so a.ImageURLs was always nil, and Auction.GetImagesArray()
+// (used by AuctionHandler.GetByID to build the "image_urls" field inside the
+// "auction" object) always returned an empty slice regardless of how many
+// rows actually existed in auction_images. Confirmed live: an auction with a
+// real, persisted auction_images row showed image_urls: [] in
+// GET /auctions/:id while the endpoint's separate top-level "images" array
+// (built from AuctionService.GetByID's own GetImages call, unaffected by this
+// bug) correctly showed the same image. Mirrors the exact subquery already
+// used by FindAll/ListPaginated so both response shapes stay consistent for
+// existing Flutter/web clients -- purely additive, no existing field removed
+// or renamed.
 func (r *auctionRepo) findByIDInternal(ctx context.Context, db sqlx.ExtContext, id uuid.UUID) (*models.Auction, error) {
 	var a models.Auction
 	err := db.QueryRowxContext(ctx, `
         SELECT a.*,
                c.name_ar as category_name_ar,
-               l.city_name_ar as city_name_ar
+               l.city_name_ar as city_name_ar,
+               (SELECT string_agg(ai.url, ',' ORDER BY ai.display_order)
+                FROM auction_images ai WHERE ai.auction_id = a.id) as image_urls
         FROM auctions a
         LEFT JOIN categories c ON a.category_id = c.id
         LEFT JOIN locations l ON a.location_id = l.id

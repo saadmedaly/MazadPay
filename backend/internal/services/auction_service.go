@@ -108,6 +108,27 @@ var PubliclyVisibleAuctionStatuses = map[string]bool{
 	"ended":  true,
 }
 
+// imagesUpdateIncludesNewURLs reports whether an update payload's Images
+// slice actually contains at least one real (non-empty) URL. Shared by
+// Update and UpdateAuction (client feedback, R2 deletion-path audit): both
+// must only wipe/replace auction_images and delete the corresponding R2
+// objects when the caller genuinely supplied new images -- never on a plain
+// field edit (title/price/description/duration) where Images is empty or
+// nil, which is the case on every real call from AuctionHandler.Update
+// (PUT /auctions/:id), since that handler's own request DTO never parses an
+// "images" field from the body at all. Exported behavior, not exported
+// symbol -- kept unexported since it's an internal helper, but factored out
+// so its exact decision logic is tested directly rather than duplicated
+// inline at each call site.
+func imagesUpdateIncludesNewURLs(images []string) bool {
+	for _, url := range images {
+		if url != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *auctionService) GetByID(ctx context.Context, id uuid.UUID) (*models.Auction, []models.AuctionImage, error) {
 	auction, err := s.auctionRepo.FindByID(ctx, id)
 	if err != nil {
@@ -352,11 +373,18 @@ func (s *auctionService) Update(ctx context.Context, id uuid.UUID, input CreateA
 		auction.StartTime = *input.StartTime
 	}
 
-	// Get existing images before update (for R2 cleanup)
-	existingImages, err := s.auctionRepo.GetImages(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get existing images: %w", err)
-	}
+	// Image bug fix (client feedback, R2 deletion-path audit): only touch
+	// auction_images/R2 when the caller actually supplied at least one
+	// non-empty URL. This handler's own DTO chain (AuctionHandler.Update,
+	// PUT /auctions/:id) never even parses an "images" field from the
+	// request body, so `input.Images` was ALWAYS empty on every real call --
+	// yet this function used to unconditionally wipe existing auction_images
+	// rows and delete the corresponding R2 objects regardless. Image
+	// management belongs exclusively to the dedicated POST /auctions/:id/images
+	// endpoint (AddImages); a plain field-edit update must never touch images
+	// at all. Same principle already used correctly by adminService.
+	// UpdateAuction's hasNewImages guard.
+	hasNewImages := imagesUpdateIncludesNewURLs(input.Images)
 
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -368,22 +396,33 @@ func (s *auctionService) Update(ctx context.Context, id uuid.UUID, input CreateA
 		return nil, err
 	}
 
-	// Synchroniser les images (toujours vider et re-remplir pour garantir la cohérence)
-	if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
-		return nil, fmt.Errorf("failed to clear images: %w", err)
-	}
-
-	for i, url := range input.Images {
-		if url == "" {
-			continue
+	var existingImages []models.AuctionImage
+	if hasNewImages {
+		// Get existing images before update (for R2 cleanup) -- only needed
+		// when we're actually about to replace them.
+		existingImages, err = s.auctionRepo.GetImages(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get existing images: %w", err)
 		}
-		if err := s.auctionRepo.AddImageTx(ctx, tx, &models.AuctionImage{
-			AuctionID:    id,
-			URL:          url,
-			MediaType:    "image",
-			DisplayOrder: i + 1,
-		}); err != nil {
-			return nil, fmt.Errorf("failed to update image URL in database: %w", err)
+
+		// Synchroniser les images (vider et re-remplir) -- uniquement quand
+		// l'appelant a explicitement fourni au moins une nouvelle image.
+		if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
+			return nil, fmt.Errorf("failed to clear images: %w", err)
+		}
+
+		for i, url := range input.Images {
+			if url == "" {
+				continue
+			}
+			if err := s.auctionRepo.AddImageTx(ctx, tx, &models.AuctionImage{
+				AuctionID:    id,
+				URL:          url,
+				MediaType:    "image",
+				DisplayOrder: i + 1,
+			}); err != nil {
+				return nil, fmt.Errorf("failed to update image URL in database: %w", err)
+			}
 		}
 	}
 
@@ -392,7 +431,7 @@ func (s *auctionService) Update(ctx context.Context, id uuid.UUID, input CreateA
 	}
 
 	// After successful commit, delete old images from R2 (best effort, don't fail if error)
-	if s.mediaSvc != nil {
+	if hasNewImages && s.mediaSvc != nil {
 		for _, img := range existingImages {
 			if err := s.mediaSvc.DeleteFile(ctx, img.URL); err != nil {
 				// Log but don't fail - the DB update succeeded
@@ -551,10 +590,30 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 		auction.StartTime = *input.StartTime
 	}
 
-	// Get existing images before update (for R2 cleanup)
-	existingImages, err := s.auctionRepo.GetImages(ctx, id)
-	if err != nil {
-		return fmt.Errorf("failed to get existing images: %w", err)
+	// Image bug fix (client feedback, R2 deletion-path audit): AuctionHandler.
+	// Update's own request DTO (PUT /auctions/:id, the mobile app's own
+	// edit-auction call) never parses an "images" field from the body at
+	// all, so `input.Images` was ALWAYS empty on every real call reaching
+	// this function -- yet it used to unconditionally wipe existing
+	// auction_images rows and delete the corresponding R2 objects on every
+	// plain field edit (title, price, description, duration...). This is
+	// the confirmed root cause of an uploaded image being deleted from R2
+	// while its auction_images DB row could independently survive depending
+	// on call ordering relative to the upload. Only touch images at all when
+	// the caller actually supplied at least one non-empty URL -- image
+	// management belongs exclusively to POST /auctions/:id/images (AddImages).
+	// Same principle already used correctly by adminService.UpdateAuction's
+	// hasNewImages guard.
+	hasNewImages := imagesUpdateIncludesNewURLs(input.Images)
+
+	var existingImages []models.AuctionImage
+	if hasNewImages {
+		// Get existing images before update (for R2 cleanup) -- only needed
+		// when we're actually about to replace them.
+		existingImages, err = s.auctionRepo.GetImages(ctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to get existing images: %w", err)
+		}
 	}
 
 	tx, err := s.db.BeginTxx(ctx, nil)
@@ -567,23 +626,25 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 		return err
 	}
 
-	// Mettre à jour les images
-	// On vide et on re-remplit systématiquement pour refléter exactement l'état du formulaire
-	if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
-		return fmt.Errorf("failed to clear old images: %w", err)
-	}
-
-	for i, url := range input.Images {
-		if url == "" {
-			continue
+	if hasNewImages {
+		// Mettre à jour les images (vider et re-remplir) -- uniquement quand
+		// l'appelant a explicitement fourni au moins une nouvelle image.
+		if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
+			return fmt.Errorf("failed to clear old images: %w", err)
 		}
-		if err := s.auctionRepo.AddImageTx(ctx, tx, &models.AuctionImage{
-			AuctionID:    id,
-			URL:          url,
-			MediaType:    "image",
-			DisplayOrder: i + 1,
-		}); err != nil {
-			return fmt.Errorf("failed to save new image URL to database: %w", err)
+
+		for i, url := range input.Images {
+			if url == "" {
+				continue
+			}
+			if err := s.auctionRepo.AddImageTx(ctx, tx, &models.AuctionImage{
+				AuctionID:    id,
+				URL:          url,
+				MediaType:    "image",
+				DisplayOrder: i + 1,
+			}); err != nil {
+				return fmt.Errorf("failed to save new image URL to database: %w", err)
+			}
 		}
 	}
 
@@ -592,7 +653,7 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 	}
 
 	// After successful commit, delete old images from R2 (best effort, don't fail if error)
-	if s.mediaSvc != nil {
+	if hasNewImages && s.mediaSvc != nil {
 		for _, img := range existingImages {
 			if err := s.mediaSvc.DeleteFile(ctx, img.URL); err != nil {
 				// Log but don't fail - the DB update succeeded

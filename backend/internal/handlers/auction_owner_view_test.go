@@ -6,11 +6,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/mazadpay/backend/internal/services"
@@ -331,5 +333,219 @@ func TestAuctionGetByID_TNNonOwner_LegacyNullMarketAuction_StillBlocked(t *testi
 	// still blocked, matching the existing (unchanged) market isolation policy.
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("SECURITY REGRESSION: expected a non-owner TN caller to still be blocked from a legacy null-market (MR-fallback) auction, got %d", resp.StatusCode)
+	}
+}
+
+// TestAuctionGetByID_ImageURLsPopulatedFromModel is targeted test B (client
+// feedback, R2 deletion-path audit): GET /auctions/:id's "auction.image_urls"
+// field must reflect real persisted images, not always be empty. The actual
+// bug was in the repository layer (findByIDInternal never joined
+// auction_images, so Auction.ImageURLs stayed nil regardless of what was in
+// the DB -- fixed separately in auction_repo.go, not testable here without a
+// live database). This test instead locks down the handler's consumer
+// contract: when the Auction model DOES carry a populated ImageURLs (exactly
+// what the fixed repository query now produces), GetByID's response must
+// correctly expose it via "auction.image_urls", proving the JSON
+// serialization side of the fix is wired correctly end-to-end from model to
+// wire format.
+func TestAuctionGetByID_ImageURLsPopulatedFromModel(t *testing.T) {
+	sellerID := uuid.New()
+	auctionID := uuid.New()
+	imageURLs := "https://pub-example.r2.dev/auctions/x/a.jpg,https://pub-example.r2.dev/auctions/x/b.jpg"
+
+	auction := &models.Auction{
+		ID:           auctionID,
+		SellerID:     sellerID,
+		Status:       "active",
+		StartPrice:   decimal.NewFromInt(100),
+		CurrentPrice: decimal.NewFromInt(100),
+		StartTime:    time.Now(),
+		EndTime:      time.Now().Add(24 * time.Hour),
+		ImageURLs:    &imageURLs,
+	}
+
+	auctionSvc := &fakeAuctionServiceForGetByID{auction: auction}
+	userRepo := &fakeUserRepoForGetByID{users: map[uuid.UUID]*models.User{}}
+	h := NewAuctionHandler(auctionSvc, userRepo, zap.NewNop())
+
+	app := fiber.New()
+	app.Get("/v1/api/auctions/:id", h.GetByID) // anonymous, active auction -> publicly visible
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/api/auctions/"+auctionID.String(), nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got %d, body: %s", resp.StatusCode, body)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatalf("failed to parse response JSON: %v, body: %s", err, body)
+	}
+
+	data, ok := parsed["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected top-level \"data\" object, got: %v", parsed["data"])
+	}
+	auctionObj, ok := data["auction"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected \"data.auction\" object, got: %v", data["auction"])
+	}
+	urls, ok := auctionObj["image_urls"].([]interface{})
+	if !ok {
+		t.Fatalf("expected \"auction.image_urls\" to be an array, got %T: %v", auctionObj["image_urls"], auctionObj["image_urls"])
+	}
+	if len(urls) != 2 {
+		t.Fatalf("REGRESSION: expected auction.image_urls to contain 2 URLs (matching the model's populated ImageURLs), got %d: %v", len(urls), urls)
+	}
+	if urls[0] != "https://pub-example.r2.dev/auctions/x/a.jpg" {
+		t.Fatalf("expected the first image URL to match, got %v", urls[0])
+	}
+}
+
+// fakeAuctionServiceForAddImages drives AuctionHandler.AddImages's
+// URL-based (non-multipart) branch through the real Fiber HTTP cycle and
+// records every argument AddImages is called with, plus whether any other
+// AuctionService method (in particular DeleteFile-adjacent paths, or
+// Update/UpdateAuction) is touched by this request at all.
+type fakeAuctionServiceForAddImages struct {
+	services.AuctionService
+	calls []addImagesCall
+	err   error
+}
+
+type addImagesCall struct {
+	auctionID uuid.UUID
+	sellerID  uuid.UUID
+	urls      []string
+}
+
+func (f *fakeAuctionServiceForAddImages) AddImages(ctx context.Context, auctionID, sellerID uuid.UUID, urls []string) error {
+	f.calls = append(f.calls, addImagesCall{auctionID: auctionID, sellerID: sellerID, urls: urls})
+	return f.err
+}
+
+// TestAuctionAddImages_URLPathPersistsAndAssociatesCorrectly is the
+// regression test for targeted test D (client feedback, R2 deletion-path
+// audit, image bug fix final verification): proves POST
+// /v1/api/auctions/:id/images -> AuctionHandler.AddImages ->
+// AuctionService.AddImages still works after the Update/UpdateAuction guard
+// change (imagesUpdateIncludesNewURLs / hasNewImages), NOT by asserting
+// "AddImages itself has zero diff" (rejected as insufficient), but by
+// actually exercising the real handler method end-to-end through the exact
+// same URL-based (legacy JSON) branch AddImages supports, and asserting:
+//  1. the auction ID from the route param and the seller ID from the auth
+//     context both reach AddImages unchanged (correct auction_id/seller
+//     association, matching what AddImageTx would persist against);
+//  2. the exact URLs from the request body reach AddImages unchanged (the
+//     image URL is what gets saved);
+//  3. AddImages is the ONLY AuctionService method invoked by this request --
+//     the embedded services.AuctionService is nil, so any accidental call
+//     to Update, UpdateAuction, or any other method (which is the family of
+//     methods that now contain the new hasNewImages / DeleteFile guard)
+//     would nil-pointer-panic the test instead of silently succeeding,
+//     directly proving the Update/UpdateAuction fix does not leak into or
+//     get invoked by the AddImages request path;
+//  4. by extension (3), no DeleteFile call can occur on this path, since
+//     DeleteFile is only ever invoked from inside Update/UpdateAuction's
+//     hasNewImages branch (see auction_service.go), neither of which this
+//     request path reaches.
+//
+// This is deliberately layered with, not a replacement for, direct
+// inspection of the real AuctionService.AddImages body (auction_service.go
+// ~line 745), which -- confirmed by reading the current source -- performs
+// only FindByID (ownership check) + BeginTxx + AddImageTx per URL + Commit,
+// with no call to mediaSvc.DeleteFile anywhere in the function, and no call
+// through the db.BeginTxx-based image-replace/delete path added to
+// Update/UpdateAuction in this round.
+func TestAuctionAddImages_URLPathPersistsAndAssociatesCorrectly(t *testing.T) {
+	sellerID := uuid.New()
+	auctionID := uuid.New()
+	imageURL1 := "https://pub-example.r2.dev/auctions/" + auctionID.String() + "/new-image-1.jpg"
+	imageURL2 := "https://pub-example.r2.dev/auctions/" + auctionID.String() + "/new-image-2.jpg"
+
+	fakeSvc := &fakeAuctionServiceForAddImages{}
+	userRepo := &fakeUserRepoForGetByID{users: map[uuid.UUID]*models.User{}}
+	h := NewAuctionHandler(fakeSvc, userRepo, zap.NewNop())
+
+	app := fiber.New()
+	app.Post("/v1/api/auctions/:id/images", func(c *fiber.Ctx) error {
+		c.Locals("user_id", sellerID)
+		return h.AddImages(c)
+	})
+
+	reqBody := `{"urls":["` + imageURL1 + `","` + imageURL2 + `"]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/auctions/"+auctionID.String()+"/images", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200 from AddImages, got %d, body: %s", resp.StatusCode, body)
+	}
+
+	if len(fakeSvc.calls) != 1 {
+		t.Fatalf("REGRESSION: expected AuctionService.AddImages to be called exactly once, got %d calls", len(fakeSvc.calls))
+	}
+	call := fakeSvc.calls[0]
+
+	if call.auctionID != auctionID {
+		t.Fatalf("REGRESSION: expected auction_id association %s, got %s -- the image would be linked to the wrong auction", auctionID, call.auctionID)
+	}
+	if call.sellerID != sellerID {
+		t.Fatalf("REGRESSION: expected seller ID %s (from auth context) to reach AddImages, got %s", sellerID, call.sellerID)
+	}
+	if len(call.urls) != 2 || call.urls[0] != imageURL1 || call.urls[1] != imageURL2 {
+		t.Fatalf("REGRESSION: expected the exact submitted image URLs [%s, %s] to reach AddImages for persistence, got %v", imageURL1, imageURL2, call.urls)
+	}
+}
+
+// TestAuctionAddImages_RejectsAuctionOwnerMismatch_ServiceLayerEnforced
+// documents (does not newly assert) that ownership enforcement for AddImages
+// happens inside the real AuctionService.AddImages (FindByID + SellerID
+// comparison, auction_service.go ~line 750), not in the handler -- so at the
+// handler level, a fake that simulates the service returning apperr.ErrUnauthorized
+// must produce a non-200 response, proving the handler correctly propagates
+// that failure rather than reporting false success for a mismatched image add.
+func TestAuctionAddImages_RejectsAuctionOwnerMismatch_ServiceLayerEnforced(t *testing.T) {
+	sellerID := uuid.New()
+	auctionID := uuid.New()
+
+	fakeSvc := &fakeAuctionServiceForAddImages{err: apperr.ErrUnauthorized}
+	userRepo := &fakeUserRepoForGetByID{users: map[uuid.UUID]*models.User{}}
+	h := NewAuctionHandler(fakeSvc, userRepo, zap.NewNop())
+
+	app := fiber.New()
+	app.Post("/v1/api/auctions/:id/images", func(c *fiber.Ctx) error {
+		c.Locals("user_id", sellerID)
+		return h.AddImages(c)
+	})
+
+	reqBody := `{"urls":["https://pub-example.r2.dev/auctions/x/y.jpg"]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/auctions/"+auctionID.String()+"/images", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		t.Fatalf("expected a non-200 response when AddImages rejects a non-owner, got 200")
 	}
 }
