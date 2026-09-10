@@ -43,23 +43,39 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
     _loadCountries();
   }
 
+  bool _countriesLoadFailed = false;
+
   Future<void> _loadCountries() async {
+    debugPrint('[Countries] request start');
     final response = await _categoryApi.getCountries();
+    debugPrint('[Countries] success=${response.success} dataIsNull=${response.data == null}');
+
     if (response.success && response.data != null) {
-      if (mounted) {
-        setState(() {
-          _countries = response.data!;
-          try {
-            _selectedCountry = _countries.firstWhere(
-              (c) => c['country_code'] == '+222' || c['code'] == 'MR',
-            );
-          } catch (e) {
-            if (_countries.isNotEmpty) {
-              _selectedCountry = _countries.first;
-            }
-          }
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _countriesLoadFailed = false;
+        _countries = response.data!;
+        debugPrint('[Countries] parsed count=${_countries.length}');
+        // Only (re)compute the default on first load or when recovering from
+        // the temporary MR fallback -- never overwrite a real user selection
+        // on a retry.
+        if (_selectedCountry == null || identical(_selectedCountry, kFallbackMauritania)) {
+          _selectedCountry = selectDefaultCountry(_countries);
+        }
+        final mrFound = _countries.any((c) => c['code'] == 'MR');
+        debugPrint('[Countries] MR found=$mrFound');
+        debugPrint('[Countries] selected ISO=${_selectedCountry?['code']} '
+            'min=${_selectedCountry?['phone_min_length']} '
+            'max=${_selectedCountry?['phone_max_length']}');
+      });
+    } else {
+      // Network/parse failure -- never leave the form permanently locked.
+      debugPrint('[Countries] load failed, applying local MR fallback');
+      if (!mounted) return;
+      setState(() {
+        _countriesLoadFailed = true;
+        _selectedCountry ??= kFallbackMauritania;
+      });
     }
   }
 
@@ -306,6 +322,38 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                               color: Colors.red,
                               fontSize: 11,
                             ),
+                          ),
+                        ),
+                      ),
+
+                    // Countries list failed to load -- form still usable via
+                    // the local MR fallback, but surface a retry so the user
+                    // isn't silently stuck on a possibly-wrong country/length.
+                    if (_countriesLoadFailed)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, right: 8),
+                        child: Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'تعذر تحميل قائمة الدول',
+                                style: TextStyle(color: Colors.orange, fontSize: 11),
+                              ),
+                              TextButton(
+                                onPressed: _loadCountries,
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: const Text(
+                                  'إعادة المحاولة',
+                                  style: TextStyle(fontSize: 11),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),

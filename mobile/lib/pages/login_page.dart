@@ -70,40 +70,50 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _checkShowSuccessDialog();
   }
 
+  bool _countriesLoadFailed = false;
+
   Future<void> _loadCountries() async {
+    debugPrint('[Countries] request start');
     final response = await _categoryApi.getCountries();
+    debugPrint('[Countries] success=${response.success} dataIsNull=${response.data == null}');
+
     if (response.success && response.data != null) {
-      if (mounted) {
-        setState(() {
-          _countries = response.data!;
-          // Si un country_code a été transmis depuis l'inscription (Mobile Auth
-          // Phase 2), on tente d'abord de retrouver ce pays précis, pour éviter
-          // qu'un dropdown différent de celui choisi au register ne produise un
-          // numéro complet différent de celui stocké côté backend.
-          final targetCode = widget.initialCountryCode;
-          try {
-            if (targetCode != null) {
-              _selectedCountry = _countries.firstWhere(
-                (c) => c['country_code'] == targetCode,
-              );
-            } else {
-              _selectedCountry = _countries.firstWhere(
-                (c) => c['country_code'] == '+222' || c['code'] == 'MR',
-              );
-            }
-          } catch (e) {
-            try {
-              _selectedCountry = _countries.firstWhere(
-                (c) => c['country_code'] == '+222' || c['code'] == 'MR',
-              );
-            } catch (e) {
-              if (_countries.isNotEmpty) {
-                _selectedCountry = _countries.first;
-              }
-            }
-          }
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _countriesLoadFailed = false;
+        _countries = response.data!;
+        debugPrint('[Countries] parsed count=${_countries.length}');
+        // Only (re)compute the default selection on the very first load, or
+        // when a prior failed load left the temporary MR fallback active --
+        // never on a retry after the user has already picked a real country
+        // from the loaded list, which would otherwise silently discard their
+        // choice. Si un country_code a été transmis depuis l'inscription
+        // (Mobile Auth Phase 2), on tente d'abord de retrouver ce pays précis,
+        // pour éviter qu'un dropdown différent de celui choisi au register ne
+        // produise un numéro complet différent de celui stocké côté backend.
+        if (_selectedCountry == null || identical(_selectedCountry, kFallbackMauritania)) {
+          _selectedCountry = selectDefaultCountry(
+            _countries,
+            targetCountryCode: widget.initialCountryCode,
+          );
+        }
+        final mrFound = _countries.any((c) => c['code'] == 'MR');
+        debugPrint('[Countries] MR found=$mrFound');
+        debugPrint('[Countries] selected ISO=${_selectedCountry?['code']} '
+            'min=${_selectedCountry?['phone_min_length']} '
+            'max=${_selectedCountry?['phone_max_length']}');
+      });
+    } else {
+      // Network/parse failure -- never leave the form permanently locked.
+      // Fall back to a local MR default (this app's default market) so
+      // login/registration stay usable; a subsequent successful load (via
+      // the retry link below) always replaces this with the real list.
+      debugPrint('[Countries] load failed, applying local MR fallback');
+      if (!mounted) return;
+      setState(() {
+        _countriesLoadFailed = true;
+        _selectedCountry ??= kFallbackMauritania;
+      });
     }
   }
 
@@ -223,6 +233,34 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       AppLocalizations.of(context)!.error_phone_length,
                       style: const TextStyle(color: Colors.red, fontSize: 12),
                     ),
+                  ),
+                ),
+              // Countries list failed to load -- form still usable via the
+              // local MR fallback, but surface a retry so the user isn't
+              // silently stuck on a possibly-wrong country/length forever.
+              if (_countriesLoadFailed)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'تعذر تحميل قائمة الدول',
+                        style: TextStyle(color: Colors.orange, fontSize: 12),
+                      ),
+                      TextButton(
+                        onPressed: _loadCountries,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'إعادة المحاولة',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               const SizedBox(height: 8),
