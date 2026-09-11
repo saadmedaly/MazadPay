@@ -43,6 +43,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   // Timer state
   Duration _timeLeft = Duration.zero;
   Timer? _timer;
+  CountdownParts get _countdownParts => CountdownParts.fromDuration(_timeLeft);
 
   // UI State
   int _currentPage = 0;
@@ -209,25 +210,27 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
 
   void _startTimer(Auction auction) {
     final endTime = auction.endTime;
-    _timeLeft = endTime.difference(DateTime.now());
+    _updateTimeLeft(endTime);
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_isDisposed || !mounted) {
         timer.cancel();
         return;
       }
-      if (_timeLeft.inSeconds > 0) {
-        try {
-          if (mounted && !_isDisposed) {
-            setState(() {
-              _timeLeft = Duration(seconds: _timeLeft.inSeconds - 1);
-            });
-          }
-        } catch (e) {
+      try {
+        // Recompute from endTime - DateTime.now() on every tick, rather than
+        // decrementing the previous value by one second -- the latter drifts
+        // away from wall-clock time under dropped frames, GC pauses, or the
+        // app being backgrounded/resumed, since it never re-anchors to the
+        // real end time.
+        setState(() {
+          _updateTimeLeft(endTime);
+        });
+        if (_timeLeft == Duration.zero) {
           timer.cancel();
+          _checkWinner();
         }
-      } else {
-        _timer?.cancel();
-        _checkWinner();
+      } catch (e) {
+        timer.cancel();
       }
     });
   }
@@ -695,22 +698,23 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                     // "Min" under hours, text_61 "Hour" under minutes) with
                     // no seconds displayed at all despite _timeLeft already
                     // being second-accurate. Fixed to the correct labels and
-                    // a real seconds column reusing the same Timer.periodic.
+                    // a real seconds column, recomputed every tick via
+                    // CountdownParts.fromDuration (see _startTimer).
                     _buildTimerUnit(
                       AppLocalizations.of(context)!.day,
-                      _timeLeft.inDays.toString().padLeft(2, '0'),
+                      _countdownParts.days.toString().padLeft(2, '0'),
                     ),
                     _buildTimerUnit(
                       AppLocalizations.of(context)!.text_61,
-                      (_timeLeft.inHours % 24).toString().padLeft(2, '0'),
+                      _countdownParts.hours.toString().padLeft(2, '0'),
                     ),
                     _buildTimerUnit(
                       AppLocalizations.of(context)!.text_60,
-                      (_timeLeft.inMinutes % 60).toString().padLeft(2, '0'),
+                      _countdownParts.minutes.toString().padLeft(2, '0'),
                     ),
                     _buildTimerUnit(
                       AppLocalizations.of(context)!.text_59,
-                      (_timeLeft.inSeconds % 60).toString().padLeft(2, '0'),
+                      _countdownParts.seconds.toString().padLeft(2, '0'),
                     ),
                   ],
                 ),
