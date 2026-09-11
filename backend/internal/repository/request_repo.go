@@ -493,13 +493,17 @@ func (r *requestRepo) GetBannerRequests(ctx context.Context, status string, user
 	for rows.Next() {
 		var req models.BannerRequest
 		var user models.User
+		// See GetBannerRequestByID's comment below: description_ar/fr/en are
+		// physically LAST in br.* (appended by migration 000037 after the
+		// table already existed), not in this "logical" position -- this
+		// caused the same column-shift Scan bug fixed there.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.TitleAr, &req.TitleFr, &req.TitleEn,
 			&req.ImageURL, &req.TargetURL,
-			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 			&req.StartsAt, &req.EndsAt,
 			&req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt,
+			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {
@@ -522,13 +526,27 @@ func (r *requestRepo) GetBannerRequestByID(ctx context.Context, id uuid.UUID) (*
 		LEFT JOIN users u ON br.user_id = u.id
 		WHERE br.id = $1
 	`
+	// br.* column order matches the table's physical column order -- same
+	// reasoning as GetAuctionRequestByID's own comment above: description_ar/
+	// fr/en (migration 000037_add_descriptions_to_banner_requests) were added
+	// via ALTER TABLE ADD COLUMN AFTER the table already existed, so
+	// PostgreSQL appends them physically LAST, after updated_at -- not in
+	// their "logical" position next to title_ar/image_url. This Scan
+	// previously placed them right after ImageURL/TargetURL instead, which
+	// silently shifted every subsequent destination by one column relative to
+	// what the query actually returns once description_ar/fr/en genuinely
+	// exist in the table (e.g. StartsAt receiving admin_notes' value,
+	// ReviewedAt receiving a NULL where a time.Time was expected --
+	// "unsupported Scan ... storing driver.Value type <nil> into type
+	// *time.Time"). Fixed by moving them to the end, matching
+	// GetAuctionRequestByID's already-correct pattern.
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&req.ID, &req.UserID, &req.TitleAr, &req.TitleFr, &req.TitleEn,
 		&req.ImageURL, &req.TargetURL,
-		&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 		&req.StartsAt, &req.EndsAt,
 		&req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 		&req.CreatedAt, &req.UpdatedAt,
+		&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 		&user.ID, &user.Phone, &user.FullName, &user.Role,
 	)
 	if err != nil {
@@ -597,13 +615,15 @@ func (r *requestRepo) GetUserBannerRequests(ctx context.Context, userID uuid.UUI
 	for rows.Next() {
 		var req models.BannerRequest
 		var user models.User
+		// Same column-order fix as GetBannerRequestByID/GetBannerRequests --
+		// description_ar/fr/en are physically last in br.*.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.TitleAr, &req.TitleFr, &req.TitleEn,
 			&req.ImageURL, &req.TargetURL,
-			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 			&req.StartsAt, &req.EndsAt,
 			&req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt,
+			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {

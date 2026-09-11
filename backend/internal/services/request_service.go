@@ -514,16 +514,52 @@ func (s *requestService) DeleteAuctionRequest(ctx context.Context, id uuid.UUID,
 	return nil
 }
 
+// BulkReviewAuctionRequests reviews multiple auction requests in one call.
+//
+// Client feedback #10 (bulk review notifications) audit found a much larger
+// pre-existing gap than missing notifications: this method used to call ONLY
+// BulkUpdateAuctionRequestStatus, a single blind UPDATE with no pending-status
+// guard and no auction creation -- unlike ReviewAuctionRequest (the
+// single-review path), which creates the actual Auction row inside a
+// transaction when status="approved". That meant bulk-approving a request
+// flipped its DB status to "approved" but the item never went live as an
+// auction, and re-approving an already-reviewed request was silently
+// possible (no ErrRequestAlreadyReviewed guard). Sending an "approved!" push
+// notification on top of that gap would have actively misled sellers about
+// an item that was never actually published.
+//
+// Fixed by delegating each id to the existing, already-correct
+// ReviewAuctionRequest -- reusing its transaction safety, pending-status
+// guard, insurance guard, real Auction creation, audit log, and
+// SendLocalizedPush call verbatim, rather than duplicating that logic here.
+// This also automatically prevents duplicate auction creation and duplicate
+// notifications: ReviewAuctionRequest's own req.Status != "pending" guard
+// means retrying the same bulk call, or passing a duplicate id twice in one
+// call, only ever processes (and notifies for) each request once -- the
+// second attempt hits ErrRequestAlreadyReviewed and is skipped, not retried
+// or re-notified. One request's failure (already reviewed, insurance not
+// set, not found, DB error) does not stop the rest of the batch from being
+// processed, matching this method's pre-existing "continue on per-item audit
+// failure" tolerance.
 func (s *requestService) BulkReviewAuctionRequests(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error {
 	if status != "approved" && status != "rejected" {
 		return ErrInvalidStatus
 	}
-	if err := s.repo.BulkUpdateAuctionRequestStatus(ctx, ids, status, notes, reviewedBy); err != nil {
-		return err
-	}
 
-	// Log audit for each request
+	seen := make(map[uuid.UUID]bool, len(ids))
 	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+
+		if err := s.ReviewAuctionRequest(ctx, id, status, notes, reviewedBy); err != nil {
+			if s.logger != nil {
+				s.logger.Warn("BulkReviewAuctionRequests: skipping request that could not be reviewed", zap.String("request_id", id.String()), zap.Error(err))
+			}
+			continue
+		}
+
 		if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_requests_bulk_reviewed_%s", status), "auction_request", &id,
 			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes)); auditErr != nil {
 			if s.logger != nil {
@@ -598,6 +634,19 @@ func (s *requestService) ReviewBannerRequest(ctx context.Context, id uuid.UUID, 
 	req, err := s.repo.GetBannerRequestByID(ctx, id)
 	if err != nil {
 		return err
+	}
+
+	// Client feedback #10 (bulk review notifications) audit: unlike
+	// ReviewAuctionRequest, this method had no pending-status guard --
+	// re-reviewing an already-approved request would create a SECOND Banner
+	// row and send a second "approved" notification every time it was
+	// called. Now that BulkReviewBannerRequests delegates each id here (same
+	// fix as BulkReviewAuctionRequests), this guard is what makes both the
+	// single and bulk paths idempotent: retrying the same review, or passing
+	// a duplicate id twice in one bulk call, is a no-op on the second
+	// attempt rather than a duplicate creation/notification.
+	if req.Status != "pending" {
+		return ErrRequestAlreadyReviewed
 	}
 
 	// Begin transaction
@@ -706,16 +755,36 @@ func (s *requestService) DeleteBannerRequest(ctx context.Context, id uuid.UUID, 
 	return nil
 }
 
+// BulkReviewBannerRequests reviews multiple banner requests in one call.
+//
+// Same client feedback #10 fix as BulkReviewAuctionRequests above -- this
+// used to call ONLY BulkUpdateBannerRequestStatus (a blind UPDATE, no
+// pending-status guard, no Banner creation), unlike ReviewBannerRequest
+// (single-review), which creates the actual Banner row on approval. Fixed by
+// delegating each id to ReviewBannerRequest, for the identical reasons: real
+// banner creation, the pending-status guard (preventing duplicate
+// creation/notification on retry or a duplicate id in the same call), and
+// correct SendLocalizedPush usage, all reused verbatim rather than
+// duplicated here.
 func (s *requestService) BulkReviewBannerRequests(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error {
 	if status != "approved" && status != "rejected" {
 		return ErrInvalidStatus
 	}
-	if err := s.repo.BulkUpdateBannerRequestStatus(ctx, ids, status, notes, reviewedBy); err != nil {
-		return err
-	}
 
-	// Log audit for each request
+	seen := make(map[uuid.UUID]bool, len(ids))
 	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+
+		if err := s.ReviewBannerRequest(ctx, id, status, notes, reviewedBy); err != nil {
+			if s.logger != nil {
+				s.logger.Warn("BulkReviewBannerRequests: skipping request that could not be reviewed", zap.String("request_id", id.String()), zap.Error(err))
+			}
+			continue
+		}
+
 		if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_requests_bulk_reviewed_%s", status), "banner_request", &id,
 			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes)); auditErr != nil {
 			if s.logger != nil {

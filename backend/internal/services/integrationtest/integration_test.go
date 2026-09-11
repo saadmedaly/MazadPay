@@ -249,6 +249,23 @@ func newAuctionRequest(userID uuid.UUID, titleSuffix string) *models.AuctionRequ
 	}
 }
 
+// newBannerRequest (client feedback #10, bulk review notifications): unlike
+// auction requests, CreateBannerRequest has no insurance-style approval gate
+// -- its only validation is EndsAt.After(StartsAt) -- so this fixture needs
+// no equivalent to newAuctionRequest's insurance-setup dance before approval.
+func newBannerRequest(userID uuid.UUID, titleSuffix string) *models.BannerRequest {
+	now := time.Now()
+	return &models.BannerRequest{
+		ID:        uuid.New(),
+		UserID:    userID,
+		TitleAr:   "بانر اختبار " + titleSuffix,
+		ImageURL:  "https://example.com/banner-" + titleSuffix + ".jpg",
+		StartsAt:  now.Add(1 * time.Hour),
+		EndsAt:    now.Add(48 * time.Hour),
+		Status:    "pending",
+	}
+}
+
 // === (a) Register MR, TN, US, CA users with correct country_iso ===
 func TestRegister_MultiCountry(t *testing.T) {
 	env := setupEnv(t)
@@ -553,6 +570,25 @@ func TestReviewAuctionRequest_ApproveCreatesPublicAuction(t *testing.T) {
 		t.Fatalf("CreateAuctionRequest failed: %v", err)
 	}
 
+	// CreateAuctionRequest unconditionally forces InsuranceAmount=0 /
+	// InsurancePolicy="required" (client feedback A7 -- the user must never
+	// set insurance). ReviewAuctionRequest's approval guard blocks approving
+	// any "required" request with a non-positive InsuranceAmount
+	// (apperr.ErrRequestInsuranceNotSet), exactly as the real admin panel's
+	// approve action would be blocked. The only legitimate way to clear this
+	// gate is the same one the real admin workflow uses: AdminUpdateAuctionRequest
+	// with a positive InsuranceAmount, via a full-object update (its handler,
+	// request_handler.go AdminUpdateAuctionRequest, parses the ENTIRE request
+	// body into models.AuctionRequest and applyAuctionRequestUpdates copies
+	// every editable field from it onto the existing row) -- so `updates` here
+	// must carry req's own current field values, not just InsuranceAmount, or
+	// this call would silently blank out the request's title/prices/dates/etc.
+	insuranceUpdates := *req
+	insuranceUpdates.InsuranceAmount = decimal.NewFromInt(500)
+	if err := env.reqSvc.AdminUpdateAuctionRequest(ctx, req.ID, &insuranceUpdates, nil); err != nil {
+		t.Fatalf("AdminUpdateAuctionRequest (setting insurance) failed: %v", err)
+	}
+
 	if err := env.reqSvc.ReviewAuctionRequest(ctx, req.ID, "approved", "looks good", admin.ID); err != nil {
 		t.Fatalf("ReviewAuctionRequest(approved) failed: %v", err)
 	}
@@ -570,6 +606,162 @@ func TestReviewAuctionRequest_ApproveCreatesPublicAuction(t *testing.T) {
 		t.Fatalf("(k) expected approved auction status %q to be in PubliclyVisibleAuctionStatuses", auction.Status)
 	}
 	t.Logf("(k) confirmed auction.Status=%q is in the publicly-visible-filtered set", auction.Status)
+}
+
+// TestBulkReviewAuctionRequests_ApproveCreatesRealAuctions_RetryIsIdempotent
+// (client feedback #10, bulk review notifications): BulkReviewAuctionRequests
+// now delegates each id to ReviewAuctionRequest (see request_service.go) --
+// this proves that delegation end-to-end against a real DB: two pending
+// requests, both given valid insurance via the same real admin workflow as
+// the single-approve test above, bulk-approved together, each produces its
+// own real Auction row correctly linked to its own request (by seller_id +
+// title_ar, the same identification the single-approve test uses), and a
+// SECOND bulk-approve call over the same two ids (simulating a retry/double
+// click) creates NO additional Auction rows -- proving the pending-status
+// guard inside ReviewAuctionRequest makes the bulk path idempotent.
+//
+// Notification dispatch itself (SendLocalizedPush) is NOT independently
+// re-verified here -- it is exactly the same call ReviewAuctionRequest
+// already makes for single review (unchanged by this feature), and is
+// covered at the unit level by request_service_bulk_review_test.go's
+// pending-status-gate and duplicate-id-deduplication tests. Adding
+// notification-delivery assertions here would require either a live FCM
+// service (out of scope) or new mock/spy infrastructure on NotificationService
+// specifically for this test, which is more infrastructure than this
+// feature's scope justifies -- DB/entity-creation correctness is
+// integration-tested here; the notification call-path itself is unit-tested.
+func TestBulkReviewAuctionRequests_ApproveCreatesRealAuctions_RetryIsIdempotent(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST BULK APPROVE SELLER N")
+	admin := createTestAdmin(t, env, "TEST BULK APPROVE ADMIN N")
+
+	req1 := newAuctionRequest(seller.ID, "n-bulk1-"+uuid.New().String()[:6])
+	if err := env.reqSvc.CreateAuctionRequest(ctx, req1); err != nil {
+		t.Fatalf("CreateAuctionRequest (req1) failed: %v", err)
+	}
+	req2 := newAuctionRequest(seller.ID, "n-bulk2-"+uuid.New().String()[:6])
+	if err := env.reqSvc.CreateAuctionRequest(ctx, req2); err != nil {
+		t.Fatalf("CreateAuctionRequest (req2) failed: %v", err)
+	}
+
+	for _, r := range []*models.AuctionRequest{req1, req2} {
+		insuranceUpdates := *r
+		insuranceUpdates.InsuranceAmount = decimal.NewFromInt(500)
+		if err := env.reqSvc.AdminUpdateAuctionRequest(ctx, r.ID, &insuranceUpdates, nil); err != nil {
+			t.Fatalf("AdminUpdateAuctionRequest (setting insurance for %s) failed: %v", r.ID, err)
+		}
+	}
+
+	ids := []uuid.UUID{req1.ID, req2.ID}
+	if err := env.reqSvc.BulkReviewAuctionRequests(ctx, ids, "approved", "bulk approved", admin.ID); err != nil {
+		t.Fatalf("BulkReviewAuctionRequests(approved) failed: %v", err)
+	}
+
+	for _, r := range []*models.AuctionRequest{req1, req2} {
+		var status string
+		if err := env.db.GetContext(ctx, &status, `SELECT status FROM auction_requests WHERE id = $1`, r.ID); err != nil {
+			t.Fatalf("failed to read back request status for %s: %v", r.ID, err)
+		}
+		if status != "approved" {
+			t.Fatalf("(n) expected request %s status=approved, got %q", r.ID, status)
+		}
+
+		var auction models.Auction
+		if err := env.db.GetContext(ctx, &auction, `SELECT * FROM auctions WHERE seller_id = $1 AND title_ar = $2`, seller.ID, r.TitleAr); err != nil {
+			t.Fatalf("(n) expected a real Auction row for bulk-approved request %s (title=%q): %v", r.ID, r.TitleAr, err)
+		}
+		t.Logf("(n) request %s correctly produced its own Auction row (id=%s, status=%q)", r.ID, auction.ID, auction.Status)
+	}
+
+	var auctionCountBefore int
+	if err := env.db.GetContext(ctx, &auctionCountBefore, `SELECT COUNT(*) FROM auctions WHERE seller_id = $1`, seller.ID); err != nil {
+		t.Fatalf("failed to count auctions before retry: %v", err)
+	}
+	if auctionCountBefore != 2 {
+		t.Fatalf("(n) expected exactly 2 auctions after the first bulk approve, got %d", auctionCountBefore)
+	}
+
+	// Retry the same bulk approve over the same (now-approved) ids -- must be
+	// a no-op: ReviewAuctionRequest's pending-status guard rejects each id
+	// (already approved), BulkReviewAuctionRequests logs and skips rather
+	// than erroring the whole batch, and NO new Auction rows are created.
+	if err := env.reqSvc.BulkReviewAuctionRequests(ctx, ids, "approved", "bulk approved again", admin.ID); err != nil {
+		t.Fatalf("(n) retry BulkReviewAuctionRequests returned an unexpected error (should silently skip already-reviewed ids): %v", err)
+	}
+
+	var auctionCountAfter int
+	if err := env.db.GetContext(ctx, &auctionCountAfter, `SELECT COUNT(*) FROM auctions WHERE seller_id = $1`, seller.ID); err != nil {
+		t.Fatalf("failed to count auctions after retry: %v", err)
+	}
+	if auctionCountAfter != 2 {
+		t.Fatalf("(n) SECURITY/DATA REGRESSION: retrying the same bulk approve created additional Auction rows -- expected 2, got %d", auctionCountAfter)
+	}
+	t.Logf("(n) confirmed retry created zero additional Auction rows (idempotent): %d auctions before and after retry", auctionCountAfter)
+}
+
+// TestBulkReviewBannerRequests_ApproveCreatesRealBanner_RetryIsIdempotent
+// (client feedback #10, bulk review notifications): same proof as
+// TestBulkReviewAuctionRequests_ApproveCreatesRealAuctions_RetryIsIdempotent
+// above, for banner requests. BulkReviewBannerRequests delegates each id to
+// ReviewBannerRequest, which gained the pending-status guard this round
+// (request_service.go) -- this is what makes the retry idempotent, since
+// ReviewBannerRequest previously had no such guard at all. Practical to add:
+// banner requests need no insurance-equivalent setup step, so this fixture
+// is simpler than the auction one. Same scope note as above: notification
+// dispatch itself is unit-tested (request_service_bulk_review_test.go), not
+// re-verified here -- this proves real DB/entity-creation behavior only.
+func TestBulkReviewBannerRequests_ApproveCreatesRealBanner_RetryIsIdempotent(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST BULK BANNER SELLER O")
+	admin := createTestAdmin(t, env, "TEST BULK BANNER ADMIN O")
+
+	req := newBannerRequest(seller.ID, "o-bulk-"+uuid.New().String()[:6])
+	if err := env.reqSvc.CreateBannerRequest(ctx, req); err != nil {
+		t.Fatalf("CreateBannerRequest failed: %v", err)
+	}
+
+	ids := []uuid.UUID{req.ID}
+	if err := env.reqSvc.BulkReviewBannerRequests(ctx, ids, "approved", "bulk approved", admin.ID); err != nil {
+		t.Fatalf("BulkReviewBannerRequests(approved) failed: %v", err)
+	}
+
+	var status string
+	if err := env.db.GetContext(ctx, &status, `SELECT status FROM banner_requests WHERE id = $1`, req.ID); err != nil {
+		t.Fatalf("failed to read back banner request status: %v", err)
+	}
+	if status != "approved" {
+		t.Fatalf("(o) expected banner request status=approved, got %q", status)
+	}
+
+	var bannerCountBefore int
+	if err := env.db.GetContext(ctx, &bannerCountBefore, `SELECT COUNT(*) FROM banners WHERE title_ar = $1`, req.TitleAr); err != nil {
+		t.Fatalf("failed to count banners before retry: %v", err)
+	}
+	if bannerCountBefore != 1 {
+		t.Fatalf("(o) expected exactly 1 real Banner row after bulk approve, got %d", bannerCountBefore)
+	}
+	t.Logf("(o) bulk-approved banner request correctly produced its own Banner row")
+
+	// Retry the same bulk approve over the same (now-approved) id -- must be a
+	// no-op: ReviewBannerRequest's pending-status guard (added this round)
+	// rejects the id (already approved), BulkReviewBannerRequests logs and
+	// skips rather than erroring, and NO new Banner row is created.
+	if err := env.reqSvc.BulkReviewBannerRequests(ctx, ids, "approved", "bulk approved again", admin.ID); err != nil {
+		t.Fatalf("(o) retry BulkReviewBannerRequests returned an unexpected error (should silently skip already-reviewed ids): %v", err)
+	}
+
+	var bannerCountAfter int
+	if err := env.db.GetContext(ctx, &bannerCountAfter, `SELECT COUNT(*) FROM banners WHERE title_ar = $1`, req.TitleAr); err != nil {
+		t.Fatalf("failed to count banners after retry: %v", err)
+	}
+	if bannerCountAfter != 1 {
+		t.Fatalf("(o) SECURITY/DATA REGRESSION: retrying the same bulk approve created additional Banner rows -- expected 1, got %d", bannerCountAfter)
+	}
+	t.Logf("(o) confirmed retry created zero additional Banner rows (idempotent)")
 }
 
 // === (l) User B cannot edit/review User A's request ===
@@ -908,6 +1100,14 @@ func TestReviewAuctionRequest_ApprovePreservesMarketCurrency(t *testing.T) {
 	// seller's now-current one.
 	if _, err := env.db.ExecContext(ctx, `UPDATE users SET account_country_iso = 'MA' WHERE id = $1`, seller.ID); err != nil {
 		t.Fatalf("failed to simulate seller account market change: %v", err)
+	}
+
+	// Same real-admin-workflow insurance setup as TestReviewAuctionRequest_ApproveCreatesPublicAuction
+	// above -- see that test's comment for the full explanation.
+	insuranceUpdates := *req
+	insuranceUpdates.InsuranceAmount = decimal.NewFromInt(500)
+	if err := env.reqSvc.AdminUpdateAuctionRequest(ctx, req.ID, &insuranceUpdates, nil); err != nil {
+		t.Fatalf("AdminUpdateAuctionRequest (setting insurance) failed: %v", err)
 	}
 
 	if err := env.reqSvc.ReviewAuctionRequest(ctx, req.ID, "approved", "ok", admin.ID); err != nil {
