@@ -127,21 +127,49 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
                     ],
                   ),
                 )
+              // Customer feedback #11: a user who already had this page open
+              // (or returns to it) when an auction they won just finalized
+              // must be able to pull down to see the new win without leaving
+              // and reopening the page -- pull-to-refresh added to both the
+              // list and the empty state (RefreshIndicator requires a
+              // scrollable child, so the empty state is wrapped in one).
+              // AlwaysScrollableScrollPhysics is required here specifically:
+              // the empty state's content is shorter than the viewport, and
+              // default ScrollPhysics can refuse to register the overscroll
+              // drag needed to trigger RefreshIndicator when there is nothing
+              // to actually scroll.
               : _winnings.isEmpty
-                  ? Center(
-                      child: Text(
-                        l10n.no_winnings,
-                        style: const TextStyle(color: Colors.grey, fontSize: 16),
+                  ? RefreshIndicator(
+                      onRefresh: _loadWinnings,
+                      color: const Color(0xFF0081FF),
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.6,
+                            child: Center(
+                              child: Text(
+                                l10n.no_winnings,
+                                style: const TextStyle(color: Colors.grey, fontSize: 16),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(20),
-                      itemCount: _winnings.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 16),
-                      itemBuilder: (context, index) {
-                        final winning = _winnings[index];
-                        return _buildWinningItem(context, winning, isDarkMode, l10n);
-                      },
+                  : RefreshIndicator(
+                      onRefresh: _loadWinnings,
+                      color: const Color(0xFF0081FF),
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(20),
+                        itemCount: _winnings.length,
+                        separatorBuilder: (context, index) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          final winning = _winnings[index];
+                          return _buildWinningItem(context, winning, isDarkMode, l10n);
+                        },
+                      ),
                     ),
     );
   }
@@ -186,12 +214,23 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
     );
     final isPaid = winning['is_paid'] == true || winning['payment_status'] == 'paid';
 
-    // Gestion des images
+    // Gestion des images. Customer feedback #11: /users/me/winnings returns
+    // auctions via AuctionRepository.ListPaginated, whose image_urls field is a
+    // comma-separated STRING (see models.Auction.ImageURLs), not a List -- the
+    // "is List" check below always failed for it, so every won item silently
+    // fell through to the generic placeholder asset even when real images
+    // existed. Mirrors the same comma-separated-string-or-List handling
+    // already established in my_auctions_page.dart for this identical field.
     String imageUrl = 'assets/corolla.png';
-    if (winning['images'] != null && winning['images'] is List && (winning['images'] as List).isNotEmpty) {
+    final rawImageUrls = winning['image_urls'];
+    if (rawImageUrls != null && rawImageUrls.toString().isNotEmpty) {
+      if (rawImageUrls is List && rawImageUrls.isNotEmpty) {
+        imageUrl = rawImageUrls[0].toString();
+      } else {
+        imageUrl = rawImageUrls.toString().split(',').first.trim();
+      }
+    } else if (winning['images'] != null && winning['images'] is List && (winning['images'] as List).isNotEmpty) {
       imageUrl = (winning['images'] as List)[0].toString();
-    } else if (winning['image_urls'] != null && winning['image_urls'] is List && (winning['image_urls'] as List).isNotEmpty) {
-      imageUrl = (winning['image_urls'] as List)[0].toString();
     } else if (winning['image_url'] != null) {
       imageUrl = winning['image_url'].toString();
     } else if (winning['image'] != null) {

@@ -1886,6 +1886,167 @@ func TestLotNumber_ExplicitAssignmentUnaffected(t *testing.T) {
 	t.Logf("(lot-5) explicit LotNumber assignment unaffected by trigger: %s", *auction.LotNumber)
 }
 
+// finalizeAuctionAsWinner reproduces the exact persistence step
+// AuctionScheduler.setAuctionWinner runs on a real 1-minute tick (see
+// auction_scheduler.go): opens a transaction, calls auctionRepo.SetWinner
+// (winner_id/winning_bid_id/status='ended'), commits. Used here instead of
+// running the full scheduler (which polls on its own ticker and would make
+// this test slow/flaky) to exercise the identical repository call the
+// scheduler makes once a real auction's end_time has passed.
+func finalizeAuctionAsWinner(t *testing.T, env *testEnv, auctionID, winnerID, winningBidID uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := env.db.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("failed to begin finalize transaction: %v", err)
+	}
+	if err := env.auctionRepo.SetWinner(ctx, tx, auctionID, winnerID, winningBidID); err != nil {
+		tx.Rollback()
+		t.Fatalf("SetWinner failed: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("failed to commit finalize transaction: %v", err)
+	}
+}
+
+// Customer feedback #11 final proof: the customer's actual complaint was
+// "العناصر التي فزت بها" (My Winnings) staying empty even after winning --
+// not merely a cosmetic image issue. This proves the real, previously-broken
+// path end-to-end: a real bid -> real winner persistence (the exact
+// SetWinner call the scheduler makes) -> the SAME userSvc.ListMyWinnings
+// used by GET /users/me/winnings -- confirming the winner's auction is
+// actually returned, a non-winner never sees it, an still-active auction is
+// absent, and a no-bid ended auction is absent (mirrors the scheduler's own
+// hasWinner gate, which never calls SetWinner without a real qualifying bid).
+// createTestAuctionInsured duplicates createTestAuction but stamps
+// insurance_policy = 'not_required' before the insert. createTestAuction
+// itself leaves insurance_policy at the Go zero value (""), which
+// auctionRepo.Create binds explicitly -- bypassing the column's SQL DEFAULT
+// 'required' and violating chk_auctions_insurance_policy (migration 000048)
+// on a local DB that has that constraint applied. This is a pre-existing gap
+// in the shared fixture helper (affects ~20+ other existing tests too --
+// flagged out of scope in the prior client feedback #10 round); duplicated
+// locally here rather than widening scope by editing the shared helper.
+func createTestAuctionInsured(t *testing.T, env *testEnv, sellerID uuid.UUID, marketISO, currencyCode string) *models.Auction {
+	t.Helper()
+	ctx := context.Background()
+	lotNumber := "TEST-" + uuid.New().String()[:8]
+	a := &models.Auction{
+		ID:               uuid.New(),
+		SellerID:         sellerID,
+		CategoryID:       mkCategoryID(),
+		TitleAr:          "مزاد اختبار فوز " + marketISO + " " + uuid.New().String()[:6],
+		LotNumber:        &lotNumber,
+		StartPrice:       decimal.NewFromInt(100),
+		CurrentPrice:     decimal.NewFromInt(100),
+		MinIncrement:     decimal.NewFromInt(10),
+		InsuranceAmount:  decimal.NewFromInt(20),
+		InsurancePolicy:  "not_required",
+		ReservePrice:     decimal.NewFromInt(100),
+		StartTime:        time.Now().Add(-1 * time.Hour),
+		EndTime:          time.Now().Add(48 * time.Hour),
+		Status:           "active",
+		MarketCountryISO: &marketISO,
+		CurrencyCode:     &currencyCode,
+	}
+	if err := env.auctionRepo.Create(ctx, nil, a); err != nil {
+		t.Fatalf("failed to create insured fixture auction: %v", err)
+	}
+	if err := env.db.GetContext(ctx, a, `SELECT * FROM auctions WHERE id = $1`, a.ID); err != nil {
+		t.Fatalf("failed to read back insured fixture auction: %v", err)
+	}
+	return a
+}
+
+func TestListMyWinnings_RealWinnerAppears_OthersExcluded(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST WINNINGS SELLER")
+	winner := createTestUser(t, env, "TEST WINNINGS WINNER")
+	otherUser := createTestUser(t, env, "TEST WINNINGS OTHER USER")
+	creditWallet(t, env, winner.ID, decimal.NewFromInt(1000))
+
+	// (1) Won auction: a real bid is placed while still active, then the
+	// auction is finalized via the exact scheduler persistence path.
+	wonAuction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+	bid, err := env.bidSvc.PlaceBid(ctx, wonAuction.ID, winner.ID, decimal.NewFromInt(150))
+	if err != nil {
+		t.Fatalf("failed to place winning bid: %v", err)
+	}
+	finalizeAuctionAsWinner(t, env, wonAuction.ID, winner.ID, bid.ID)
+
+	// (2) Still-active auction (never finalized): must be absent from winnings
+	// even though nothing else about it distinguishes it from the won one.
+	activeAuction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.bidSvc.PlaceBid(ctx, activeAuction.ID, winner.ID, decimal.NewFromInt(150)); err != nil {
+		t.Fatalf("failed to place bid on active auction: %v", err)
+	}
+
+	// (3) Ended auction won by someone else: must be absent for `winner`.
+	otherWinAuction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+	otherBid, err := env.bidSvc.PlaceBid(ctx, otherWinAuction.ID, otherUser.ID, decimal.NewFromInt(150))
+	if err != nil {
+		t.Fatalf("failed to place bid for other user's win: %v", err)
+	}
+	finalizeAuctionAsWinner(t, env, otherWinAuction.ID, otherUser.ID, otherBid.ID)
+
+	// (4) No-bid ended auction: mirrors the scheduler's own else-branch
+	// (auction_scheduler.go) -- status becomes 'ended' but winner_id stays
+	// NULL, since hasWinner requires a real qualifying bid.
+	noBidAuction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+	if err := env.auctionRepo.UpdateStatus(ctx, noBidAuction.ID, "ended"); err != nil {
+		t.Fatalf("failed to mark no-bid auction as ended: %v", err)
+	}
+
+	// This is the exact service call behind GET /users/me/winnings
+	// (internal/handlers/user_handler.go MyWinnings -> h.service.ListMyWinnings).
+	winnings, err := env.userSvc.ListMyWinnings(ctx, winner.ID)
+	if err != nil {
+		t.Fatalf("ListMyWinnings failed: %v", err)
+	}
+
+	foundWon, foundActive, foundOtherWin, foundNoBid := false, false, false, false
+	for _, a := range winnings {
+		switch a.ID {
+		case wonAuction.ID:
+			foundWon = true
+		case activeAuction.ID:
+			foundActive = true
+		case otherWinAuction.ID:
+			foundOtherWin = true
+		case noBidAuction.ID:
+			foundNoBid = true
+		}
+	}
+
+	if !foundWon {
+		t.Fatalf("CUSTOMER COMPLAINT NOT FIXED: expected the real, backend-confirmed win (auction %s) to appear in winner %s's My Winnings, but it did not", wonAuction.ID, winner.ID)
+	}
+	if foundActive {
+		t.Fatalf("expected still-active auction %s to be excluded from My Winnings", activeAuction.ID)
+	}
+	if foundOtherWin {
+		t.Fatalf("expected another user's win (auction %s, winner=%s) to be excluded from %s's My Winnings", otherWinAuction.ID, otherUser.ID, winner.ID)
+	}
+	if foundNoBid {
+		t.Fatalf("expected no-bid ended auction %s to be excluded from My Winnings", noBidAuction.ID)
+	}
+	t.Logf("confirmed: real win appears, active/other-user-win/no-bid auctions all correctly excluded (%d total winnings returned for winner)", len(winnings))
+
+	// Isolation the other direction: the actual winner's win must not leak
+	// into a different user's My Winnings.
+	otherUserWinnings, err := env.userSvc.ListMyWinnings(ctx, otherUser.ID)
+	if err != nil {
+		t.Fatalf("ListMyWinnings for otherUser failed: %v", err)
+	}
+	for _, a := range otherUserWinnings {
+		if a.ID == wonAuction.ID {
+			t.Fatalf("SECURITY: winner %s's win (auction %s) leaked into otherUser %s's My Winnings", winner.ID, wonAuction.ID, otherUser.ID)
+		}
+	}
+}
+
 // --- Phase 1.4 helpers ---
 
 // httpCreateBoost performs a real HTTP-level POST against env.app's

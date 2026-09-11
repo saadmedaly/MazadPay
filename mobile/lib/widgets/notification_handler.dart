@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/pages/auction_details_page.dart';
+import 'package:mezadpay/pages/auction_winner_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/deposit_page.dart';
 import 'package:mezadpay/services/fcm_service.dart';
@@ -96,11 +97,21 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
       final String? auctionId = data['auctionId'] ?? data['auction_id'];
 
       switch (type) {
+        // Customer feedback #11: auction_won is only ever sent by the backend
+        // scheduler to the confirmed winner (topBid.UserID, persisted via
+        // SetWinner before the push fires -- see auction_scheduler.go), so a
+        // tap on it is an authoritative win signal, not a client-side guess.
+        // Routes to the congratulations page (AuctionWinnerPage) instead of
+        // plain auction details; every other auction event keeps going there.
+        case 'auction_won':
+          if (auctionId != null) {
+            _navigateToWinner(auctionId);
+          }
+          break;
         case 'auction_pending':
         case 'auction_approved':
         case 'auction_rejected':
         case 'auction_ended':
-        case 'auction_won':
         case 'bid_outbid':
           if (auctionId != null) {
             _navigateToAuction(auctionId);
@@ -129,6 +140,21 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
         navigator.push(
           MaterialPageRoute(
             builder: (context) => AuctionDetailsPage(auctionId: auctionId),
+          ),
+        );
+      }
+    } catch (e) {
+      developer.log('Navigation error: $e');
+    }
+  }
+
+  void _navigateToWinner(String auctionId) {
+    try {
+      final navigator = navigatorKey.currentState;
+      if (navigator != null) {
+        navigator.push(
+          MaterialPageRoute(
+            builder: (context) => AuctionWinnerPage(auctionId: auctionId),
           ),
         );
       }

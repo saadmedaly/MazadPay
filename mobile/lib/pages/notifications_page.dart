@@ -7,6 +7,7 @@ import '../services/fcm_service.dart';
 import '../services/notification_api.dart';
 import '../services/notifications_api.dart';
 import 'auction_details_page.dart';
+import 'auction_winner_page.dart';
 import 'deposit_page.dart';
 
 
@@ -380,11 +381,23 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     _markAsRead(notification['id']?.toString());
 
     switch (type) {
+      // Customer feedback #11: same authoritative-win reasoning as
+      // notification_handler.dart's _navigateFromNotification -- auction_won
+      // routes to the congratulations page here too, so tapping it from the
+      // in-app notification list behaves the same as tapping the push itself.
+      case 'auction_won':
+        if (auctionId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => AuctionWinnerPage(auctionId: auctionId),
+            ),
+          );
+        }
+        break;
       case 'auction_pending':
       case 'auction_approved':
       case 'auction_rejected':
       case 'auction_ended':
-      case 'auction_won':
       case 'bid_outbid':
         if (auctionId != null) {
           Navigator.of(context).push(

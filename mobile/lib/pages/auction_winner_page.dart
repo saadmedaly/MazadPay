@@ -2,7 +2,7 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/auction_provider.dart';
+import '../providers/auction_provider_api.dart';
 import '../models/auction.dart';
 import '../utils/money_formatter.dart';
 
@@ -12,16 +12,43 @@ class AuctionWinnerPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auction = ref.watch(auctionNotifierProvider(auctionId));
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    // Customer feedback #11 final proof: this page previously read
+    // auctionNotifierProvider (auction_provider.dart), whose build(id) IGNORES
+    // the id and always returns hardcoded demo data ("Toyota Corolla 2018",
+    // mock-seller-id) -- every winner would have seen the same fake auction
+    // regardless of what they actually won. auctionNotifierApiProvider
+    // (auction_provider_api.dart) is the real, live-fetching provider already
+    // used by auction_details_page.dart for the identical id -> Auction
+    // lookup (GET auction by id, with its own loading/error/data states).
+    final auctionAsync = ref.watch(auctionNotifierApiProvider(auctionId));
 
-    return Scaffold(
+    return auctionAsync.when(
+      loading: () => Scaffold(
+        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (err, stack) => Scaffold(
+        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: Center(
+          child: Text(AppLocalizations.of(context)!.error_loading_auction),
+        ),
+      ),
+      data: (auction) => Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFFBFBFB),
         body: Stack(
           children: [
             // Fireworks Background (Simulated with icons)
             _buildFireworksDecoration(context),
-            
+
             SafeArea(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
@@ -50,7 +77,7 @@ class AuctionWinnerPage extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 40),
-                    
+
                     _buildWinningAmountBox(auction, isDarkMode),
                     const SizedBox(height: 32),
 
@@ -58,7 +85,7 @@ class AuctionWinnerPage extends ConsumerWidget {
                     const SizedBox(height: 32),
 
                     _buildWinnerSummary(context, auction, isDarkMode),
-                    
+
                     const SizedBox(height: 40),
                     _buildFooterAction(context, isDarkMode),
                   ],
@@ -67,7 +94,8 @@ class AuctionWinnerPage extends ConsumerWidget {
             ),
           ],
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildFireworksDecoration(BuildContext context) {
