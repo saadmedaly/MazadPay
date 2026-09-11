@@ -44,7 +44,9 @@ type CreateAuctionInput struct {
 
 type AuctionService interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Auction, []models.AuctionImage, error)
-	List(ctx context.Context, f repository.AuctionFilters) ([]models.Auction, error)
+	// List's second return value is the real total matching f, ignoring
+	// pagination (client feedback #12 tab counts).
+	List(ctx context.Context, f repository.AuctionFilters) ([]models.Auction, int, error)
 
 	Create(ctx context.Context, sellerID uuid.UUID, input CreateAuctionInput) (*models.Auction, error)
 	ReportAuction(ctx context.Context, auctionID, reporterID uuid.UUID, reason string) error
@@ -138,7 +140,7 @@ func (s *auctionService) GetByID(ctx context.Context, id uuid.UUID) (*models.Auc
 	return auction, images, nil
 }
 
-func (s *auctionService) List(ctx context.Context, f repository.AuctionFilters) ([]models.Auction, error) {
+func (s *auctionService) List(ctx context.Context, f repository.AuctionFilters) ([]models.Auction, int, error) {
 	return s.auctionRepo.FindAll(ctx, f)
 }
 

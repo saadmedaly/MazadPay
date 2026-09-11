@@ -2047,6 +2047,91 @@ func TestListMyWinnings_RealWinnerAppears_OthersExcluded(t *testing.T) {
 	}
 }
 
+// Customer feedback #12 (restore Active/Ended auctions selector): the mobile
+// "Auction Types" page (all_auctions_page.dart) already had its Active/Ended
+// status tabs restored (client feedback A12) and correctly requests
+// GET /auctions?status=ended for the Ended tab. But AuctionRepository.FindAll
+// unconditionally appended "AND end_time > NOW()" to every query regardless
+// of the requested status -- harmless when this line was written (predating
+// SetWinner ever being called anywhere), but since an ended auction's
+// end_time is necessarily in the past by definition, this silently excluded
+// EVERY ended auction from a status='ended' request, making the Ended tab
+// permanently empty. This proves both fixes: status='ended' now returns real
+// ended auctions, and the new total return value reflects the true count
+// (not just the current page's length).
+func TestFindAllAuctions_EndedStatusReturnsRealEndedAuctions(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST A12 SELLER")
+	winner := createTestUser(t, env, "TEST A12 WINNER")
+
+	activeAuction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+	endedAuction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+	bid, err := env.bidSvc.PlaceBid(ctx, endedAuction.ID, winner.ID, decimal.NewFromInt(150))
+	if err != nil {
+		t.Fatalf("failed to place bid on soon-to-end auction: %v", err)
+	}
+	finalizeAuctionAsWinner(t, env, endedAuction.ID, winner.ID, bid.ID)
+
+	// Before the fix, this returned zero results and total=0 no matter how
+	// many auctions were actually ended -- "AND end_time > NOW()" excluded
+	// endedAuction's row unconditionally, since its end_time is in the past.
+	endedResults, endedTotal, err := env.auctSvc.List(ctx, repository.AuctionFilters{
+		Status:           "ended",
+		MarketCountryISO: "MR",
+		Page:             1,
+		PerPage:          25,
+	})
+	if err != nil {
+		t.Fatalf("List(status=ended) failed: %v", err)
+	}
+
+	foundEnded := false
+	for _, a := range endedResults {
+		if a.ID == endedAuction.ID {
+			foundEnded = true
+		}
+		if a.ID == activeAuction.ID {
+			t.Fatalf("CUSTOMER COMPLAINT NOT FIXED: still-active auction %s appeared in the Ended tab's results", activeAuction.ID)
+		}
+	}
+	if !foundEnded {
+		t.Fatalf("CUSTOMER COMPLAINT NOT FIXED: real ended auction %s did not appear in status='ended' results (Ended tab would stay permanently empty)", endedAuction.ID)
+	}
+	if endedTotal < 1 {
+		t.Fatalf("expected a real total >= 1 for status='ended', got %d", endedTotal)
+	}
+
+	// The active tab's own filtering (end_time > NOW() still applies) and its
+	// total must be unaffected by this fix.
+	activeResults, activeTotal, err := env.auctSvc.List(ctx, repository.AuctionFilters{
+		Status:           "active",
+		MarketCountryISO: "MR",
+		Page:             1,
+		PerPage:          25,
+	})
+	if err != nil {
+		t.Fatalf("List(status=active) failed: %v", err)
+	}
+	foundActive := false
+	for _, a := range activeResults {
+		if a.ID == activeAuction.ID {
+			foundActive = true
+		}
+		if a.ID == endedAuction.ID {
+			t.Fatalf("ended auction %s incorrectly appeared in the Active tab's results", endedAuction.ID)
+		}
+	}
+	if !foundActive {
+		t.Fatalf("expected still-active auction %s to appear in the Active tab's results", activeAuction.ID)
+	}
+	if activeTotal < 1 {
+		t.Fatalf("expected a real total >= 1 for status='active', got %d", activeTotal)
+	}
+	t.Logf("confirmed: Ended tab total=%d (includes real ended auction), Active tab total=%d, no cross-contamination", endedTotal, activeTotal)
+}
+
 // --- Phase 1.4 helpers ---
 
 // httpCreateBoost performs a real HTTP-level POST against env.app's

@@ -79,7 +79,7 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 		}
 	}
 
-	auctions, err := h.service.List(c.Context(), f)
+	auctions, total, err := h.service.List(c.Context(), f)
 	if err != nil {
 		return MapError(c, h.logger, err)
 	}
@@ -134,7 +134,12 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 		})
 	}
 
-	return OK(c, response)
+	// total (client feedback #12): the real count matching the requested
+	// filters (status/category/search/market), ignoring pagination -- added
+	// alongside "data" as a top-level "total" key so existing callers that
+	// only read response.data (e.g. mobile/lib/services/auction_api.dart)
+	// keep working unchanged; only callers that also read "total" need it.
+	return c.JSON(fiber.Map{"success": true, "data": response, "total": total})
 }
 
 func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {

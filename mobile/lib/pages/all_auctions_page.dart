@@ -41,6 +41,13 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   // approximation.
   String _statusFilter = 'active'; // 'active' | 'ended'
 
+  // Tab counts (client feedback #12): the real total matching each status
+  // (and the current category), from GET /auctions's own "total" field
+  // (backend/internal/handlers/auction_handler.go List) -- never
+  // _allAuctions.length, which would only reflect the current page.
+  int _activeCount = 0;
+  int _endedCount = 0;
+
   // Pagination variables
   int _currentPage = 1;
   bool _hasMoreData = true;
@@ -62,6 +69,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     _scrollController.addListener(_onScroll);
     _loadCategories();
     _loadAuctions();
+    _loadTabCounts();
   }
 
   void _onScroll() {
@@ -169,6 +177,34 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
 
   void _onSearchChanged() {
     _filterAuctions();
+  }
+
+  // Fetches the real Active/Ended totals for the current category (client
+  // feedback #12) -- limit: 1 since only "total" is needed, not the rows
+  // themselves, keeping this a lightweight sibling call to _loadAuctions()
+  // rather than duplicating its full page fetch.
+  Future<void> _loadTabCounts() async {
+    try {
+      final results = await Future.wait([
+        _auctionApi.getAuctionsWithTotal(page: 1, limit: 1, status: 'active', categoryId: _selectedCategoryId),
+        _auctionApi.getAuctionsWithTotal(page: 1, limit: 1, status: 'ended', categoryId: _selectedCategoryId),
+      ]);
+      if (!mounted) return;
+      final activeResponse = results[0];
+      final endedResponse = results[1];
+      setState(() {
+        if (activeResponse.success && activeResponse.data != null) {
+          _activeCount = (activeResponse.data!['total'] as int?) ?? 0;
+        }
+        if (endedResponse.success && endedResponse.data != null) {
+          _endedCount = (endedResponse.data!['total'] as int?) ?? 0;
+        }
+      });
+    } catch (e) {
+      // Silencieux : les compteurs restent à leur dernière valeur connue (ou 0)
+      // plutôt que de bloquer l'affichage de la liste elle-même.
+      debugPrint('Error loading tab counts: $e');
+    }
   }
 
   Future<void> _loadAuctions({bool reset = true}) async {
@@ -563,6 +599,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     bool isDarkMode, {
     required String value,
     required String label,
+    required int count,
   }) {
     final isSelected = _statusFilter == value;
     return GestureDetector(
@@ -579,15 +616,47 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
           borderRadius: BorderRadius.circular(18),
         ),
         child: Center(
-          child: Text(
-            label,
-            style: GoogleFonts.plusJakartaSans(
-              color: isSelected
-                  ? Colors.white
-                  : (isDarkMode ? Colors.white70 : Colors.black87),
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: isSelected
+                        ? Colors.white
+                        : (isDarkMode ? Colors.white70 : Colors.black87),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Count badge (client feedback #12): real total from
+              // _loadTabCounts()/GET /auctions's "total" field, never a
+              // hardcoded or currentPage.length approximation.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.white.withValues(alpha: 0.25)
+                      : (isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: isSelected
+                        ? Colors.white
+                        : (isDarkMode ? Colors.white70 : Colors.black87),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -687,6 +756,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           }
                           // Recharger les enchères depuis le serveur avec le nouveau filtre
                           _loadAuctions();
+                          _loadTabCounts();
                         },
                         child: Container(
                           width: 100,
@@ -853,6 +923,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                             isDarkMode,
                             value: 'active',
                             label: _getStatusTabLabel(context, active: true),
+                            count: _activeCount,
                           ),
                         ),
                         Expanded(
@@ -861,6 +932,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                             isDarkMode,
                             value: 'ended',
                             label: _getStatusTabLabel(context, active: false),
+                            count: _endedCount,
                           ),
                         ),
                       ],

@@ -33,14 +33,57 @@ class AuctionApi {
         '/auctions',
         queryParameters: queryParams,
       );
- 
+
       final List<dynamic> auctionList = response?['data'] ?? [];
       return ApiResponse.success(auctionList);
     } catch (e) {
       return ApiResponse.error(e.toString());
     }
   }
-  
+
+  /// Customer feedback #12 (restore Active/Ended selector): same request as
+  /// getAuctions(), but also surfaces the real "total" GET /auctions now
+  /// returns (backend/internal/handlers/auction_handler.go List) -- needed
+  /// for the Active/Ended tab counts, which must reflect the true total
+  /// matching the filter, not just the current page's length. A separate
+  /// method rather than changing getAuctions()'s return shape, since three
+  /// other pages already call getAuctions() and only expect the plain list.
+  Future<ApiResponse<Map<String, dynamic>>> getAuctionsWithTotal({
+    int page = 1,
+    int limit = 20,
+    String? categoryId,
+    String? locationId,
+    String? status,
+    int? minPrice,
+    int? maxPrice,
+    String? sortBy,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+      };
+
+      if (categoryId != null) queryParams['category_id'] = categoryId;
+      if (locationId != null) queryParams['location_id'] = locationId;
+      if (status != null) queryParams['status'] = status;
+      if (minPrice != null) queryParams['min_price'] = minPrice;
+      if (maxPrice != null) queryParams['max_price'] = maxPrice;
+      if (sortBy != null) queryParams['sort_by'] = sortBy;
+
+      final response = await _apiService.get<Map<String, dynamic>>(
+        '/auctions',
+        queryParameters: queryParams,
+      );
+
+      final List<dynamic> auctionList = response?['data'] ?? [];
+      final int total = (response?['total'] as num?)?.toInt() ?? auctionList.length;
+      return ApiResponse.success({'auctions': auctionList, 'total': total});
+    } catch (e) {
+      return ApiResponse.error(e.toString());
+    }
+  }
+
   /// Récupérer les détails d'une enchère
   Future<ApiResponse<Map<String, dynamic>>> getAuctionById(String id) async {
     try {

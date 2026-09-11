@@ -38,7 +38,10 @@ type AuctionFilters struct {
 type AuctionRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*models.Auction, error)
 	FindByIDTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (*models.Auction, error)
-	FindAll(ctx context.Context, f AuctionFilters) ([]models.Auction, error)
+	// FindAll's second return value is the total count matching f (ignoring
+	// pagination) -- added for client feedback #12's Active/Ended tab counts,
+	// which must reflect the real total, not just the current page's length.
+	FindAll(ctx context.Context, f AuctionFilters) ([]models.Auction, int, error)
 
 	Create(ctx context.Context, tx *sqlx.Tx, a *models.Auction) error
 	UpdatePrice(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, newPrice decimal.Decimal, version int) (bool, error)
@@ -140,7 +143,7 @@ func (r *auctionRepo) findByIDInternal(ctx context.Context, db sqlx.ExtContext, 
 	return &a, nil
 }
 
-func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.Auction, error) {
+func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.Auction, int, error) {
 	where := "WHERE 1=1"
 	args := []interface{}{}
 	i := 1
@@ -169,8 +172,28 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 		args = append(args, f.MarketCountryISO)
 		i++
 	}
-	// Always hide expired auctions from general listing
-	where += " AND end_time > NOW()"
+	// Hide expired auctions from the general/active listing only. This
+	// unconditional clause predates SetWinner ever being called anywhere
+	// (client feedback #10/#11 history) -- at the time, status='ended' never
+	// occurred in practice, so hiding anything past end_time was harmless.
+	// Now that SetWinner really persists status='ended' (with end_time
+	// necessarily in the past, by definition), this clause was silently
+	// excluding every single ended auction from a status='ended' request --
+	// the exact query GET /auctions?status=ended relies on for the mobile
+	// "Ended" filter tab (client feedback #12). Skipped only when the caller
+	// explicitly asked for ended auctions; every other filter (active, or no
+	// status at all) keeps the original expired-hiding behavior unchanged.
+	if f.Status != "ended" {
+		where += " AND end_time > NOW()"
+	}
+
+	// Total matching f, ignoring pagination -- computed before LIMIT/OFFSET
+	// are appended to args below (client feedback #12: real Active/Ended tab
+	// counts, not currentPage.length).
+	var total int
+	if err := r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM auctions a %s", where), args...); err != nil {
+		return nil, 0, fmt.Errorf("failed to count auctions: %w", err)
+	}
 
 	// Pagination : page/per_page par défaut 1/25, plafonné à 100 (Public Endpoints /
 	// Scraping Protection — un appel ne peut plus retourner la table entière).
@@ -207,7 +230,7 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
             ORDER BY a.is_featured DESC, a.created_at DESC%s`, where, limitOffset),
 		args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -215,11 +238,11 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 	for rows.Next() {
 		var a models.Auction
 		if err := rows.StructScan(&a); err != nil {
-			return nil, fmt.Errorf("failed to scan auction: %w", err)
+			return nil, 0, fmt.Errorf("failed to scan auction: %w", err)
 		}
 		auctions = append(auctions, a)
 	}
-	return auctions, nil
+	return auctions, total, nil
 }
 
 func (r *auctionRepo) Create(ctx context.Context, tx *sqlx.Tx, a *models.Auction) error {
