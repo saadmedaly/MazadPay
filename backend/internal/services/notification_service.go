@@ -123,6 +123,21 @@ func (s *notificationService) SendPush(ctx context.Context, userID uuid.UUID, ti
 		// Continue anyway - don't fail the whole operation (FCM is still sent)
 	}
 
+	// Client feedback #10: users.notifications_enabled (set via PUT
+	// /users/me/notification-prefs, client feedback #6) was written and read
+	// back for display, but never actually consulted before sending a push --
+	// the in-app notification row above is always created (the account
+	// preference toggle only ever claimed to control "notifications", i.e.
+	// push, and the in-app inbox is a separate concern the user never asked
+	// to suppress), but the FCM push itself must be skipped when the user has
+	// disabled it.
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		s.logger.Warn("SendPush: could not load user to check notification preference, sending push anyway", zap.Error(err), zap.String("userID", userID.String()))
+	} else if !user.NotificationsEnabled {
+		return nil
+	}
+
 	// 2. Send via FCM
 	if s.fcm == nil {
 		return nil // FCM not configured

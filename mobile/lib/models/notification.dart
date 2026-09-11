@@ -38,8 +38,12 @@ class Notification {
       data: json['data'] != null
           ? Map<String, dynamic>.from(json['data'])
           : null,
+      // Client feedback #10: DateTime.parse throws on a malformed string,
+      // which would crash the whole notifications list for one bad row.
+      // tryParse degrades to "now" instead, matching the missing-field
+      // fallback already used above.
       createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
+          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
     );
   }

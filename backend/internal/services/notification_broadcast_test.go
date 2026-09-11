@@ -61,10 +61,20 @@ func (f *fakeNotificationRepo) Delete(ctx context.Context, id uuid.UUID) error {
 var _ repository.NotificationRepository = (*fakeNotificationRepo)(nil)
 
 // fakeUserRepoForBroadcast embeds the real interface and overrides only
-// ListAllActiveUserIDs -- the one method SendBroadcast actually calls. Any
-// other method would panic if called (nil embedded interface), which is
-// intentional: it proves the test only exercises what SendBroadcast really
-// touches.
+// ListAllActiveUserIDs and FindByID -- the methods SendBroadcast/SendPush
+// actually call. Any other method would panic if called (nil embedded
+// interface), which is intentional: it proves the test only exercises what
+// SendBroadcast really touches.
+//
+// Client feedback #10: SendPush now checks user.NotificationsEnabled before
+// sending the FCM push (DB persistence is unconditional). FindByID here
+// returns NotificationsEnabled: true unconditionally -- matching the real
+// Postgres column default (migrations/000001_init.up.sql:
+// "notifications_enabled BOOLEAN DEFAULT TRUE") -- so this broadcast-focused
+// test continues to exercise the pre-existing "sent" persistence-count
+// semantics unaffected by the new preference check; see
+// TestSendPush_RespectsNotificationsEnabled below for the preference check
+// itself.
 type fakeUserRepoForBroadcast struct {
 	repository.UserRepository
 	activeUserIDs []uuid.UUID
@@ -72,6 +82,10 @@ type fakeUserRepoForBroadcast struct {
 
 func (f *fakeUserRepoForBroadcast) ListAllActiveUserIDs(ctx context.Context) ([]uuid.UUID, error) {
 	return f.activeUserIDs, nil
+}
+
+func (f *fakeUserRepoForBroadcast) FindByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	return &models.User{ID: id, NotificationsEnabled: true}, nil
 }
 
 // TestSendBroadcast_PersistsPerTargetUser_NoDuplicates_ReadIsolated covers
