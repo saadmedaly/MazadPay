@@ -672,6 +672,42 @@ func (s *adminService) GetTransactionByID(ctx context.Context, id uuid.UUID) (*m
 	return s.txRepo.FindByID(ctx, id, nil)
 }
 
+// withdrawalStatusWord returns the localized word substituted into the
+// withdrawal_processed {status} placeholder (notification_localizations.go).
+// Kept as a small lookup rather than extending GetLocalizedNotification with
+// conditional templating, since deposit_confirmed/deposit_rejected already
+// establish the pattern of one placeholder per fact, not per-branch bodies.
+func withdrawalStatusWord(approve bool, language string) string {
+	words := map[string]map[bool]string{
+		"ar": {true: "تمت الموافقة عليه", false: "مرفوض"},
+		"fr": {true: "approuvée", false: "refusée"},
+		"en": {true: "approved", false: "rejected"},
+	}
+	byLang, ok := words[language]
+	if !ok {
+		byLang = words["en"]
+	}
+	return byLang[approve]
+}
+
+// withdrawalReasonSuffix builds the trailing "{reason}" clause for a rejected
+// withdrawal, adjacent to {status} in the withdrawal_processed template. Empty
+// notes (an admin rejected without typing a reason) omit the clause entirely
+// rather than printing a dangling separator.
+func withdrawalReasonSuffix(notes, language string) string {
+	if notes == "" {
+		return ""
+	}
+	switch language {
+	case "ar":
+		return ". السبب: " + notes
+	case "fr":
+		return ". Raison : " + notes
+	default:
+		return ". Reason: " + notes
+	}
+}
+
 func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error {
 	status := "rejected"
 	if approve {
@@ -723,6 +759,17 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 		}
 	}
 
+	// Client feedback #10 (withdrawal notifications) idempotency: UpdateStatus
+	// above always rewrites status/admin_notes/reviewed_at even when the
+	// transaction was already terminal (money movement itself is guarded by
+	// tx.Status checks inside UpdateStatus, but the status row write and this
+	// notification send were not). A retried or double-clicked admin
+	// approve/reject on an already-completed/rejected transaction must not
+	// resend a duplicate push.
+	if findErr == nil && (txBefore.Status == "completed" || txBefore.Status == "rejected") {
+		return nil
+	}
+
 	// Send notification to user
 	tx, err := s.txRepo.FindByID(ctx, id, nil)
 	if err != nil {
@@ -736,15 +783,40 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	if user.LanguagePref != "" {
 		language = user.LanguagePref
 	}
+	// Client feedback #10 (withdrawal notifications): ValidateTransaction is the
+	// shared admin approve/reject endpoint for BOTH deposit and withdraw
+	// transactions (see PUT /admin/transactions/:id/validate), but the
+	// notification type below was hardcoded to deposit_confirmed/deposit_rejected
+	// regardless of tx.Type -- a withdrawal being approved or rejected silently
+	// reused deposit wording and never used the withdrawal_processed type the
+	// mobile app already defines (NotificationType.withdrawalProcessed,
+	// fcm_service.dart channel routing + /wallet tap navigation). No new
+	// notification type is introduced here: withdrawal_processed already exists
+	// on the mobile side for both outcomes, distinguished by the approved/reason
+	// params exactly like deposit_confirmed/deposit_rejected are today.
 	notifType := "deposit_confirmed"
 	if !approve {
 		notifType = "deposit_rejected"
+	}
+	if tx.Type == "withdraw" {
+		notifType = "withdrawal_processed"
 	}
 	params := map[string]string{
 		"amount":   tx.Amount.String(),
 		"currency": tx.EffectiveCurrencyCode(),
 	}
-	if !approve {
+	if tx.Type == "withdraw" {
+		params["status"] = withdrawalStatusWord(approve, language)
+		// {status}{reason} are adjacent in the withdrawal_processed template
+		// (notification_localizations.go), so "reason" must itself carry any
+		// leading punctuation/wording -- left empty for an approved withdrawal
+		// (mirrors deposit_confirmed, which has no reason clause at all).
+		if !approve {
+			params["reason"] = withdrawalReasonSuffix(notes, language)
+		} else {
+			params["reason"] = ""
+		}
+	} else if !approve {
 		params["reason"] = notes
 	}
 	data := map[string]string{

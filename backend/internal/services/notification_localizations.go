@@ -204,6 +204,26 @@ var NotificationLocalizations = map[string]map[string]NotificationLocalization{
 			Body:  "Your deposit of {amount} {currency} was rejected. Reason: {reason}",
 		},
 	},
+	// withdrawal_processed (client feedback #10): mirrors the mobile app's single
+	// existing NotificationType.withdrawalProcessed (fcm_service.dart channel
+	// routing + /wallet tap navigation) -- covers BOTH admin outcomes
+	// (approve/reject) via the {status} param, rather than adding a second
+	// withdrawal_rejected type mobile does not know about (an unrecognized type
+	// falls through to no navigation and the wrong notification channel there).
+	"withdrawal_processed": {
+		"ar": {
+			Title: "💸 تحديث طلب السحب",
+			Body:  "طلب سحب {amount} {currency} {status}{reason}",
+		},
+		"fr": {
+			Title: "💸 Mise à jour de la demande de retrait",
+			Body:  "Votre demande de retrait de {amount} {currency} a été {status}{reason}",
+		},
+		"en": {
+			Title: "💸 Withdrawal request update",
+			Body:  "Your withdrawal of {amount} {currency} was {status}{reason}",
+		},
+	},
 }
 
 // GetLocalizedNotification retrieves a localized notification by type and language
