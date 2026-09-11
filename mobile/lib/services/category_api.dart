@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:mezadpay/models/models.dart';
 import 'package:mezadpay/services/api_service.dart';
@@ -104,12 +105,33 @@ class CategoryApi {
   }
 
   /// Lister tous les pays
+  ///
+  /// On failure, the returned ApiResponse's ApiError carries a safe category
+  /// via `code` (a DioExceptionType-derived value such as
+  /// 'connectionTimeout'/'connectionError'/'badCertificate', or
+  /// 'invalid_shape'/'null_response' for a non-network parsing failure) plus
+  /// `details['httpStatus']` when the failure was an HTTP error response.
+  /// Never includes exception messages that could carry response bodies --
+  /// only the safe category/status.
   Future<ApiResponse<List<dynamic>>> getCountries() async {
     try {
-      final response = await _apiService.get<dynamic>('/countries');
+      // /countries is a verified public, pre-login backend route
+      // (routes.go:229, no jwtMiddleware/OptionalJWT) and must never wait on
+      // secure-storage token/userId reads (see AuthInterceptor.onRequest).
+      // Wrapped in a total 35s Future.timeout as defense in depth: Dio's own
+      // 30s connect/send/receive timeouts do not cover time spent inside
+      // interceptors before handler.next(), so without this the whole call
+      // could otherwise hang indefinitely if any stage ahead of Dio's timed
+      // phases ever stalls. On timeout, the caller (LoginPage/
+      // PhonePasswordPage/etc.) receives the same failure-shaped
+      // ApiResponse.error(...) as any other network failure and follows the
+      // existing MR-fallback path -- the UI must never stay stuck loading.
+      final response = await _apiService
+          .get<dynamic>('/countries', skipAuth: true)
+          .timeout(const Duration(seconds: 35));
 
       if (response == null) {
-        return ApiResponse.error('Null response from server');
+        return ApiResponse.error('Null response from server', code: 'null_response');
       }
 
       if (response is Map) {
@@ -117,12 +139,12 @@ class CategoryApi {
         final data = response['data'];
         final errorData = response['error'];
         final message = response['message'] as String?;
-        
+
         ApiError? error;
         if (errorData != null && errorData is Map) {
           error = ApiError.fromJson(errorData as Map<String, dynamic>);
         }
-        
+
         return ApiResponse<List<dynamic>>(
           success: success,
           data: data as List<dynamic>?,
@@ -130,10 +152,24 @@ class CategoryApi {
           message: message,
         );
       } else {
-        return ApiResponse.error('Invalid response format: expected Map, got ${response.runtimeType}');
+        return ApiResponse.error(
+          'Invalid response format: expected Map, got ${response.runtimeType}',
+          code: 'invalid_shape',
+        );
       }
+    } on TimeoutException {
+      // The total-call timeout above fired -- distinct from a DioException,
+      // since it means no exception from the network layer had propagated
+      // within 35s (the "stuck on loading" real-device symptom).
+      return ApiResponse.error('Countries request timed out', code: 'totalCallTimeout');
+    } on ApiException catch (e) {
+      return ApiResponse.error(
+        e.code ?? 'unknown',
+        code: e.code ?? 'unknown',
+        details: e.httpStatus != null ? {'httpStatus': e.httpStatus} : null,
+      );
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      return ApiResponse.error(e.runtimeType.toString(), code: 'parse_error');
     }
   }
 

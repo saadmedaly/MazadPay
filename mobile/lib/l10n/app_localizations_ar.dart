@@ -9,6 +9,9 @@ class AppLocalizationsAr extends AppLocalizations {
   AppLocalizationsAr([String locale = 'ar']) : super(locale);
 
   @override
+  String get register_submit_button => 'إنشاء الحساب';
+
+  @override
   String get text_1 => 'الرئيسية';
 
   @override

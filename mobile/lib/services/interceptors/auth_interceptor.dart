@@ -10,19 +10,32 @@ class AuthInterceptor extends Interceptor {
   
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    // A verified public, pre-login endpoint (see ApiService.get/post's
+    // skipAuth param, used by CategoryApi.getCountries and AuthApi's public
+    // methods) sets options.extra['skipAuth'] so it never performs these two
+    // FlutterSecureStorage reads. This matters because these reads are
+    // awaited here, INSIDE onRequest, before handler.next(options) hands the
+    // request to Dio -- so they are NOT covered by Dio's
+    // connectTimeout/sendTimeout/receiveTimeout (those only bound the
+    // socket-level phases that begin once Dio's adapter takes over). A
+    // public endpoint has no reason to wait on auth state at all.
+    if (options.extra['skipAuth'] == true) {
+      return handler.next(options);
+    }
+
     // Ajouter le token JWT si disponible
     final token = await _authService.getToken();
-    
+
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
-    
+
     // Ajouter l'ID utilisateur si disponible
     final userId = await _authService.getUserId();
     if (userId != null && userId.isNotEmpty) {
       options.headers['X-User-ID'] = userId;
     }
-    
+
     return handler.next(options);
   }
   

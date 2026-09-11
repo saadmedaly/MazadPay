@@ -100,6 +100,12 @@ abstract class AppLocalizations {
     Locale('fr'),
   ];
 
+  /// No description provided for @register_submit_button.
+  ///
+  /// In ar, this message translates to:
+  /// **'إنشاء الحساب'**
+  String get register_submit_button;
+
   /// No description provided for @text_1.
   ///
   /// In ar, this message translates to:

@@ -49,10 +49,10 @@ class ApiResponse<T> {
     );
   }
   
-  factory ApiResponse.error(String message, {String? code}) {
+  factory ApiResponse.error(String message, {String? code, Map<String, dynamic>? details}) {
     return ApiResponse<T>(
       success: false,
-      error: ApiError(code: code ?? 'error', message: message),
+      error: ApiError(code: code ?? 'error', message: message, details: details),
       message: message,
     );
   }

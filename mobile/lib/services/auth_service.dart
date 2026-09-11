@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -30,8 +31,25 @@ class AuthService {
   }
   
   /// Sauvegarder l'état d'inscription
+  ///
+  /// Bounded with a 5s timeout. `hasRegistered` is a best-effort UX flag
+  /// (skips onboarding on relaunch), not a security- or correctness-critical
+  /// value -- unlike getToken()/getUserId(), which fail closed by returning
+  /// null, a stalled write here should not block navigation after a
+  /// successful registration/login response. On timeout, the write is left
+  /// to complete in the background (fire-and-forget) and this method returns
+  /// normally rather than propagating the timeout as an error -- never
+  /// fabricates a different persisted value, just doesn't wait for
+  /// confirmation past the bound.
   Future<void> saveHasRegistered(bool value) async {
-    await _storage.write(key: _hasRegisteredKey, value: value.toString());
+    final write = _storage.write(key: _hasRegisteredKey, value: value.toString());
+    try {
+      await write.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      // Let it finish in the background; do not block the caller (typically
+      // navigation right after a successful register/login) waiting for a
+      // non-critical flag write.
+    }
   }
   
   /// Récupérer l'état d'inscription (si l'utilisateur s'est déjà inscrit ou connecté auparavant)
@@ -51,18 +69,34 @@ class AuthService {
   }
   
   /// Récupérer le JWT token
+  ///
+  /// Bounded with a 5s timeout, fail-closed -- a stalled secure-storage read
+  /// (used by AuthInterceptor.onRequest on every authenticated request) must
+  /// never hang the request indefinitely. Returns null on timeout, exactly
+  /// like "no token found" -- never fabricates or returns a stale/partial
+  /// value.
   Future<String?> getToken() async {
-    return await _storage.read(key: _tokenKey);
+    try {
+      return await _storage.read(key: _tokenKey).timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      return null;
+    }
   }
-  
+
   /// Récupérer le refresh token
   Future<String?> getRefreshToken() async {
     return await _storage.read(key: _refreshTokenKey);
   }
-  
+
   /// Récupérer l'ID utilisateur
+  ///
+  /// Same bounded, fail-closed behavior as getToken() above.
   Future<String?> getUserId() async {
-    return await _storage.read(key: _userIdKey);
+    try {
+      return await _storage.read(key: _userIdKey).timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      return null;
+    }
   }
   
   /// Vérifier si l'utilisateur est connecté (présence du token uniquement)

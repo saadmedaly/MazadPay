@@ -73,16 +73,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _countriesLoadFailed = false;
 
   Future<void> _loadCountries() async {
-    debugPrint('[Countries] request start');
     final response = await _categoryApi.getCountries();
-    debugPrint('[Countries] success=${response.success} dataIsNull=${response.data == null}');
 
-    if (response.success && response.data != null) {
+    // A successful-but-empty response (`success: true, data: []`) must be
+    // treated the same as a failure -- otherwise it bypasses the
+    // failure/fallback branch entirely, leaving _countries == [] (empty
+    // picker) and _selectedCountry == null (falls through to the generic
+    // 7-12 range instead of the selected country's real limits).
+    final hasUsableData = response.success && response.data != null && response.data!.isNotEmpty;
+
+    if (hasUsableData) {
       if (!mounted) return;
       setState(() {
         _countriesLoadFailed = false;
         _countries = response.data!;
-        debugPrint('[Countries] parsed count=${_countries.length}');
         // Only (re)compute the default selection on the very first load, or
         // when a prior failed load left the temporary MR fallback active --
         // never on a retry after the user has already picked a real country
@@ -97,22 +101,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             targetCountryCode: widget.initialCountryCode,
           );
         }
-        final mrFound = _countries.any((c) => c['code'] == 'MR');
-        debugPrint('[Countries] MR found=$mrFound');
-        debugPrint('[Countries] selected ISO=${_selectedCountry?['code']} '
-            'min=${_selectedCountry?['phone_min_length']} '
-            'max=${_selectedCountry?['phone_max_length']}');
       });
     } else {
-      // Network/parse failure -- never leave the form permanently locked.
-      // Fall back to a local MR default (this app's default market) so
-      // login/registration stay usable; a subsequent successful load (via
-      // the retry link below) always replaces this with the real list.
-      debugPrint('[Countries] load failed, applying local MR fallback');
+      // Network/parse failure OR a successful-but-empty response -- never
+      // leave the form permanently locked. Fall back to a local MR default
+      // (this app's default market) so login/registration stay usable; a
+      // subsequent successful load (via the retry link below) always
+      // replaces this with the real list.
       if (!mounted) return;
       setState(() {
         _countriesLoadFailed = true;
         _selectedCountry ??= kFallbackMauritania;
+        // Seed the picker with at least the fallback so it never shows the
+        // "no data" empty state -- a successful retry always replaces this
+        // with the real, full international list.
+        if (_countries.isEmpty) {
+          _countries = [kFallbackMauritania];
+        }
       });
     }
   }

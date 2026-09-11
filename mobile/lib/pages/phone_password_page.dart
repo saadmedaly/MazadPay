@@ -46,35 +46,38 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
   bool _countriesLoadFailed = false;
 
   Future<void> _loadCountries() async {
-    debugPrint('[Countries] request start');
     final response = await _categoryApi.getCountries();
-    debugPrint('[Countries] success=${response.success} dataIsNull=${response.data == null}');
 
-    if (response.success && response.data != null) {
+    // A successful-but-empty response (`success: true, data: []`) must be
+    // treated the same as a failure -- see login_page.dart for the full
+    // explanation.
+    final hasUsableData = response.success && response.data != null && response.data!.isNotEmpty;
+
+    if (hasUsableData) {
       if (!mounted) return;
       setState(() {
         _countriesLoadFailed = false;
         _countries = response.data!;
-        debugPrint('[Countries] parsed count=${_countries.length}');
         // Only (re)compute the default on first load or when recovering from
         // the temporary MR fallback -- never overwrite a real user selection
         // on a retry.
         if (_selectedCountry == null || identical(_selectedCountry, kFallbackMauritania)) {
           _selectedCountry = selectDefaultCountry(_countries);
         }
-        final mrFound = _countries.any((c) => c['code'] == 'MR');
-        debugPrint('[Countries] MR found=$mrFound');
-        debugPrint('[Countries] selected ISO=${_selectedCountry?['code']} '
-            'min=${_selectedCountry?['phone_min_length']} '
-            'max=${_selectedCountry?['phone_max_length']}');
       });
     } else {
-      // Network/parse failure -- never leave the form permanently locked.
-      debugPrint('[Countries] load failed, applying local MR fallback');
+      // Network/parse failure OR a successful-but-empty response -- never
+      // leave the form permanently locked.
       if (!mounted) return;
       setState(() {
         _countriesLoadFailed = true;
         _selectedCountry ??= kFallbackMauritania;
+        // Seed the picker with at least the fallback so it never shows the
+        // "no data" empty state -- a successful retry always replaces this
+        // with the real, full international list.
+        if (_countries.isEmpty) {
+          _countries = [kFallbackMauritania];
+        }
       });
     }
   }
@@ -295,7 +298,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                         color: Color(0xFF9E9E9E),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 16),
 
                     if (widget.fullName == null)
                       _buildField(
@@ -446,7 +449,7 @@ class _PhonePasswordPageState extends State<PhonePasswordPage> {
                                 ),
                               )
                             : Text(
-                                l10n.text_217,
+                                l10n.register_submit_button,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 16,

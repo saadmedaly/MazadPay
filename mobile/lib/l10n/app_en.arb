@@ -1,5 +1,6 @@
 {
   "@@locale": "en",
+  "register_submit_button": "Create Account",
   "text_1": "Home",
   "text_2": "All Auctions",
   "text_3": "Bid Now",

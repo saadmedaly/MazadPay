@@ -215,6 +215,61 @@ void main() {
     });
   });
 
+  group('a successful-but-empty /countries response is treated as a failure', () {
+    // Regression test for the real-device bug found after APK 1.1.0+8:
+    // every _loadCountries() success branch originally guarded only on
+    // `response.success && response.data != null` -- which is ALSO true
+    // for {"success": true, "data": []}. That path bypassed the entire
+    // failure/fallback branch: _countries stayed [] (empty country picker,
+    // "لا توجد بيانات متاحة") and _selectedCountry stayed null (falls
+    // through to the generic 7-12 range, producing the observed 8/12
+    // instead of 8/8). The fix adds an explicit non-empty check
+    // (`response.data!.isNotEmpty`) so an empty list is routed through the
+    // exact same recovery path as a genuine network failure.
+    bool hasUsableData({required bool success, required List<dynamic>? data}) {
+      return success && data != null && data.isNotEmpty;
+    }
+
+    test('success=true with a non-empty list is usable', () {
+      expect(hasUsableData(success: true, data: liveShapedCountriesFixture), isTrue);
+    });
+
+    test('success=true with an EMPTY list is NOT usable (the real-device bug)', () {
+      expect(hasUsableData(success: true, data: const []), isFalse);
+    });
+
+    test('success=false is not usable regardless of data', () {
+      expect(hasUsableData(success: false, data: liveShapedCountriesFixture), isFalse);
+    });
+
+    test('success=true with null data is not usable', () {
+      expect(hasUsableData(success: true, data: null), isFalse);
+    });
+
+    test('an empty response routes through the same fallback as a genuine failure, '
+        'seeding both _selectedCountry and the picker list', () {
+      // Simulates the exact failure-branch logic now shared by every
+      // affected page: _selectedCountry ??= kFallbackMauritania; and
+      // _countries = _countries.isEmpty ? [kFallbackMauritania] : _countries.
+      Map<String, dynamic>? selectedCountry;
+      List<dynamic> countries = [];
+
+      final usable = hasUsableData(success: true, data: const []);
+      expect(usable, isFalse);
+
+      selectedCountry ??= kFallbackMauritania;
+      if (countries.isEmpty) {
+        countries = [kFallbackMauritania];
+      }
+
+      // The picker must never be empty after this recovery.
+      expect(countries, isNotEmpty);
+      // The counter must show 8/8, not the generic 7-12 fallback range.
+      expect(phoneMinLengthFor(selectedCountry), 8);
+      expect(phoneMaxLengthFor(selectedCountry), 8);
+    });
+  });
+
   group('countries load failure does not permanently lock the form', () {
     test('kFallbackMauritania provides a valid, non-null selection on failure', () {
       // Mirrors what every _loadCountries() implementation now does on a

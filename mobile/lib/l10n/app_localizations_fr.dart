@@ -9,6 +9,9 @@ class AppLocalizationsFr extends AppLocalizations {
   AppLocalizationsFr([String locale = 'fr']) : super(locale);
 
   @override
+  String get register_submit_button => 'Créer un compte';
+
+  @override
   String get text_1 => 'Accueil';
 
   @override
