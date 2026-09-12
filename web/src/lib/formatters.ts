@@ -54,6 +54,21 @@ export const maskPhone = (phone: string): string => {
   return '####' + phone.slice(-4)
 }
 
+// formatFullPhone (client feedback #17): Admin panel only -- shows the
+// user's complete, readable phone number instead of maskPhone's masked
+// suffix, so an authorized admin can actually contact the user directly.
+// Prefers phone_e164 (canonical "+<country code><number>", already computed
+// server-side for international accounts, migration 000044) since it is
+// unambiguous regardless of the user's market; falls back to the raw legacy
+// `phone` column for accounts never backfilled (shown as-is -- never guess
+// or prepend a country code for a legacy number, since doing so could be
+// wrong). Returns a safe placeholder only when genuinely no phone exists.
+export const formatFullPhone = (phone: string | null | undefined, phoneE164?: string | null): string => {
+  if (phoneE164 && phoneE164.trim()) return phoneE164
+  if (phone && phone.trim()) return phone
+  return '—'
+}
+
 export const shortID = (id: string): string =>
   id?.slice(0, 8).toUpperCase() ?? '—'
 

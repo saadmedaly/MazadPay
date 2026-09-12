@@ -17,6 +17,12 @@ export interface PaginatedResponse<T> {
 export interface AdminUser {
   id: string
   phone: string
+  // phone_e164 (migration 000044, client feedback #17): canonical
+  // "+<country code><number>" format, already correctly computed
+  // server-side for international accounts -- null for legacy accounts never
+  // backfilled (only the raw `phone` column is available for those; never
+  // guess/prepend a country code for them).
+  phone_e164: string | null
   full_name: string | null
   email: string | null
   profile_pic_url: string | null

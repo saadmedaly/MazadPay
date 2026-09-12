@@ -27,7 +27,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { DataTable } from '@/components/shared/DataTable'
 import { useUser, useUserHistory, useBlockUser, useUpdateProfile } from '@/hooks/useUsers'
-import { formatDate, formatPrice, maskPhone, shortID } from '@/lib/formatters'
+import { formatDate, formatPrice, formatFullPhone, shortID } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -253,7 +253,9 @@ export function UserDetailPage() {
                     </div>
                     <div>
                       <p className="text-[10px] font-bold text-surface-muted uppercase">رقم الهاتف</p>
-                      <p className="text-sm font-mono font-bold text-white">{maskPhone(user.phone)}</p>
+                      {/* Client feedback #17: authorized Admin sees the
+                          complete phone number here, not masked. */}
+                      <p dir="ltr" className="text-sm font-mono font-bold text-white">{formatFullPhone(user.phone, user.phone_e164)}</p>
                     </div>
                   </div>
 
