@@ -251,6 +251,14 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 		VideoURL:        input.VideoURL,
 		Quantity:        input.Quantity,
 		Version:         1,
+		// InsurancePolicy (migration 000048): must be stamped explicitly --
+		// the INSERT includes this column, so an unset Go zero value ("")
+		// is sent as-is rather than falling back to the column's DB DEFAULT
+		// 'required', which violates chk_auctions_insurance_policy. Same
+		// trust policy as RequestService.CreateAuctionRequest: only an
+		// admin can later flip this to 'not_required', never the seller at
+		// creation time.
+		InsurancePolicy: models.InsurancePolicyRequired,
 	}
 
 	tx, err := s.db.BeginTxx(ctx, nil)

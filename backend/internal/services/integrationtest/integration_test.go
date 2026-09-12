@@ -2216,6 +2216,84 @@ func TestCreateAuctionRequest_SubscriptionFeeFromCategory(t *testing.T) {
 	t.Logf("confirmed: standard=%s premium=%s stamped correctly, and an already-created request's fee survives a later category fee_tier change", standardReq.SubscriptionFee, premiumReq.SubscriptionFee)
 }
 
+// Real-device Staging bug B: AuctionService.Create (the direct
+// POST /v1/api/auctions path, distinct from AuctionRequest -> admin review)
+// built its models.Auction{} literal without setting InsurancePolicy at all,
+// so Go's zero value ("") was sent to an INSERT that explicitly includes
+// insurance_policy -- violating chk_auctions_insurance_policy (migration
+// 000048's CHECK only allows 'required'/'not_required') and failing with a
+// real-device HTTP 500 for every direct auction creation. Proven against a
+// real Postgres because the defect only manifested at DB constraint time,
+// never in application-level validation.
+func TestAuctionServiceCreate_StampsInsurancePolicyRequired(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	// auctions_lot_number_seq is deliberately left at small values (e.g. 99,
+	// 100) by the TestLotNumber_* fixtures above via a non-transactional
+	// setval() -- Postgres sequences are NOT rolled back with the
+	// transaction that calls setval(), so those tests' resets persist across
+	// this whole test binary run regardless of test order. Advance it past
+	// every existing LOT-* row before relying on the trigger's auto-generated
+	// lot_number here, so this test's own real bug (missing InsurancePolicy)
+	// isn't masked by an unrelated lot_number collision.
+	var maxLot int64
+	_ = env.db.GetContext(ctx, &maxLot, `
+		SELECT COALESCE(MAX(CAST(SUBSTRING(lot_number FROM 5) AS BIGINT)), 0)
+		FROM auctions WHERE lot_number LIKE 'LOT-%' AND SUBSTRING(lot_number FROM 5) ~ '^[0-9]+$'`)
+	if _, err := env.db.ExecContext(ctx, `SELECT setval('auctions_lot_number_seq', $1)`, maxLot+1000); err != nil {
+		t.Fatalf("failed to advance auctions_lot_number_seq past existing rows: %v", err)
+	}
+
+	seller := createTestUser(t, env, "TEST DIRECT CREATE SELLER")
+	categoryID := createTestCategory(t, env, models.FeeTierStandard)
+
+	input := services.CreateAuctionInput{
+		CategoryID:    categoryID,
+		TitleAr:       "مزاد اختبار الإنشاء المباشر " + uuid.New().String()[:6],
+		DescriptionAr: "STAGING_TEST direct auction creation",
+		StartPrice:    decimal.NewFromInt(1000),
+		MinIncrement:  decimal.NewFromInt(100),
+		// Multi-day duration (client feedback #15) must remain preserved by
+		// this fix -- end_time is passed straight through, not truncated.
+		EndTime:  time.Now().Add(72 * time.Hour),
+		Quantity: 1,
+	}
+
+	auction, err := env.auctSvc.Create(ctx, seller.ID, input)
+	if err != nil {
+		t.Fatalf("AuctionService.Create failed (this is exactly the real-device 500: %v)", err)
+	}
+
+	if auction.InsurancePolicy != models.InsurancePolicyRequired {
+		t.Fatalf("expected a directly-created auction to be stamped InsurancePolicy=%q, got %q",
+			models.InsurancePolicyRequired, auction.InsurancePolicy)
+	}
+
+	// Read back via the real repository path (not just the in-memory struct)
+	// to prove the value actually persisted through the CHECK constraint,
+	// not merely held in the Go struct.
+	reloaded, _, err := env.auctSvc.GetByID(ctx, auction.ID)
+	if err != nil {
+		t.Fatalf("GetByID failed to reload the created auction: %v", err)
+	}
+	if reloaded.InsurancePolicy != models.InsurancePolicyRequired {
+		t.Fatalf("expected reloaded auction to keep InsurancePolicy=%q, got %q",
+			models.InsurancePolicyRequired, reloaded.InsurancePolicy)
+	}
+	if !reloaded.InsuranceRequired() {
+		t.Fatalf("InsuranceRequired() must be true for a freshly-created direct auction")
+	}
+
+	// Multi-day duration (client feedback #15) regression check: end_time
+	// must be preserved exactly, not clamped to 24h.
+	if !reloaded.EndTime.After(reloaded.StartTime.Add(47 * time.Hour)) {
+		t.Fatalf("expected multi-day end_time to be preserved (~72h), got start=%v end=%v", reloaded.StartTime, reloaded.EndTime)
+	}
+
+	t.Logf("confirmed: direct auction creation stamps InsurancePolicy=%q and satisfies chk_auctions_insurance_policy; multi-day duration preserved", reloaded.InsurancePolicy)
+}
+
 // Client feedback #4: editing an existing draft/rejected request's category
 // must re-stamp the fee from the NEW category -- otherwise a user could
 // create a request under a "standard" category (100 MRU) then edit it to a
@@ -2860,6 +2938,7 @@ func createTestAuction(t *testing.T, env *testEnv, sellerID uuid.UUID, marketISO
 		CurrentPrice:     decimal.NewFromInt(100),
 		MinIncrement:     decimal.NewFromInt(10),
 		InsuranceAmount:  decimal.NewFromInt(20),
+		InsurancePolicy:  models.InsurancePolicyRequired,
 		ReservePrice:     decimal.NewFromInt(100),
 		StartTime:        time.Now().Add(-1 * time.Hour),
 		EndTime:          time.Now().Add(48 * time.Hour),
