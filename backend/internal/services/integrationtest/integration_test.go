@@ -55,6 +55,10 @@ type testEnv struct {
 	auctSvc     services.AuctionService
 	bidSvc      services.BidService
 	userSvc     services.UserService
+	// notifSvc (client feedback #16): the real, DB-backed NotificationService
+	// -- used to prove SendBroadcast against a live Postgres, not the fake
+	// in-memory repo in notification_broadcast_test.go.
+	notifSvc    services.NotificationService
 	auctHandler *handlers.AuctionHandler
 	bidHandler  *handlers.BidHandler
 	wsHandler   *handlers.WSHandler
@@ -132,7 +136,7 @@ func setupEnv(t *testing.T) *testEnv {
 	return &testEnv{
 		db: db, rdb: rdb, logger: logger,
 		userRepo: userRepo, auctionRepo: auctionRepo, reqRepo: reqRepo, walletRepo: walletRepo, bidRepo: bidRepo,
-		authSvc: authSvc, reqSvc: reqSvc, auctSvc: auctSvc, bidSvc: bidSvc, userSvc: userSvc,
+		authSvc: authSvc, reqSvc: reqSvc, auctSvc: auctSvc, bidSvc: bidSvc, userSvc: userSvc, notifSvc: notifSvc,
 		auctHandler: auctHandler, bidHandler: bidHandler, wsHandler: wsHandler, app: app,
 	}
 }
@@ -2549,6 +2553,69 @@ func TestMultiDayAuction_DurationAndSchedulerSafety(t *testing.T) {
 			t.Fatalf("expected a genuinely-ended 72h auction to be matched by FindEndedSince, but it was not")
 		}
 	})
+}
+
+// Client feedback #16 (admin global/broadcast notifications). The existing
+// notification_broadcast_test.go proves SendBroadcast's logic against a fake
+// in-memory repo -- this proves the SAME service method against a REAL local
+// Postgres, closing the gap between "logic is correct in isolation" and "it
+// actually persists end-to-end the way the customer's real deployment would
+// see it". Exercises exactly the path the HTTP handler
+// (NotificationHandler.SendNotification, POST /admin/notifications/send)
+// calls: notifSvc.SendBroadcast -> real INSERT per active user -> real
+// SELECT via notifSvc.ListNotifications (the same call GET /notifications
+// makes for a user's in-app list).
+func TestSendBroadcast_RealDatabase_PersistsForEveryActiveUser(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	userA := createTestUser(t, env, "TEST BROADCAST USER A")
+	userB := createTestUser(t, env, "TEST BROADCAST USER B")
+	userC := createTestUser(t, env, "TEST BROADCAST USER C")
+
+	title := "إعلان تجريبي " + uuid.New().String()[:6]
+	body := "نص الإشعار كما كتبه الأدمن بالضبط، بدون أي ترجمة أو تعديل تلقائي."
+
+	targetUsers, sent, failed, err := env.notifSvc.SendBroadcast(ctx, title, body, "general", nil)
+	if err != nil {
+		t.Fatalf("SendBroadcast failed: %v", err)
+	}
+	if targetUsers < 3 {
+		t.Fatalf("expected at least the 3 fixture users to be counted as targets, got %d", targetUsers)
+	}
+	// No push tokens are registered for any fixture user in this test (no
+	// FCM configured in setupEnv either -- notifSvc built with fcm=nil), so
+	// every SendPush call takes the "FCM not configured" early-return path
+	// and reports success (err == nil) -- persistence must never depend on
+	// push succeeding.
+	if sent != targetUsers {
+		t.Fatalf("expected all %d target users to be reported as sent (persistence never depends on FCM), got sent=%d failed=%d", targetUsers, sent, failed)
+	}
+
+	for _, u := range []*models.User{userA, userB, userC} {
+		notifs, err := env.notifSvc.ListNotifications(ctx, u.ID, 50)
+		if err != nil {
+			t.Fatalf("ListNotifications for %s failed: %v", u.ID, err)
+		}
+		found := false
+		for _, n := range notifs {
+			if n.Title == title {
+				found = true
+				if n.Body == nil || *n.Body != body {
+					t.Fatalf("expected persisted body to exactly match the admin's literal text, got %v", n.Body)
+				}
+				if n.Type != "general" {
+					t.Fatalf("expected persisted type='general', got %q", n.Type)
+				}
+				if n.IsRead {
+					t.Fatalf("expected a freshly broadcast notification to start unread")
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("CUSTOMER COMPLAINT: broadcast notification did not appear in user %s's in-app notification list (GET /notifications source)", u.ID)
+		}
+	}
 }
 
 // --- Phase 1.4 helpers ---
