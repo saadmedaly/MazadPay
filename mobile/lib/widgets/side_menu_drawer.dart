@@ -5,7 +5,7 @@ import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/account_page.dart';
 import 'package:mezadpay/pages/services_shell_page.dart';
 import 'package:mezadpay/pages/about_mazad_pay_page.dart';
-import 'package:mezadpay/pages/how_to_bid_page.dart';
+import 'package:mezadpay/pages/support_page.dart';
 import 'package:mezadpay/pages/my_auctions_shell_page.dart';
 import 'package:mezadpay/pages/favorites_page.dart';
 import 'package:mezadpay/pages/all_auctions_page.dart';
@@ -458,7 +458,7 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
           } else if (title == AppLocalizations.of(context)!.text_28) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const FavoritesPage()));
           } else if (title == AppLocalizations.of(context)!.text_386) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const HowToBidPage()));
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const SupportPage()));
           } else if (title == AppLocalizations.of(context)!.text_387 || title == AppLocalizations.of(context)!.text_390) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const AboutMazadPayPage()));
           } else if (title == AppLocalizations.of(context)!.text_382) {
