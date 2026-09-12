@@ -147,9 +147,9 @@ class RequestApi {
           'description_fr': descriptionFr,
           'description_en': descriptionEn,
           'image_url': imageUrl,
-          'link_url': linkUrl,
-          'starts_at': startsAt.toIso8601String(),
-          'ends_at': endsAt.toIso8601String(),
+          'target_url': linkUrl,
+          'starts_at': startsAt.toUtc().toIso8601String(),
+          'ends_at': endsAt.toUtc().toIso8601String(),
         },
       );
 

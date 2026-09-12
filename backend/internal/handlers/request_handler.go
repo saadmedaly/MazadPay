@@ -91,12 +91,16 @@ func (h *RequestHandler) CreateBannerRequest(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+
+	// UserID is always the authenticated caller, never client-supplied -- assigned
+	// here, before validation (mirrors CreateAuctionRequest above), so
+	// validate:"required" on UserID sees the real value instead of the zero UUID.
+	req.ID = uuid.New()
+	req.UserID = userID
+
 	if err := h.validate.Struct(req); err != nil {
 		return BadRequest(c, err.Error())
 	}
-
-	req.ID = uuid.New()
-	req.UserID = userID
 
 	if err := h.svc.CreateBannerRequest(c.Context(), &req); err != nil {
 		return MapError(c, h.logger, err)

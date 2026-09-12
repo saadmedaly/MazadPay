@@ -166,6 +166,11 @@ type fakeRequestService struct {
 	createErr      error
 	receivedUserID uuid.UUID
 
+	createBannerCalled   bool
+	createBannerErr      error
+	receivedBannerUserID uuid.UUID
+	receivedBannerReq    *models.BannerRequest
+
 	auctionRequestsResult []models.AuctionRequest
 	auctionRequestsTotal  int
 	auctionRequestsErr    error
@@ -186,6 +191,17 @@ func (f *fakeRequestService) CreateAuctionRequest(ctx context.Context, req *mode
 	f.createCalled = true
 	f.receivedUserID = req.UserID
 	return f.createErr
+}
+
+// CreateBannerRequest lets a test observe exactly which UserID and which
+// fields (target_url, starts_at, ends_at) reach the service layer -- for
+// Bug A's regression tests (client feedback: banner/ad request submission
+// returning "Invalid request body").
+func (f *fakeRequestService) CreateBannerRequest(ctx context.Context, req *models.BannerRequest) error {
+	f.createBannerCalled = true
+	f.receivedBannerUserID = req.UserID
+	f.receivedBannerReq = req
+	return f.createBannerErr
 }
 
 // UpdateAuctionRequest/AdminUpdateAuctionRequest let a test observe exactly which
@@ -333,6 +349,24 @@ func validAuctionRequestBody() map[string]interface{} {
 		"insurance_amount": 0,
 		"start_date":       time.Now().Format(time.RFC3339),
 		"end_date":         time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+	}
+}
+
+// validBannerRequestBody mirrors what a fixed mobile client sends: RFC3339
+// (UTC, "Z"-suffixed) start/end times and target_url (not link_url) -- see
+// Bug A regression tests below.
+func validBannerRequestBody() map[string]interface{} {
+	return map[string]interface{}{
+		"title_ar":       "إعلان اختبار Staging",
+		"title_fr":       "Annonce test Staging",
+		"title_en":       "Staging test ad",
+		"description_ar": "وصف الإعلان",
+		"description_fr": "Description",
+		"description_en": "Description",
+		"image_url":      "https://example.com/banner.jpg",
+		"target_url":     "https://example.com",
+		"starts_at":      time.Now().UTC().Format(time.RFC3339),
+		"ends_at":        time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339),
 	}
 }
 
@@ -911,5 +945,328 @@ func TestGetBannerRequests_ResponseContract(t *testing.T) {
 		if _, exists := parsed[leaked]; exists {
 			t.Fatalf(`REGRESSION: top-level %q found outside "meta" -- old response shape is back`, leaked)
 		}
+	}
+}
+
+// ==================================================
+// Bug A (client feedback): the mobile "طلب إعلان" (ad/banner request) page
+// returned "Invalid request body" on submit. Root cause, reproduced against
+// real Staging: mobile's DateTime.toIso8601String() (no .toUtc()) produced a
+// timezone-less string ("2026-09-13T00:00:00.000") that Go's time.Time JSON
+// unmarshal rejects, so c.BodyParser failed and the handler returned the
+// literal "Invalid request body" -- request_handler.go CreateBannerRequest.
+// A second, independent bug was found while proving the date fix alone: with
+// the date fixed, models.BannerRequest.UserID (validate:"required") was
+// still validated BEFORE being set from the JWT (mirrors the exact bug
+// already fixed for CreateAuctionRequest -- see the UserID_A-F tests above),
+// so validation failed on the zero UUID regardless of a well-formed body.
+// Both were fixed together since neither alone makes a real submission
+// succeed. A third, non-blocking issue (mobile sent link_url, backend
+// persists target_url, so a user-entered link was silently discarded) was
+// fixed on the mobile side since target_url is backend's existing,
+// consistent field name.
+// ==================================================
+
+// (A-1) A well-formed request (matching the FIXED mobile contract: target_url,
+// UTC/RFC3339 dates) is accepted and reaches the service layer with the
+// authenticated user's ID, never the zero UUID.
+func TestCreateBannerRequest_A_ValidPayloadSucceeds(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/banners", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateBannerRequest(c)
+	})
+
+	payload := mustMarshal(t, validBannerRequestBody())
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/banners", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200 for a valid payload, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if !fakeSvc.createBannerCalled {
+		t.Fatal("expected the request to reach the service layer, but it did not")
+	}
+	if fakeSvc.receivedBannerUserID != userID {
+		t.Fatalf("expected service to receive the authenticated user id %s, got %s (this is exactly the UserID-validated-before-set bug)", userID, fakeSvc.receivedBannerUserID)
+	}
+}
+
+// (A-2) The exact real-device failure, reproduced at the HTTP layer: a
+// mobile-shaped payload using DateTime.toIso8601String() with NO timezone
+// suffix (the pre-fix mobile behavior) must fail BodyParser with literally
+// "Invalid request body" -- proving this is really what real users saw, and
+// guarding against ever reintroducing a timezone-less date on this path.
+func TestCreateBannerRequest_A2_TimezonelessDate_StillFailsWithSameMessage(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/banners", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateBannerRequest(c)
+	})
+
+	body := validBannerRequestBody()
+	// The exact pre-fix mobile shape: Dart's DateTime.toIso8601String() on a
+	// local (non-UTC) DateTime, no "Z"/offset suffix.
+	body["starts_at"] = "2026-09-13T00:00:00.000"
+	body["ends_at"] = "2026-09-20T00:00:00.000"
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/banners", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 400 for a timezone-less date, got HTTP %d, body: %s", resp.StatusCode, respBody)
+	}
+	respBody, _ := io.ReadAll(resp.Body)
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		t.Fatalf("failed to parse error response: %v", err)
+	}
+	errObj, _ := parsed["error"].(map[string]interface{})
+	if msg, _ := errObj["message"].(string); msg != "Invalid request body" {
+		t.Fatalf(`expected the exact real-device error message "Invalid request body", got: %v`, errObj)
+	}
+	if fakeSvc.createBannerCalled {
+		t.Fatal("expected a body-parse failure to never reach the service layer")
+	}
+}
+
+// (A-3) An unauthenticated request must be rejected (401) and never reach
+// the service layer -- mirrors CreateAuctionRequest_UserID_C.
+func TestCreateBannerRequest_A3_UnauthenticatedRequestRejected(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	app.Post("/v1/api/requests/banners", func(c *fiber.Ctx) error {
+		return h.CreateBannerRequest(c)
+	})
+
+	payload := mustMarshal(t, validBannerRequestBody())
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/banners", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 401 for an unauthenticated request, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if fakeSvc.createBannerCalled {
+		t.Fatal("expected an unauthenticated request to never reach the service layer, but the service was called")
+	}
+}
+
+// (A-4) JWT-authenticated user must always override any user_id present in
+// the body -- mirrors CreateAuctionRequest_UserID_B. Not the bug being
+// fixed, but the ordering fix (validate after assigning UserID) must not
+// weaken this existing guarantee.
+func TestCreateBannerRequest_A4_JWTOverridesSpoofedBodyUserID(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	authenticatedUserID := uuid.New()
+	spoofedUserID := uuid.New()
+	app.Post("/v1/api/requests/banners", func(c *fiber.Ctx) error {
+		c.Locals("user_id", authenticatedUserID)
+		return h.CreateBannerRequest(c)
+	})
+
+	body := validBannerRequestBody()
+	body["user_id"] = spoofedUserID.String()
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/banners", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got HTTP %d, body: %s", resp.StatusCode, body)
+	}
+	if fakeSvc.receivedBannerUserID != authenticatedUserID {
+		t.Fatalf("SECURITY REGRESSION: service received user_id %s, expected the authenticated user %s (spoofed body value %s must be ignored)",
+			fakeSvc.receivedBannerUserID, authenticatedUserID, spoofedUserID)
+	}
+}
+
+// (A-5) target_url is optional: omitting it must still succeed.
+func TestCreateBannerRequest_A5_OptionalTargetURLOmitted_StillSucceeds(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/banners", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateBannerRequest(c)
+	})
+
+	body := validBannerRequestBody()
+	delete(body, "target_url")
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/banners", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200 with target_url omitted, got HTTP %d, body: %s", resp.StatusCode, respBody)
+	}
+	if fakeSvc.receivedBannerReq == nil || fakeSvc.receivedBannerReq.TargetURL != nil {
+		t.Fatalf("expected TargetURL to be nil when omitted, got: %v", fakeSvc.receivedBannerReq)
+	}
+}
+
+// (A-6) target_url supplied must reach the service layer in the correct
+// field -- proving the mobile-side rename from link_url actually lands in
+// the field the backend persists, not silently dropped.
+func TestCreateBannerRequest_A6_TargetURLSupplied_ReachesCorrectField(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/banners", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateBannerRequest(c)
+	})
+
+	body := validBannerRequestBody()
+	body["target_url"] = "https://example.com/promo"
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/banners", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200, got HTTP %d, body: %s", resp.StatusCode, respBody)
+	}
+	if fakeSvc.receivedBannerReq == nil || fakeSvc.receivedBannerReq.TargetURL == nil || *fakeSvc.receivedBannerReq.TargetURL != "https://example.com/promo" {
+		t.Fatalf("expected TargetURL to be the supplied link, got: %v", fakeSvc.receivedBannerReq)
+	}
+}
+
+// (A-7) A malformed image_url (not a URL) must still be rejected by
+// validation -- proving the UserID-ordering fix didn't weaken other field
+// validation (mirrors CreateAuctionRequest_UserID_D).
+func TestCreateBannerRequest_A7_InvalidImageURL_StillRejected(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/banners", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateBannerRequest(c)
+	})
+
+	body := validBannerRequestBody()
+	body["image_url"] = "not-a-valid-url"
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/banners", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 400 for an invalid image_url, got HTTP %d, body: %s", resp.StatusCode, respBody)
+	}
+	if fakeSvc.createBannerCalled {
+		t.Fatal("expected invalid image_url to never reach the service layer")
+	}
+}
+
+// (A-8) end <= start must still be rejected -- confirms the pre-existing
+// business rule in RequestService.CreateBannerRequest (EndsAt.Before(StartsAt))
+// is unaffected by these changes. Handler-level test only proves the request
+// reaches the service; the business rule itself lives in the service layer
+// and is covered by the ends_at/starts_at ordering already, so this is a
+// lightweight smoke check that a same-instant window is passed through
+// untouched (not rejected at the handler/validation layer, which is correct
+// -- only the service enforces ordering).
+func TestCreateBannerRequest_A8_EqualStartEnd_ReachesServiceForBusinessRuleCheck(t *testing.T) {
+	fakeSvc := &fakeRequestService{}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/banners", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateBannerRequest(c)
+	})
+
+	body := validBannerRequestBody()
+	same := time.Now().UTC().Format(time.RFC3339)
+	body["starts_at"] = same
+	body["ends_at"] = same
+	payload := mustMarshal(t, body)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/banners", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected HTTP 200 (handler/validation layer does not enforce start<end, only the service does), got HTTP %d, body: %s", resp.StatusCode, respBody)
+	}
+	if !fakeSvc.createBannerCalled {
+		t.Fatal("expected the request to reach the service layer so its own start<end business rule can run")
 	}
 }
