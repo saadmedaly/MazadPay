@@ -332,8 +332,15 @@ func (r *auctionRepo) FindExpiredActive(ctx context.Context) ([]models.Auction, 
 
 func (r *auctionRepo) GetUserHighestBid(ctx context.Context, auctionID, userID uuid.UUID) (*models.Bid, error) {
 	var bid models.Bid
+	// bidder_name/bidder_phone are legacy denormalized columns that are
+	// often NULL; models.Bid scans them as non-nullable string, so a raw
+	// SELECT * fails whenever either is NULL (client feedback #19
+	// hardening: this was blocking GetBidStatus's has_bid for a real bid).
 	err := r.db.GetContext(ctx, &bid,
-		`SELECT * FROM bids WHERE auction_id = $1 AND user_id = $2 ORDER BY amount DESC LIMIT 1`,
+		`SELECT id, auction_id, user_id, amount, previous_price, is_winning,
+                COALESCE(bidder_name, '') as bidder_name, COALESCE(bidder_phone, '') as bidder_phone,
+                is_anonymous, created_at
+         FROM bids WHERE auction_id = $1 AND user_id = $2 ORDER BY amount DESC LIMIT 1`,
 		auctionID, userID)
 	if err != nil {
 		return nil, err

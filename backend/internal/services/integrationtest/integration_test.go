@@ -12,6 +12,7 @@ package integrationtest
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http/httptest"
@@ -1155,10 +1156,10 @@ func TestPlaceBid_OneSuccessfulBidPerUserPerAuction(t *testing.T) {
 	}
 
 	// (19-12) Winner selection still works: B is the top bid. Queried
-	// directly (rather than via bidRepo.FindTopBid, whose SELECT * hits a
-	// pre-existing, unrelated NULL-scan issue on bidder_name for rows with
-	// no legacy denormalized bidder_name -- not something this round touches)
-	// to isolate exactly what this test is proving.
+	// directly here to isolate exactly what this test is proving (the
+	// NULL-scan issue this comment used to describe on bidRepo.FindTopBid's
+	// bidder_name/bidder_phone columns is now fixed -- see
+	// TestFindTopBid_NullBidderDetails_Safe and friends below).
 	var topUserID uuid.UUID
 	if err := env.db.GetContext(ctx, &topUserID,
 		`SELECT user_id FROM bids WHERE auction_id = $1 ORDER BY amount DESC LIMIT 1`, auction.ID); err != nil {
@@ -3313,6 +3314,201 @@ func creditWallet(t *testing.T, env *testEnv, userID uuid.UUID, amount decimal.D
 	if _, err := env.db.ExecContext(ctx, `UPDATE wallets SET balance = balance + $1 WHERE user_id = $2`, amount, userID); err != nil {
 		t.Fatalf("failed to credit wallet for user %s: %v", userID, err)
 	}
+}
+
+// ==================================================
+// Client feedback #19 hardening: bidder_name/bidder_phone are legacy
+// denormalized columns on bids that are frequently NULL. models.Bid scans
+// them as non-nullable Go string, so any raw `SELECT *` (or explicit
+// column list without COALESCE) into models.Bid failed whenever either was
+// NULL -- this was silently discarded in some callers (bid_service.go's
+// prevTopBid, _ := FindTopBid(...)) but became load-bearing for
+// GetBidStatus/GetUserHighestBid, which the new has_bid field depends on
+// for every real bid. Fixed via COALESCE(..., '') in bid_repo.go's
+// FindByAuctionID/FindTopBid/FindUserBidOnAuction and auction_repo.go's
+// GetUserHighestBid -- no schema change, no model change.
+// ==================================================
+
+func TestGetUserHighestBid_NullBidderName_Safe(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST NULLBID SELLER A")
+	user := createTestUser(t, env, "TEST NULLBID USER A")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, user.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("expected bid to succeed, got: %v", err)
+	}
+	// Confirm the real row actually has NULL bidder_name (the normal case
+	// for a bid placed through the service, not a contrived fixture).
+	var bidderName sql.NullString
+	if err := env.db.GetContext(ctx, &bidderName,
+		`SELECT bidder_name FROM bids WHERE auction_id = $1 AND user_id = $2`, auction.ID, user.ID); err != nil {
+		t.Fatalf("failed to read back bid: %v", err)
+	}
+	if bidderName.Valid {
+		t.Fatalf("expected bidder_name to be NULL for this fixture, got %q", bidderName.String)
+	}
+
+	bid, err := env.auctionRepo.GetUserHighestBid(ctx, auction.ID, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserHighestBid must not fail on NULL bidder_name, got: %v", err)
+	}
+	if bid.BidderName != "" {
+		t.Fatalf("expected BidderName to map to empty string for NULL, got %q", bid.BidderName)
+	}
+	t.Logf("confirmed: GetUserHighestBid handles NULL bidder_name safely")
+}
+
+func TestGetUserHighestBid_NullBidderPhone_Safe(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST NULLBID SELLER B")
+	user := createTestUser(t, env, "TEST NULLBID USER B")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, user.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("expected bid to succeed, got: %v", err)
+	}
+
+	bid, err := env.auctionRepo.GetUserHighestBid(ctx, auction.ID, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserHighestBid must not fail on NULL bidder_phone, got: %v", err)
+	}
+	if bid.BidderPhone != "" {
+		t.Fatalf("expected BidderPhone to map to empty string for NULL, got %q", bid.BidderPhone)
+	}
+	t.Logf("confirmed: GetUserHighestBid handles NULL bidder_phone safely")
+}
+
+func TestGetUserHighestBid_BothBidderFieldsNull_Safe(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST NULLBID SELLER C")
+	user := createTestUser(t, env, "TEST NULLBID USER C")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, user.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("expected bid to succeed, got: %v", err)
+	}
+
+	bid, err := env.auctionRepo.GetUserHighestBid(ctx, auction.ID, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserHighestBid must not fail when both bidder fields are NULL, got: %v", err)
+	}
+	if bid.BidderName != "" || bid.BidderPhone != "" {
+		t.Fatalf("expected both BidderName and BidderPhone empty, got %q / %q", bid.BidderName, bid.BidderPhone)
+	}
+	t.Logf("confirmed: GetUserHighestBid handles both bidder fields NULL safely")
+}
+
+func TestGetUserHighestBid_NonNullBidderDetails_Unchanged(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST NULLBID SELLER D")
+	user := createTestUser(t, env, "TEST NULLBID USER D")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, user.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("expected bid to succeed, got: %v", err)
+	}
+	// Simulate a legacy row where bidder_name/bidder_phone WERE populated --
+	// the COALESCE fix must be a no-op for non-NULL values.
+	if _, err := env.db.ExecContext(ctx,
+		`UPDATE bids SET bidder_name = 'Ahmed', bidder_phone = '22212345678' WHERE auction_id = $1 AND user_id = $2`,
+		auction.ID, user.ID); err != nil {
+		t.Fatalf("failed to stamp legacy bidder details: %v", err)
+	}
+
+	bid, err := env.auctionRepo.GetUserHighestBid(ctx, auction.ID, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserHighestBid failed: %v", err)
+	}
+	if bid.BidderName != "Ahmed" || bid.BidderPhone != "22212345678" {
+		t.Fatalf("expected non-NULL bidder details preserved unchanged, got %q / %q", bid.BidderName, bid.BidderPhone)
+	}
+	t.Logf("confirmed: non-NULL legacy bidder details pass through unchanged")
+}
+
+// (19-13) GetBidStatus for a user who has never bid: HTTP-level has_bid=false,
+// not an error (the earlier, separately-fixed sql.ErrNoRows bug).
+func TestGetBidStatus_NeverBid_ReturnsHasBidFalse(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BIDSTATUS SELLER A")
+	user := createTestUser(t, env, "TEST BIDSTATUS USER A")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	status, err := env.auctSvc.GetBidStatus(ctx, auction.ID, user.ID)
+	if err != nil {
+		t.Fatalf("(19-13) expected GetBidStatus to succeed for a never-bid user, got: %v", err)
+	}
+	if status["has_bid"] != false {
+		t.Fatalf("(19-13) expected has_bid=false for a never-bid user, got: %v", status["has_bid"])
+	}
+	t.Logf("(19-13) confirmed: GetBidStatus returns has_bid=false (not an error) for a never-bid user")
+}
+
+// (19-14) GetBidStatus immediately after a real first successful bid (with
+// NULL legacy bidder_name/bidder_phone, the normal case): must succeed with
+// has_bid=true, proving the NULL-scan fix actually unblocks this path.
+func TestGetBidStatus_AfterFirstBid_ReturnsHasBidTrue(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BIDSTATUS SELLER B")
+	user := createTestUser(t, env, "TEST BIDSTATUS USER B")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, user.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("expected bid to succeed, got: %v", err)
+	}
+
+	status, err := env.auctSvc.GetBidStatus(ctx, auction.ID, user.ID)
+	if err != nil {
+		t.Fatalf("(19-14) expected GetBidStatus to succeed after a real first bid, got: %v", err)
+	}
+	if status["has_bid"] != true {
+		t.Fatalf("(19-14) expected has_bid=true after a real first bid, got: %v", status["has_bid"])
+	}
+	t.Logf("(19-14) confirmed: GetBidStatus returns has_bid=true immediately after a real first bid")
+}
+
+// FindTopBid shares the same previously-unsafe SELECT * scan path --
+// confirm it too is now safe against NULL bidder_name/bidder_phone, and
+// that winner-selection behavior built on it remains correct.
+func TestFindTopBid_NullBidderDetails_Safe(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST TOPBID SELLER")
+	userA := createTestUser(t, env, "TEST TOPBID USER A")
+	userB := createTestUser(t, env, "TEST TOPBID USER B")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, userB.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("expected User A's bid to succeed, got: %v", err)
+	}
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userB.ID, decimal.NewFromInt(150)); err != nil {
+		t.Fatalf("expected User B's bid to succeed, got: %v", err)
+	}
+
+	top, err := env.bidRepo.FindTopBid(ctx, auction.ID)
+	if err != nil {
+		t.Fatalf("FindTopBid must not fail on NULL bidder details, got: %v", err)
+	}
+	if top.UserID != userB.ID {
+		t.Fatalf("expected User B to be the top bid, got user %s", top.UserID)
+	}
+	if top.BidderName != "" || top.BidderPhone != "" {
+		t.Fatalf("expected empty bidder details for NULL columns, got %q / %q", top.BidderName, top.BidderPhone)
+	}
+	t.Logf("confirmed: FindTopBid handles NULL bidder details safely, winner selection unaffected")
 }
 
 var _ = fmt.Sprintf // keep fmt import if unused paths change

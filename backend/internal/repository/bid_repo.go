@@ -77,7 +77,15 @@ func (r *bidRepo) FindHistoryByAuction(ctx context.Context, auctionID uuid.UUID)
 
 func (r *bidRepo) FindByAuctionID(ctx context.Context, auctionID uuid.UUID) ([]models.Bid, error) {
 	var bids []models.Bid
-	err := r.db.SelectContext(ctx, &bids, `SELECT * FROM bids WHERE auction_id = $1 ORDER BY amount DESC`, auctionID)
+	// bidder_name/bidder_phone are legacy denormalized columns that are
+	// often NULL; models.Bid scans them as non-nullable string, so a raw
+	// SELECT * fails here whenever either is NULL (client feedback #19
+	// hardening: this was blocking GetBidStatus's has_bid for a real bid).
+	err := r.db.SelectContext(ctx, &bids,
+		`SELECT id, auction_id, user_id, amount, previous_price, is_winning,
+                COALESCE(bidder_name, '') as bidder_name, COALESCE(bidder_phone, '') as bidder_phone,
+                is_anonymous, created_at
+         FROM bids WHERE auction_id = $1 ORDER BY amount DESC`, auctionID)
 	return bids, err
 }
 
@@ -89,8 +97,12 @@ func (r *bidRepo) Count(ctx context.Context) (int, error) {
 
 func (r *bidRepo) FindTopBid(ctx context.Context, auctionID uuid.UUID) (*models.Bid, error) {
 	var bid models.Bid
+	// See FindByAuctionID: bidder_name/bidder_phone can be NULL.
 	err := r.db.GetContext(ctx, &bid,
-		`SELECT * FROM bids WHERE auction_id = $1 ORDER BY amount DESC LIMIT 1`, auctionID)
+		`SELECT id, auction_id, user_id, amount, previous_price, is_winning,
+                COALESCE(bidder_name, '') as bidder_name, COALESCE(bidder_phone, '') as bidder_phone,
+                is_anonymous, created_at
+         FROM bids WHERE auction_id = $1 ORDER BY amount DESC LIMIT 1`, auctionID)
 	if err != nil {
 		return nil, err
 	}
@@ -99,8 +111,12 @@ func (r *bidRepo) FindTopBid(ctx context.Context, auctionID uuid.UUID) (*models.
 
 func (r *bidRepo) FindUserBidOnAuction(ctx context.Context, userID, auctionID uuid.UUID) (*models.Bid, error) {
 	var bid models.Bid
+	// See FindByAuctionID: bidder_name/bidder_phone can be NULL.
 	err := r.db.GetContext(ctx, &bid,
-		`SELECT * FROM bids WHERE user_id = $1 AND auction_id = $2 ORDER BY amount DESC LIMIT 1`,
+		`SELECT id, auction_id, user_id, amount, previous_price, is_winning,
+                COALESCE(bidder_name, '') as bidder_name, COALESCE(bidder_phone, '') as bidder_phone,
+                is_anonymous, created_at
+         FROM bids WHERE user_id = $1 AND auction_id = $2 ORDER BY amount DESC LIMIT 1`,
 		userID, auctionID)
 	if err != nil {
 		return nil, err
