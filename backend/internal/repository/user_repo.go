@@ -84,7 +84,7 @@ type UserRepository interface {
 	// New methods for extended functionality
 	UpdateKYCStatus(ctx context.Context, userID uuid.UUID, status string) error
 	GetUserSettings(ctx context.Context, userID uuid.UUID) (*models.UserSettings, error)
-	UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings interface{}) error
+	UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings models.UserSettingsUpdate) error
 
 	// ListAllActiveUserIDs (Staging blocker fix, item 10/16): returns every
 	// active user's ID, independent of whether they have a push token
@@ -518,21 +518,55 @@ func (r *userRepo) UpdateKYCStatus(ctx context.Context, userID uuid.UUID, status
 	return err
 }
 
+// GetUserSettings returns the user's settings, or the canonical defaults
+// (models.DefaultUserSettings) if they have never customized them -- no row
+// yet is the normal state for most users (nothing auto-creates this row at
+// registration), not an error condition (client feedback: Bug D).
 func (r *userRepo) GetUserSettings(ctx context.Context, userID uuid.UUID) (*models.UserSettings, error) {
 	var settings models.UserSettings
 	err := r.db.GetContext(ctx, &settings,
 		"SELECT * FROM user_settings WHERE user_id = $1", userID,
 	)
 	if err != nil {
-		return nil, apperr.ErrNotFound
+		if err == sql.ErrNoRows {
+			return models.DefaultUserSettings(userID), nil
+		}
+		return nil, err
 	}
 	return &settings, nil
 }
 
-func (r *userRepo) UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings interface{}) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE user_settings SET updated_at = now() WHERE user_id = $1`,
-		userID,
+// UpdateUserSettings performs a single atomic partial-update UPSERT:
+// mobile's real PUT caller (SettingsPage._updateSetting) sends exactly one
+// field per call, so a nil field in settings means "leave unspecified",
+// never "reset to default" (client feedback: Bug D hardening -- the
+// previous full-replacement version, and the no-op version before that,
+// would each have silently destroyed every other stored preference on a
+// single-field PUT). Each column uses
+// COALESCE($n, user_settings.col, <canonical default>): $n wins if the
+// client supplied it; otherwise the existing stored value wins on an
+// UPDATE, or the canonical default wins on a fresh INSERT (where
+// user_settings.col does not exist yet, so COALESCE falls through to the
+// literal default). This is one statement -- no SELECT-then-INSERT/UPDATE,
+// so it cannot race, and user_id is PRIMARY KEY, so ON CONFLICT is the sole
+// concurrency authority: concurrent partial updates for the same new user
+// cannot create duplicate rows.
+func (r *userRepo) UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings models.UserSettingsUpdate) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO user_settings (user_id, currency, theme, language, notifications_email, notifications_push, notifications_sms, two_factor_enabled)
+		VALUES ($1, COALESCE($2, 'MRU'), COALESCE($3, 'auto'), COALESCE($4, 'ar'), COALESCE($5, true), COALESCE($6, true), COALESCE($7, false), COALESCE($8, false))
+		ON CONFLICT (user_id) DO UPDATE SET
+			currency = COALESCE($2, user_settings.currency),
+			theme = COALESCE($3, user_settings.theme),
+			language = COALESCE($4, user_settings.language),
+			notifications_email = COALESCE($5, user_settings.notifications_email),
+			notifications_push = COALESCE($6, user_settings.notifications_push),
+			notifications_sms = COALESCE($7, user_settings.notifications_sms),
+			two_factor_enabled = COALESCE($8, user_settings.two_factor_enabled),
+			updated_at = now()`,
+		userID, settings.Currency, settings.Theme, settings.Language,
+		settings.NotificationsEmail, settings.NotificationsPush, settings.NotificationsSMS,
+		settings.TwoFactorEnabled,
 	)
 	return err
 }

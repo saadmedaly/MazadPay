@@ -261,9 +261,9 @@ type Country struct {
 // the conventional number of decimal places for the currency (e.g. TND=3,
 // MRU=0, MAD=2) -- required for correct rounding/formatting.
 type Currency struct {
-	Code        string    `db:"code"         json:"code"`
-	MinorUnits  int16     `db:"minor_units"  json:"minor_units"`
-	CreatedAt   time.Time `db:"created_at"   json:"created_at"`
+	Code       string    `db:"code"         json:"code"`
+	MinorUnits int16     `db:"minor_units"  json:"minor_units"`
+	CreatedAt  time.Time `db:"created_at"   json:"created_at"`
 }
 
 // New models from migration 000031

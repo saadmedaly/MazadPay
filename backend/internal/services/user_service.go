@@ -40,7 +40,7 @@ type UserService interface {
 
 	// User Settings (new)
 	GetUserSettings(ctx context.Context, userID uuid.UUID) (*models.UserSettings, error)
-	UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings interface{}) error
+	UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings models.UserSettingsUpdate) error
 	Search(ctx context.Context, query string, page, perPage int) ([]models.User, int, error)
 }
 
@@ -245,11 +245,10 @@ func (s *userService) GetUserSettings(ctx context.Context, userID uuid.UUID) (*m
 	return s.repo.GetUserSettings(ctx, userID)
 }
 
-func (s *userService) UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings interface{}) error {
+func (s *userService) UpdateUserSettings(ctx context.Context, userID uuid.UUID, settings models.UserSettingsUpdate) error {
 	return s.repo.UpdateUserSettings(ctx, userID, settings)
 }
 
 func (s *userService) Search(ctx context.Context, query string, page, perPage int) ([]models.User, int, error) {
 	return s.repo.ListPaginated(ctx, page, perPage, query)
 }
-

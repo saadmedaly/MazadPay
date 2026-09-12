@@ -5,6 +5,19 @@ import 'package:mezadpay/services/user_api.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
 import 'login_page.dart';
 
+/// Merges a GET /users/me/settings response into the page's local settings
+/// map: server values win for any key present in [serverData] (currency,
+/// theme, language, notifications_push/email/sms, two_factor_enabled),
+/// while [localDefaults]-only keys (public_profile, show_bid_history --
+/// backend has no such columns yet) are preserved rather than disappearing
+/// (client feedback: Bug D contract hardening).
+Map<String, dynamic> mergeSettingsResponse(
+  Map<String, dynamic> localDefaults,
+  Map<String, dynamic> serverData,
+) {
+  return {...localDefaults, ...serverData};
+}
+
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -16,10 +29,14 @@ class _SettingsPageState extends State<SettingsPage> {
   final UserApi _userApi = UserApi();
   bool _isLoading = true;
   bool _isDeletingAccount = false;
+  // Keys match the backend's user_settings field names exactly
+  // (notifications_push/email/sms) so _loadSettings' response.data can
+  // populate this map directly -- public_profile/show_bid_history have no
+  // backend column yet (client-side-only placeholders, unrelated to Bug D).
   Map<String, dynamic> _settings = {
-    'push_notifications': true,
-    'email_notifications': true,
-    'sms_notifications': false,
+    'notifications_push': true,
+    'notifications_email': true,
+    'notifications_sms': false,
     'public_profile': true,
     'show_bid_history': true,
   };
@@ -33,9 +50,15 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadSettings() async {
     try {
       final response = await _userApi.getUserSettings();
+      // Backend's GET /users/me/settings returns the settings object
+      // directly as `data` (e.g. {"success":true,"data":{"theme":"dark",...}})
+      // -- there is no nested "settings" key. Reading response.data!['settings']
+      // always evaluated to null, silently falling back to this page's
+      // hardcoded local defaults regardless of what the server actually
+      // stored (client feedback: Bug D contract hardening).
       if (mounted && response.success && response.data != null) {
         setState(() {
-          _settings = Map<String, dynamic>.from(response.data!['settings'] ?? _settings);
+          _settings = mergeSettingsResponse(_settings, response.data!);
           _isLoading = false;
         });
       } else {
@@ -145,21 +168,21 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               _buildSectionHeader('Notifications'),
               _buildSwitchTile(
-                'Notifications Push', 
-                'Recevoir des alertes sur votre téléphone', 
-                'push_notifications',
+                'Notifications Push',
+                'Recevoir des alertes sur votre téléphone',
+                'notifications_push',
                 Icons.notifications_active_outlined
               ),
               _buildSwitchTile(
-                'E-mail', 
-                'Recevoir des mises à jour par e-mail', 
-                'email_notifications',
+                'E-mail',
+                'Recevoir des mises à jour par e-mail',
+                'notifications_email',
                 Icons.email_outlined
               ),
               _buildSwitchTile(
-                'SMS', 
-                'Recevoir des alertes critiques par SMS', 
-                'sms_notifications',
+                'SMS',
+                'Recevoir des alertes critiques par SMS',
+                'notifications_sms',
                 Icons.sms_outlined
               ),
               

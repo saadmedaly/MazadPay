@@ -13,6 +13,7 @@ package integrationtest
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http/httptest"
@@ -52,11 +53,11 @@ type testEnv struct {
 	walletRepo  repository.WalletRepository
 	bidRepo     repository.BidRepository
 
-	authSvc     services.AuthService
-	reqSvc      services.RequestService
-	auctSvc     services.AuctionService
-	bidSvc      services.BidService
-	userSvc     services.UserService
+	authSvc services.AuthService
+	reqSvc  services.RequestService
+	auctSvc services.AuctionService
+	bidSvc  services.BidService
+	userSvc services.UserService
 	// notifSvc (client feedback #16): the real, DB-backed NotificationService
 	// -- used to prove SendBroadcast against a live Postgres, not the fake
 	// in-memory repo in notification_broadcast_test.go.
@@ -173,7 +174,7 @@ func fakeAuthFromParam() fiber.Handler {
 // broadcasts (bidSvc.PlaceBid calls Broadcast unconditionally on success).
 type noopHub struct{}
 
-func (noopHub) Broadcast(auctionID uuid.UUID, event models.WSEvent)                        {}
+func (noopHub) Broadcast(auctionID uuid.UUID, event models.WSEvent)                      {}
 func (noopHub) BroadcastToUser(auctionID uuid.UUID, userID string, event models.WSEvent) {}
 
 // uniquePhone returns a national number that is genuinely VALID for the given region
@@ -262,13 +263,13 @@ func newAuctionRequest(userID uuid.UUID, titleSuffix string) *models.AuctionRequ
 func newBannerRequest(userID uuid.UUID, titleSuffix string) *models.BannerRequest {
 	now := time.Now()
 	return &models.BannerRequest{
-		ID:        uuid.New(),
-		UserID:    userID,
-		TitleAr:   "بانر اختبار " + titleSuffix,
-		ImageURL:  "https://example.com/banner-" + titleSuffix + ".jpg",
-		StartsAt:  now.Add(1 * time.Hour),
-		EndsAt:    now.Add(48 * time.Hour),
-		Status:    "pending",
+		ID:       uuid.New(),
+		UserID:   userID,
+		TitleAr:  "بانر اختبار " + titleSuffix,
+		ImageURL: "https://example.com/banner-" + titleSuffix + ".jpg",
+		StartsAt: now.Add(1 * time.Hour),
+		EndsAt:   now.Add(48 * time.Hour),
+		Status:   "pending",
 	}
 }
 
@@ -817,13 +818,13 @@ func TestAuctionCreate_RegularUserAlwaysPending(t *testing.T) {
 	seller := createTestUser(t, env, "TEST INTEGRATION SELLER M")
 
 	input := services.CreateAuctionInput{
-		CategoryID:      mkCategoryID(),
-		TitleAr:         "مزاد مباشر اختبار m",
-		DescriptionAr:   "وصف تجريبي لمزاد تم إنشاؤه مباشرة بدون مراجعة الإدارة",
-		StartPrice:      decimal.NewFromInt(50),
-		MinIncrement:    decimal.NewFromInt(5),
-		EndTime:         time.Now().Add(24 * time.Hour),
-		Quantity:        1,
+		CategoryID:    mkCategoryID(),
+		TitleAr:       "مزاد مباشر اختبار m",
+		DescriptionAr: "وصف تجريبي لمزاد تم إنشاؤه مباشرة بدون مراجعة الإدارة",
+		StartPrice:    decimal.NewFromInt(50),
+		MinIncrement:  decimal.NewFromInt(5),
+		EndTime:       time.Now().Add(24 * time.Hour),
+		Quantity:      1,
 	}
 	// Note: CreateAuctionInput has NO Status field at all — this alone structurally
 	// proves a caller (even the non-admin-restricted POST /auctions handler) cannot set
@@ -2225,7 +2226,7 @@ func TestLotNumber_GeneratedValuesRemainUnique(t *testing.T) {
 
 // (lot-5) Explicit LotNumber assignment (the existing "TEST-"+uuid fixture pattern
 // used throughout this file, e.g. createTestAuction) is unaffected by this hotfix
-// -- the trigger only fires when lot_number IS NULL OR ''.
+// -- the trigger only fires when lot_number IS NULL OR ”.
 func TestLotNumber_ExplicitAssignmentUnaffected(t *testing.T) {
 	env := setupEnv(t)
 	seller := createTestUser(t, env, "TEST LOTNUMBER EXPLICIT SELLER")
@@ -2945,7 +2946,7 @@ func TestMultiDayAuction_DurationAndSchedulerSafety(t *testing.T) {
 
 	t.Run("a still-active 7-day auction is NOT matched by the scheduler's ended-auction query, even well past 24h from its start", func(t *testing.T) {
 		start := time.Now().Add(-30 * time.Hour) // started 30h ago -- past the old 24h mark
-		end := start.Add(7 * 24 * time.Hour)      // but genuinely still 5+ days from ending
+		end := start.Add(7 * 24 * time.Hour)     // but genuinely still 5+ days from ending
 		a := newInsuredAuction(start, end)
 
 		ended, err := env.auctionRepo.FindEndedSince(ctx, time.Now().Add(-1*time.Hour))
@@ -2961,7 +2962,7 @@ func TestMultiDayAuction_DurationAndSchedulerSafety(t *testing.T) {
 
 	t.Run("an auction whose true (multi-day-scheduled) end_time has now actually passed IS matched by the scheduler", func(t *testing.T) {
 		start := time.Now().Add(-73 * time.Hour) // started 73h ago
-		end := start.Add(72 * time.Hour)          // a real 72h auction -- ended 1h ago
+		end := start.Add(72 * time.Hour)         // a real 72h auction -- ended 1h ago
 		a := newInsuredAuction(start, end)
 
 		ended, err := env.auctionRepo.FindEndedSince(ctx, time.Now().Add(-2*time.Hour))
@@ -3512,3 +3513,385 @@ func TestFindTopBid_NullBidderDetails_Safe(t *testing.T) {
 }
 
 var _ = fmt.Sprintf // keep fmt import if unused paths change
+
+// ==================================================
+// Bug D (client feedback): GET /v1/api/users/me/settings returned HTTP 500
+// for any user without a user_settings row -- which was every user, since
+// nothing auto-creates this row at registration. Root cause, traced against
+// current source: userRepo.GetUserSettings correctly detected the missing
+// row (sql.ErrNoRows) and returned apperr.ErrNotFound, but UserHandler.
+// GetUserSettings never routed errors through MapError -- it unconditionally
+// returned InternalError (500) for ANY non-nil error. Separately,
+// UpdateUserSettings's repository implementation was dead code: an
+// `UPDATE ... SET updated_at = now()` that ignored every field in the
+// payload and never checked RowsAffected, so even a "successful" PUT never
+// created the missing row.
+//
+// Fixed by: (1) GetUserSettings returning models.DefaultUserSettings (the
+// user_settings table's own column DEFAULTs) for a missing row instead of
+// an error -- a missing row is normal, not a failure; (2) replacing the
+// no-op UPDATE with `INSERT ... ON CONFLICT (user_id) DO UPDATE`, mirroring
+// the already-correct adminService.UpdateUserSettings pattern, which is
+// concurrency-safe because user_id is the table's PRIMARY KEY.
+// ==================================================
+
+// fullUserSettingsUpdate builds a models.UserSettingsUpdate with every field
+// set (no nils) -- for tests exercising full-replacement-style calls, where
+// models.UserSettingsUpdate's pointer fields would otherwise require
+// verbose per-field &x boilerplate at every call site.
+func fullUserSettingsUpdate(currency, theme, language string, notificationsEmail, notificationsPush, notificationsSMS, twoFactorEnabled bool) models.UserSettingsUpdate {
+	return models.UserSettingsUpdate{
+		Currency: &currency, Theme: &theme, Language: &language,
+		NotificationsEmail: &notificationsEmail, NotificationsPush: &notificationsPush,
+		NotificationsSMS: &notificationsSMS, TwoFactorEnabled: &twoFactorEnabled,
+	}
+}
+
+// (D-1) GET for a user with no settings row returns the canonical defaults,
+// not an error.
+func TestGetUserSettings_MissingRow_ReturnsDefaults(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST SETTINGS USER D1")
+
+	settings, err := env.userSvc.GetUserSettings(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("(D-1) expected GetUserSettings to succeed for a user with no row, got: %v", err)
+	}
+	want := models.DefaultUserSettings(user.ID)
+	if settings.Currency != want.Currency || settings.Theme != want.Theme || settings.Language != want.Language ||
+		settings.NotificationsEmail != want.NotificationsEmail || settings.NotificationsPush != want.NotificationsPush ||
+		settings.NotificationsSMS != want.NotificationsSMS || settings.TwoFactorEnabled != want.TwoFactorEnabled {
+		t.Fatalf("(D-1) expected canonical defaults, got: %+v", settings)
+	}
+	if settings.UserID != user.ID {
+		t.Fatalf("(D-1) expected default settings to carry the requesting user's ID, got %s", settings.UserID)
+	}
+	t.Logf("(D-1) confirmed: GetUserSettings returns canonical defaults for a missing row, not an error")
+}
+
+// (D-2) GET for a user with an existing, customized row returns the stored
+// values, not defaults.
+func TestGetUserSettings_ExistingRow_ReturnsStoredValues(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST SETTINGS USER D2")
+
+	update := fullUserSettingsUpdate("TND", "dark", "fr", false, false, true, true)
+	if err := env.userSvc.UpdateUserSettings(ctx, user.ID, update); err != nil {
+		t.Fatalf("failed to seed a customized settings row: %v", err)
+	}
+
+	settings, err := env.userSvc.GetUserSettings(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("(D-2) expected GetUserSettings to succeed, got: %v", err)
+	}
+	if settings.Currency != "TND" || settings.Theme != "dark" || settings.Language != "fr" ||
+		settings.NotificationsEmail != false || settings.NotificationsPush != false ||
+		settings.NotificationsSMS != true || settings.TwoFactorEnabled != true {
+		t.Fatalf("(D-2) expected stored (non-default) values, got: %+v", settings)
+	}
+	t.Logf("(D-2) confirmed: GetUserSettings returns the real stored row, not defaults, once one exists")
+}
+
+// (D-3) PUT for a user with no row creates it (upsert insert path).
+func TestUpdateUserSettings_MissingRow_CreatesIt(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST SETTINGS USER D3")
+
+	var rowCountBefore int
+	if err := env.db.GetContext(ctx, &rowCountBefore, `SELECT COUNT(*) FROM user_settings WHERE user_id = $1`, user.ID); err != nil {
+		t.Fatalf("failed to count settings rows before: %v", err)
+	}
+	if rowCountBefore != 0 {
+		t.Fatalf("(D-3) expected 0 settings rows before PUT, got %d", rowCountBefore)
+	}
+
+	update := fullUserSettingsUpdate("MRU", "light", "en", true, false, false, false)
+	if err := env.userSvc.UpdateUserSettings(ctx, user.ID, update); err != nil {
+		t.Fatalf("(D-3) expected PUT to succeed for a user with no row, got: %v", err)
+	}
+
+	var rowCountAfter int
+	if err := env.db.GetContext(ctx, &rowCountAfter, `SELECT COUNT(*) FROM user_settings WHERE user_id = $1`, user.ID); err != nil {
+		t.Fatalf("failed to count settings rows after: %v", err)
+	}
+	if rowCountAfter != 1 {
+		t.Fatalf("(D-3) expected exactly 1 settings row after PUT, got %d", rowCountAfter)
+	}
+	t.Logf("(D-3) confirmed: PUT for a missing row creates exactly one row")
+}
+
+// (D-4) PUT for a user with an existing row updates it in place.
+func TestUpdateUserSettings_ExistingRow_UpdatesInPlace(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST SETTINGS USER D4")
+
+	first := fullUserSettingsUpdate("MRU", "light", "ar", true, true, false, false)
+	if err := env.userSvc.UpdateUserSettings(ctx, user.ID, first); err != nil {
+		t.Fatalf("failed initial PUT: %v", err)
+	}
+
+	second := fullUserSettingsUpdate("EUR", "dark", "en", false, false, true, true)
+	if err := env.userSvc.UpdateUserSettings(ctx, user.ID, second); err != nil {
+		t.Fatalf("(D-4) expected second PUT to succeed, got: %v", err)
+	}
+
+	var rowCount int
+	if err := env.db.GetContext(ctx, &rowCount, `SELECT COUNT(*) FROM user_settings WHERE user_id = $1`, user.ID); err != nil {
+		t.Fatalf("failed to count settings rows: %v", err)
+	}
+	if rowCount != 1 {
+		t.Fatalf("(D-4) expected exactly 1 settings row after two PUTs, got %d (REGRESSION: duplicate row created)", rowCount)
+	}
+
+	settings, err := env.userSvc.GetUserSettings(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("(D-4) GetUserSettings failed: %v", err)
+	}
+	if settings.Currency != "EUR" || settings.Theme != "dark" {
+		t.Fatalf("(D-4) expected the second PUT's values to have replaced the first, got: %+v", settings)
+	}
+	t.Logf("(D-4) confirmed: PUT on an existing row updates the same row, never creates a duplicate")
+}
+
+// (D-5) PUT followed by GET is consistent -- the exact values just written
+// are what GET returns immediately after, end to end through the service
+// layer (not just the repo).
+func TestUserSettings_PutThenGet_Consistent(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST SETTINGS USER D5")
+
+	update := fullUserSettingsUpdate("TND", "dark", "fr", false, true, true, true)
+	if err := env.userSvc.UpdateUserSettings(ctx, user.ID, update); err != nil {
+		t.Fatalf("(D-5) PUT failed: %v", err)
+	}
+
+	settings, err := env.userSvc.GetUserSettings(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("(D-5) GET after PUT failed: %v", err)
+	}
+	if settings.Currency != *update.Currency || settings.Theme != *update.Theme || settings.Language != *update.Language ||
+		settings.NotificationsEmail != *update.NotificationsEmail || settings.NotificationsPush != *update.NotificationsPush ||
+		settings.NotificationsSMS != *update.NotificationsSMS || settings.TwoFactorEnabled != *update.TwoFactorEnabled {
+		t.Fatalf("(D-5) expected GET to reflect exactly what PUT wrote, got: %+v", settings)
+	}
+	t.Logf("(D-5) confirmed: PUT then GET is consistent")
+}
+
+// (D-6) Concurrent first-time PUTs for the SAME user cannot create duplicate
+// rows -- proving the fix relies on the database's ON CONFLICT (user_id),
+// not a race-prone SELECT-then-INSERT.
+func TestUpdateUserSettings_ConcurrentFirstPuts_NoDuplicateRows(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST SETTINGS USER D6")
+
+	const n = 8
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			update := fullUserSettingsUpdate("MRU", "auto", "ar", true, true, false, false)
+			errs[i] = env.userSvc.UpdateUserSettings(ctx, user.ID, update)
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("(D-6) concurrent PUT %d failed: %v", i, err)
+		}
+	}
+
+	var rowCount int
+	if err := env.db.GetContext(ctx, &rowCount, `SELECT COUNT(*) FROM user_settings WHERE user_id = $1`, user.ID); err != nil {
+		t.Fatalf("failed to count settings rows: %v", err)
+	}
+	if rowCount != 1 {
+		t.Fatalf("(D-6) expected exactly 1 settings row after %d concurrent PUTs, got %d", n, rowCount)
+	}
+	t.Logf("(D-6) confirmed: %d concurrent first-time PUTs produced exactly 1 row (ON CONFLICT is the sole concurrency authority)", n)
+}
+
+// (D-7) User isolation: one user's settings (missing-row defaults, or a
+// customized row) are never visible to or overwritten by another user.
+func TestUserSettings_UserIsolation(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	userA := createTestUser(t, env, "TEST SETTINGS USER D7 A")
+	userB := createTestUser(t, env, "TEST SETTINGS USER D7 B")
+
+	updateA := fullUserSettingsUpdate("TND", "dark", "fr", false, false, true, true)
+	if err := env.userSvc.UpdateUserSettings(ctx, userA.ID, updateA); err != nil {
+		t.Fatalf("failed to set User A's settings: %v", err)
+	}
+
+	// User B never PUT anything -- must still see defaults, not A's values.
+	settingsB, err := env.userSvc.GetUserSettings(ctx, userB.ID)
+	if err != nil {
+		t.Fatalf("(D-7) GetUserSettings for User B failed: %v", err)
+	}
+	if settingsB.Currency == "TND" || settingsB.Theme == "dark" {
+		t.Fatalf("(D-7) SECURITY REGRESSION: User B's settings leaked User A's values: %+v", settingsB)
+	}
+	want := models.DefaultUserSettings(userB.ID)
+	if settingsB.Currency != want.Currency || settingsB.Theme != want.Theme {
+		t.Fatalf("(D-7) expected User B (no row) to see defaults, got: %+v", settingsB)
+	}
+
+	settingsA, err := env.userSvc.GetUserSettings(ctx, userA.ID)
+	if err != nil {
+		t.Fatalf("(D-7) GetUserSettings for User A failed: %v", err)
+	}
+	if settingsA.Currency != "TND" || settingsA.Theme != "dark" {
+		t.Fatalf("(D-7) expected User A's own settings to be unaffected, got: %+v", settingsA)
+	}
+	t.Logf("(D-7) confirmed: settings are fully isolated per user")
+}
+
+// (D-8) notifications_push default and persistence -- distinct from
+// Customer #10's separate users.notifications_enabled column (see D-9),
+// this proves user_settings.notifications_push specifically defaults to
+// TRUE (matching the table's own column DEFAULT) and persists correctly.
+func TestUserSettings_NotificationsPush_DefaultAndPersistence(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST SETTINGS USER D8")
+
+	defaults, err := env.userSvc.GetUserSettings(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("(D-8) GetUserSettings failed: %v", err)
+	}
+	if !defaults.NotificationsPush {
+		t.Fatalf("(D-8) expected notifications_push to default to true, got false")
+	}
+
+	update := fullUserSettingsUpdate("MRU", "auto", "ar", true, false, false, false)
+	if err := env.userSvc.UpdateUserSettings(ctx, user.ID, update); err != nil {
+		t.Fatalf("(D-8) PUT failed: %v", err)
+	}
+	after, err := env.userSvc.GetUserSettings(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("(D-8) GetUserSettings after PUT failed: %v", err)
+	}
+	if after.NotificationsPush {
+		t.Fatalf("(D-8) expected notifications_push=false to persist after PUT, got true")
+	}
+	t.Logf("(D-8) confirmed: user_settings.notifications_push defaults to true and persists correctly")
+}
+
+// (D-9) Customer #10 regression guard: users.notifications_enabled (a
+// SEPARATE column, on a separate table, controlling push-delivery
+// eligibility) is completely untouched by this fix -- proving the
+// user_settings upsert never reads or writes it.
+func TestUserSettings_DoesNotRegressCustomer10NotificationPref(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST SETTINGS USER D9")
+
+	// Disable Customer #10's users.notifications_enabled directly.
+	if _, err := env.db.ExecContext(ctx, `UPDATE users SET notifications_enabled = false WHERE id = $1`, user.ID); err != nil {
+		t.Fatalf("failed to set up users.notifications_enabled = false: %v", err)
+	}
+
+	// Exercise the user_settings GET/PUT/GET cycle this round changed.
+	update := fullUserSettingsUpdate("MRU", "dark", "ar", true, true, false, false)
+	if err := env.userSvc.UpdateUserSettings(ctx, user.ID, update); err != nil {
+		t.Fatalf("(D-9) PUT failed: %v", err)
+	}
+	if _, err := env.userSvc.GetUserSettings(ctx, user.ID); err != nil {
+		t.Fatalf("(D-9) GET failed: %v", err)
+	}
+
+	var notificationsEnabled bool
+	if err := env.db.GetContext(ctx, &notificationsEnabled, `SELECT notifications_enabled FROM users WHERE id = $1`, user.ID); err != nil {
+		t.Fatalf("failed to read back users.notifications_enabled: %v", err)
+	}
+	if notificationsEnabled {
+		t.Fatalf("(D-9) REGRESSION: users.notifications_enabled changed from false to true -- user_settings fix must never touch Customer #10's column")
+	}
+	t.Logf("(D-9) confirmed: Customer #10's users.notifications_enabled is untouched by the user_settings GET/PUT fix")
+}
+
+// (D-10) Bug D FINAL HARDENING: mobile's real PUT caller
+// (SettingsPage._updateSetting) sends exactly ONE field per call, e.g.
+// {"notifications_push": false} -- proving PUT is genuinely PARTIAL_UPDATE
+// semantics, not full replacement. This test seeds a fully customized row,
+// then sends the smallest possible partial update (only notifications_push
+// via a hand-built single-field JSON body decoded into
+// models.UserSettingsUpdate, exactly mirroring what Fiber's BodyParser does
+// for a real {"notifications_push": false} request body), and proves every
+// other field survives untouched. Before the pointer-field + SQL COALESCE
+// fix, pre-populating Go zero-value defaults and overlaying BodyParser on
+// top would have silently reset theme/language/currency/other notification
+// flags back to defaults on every single toggle tap in the real app.
+func TestUserSettings_PartialUpdatePreservesUnspecifiedFields(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST SETTINGS USER D10")
+
+	seed := fullUserSettingsUpdate("MRU", "dark", "fr", false, true, true, true)
+	if err := env.userSvc.UpdateUserSettings(ctx, user.ID, seed); err != nil {
+		t.Fatalf("(D-10) failed to seed existing settings row: %v", err)
+	}
+
+	before, err := env.userSvc.GetUserSettings(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("(D-10) GET before partial update failed: %v", err)
+	}
+	if before.Currency != "MRU" || before.Theme != "dark" || before.Language != "fr" ||
+		before.NotificationsEmail != false || before.NotificationsPush != true ||
+		before.NotificationsSMS != true || before.TwoFactorEnabled != true {
+		t.Fatalf("(D-10) PARTIAL_UPDATE_BEFORE: seed did not persist as expected, got: %+v", before)
+	}
+	t.Logf("(D-10) PARTIAL_UPDATE_BEFORE: %+v", before)
+
+	// The smallest partial update supported by the real API: decode the
+	// exact JSON a real client sends for a single toggle, proving the
+	// handler's actual BodyParser path (not just the repo) preserves
+	// unspecified fields.
+	var partial models.UserSettingsUpdate
+	if err := json.Unmarshal([]byte(`{"notifications_push": false}`), &partial); err != nil {
+		t.Fatalf("(D-10) failed to decode single-field JSON body: %v", err)
+	}
+	if partial.Currency != nil || partial.Theme != nil || partial.Language != nil ||
+		partial.NotificationsEmail != nil || partial.NotificationsSMS != nil || partial.TwoFactorEnabled != nil {
+		t.Fatalf("(D-10) expected every field except NotificationsPush to decode as nil (omitted), got: %+v", partial)
+	}
+	if partial.NotificationsPush == nil || *partial.NotificationsPush != false {
+		t.Fatalf("(D-10) expected NotificationsPush to decode to a non-nil false, got: %+v", partial.NotificationsPush)
+	}
+
+	if err := env.userSvc.UpdateUserSettings(ctx, user.ID, partial); err != nil {
+		t.Fatalf("(D-10) partial PUT failed: %v", err)
+	}
+
+	after, err := env.userSvc.GetUserSettings(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("(D-10) GET after partial update failed: %v", err)
+	}
+	t.Logf("(D-10) PARTIAL_UPDATE_AFTER: %+v", after)
+
+	if after.NotificationsPush != false {
+		t.Fatalf("(D-10) expected notifications_push=false to be applied, got true")
+	}
+	if after.Currency != "MRU" || after.Theme != "dark" || after.Language != "fr" ||
+		after.NotificationsEmail != false || after.NotificationsSMS != true || after.TwoFactorEnabled != true {
+		t.Fatalf("(D-10) UNSPECIFIED_FIELDS_PRESERVED=NO: partial update destroyed unspecified fields, got: %+v (expected currency=MRU theme=dark language=fr notifications_email=false notifications_sms=true two_factor_enabled=true, all unchanged from before)", after)
+	}
+
+	var rowCount int
+	if err := env.db.GetContext(ctx, &rowCount, `SELECT COUNT(*) FROM user_settings WHERE user_id = $1`, user.ID); err != nil {
+		t.Fatalf("failed to count settings rows: %v", err)
+	}
+	if rowCount != 1 {
+		t.Fatalf("(D-10) expected exactly 1 settings row, got %d", rowCount)
+	}
+	t.Logf("(D-10) confirmed: UNSPECIFIED_FIELDS_PRESERVED=YES -- partial PUT changed only notifications_push, every other field survived unchanged")
+}

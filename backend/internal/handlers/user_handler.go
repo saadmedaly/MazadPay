@@ -376,16 +376,14 @@ func (h *UserHandler) GetUserSettings(c *fiber.Ctx) error {
 }
 
 func (h *UserHandler) UpdateUserSettings(c *fiber.Ctx) error {
-	type Request struct {
-		Currency           string `json:"currency"`
-		Theme              string `json:"theme"`
-		Language           string `json:"language"`
-		NotificationsEmail bool   `json:"notifications_email"`
-		NotificationsPush  bool   `json:"notifications_push"`
-		NotificationsSMS   bool   `json:"notifications_sms"`
-		TwoFactorEnabled   bool   `json:"two_factor_enabled"`
-	}
-	var req Request
+	// PUT is a genuine partial update: mobile's real caller
+	// (SettingsPage._updateSetting) sends exactly one field per call. Fields
+	// left out of the JSON body simply stay nil pointers here -- BodyParser
+	// never touches them -- and userRepo.UpdateUserSettings's SQL-level
+	// COALESCE merges each nil with the existing stored value (or the
+	// canonical default if no row exists yet), never Go zero values
+	// (client feedback: Bug D hardening).
+	var req models.UserSettingsUpdate
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
@@ -501,4 +499,3 @@ func (h *UserHandler) Search(c *fiber.Ctx) error {
 
 	return OK(c, maskedUsers)
 }
-
