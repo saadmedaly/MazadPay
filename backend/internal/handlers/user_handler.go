@@ -388,6 +388,20 @@ func (h *UserHandler) UpdateUserSettings(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
+	// Reject an unsupported theme before it ever reaches the DB (client
+	// feedback: Bug D.1) -- user_settings.theme has a Postgres CHECK
+	// constraint (chk_theme: light/dark/auto), and previously an invalid
+	// value reached that constraint and surfaced as an unmapped HTTP 500.
+	// A nil Theme (field omitted -- this is a partial update) is valid and
+	// skips this check entirely.
+	if req.Theme != nil {
+		switch *req.Theme {
+		case "light", "dark", "auto":
+		default:
+			return BadRequest(c, "Invalid theme")
+		}
+	}
+
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c)

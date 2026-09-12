@@ -3895,3 +3895,89 @@ func TestUserSettings_PartialUpdatePreservesUnspecifiedFields(t *testing.T) {
 	}
 	t.Logf("(D-10) confirmed: UNSPECIFIED_FIELDS_PRESERVED=YES -- partial PUT changed only notifications_push, every other field survived unchanged")
 }
+
+// ==================================================
+// Bug A.1 (pre-APK error-mapping cleanup): CreateBannerRequest's
+// ends_at<=starts_at business rule returned a plain errors.New(...), which
+// MapError had no case for, so it fell through to an unmapped HTTP 500
+// instead of 400. Fixed by returning apperr.ErrBadRequest (an existing,
+// reusable "generic bad request" domain error, already mapped by
+// MapError's "bad_request" case) and tightening the check from
+// EndsAt.Before(StartsAt) to !EndsAt.After(StartsAt), so a zero-length
+// window (ends_at == starts_at) is also correctly rejected, not just
+// ends_at < starts_at.
+// ==================================================
+
+// (A1-1) A valid date range (ends_at > starts_at) is unaffected.
+func TestCreateBannerRequest_A1_ValidDateRange_Unaffected(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST A1 SELLER VALID")
+
+	req := newBannerRequest(seller.ID, "a1-valid-"+uuid.New().String()[:6])
+	if err := env.reqSvc.CreateBannerRequest(ctx, req); err != nil {
+		t.Fatalf("(A1-1) expected a valid date range to succeed, got: %v", err)
+	}
+
+	var count int
+	if err := env.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM banner_requests WHERE id = $1`, req.ID); err != nil {
+		t.Fatalf("failed to count banner_requests: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("(A1-1) expected the valid banner request to persist, got %d rows", count)
+	}
+	t.Logf("(A1-1) confirmed: a valid date range still succeeds and persists")
+}
+
+// (A1-2) ends_at == starts_at (a zero-length window) is rejected as
+// apperr.ErrBadRequest, and no row is persisted.
+func TestCreateBannerRequest_A1_EqualDates_RejectedAsBadRequest(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST A1 SELLER EQUAL")
+
+	req := newBannerRequest(seller.ID, "a1-equal-"+uuid.New().String()[:6])
+	same := time.Now().Add(2 * time.Hour)
+	req.StartsAt = same
+	req.EndsAt = same
+
+	err := env.reqSvc.CreateBannerRequest(ctx, req)
+	if err != apperr.ErrBadRequest {
+		t.Fatalf("(A1-2) expected apperr.ErrBadRequest for ends_at == starts_at, got: %v", err)
+	}
+
+	var count int
+	if err := env.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM banner_requests WHERE id = $1`, req.ID); err != nil {
+		t.Fatalf("failed to count banner_requests: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("(A1-2) expected no row to be persisted for a rejected date range, got %d rows", count)
+	}
+	t.Logf("(A1-2) confirmed: ends_at == starts_at correctly rejected as ErrBadRequest, no row persisted")
+}
+
+// (A1-3) ends_at < starts_at is rejected as apperr.ErrBadRequest, and no
+// row is persisted.
+func TestCreateBannerRequest_A1_EndBeforeStart_RejectedAsBadRequest(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST A1 SELLER BEFORE")
+
+	req := newBannerRequest(seller.ID, "a1-before-"+uuid.New().String()[:6])
+	req.StartsAt = time.Now().Add(48 * time.Hour)
+	req.EndsAt = time.Now().Add(1 * time.Hour)
+
+	err := env.reqSvc.CreateBannerRequest(ctx, req)
+	if err != apperr.ErrBadRequest {
+		t.Fatalf("(A1-3) expected apperr.ErrBadRequest for ends_at < starts_at, got: %v", err)
+	}
+
+	var count int
+	if err := env.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM banner_requests WHERE id = $1`, req.ID); err != nil {
+		t.Fatalf("failed to count banner_requests: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("(A1-3) expected no row to be persisted for a rejected date range, got %d rows", count)
+	}
+	t.Logf("(A1-3) confirmed: ends_at < starts_at correctly rejected as ErrBadRequest, no row persisted")
+}

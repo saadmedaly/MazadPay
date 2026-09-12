@@ -624,9 +624,14 @@ func (s *requestService) BulkDeleteAuctionRequests(ctx context.Context, ids []uu
 
 // Banner Requests
 func (s *requestService) CreateBannerRequest(ctx context.Context, req *models.BannerRequest) error {
-	// Business validation
-	if req.EndsAt.Before(req.StartsAt) {
-		return errors.New("ends_at must be after starts_at")
+	// Business validation (client feedback: Bug A.1) -- ends_at must be
+	// strictly after starts_at (a zero-length window is not a valid ad
+	// display period), returning apperr.ErrBadRequest (an existing,
+	// reusable "generic bad request" domain error -- see MapError's
+	// "bad_request" case) so this surfaces as HTTP 400, not an unmapped
+	// plain error falling through to a 500.
+	if !req.EndsAt.After(req.StartsAt) {
+		return apperr.ErrBadRequest
 	}
 
 	req.Status = "pending"

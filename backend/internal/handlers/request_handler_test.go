@@ -12,6 +12,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/shopspring/decimal"
@@ -1268,5 +1269,37 @@ func TestCreateBannerRequest_A8_EqualStartEnd_ReachesServiceForBusinessRuleCheck
 	}
 	if !fakeSvc.createBannerCalled {
 		t.Fatal("expected the request to reach the service layer so its own start<end business rule can run")
+	}
+}
+
+// (A1-4) Bug A.1 (pre-APK error-mapping cleanup): apperr.ErrBadRequest
+// returned by CreateBannerRequest (e.g. the ends_at<=starts_at business
+// rule) must reach MapError and come back as HTTP 400 -- not the
+// unmapped-error 500 real users/Staging saw before this fix, since the
+// error previously used was a plain errors.New(...) with no MapError case.
+func TestCreateBannerRequest_A1_BadRequestError_MapsToHTTP400(t *testing.T) {
+	fakeSvc := &fakeRequestService{createBannerErr: apperr.ErrBadRequest}
+	h := NewRequestHandler(fakeSvc, zap.NewNop())
+
+	app := fiber.New()
+	userID := uuid.New()
+	app.Post("/v1/api/requests/banners", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.CreateBannerRequest(c)
+	})
+
+	payload := mustMarshal(t, validBannerRequestBody())
+	req := httptest.NewRequest(http.MethodPost, "/v1/api/requests/banners", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("(A1-4) expected HTTP 400 for apperr.ErrBadRequest, got HTTP %d, body: %s", resp.StatusCode, respBody)
 	}
 }
