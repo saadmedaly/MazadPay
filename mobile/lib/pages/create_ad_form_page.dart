@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, Uint8List, debugPrint;
 import 'package:image_picker/image_picker.dart';
 
 import 'auction_pending_approval_page.dart';
+import 'deposit_page.dart';
 import '../services/auction_api.dart';
 import '../services/r2_upload_service.dart';
 import '../services/category_api.dart';
@@ -439,17 +440,42 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       setState(() => _isSavingDraft = false);
 
       if (response.success) {
-        Navigator.of(context).pop(true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              status == 'draft'
-                  ? l10n.label_save_as_draft
-                  : l10n.status_pending,
+        // Customer feedback #4: submitting for review (not just saving a
+        // draft) is the moment the subscription fee applies -- the request
+        // was just stamped server-side with subscription_fee (derived from
+        // its category's fee_tier, never client-chosen). Navigate to the
+        // payment page with that authoritative amount instead of just
+        // popping back; draft saves never trigger payment since the request
+        // isn't under review yet.
+        final requestId = response.data?['id']?.toString() ?? existingId;
+        final rawFee = response.data?['subscription_fee'];
+        final subscriptionFee = rawFee is num
+            ? rawFee.toDouble()
+            : double.tryParse(rawFee?.toString() ?? '');
+
+        if (status == 'pending' && requestId != null && subscriptionFee != null) {
+          Navigator.of(context).pop(true);
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => DepositPage(
+                auctionRequestId: requestId,
+                subscriptionFee: subscriptionFee,
+              ),
             ),
-            backgroundColor: Colors.green,
-          ),
-        );
+          );
+        } else {
+          Navigator.of(context).pop(true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                status == 'draft'
+                    ? l10n.label_save_as_draft
+                    : l10n.status_pending,
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

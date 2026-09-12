@@ -183,6 +183,43 @@ type Category struct {
 	AuctionCount int `db:"auction_count" json:"auction_count"`
 	// Count of direct subcategories for this category
 	SubcategoriesCount int `db:"subcategories_count" json:"subcategories_count"`
+
+	// FeeTier (migration 000049, client feedback #4): explicit admin decision
+	// distinguishing the 100 MRU "standard" subscription fee from the 500 MRU
+	// "premium" fee (cars, real estate, or any other category an admin
+	// chooses to flag). DEFAULT 'standard' -- never derive the fee from
+	// NameAr/NameFr/NameEn/ID/IconName, none of which are stable or
+	// guaranteed to mean the same thing across environments. Use
+	// SubscriptionFee(), never this raw field, to get the actual amount.
+	FeeTier string `db:"fee_tier" json:"fee_tier" validate:"omitempty,oneof=standard premium"`
+}
+
+// FeeTierStandard/FeeTierPremium are the only two valid values of
+// Category.FeeTier (also enforced by the DB CHECK constraint, migration
+// 000049).
+const (
+	FeeTierStandard = "standard"
+	FeeTierPremium  = "premium"
+)
+
+// StandardSubscriptionFee/PremiumSubscriptionFee (client feedback #4): the
+// two fixed subscription amounts, in MRU. Not user-selectable -- derived
+// solely from the category's admin-set FeeTier.
+var (
+	StandardSubscriptionFee = decimal.NewFromInt(100)
+	PremiumSubscriptionFee  = decimal.NewFromInt(500)
+)
+
+// SubscriptionFee returns this category's subscription fee. Defaults safely
+// to the standard (cheaper) fee only for the recognized default state
+// ("standard" or empty/legacy rows) -- any unrecognized value is treated as
+// standard too, matching FeeTier's DB DEFAULT, since a category is only ever
+// charged the premium fee via an explicit admin action.
+func (c *Category) SubscriptionFee() decimal.Decimal {
+	if c.FeeTier == FeeTierPremium {
+		return PremiumSubscriptionFee
+	}
+	return StandardSubscriptionFee
 }
 
 type Location struct {

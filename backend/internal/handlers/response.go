@@ -232,9 +232,22 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "forbidden":
 		logger.Warn("Forbidden access attempt", logFields...)
 		return Forbidden(c)
+	case "bad_request":
+		// Generic apperr.ErrBadRequest -- e.g. category create/update
+		// rejecting an invalid fee_tier value (client feedback #4). Without
+		// this case the error would fall through to the unhandled-error
+		// branch below and be misreported as a 500.
+		logger.Info("Bad request", logFields...)
+		return BadRequest(c, "Invalid request")
 	case "bid_conflict":
 		logger.Warn("Bid conflict occurred", logFields...)
 		return Fail(c, 409, "bid_conflict", "Bid conflict, please retry")
+	case "conflict":
+		// Client feedback #4 financial-integrity round: InitiateDeposit
+		// returns this for a duplicate non-rejected subscription deposit on
+		// the same auction_request_id (API-retry protection).
+		logger.Info("Duplicate subscription deposit rejected", logFields...)
+		return Fail(c, 409, "conflict", "A payment for this request is already pending or completed")
 	case "request_already_reviewed":
 		logger.Info("Attempt to re-review an already reviewed request", logFields...)
 		return Fail(c, 409, "request_already_reviewed", "This request has already been reviewed")

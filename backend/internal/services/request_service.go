@@ -156,6 +156,24 @@ func (s *requestService) CreateAuctionRequest(ctx context.Context, req *models.A
 	// la création.
 	req.InsurancePolicy = models.InsurancePolicyRequired
 
+	// SubscriptionFee (migration 000049, client feedback #4): stamped
+	// server-side from the request's category, same trust policy as
+	// InsuranceAmount/MarketCountryISO/CurrencyCode above -- never accepted
+	// from the client, and never derived from category name/id/icon_name
+	// (none of which are stable). Falls back to the standard fee if the
+	// category lookup fails, since CategoryID's own existence was already
+	// validated by the DB foreign key on insert below -- a lookup error here
+	// would be transient (e.g. DB hiccup), not a sign of premium pricing, so
+	// failing open to the cheaper fee is safe: it never overcharges, and an
+	// admin reviewing the request can still see/correct it before approval.
+	category, err := s.auctionRepo.GetCategoryByID(ctx, req.CategoryID)
+	if err != nil {
+		s.logger.Warn("CreateAuctionRequest: failed to load category for subscription fee, defaulting to standard", zap.Int("category_id", req.CategoryID), zap.Error(err))
+		req.SubscriptionFee = models.StandardSubscriptionFee
+	} else {
+		req.SubscriptionFee = category.SubscriptionFee()
+	}
+
 	sanitizeDescriptions(req)
 
 	if err := s.repo.CreateAuctionRequest(ctx, req); err != nil {
@@ -424,9 +442,25 @@ func (s *requestService) UpdateAuctionRequest(ctx context.Context, id uuid.UUID,
 	}
 
 	wasRejected := existing.Status == "rejected"
+	categoryChanged := existing.CategoryID != updates.CategoryID
 
 	applyAuctionRequestUpdates(existing, updates)
 	sanitizeDescriptions(existing)
+
+	// SubscriptionFee (client feedback #4): re-stamped only when the category
+	// actually changed -- an edit to price/description/dates must not
+	// silently recompute (and potentially change) an already-correct fee,
+	// but a category change (e.g. "phones" -> "cars") must not leave a stale
+	// fee from the old category on the request.
+	if categoryChanged {
+		category, catErr := s.auctionRepo.GetCategoryByID(ctx, existing.CategoryID)
+		if catErr != nil {
+			s.logger.Warn("UpdateAuctionRequest: failed to load new category for subscription fee, defaulting to standard", zap.Int("category_id", existing.CategoryID), zap.Error(catErr))
+			existing.SubscriptionFee = models.StandardSubscriptionFee
+		} else {
+			existing.SubscriptionFee = category.SubscriptionFee()
+		}
+	}
 
 	if wasRejected {
 		// Resoumission après rejet : retour forcé à "pending", on efface l'ancienne

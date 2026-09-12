@@ -16,7 +16,16 @@ import (
 
 type WalletService interface {
 	GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error)
-	InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string) (*models.Transaction, error)
+	// InitiateDeposit's auctionRequestID is optional (client feedback #4
+	// financial-integrity round): empty preserves the original generic
+	// wallet-top-up behavior exactly (client-supplied amount trusted, as
+	// intended for a voluntary top-up). When non-empty, the deposit is an
+	// auction-subscription payment: the caller must own that AuctionRequest,
+	// and the authoritative amount becomes that request's server-stamped
+	// subscription_fee -- the client-supplied amount is IGNORED, never just
+	// validated against it, so a tampered client cannot underpay by sending
+	// a lower amount alongside a valid auction_request_id.
+	InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string, auctionRequestID *uuid.UUID) (*models.Transaction, error)
 	UploadReceipt(ctx context.Context, txID uuid.UUID, userID uuid.UUID, receiptURL string) error
 	RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error)
 	GetTransactions(ctx context.Context, userID uuid.UUID, page, perPage int) ([]models.Transaction, int, error)
@@ -32,13 +41,18 @@ type walletService struct {
 	db         *sqlx.DB
 	walletRepo repository.WalletRepository
 	txRepo     repository.TransactionRepository
-	notifSvc   NotificationService
-	auditSvc   AuditService
-	logger     *zap.Logger
+	// reqRepo (client feedback #4 financial-integrity round): looked up only
+	// when InitiateDeposit is called with a non-nil auctionRequestID, to load
+	// the authoritative subscription_fee and verify ownership. Never used by
+	// the generic wallet-top-up path.
+	reqRepo  repository.RequestRepository
+	notifSvc NotificationService
+	auditSvc AuditService
+	logger   *zap.Logger
 }
 
-func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, notifSvc NotificationService, auditSvc AuditService, logger *zap.Logger) WalletService {
-	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, notifSvc: notifSvc, auditSvc: auditSvc, logger: logger}
+func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, reqRepo repository.RequestRepository, notifSvc NotificationService, auditSvc AuditService, logger *zap.Logger) WalletService {
+	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, reqRepo: reqRepo, notifSvc: notifSvc, auditSvc: auditSvc, logger: logger}
 }
 
 func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
@@ -49,12 +63,50 @@ func (s *walletService) GetPaymentMethods(ctx context.Context) ([]models.Payment
 	return s.walletRepo.GetPaymentMethods(ctx)
 }
 
-func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string) (*models.Transaction, error) {
+func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string, auctionRequestID *uuid.UUID) (*models.Transaction, error) {
 	// Vérification défensive indépendante du handler (audit de sécurité V05-bis) :
 	// ce service ne doit jamais faire confiance uniquement à la validation côté handler/mobile.
 	if amount.LessThanOrEqual(decimal.Zero) {
 		return nil, apperr.ErrBadRequest
 	}
+
+	var reference *string
+
+	// Client feedback #4 financial-integrity round: when this deposit is
+	// explicitly linked to an auction request, the client-supplied amount is
+	// IGNORED and replaced with that request's own server-stamped
+	// subscription_fee -- never merely validated against it, so a tampered
+	// client sending a lower amount alongside a valid auction_request_id
+	// cannot underpay. Ownership is verified (a user cannot pay for/tag
+	// someone else's request), a missing/invalid request id is rejected, and
+	// a duplicate non-rejected deposit for the same request is rejected too
+	// (API-retry protection, not a ban on ever paying twice -- a rejected
+	// deposit can still be resubmitted). The generic wallet-top-up path
+	// (auctionRequestID == nil) is completely unaffected: the client-supplied
+	// amount is trusted exactly as before.
+	if auctionRequestID != nil {
+		if s.reqRepo == nil {
+			return nil, apperr.ErrBadRequest
+		}
+		req, err := s.reqRepo.GetAuctionRequestByID(ctx, *auctionRequestID)
+		if err != nil {
+			return nil, apperr.ErrNotFound
+		}
+		if req.UserID != userID {
+			return nil, apperr.ErrForbidden
+		}
+		amount = req.SubscriptionFee
+		ref := "auction_request_id:" + auctionRequestID.String()
+		exists, err := s.txRepo.ExistsActiveDepositForReference(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, apperr.ErrConflict
+		}
+		reference = &ref
+	}
+
 	// currency_code (migration 000046): stamped from the user's own wallet currency --
 	// never from client input, never re-derived from the user's current account market
 	// at read time -- a deposit is a standalone historical financial record and must
@@ -73,6 +125,7 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 		Amount:             amount,
 		Gateway:            &gateway,
 		Status:             "pending",
+		Reference:          reference,
 		PaymentMethod:      &paymentMethod,
 		ReceiptImageTemp:   &receiptImageTemp,
 		CurrencyCode:       &currencyCode,

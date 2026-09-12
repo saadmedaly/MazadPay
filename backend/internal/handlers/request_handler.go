@@ -73,7 +73,11 @@ func (h *RequestHandler) CreateAuctionRequest(c *fiber.Ctx) error {
 		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, fiber.Map{"message": "Auction request submitted successfully", "id": req.ID})
+	// subscription_fee (client feedback #4): stamped by CreateAuctionRequest
+	// (service) from the request's category before this response is built --
+	// authoritative, never client-supplied. Mobile uses this to display the
+	// correct amount (100/500 MRU) before payment-method selection.
+	return OK(c, fiber.Map{"message": "Auction request submitted successfully", "id": req.ID, "subscription_fee": req.SubscriptionFee})
 }
 
 // Create Banner Request (public endpoint for users)

@@ -52,6 +52,15 @@ type AuctionRequest struct {
 	// InsuranceRequired(), never this raw field, for any policy decision.
 	InsurancePolicy string `db:"insurance_policy" json:"insurance_policy" validate:"omitempty,oneof=required not_required"`
 
+	// SubscriptionFee (migration 000049, client feedback #4): stamped
+	// server-side from the request's category (Category.SubscriptionFee())
+	// at creation time -- never client-supplied, and immutable afterward
+	// (same "stamped once" pattern as CurrencyCode/MarketCountryISO above),
+	// so a request's fee stays correct even if the category's FeeTier is
+	// changed by an admin later. No validate tag: a client never legitimately
+	// supplies this value.
+	SubscriptionFee decimal.Decimal `db:"subscription_fee" json:"subscription_fee"`
+
 	// Relations
 	User *User `db:"-" json:"user,omitempty"`
 }

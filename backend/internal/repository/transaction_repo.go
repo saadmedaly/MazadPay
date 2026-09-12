@@ -14,6 +14,13 @@ import (
 type TransactionRepository interface {
 	ListPaginated(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error)
+	// ExistsActiveDepositForReference (client feedback #4 financial-integrity
+	// round): reports whether a non-rejected deposit transaction already
+	// references the given string (used with "auction_request_id:<uuid>",
+	// the same value stamped into Transaction.Reference on an
+	// auction-subscription deposit) -- prevents an API retry from creating a
+	// second subscription-fee deposit for the same request.
+	ExistsActiveDepositForReference(ctx context.Context, reference string) (bool, error)
 	FindByID(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*models.Transaction, error)
 	Create(ctx context.Context, tx *models.Transaction) error
 	CreateTx(ctx context.Context, dbtx *sqlx.Tx, tx *models.Transaction) error
@@ -124,6 +131,21 @@ func (r *transactionRepo) FindByID(ctx context.Context, id uuid.UUID, userID *uu
 	}
 	row := r.db.QueryRowxContext(ctx, explicitTxJoinQuery, id)
 	return scanTxJoinRow(row)
+}
+
+// ExistsActiveDepositForReference reports whether any deposit transaction
+// referencing the given string is not rejected (i.e. still pending or
+// already completed) -- "rejected" deposits don't block a resubmission,
+// matching the existing manual-review flow (an admin rejecting a bad receipt
+// must not permanently lock a user out of paying the same subscription fee).
+func (r *transactionRepo) ExistsActiveDepositForReference(ctx context.Context, reference string) (bool, error) {
+	var exists bool
+	err := r.db.GetContext(ctx, &exists, `
+		SELECT EXISTS(
+			SELECT 1 FROM transactions
+			WHERE type = 'deposit' AND reference = $1 AND status != 'rejected'
+		)`, reference)
+	return exists, err
 }
 
 func (r *transactionRepo) Create(ctx context.Context, tx *models.Transaction) error {

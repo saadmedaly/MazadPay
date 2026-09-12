@@ -10,10 +10,25 @@ import 'package:mezadpay/services/payment_methods_service.dart';
 import 'package:mezadpay/models/payment_method.dart';
 
 const String _officialAccountNumber = '36601175';
-const double _depositAmount = 500.0;
+// Fallback only for the generic wallet top-up entry points (account page
+// "Deposit Now", wallet-related notification taps) which have no auction
+// request to derive a fee from. Customer feedback #4: when reaching this
+// page FROM submitting an auction request for review, the real amount comes
+// from that request's server-stamped subscriptionFee (100 MRU standard /
+// 500 MRU premium, by category) instead of this constant.
+const double _fallbackDepositAmount = 500.0;
 
 class DepositPage extends StatefulWidget {
-  const DepositPage({super.key});
+  // Customer feedback #4: when set (auction request just submitted for
+  // review), the deposit amount and payment reference are derived from the
+  // request's authoritative subscription_fee -- never user-editable, never
+  // guessed client-side. Both null preserves the page's original generic
+  // wallet-top-up behavior (existing entry points: account page "Deposit
+  // Now", wallet notification taps).
+  final String? auctionRequestId;
+  final double? subscriptionFee;
+
+  const DepositPage({super.key, this.auctionRequestId, this.subscriptionFee});
 
   @override
   State<DepositPage> createState() => _DepositPageState();
@@ -27,6 +42,9 @@ class _DepositPageState extends State<DepositPage> {
   bool _loadingMethods = true;
   File? _receiptFile;
   bool _submitting = false;
+
+  double get _depositAmount => widget.subscriptionFee ?? _fallbackDepositAmount;
+  bool get _isAuctionSubscriptionFee => widget.auctionRequestId != null && widget.subscriptionFee != null;
 
   @override
   void initState() {
@@ -77,13 +95,24 @@ class _DepositPageState extends State<DepositPage> {
     try {
       final api = ApiService();
 
-      // Step 1: create the deposit transaction
+      // Step 1: create the deposit transaction. Customer feedback #4
+      // financial-integrity round: auction_request_id is sent ONLY for the
+      // auction-subscription flow (widget.auctionRequestId != null) -- the
+      // backend then IGNORES 'amount' below and substitutes that request's
+      // own server-stamped subscription_fee, so _depositAmount here is
+      // display-only, never authoritative, for that case. The generic
+      // wallet-top-up entry points (account page "Deposit Now", wallet
+      // notification taps) never set auctionRequestId, so this field is
+      // omitted for them exactly as before -- their client-supplied amount
+      // stays trusted, unchanged.
       final depositResp = await api.post<Map<String, dynamic>>(
         '/users/wallet/deposit',
         data: {
           'amount': _depositAmount,
           'gateway': _selectedMethodCode,
           'payment_method': _selectedMethodCode,
+          if (widget.auctionRequestId != null)
+            'auction_request_id': widget.auctionRequestId,
         },
       );
 
@@ -100,12 +129,15 @@ class _DepositPageState extends State<DepositPage> {
         return;
       }
 
-      // Step 2: upload the receipt
+      // Step 2: upload the receipt. The auction_request_id link itself is
+      // already stored authoritatively on the transaction's `reference`
+      // field (set server-side in InitiateDeposit) -- only the user's own
+      // free-text note is sent here.
       final fileName = path.basename(_receiptFile!.path);
+      final userNote = _notesController.text.trim();
       final formData = FormData.fromMap({
         'receipt': await MultipartFile.fromFile(_receiptFile!.path, filename: fileName),
-        if (_notesController.text.trim().isNotEmpty)
-          'note': _notesController.text.trim(),
+        if (userNote.isNotEmpty) 'note': userNote,
         if (_phoneController.text.trim().isNotEmpty)
           'phone': _phoneController.text.trim(),
       });
@@ -176,6 +208,40 @@ class _DepositPageState extends State<DepositPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Subscription fee amount (customer feedback #4): shown before
+            // payment-method selection, whenever this page was reached from
+            // submitting an auction request for review. The amount itself
+            // (_depositAmount) is the server-stamped, category-derived
+            // subscription_fee -- never a value the user picks here.
+            if (_isAuctionSubscriptionFee) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F4FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFB3D9FF)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text(
+                      'رسوم النشر المطلوبة',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${_depositAmount.toStringAsFixed(0)} أوقية',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: blue),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+
             // Phone number
             const Text('رقم الهاتف *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 8),

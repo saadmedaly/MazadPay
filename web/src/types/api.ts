@@ -183,6 +183,10 @@ export interface Category {
   is_active: boolean
   image_url: string | null
   has_subcategories: boolean
+  // fee_tier (client feedback #4): admin-controlled subscription fee tier --
+  // 'standard' (100 MRU) or 'premium' (500 MRU) for auction requests filed
+  // under this category. Never derived from name/id/icon_name.
+  fee_tier: 'standard' | 'premium'
   children?: Category[]
 }
 

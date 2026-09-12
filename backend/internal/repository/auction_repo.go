@@ -73,6 +73,10 @@ type AuctionRepository interface {
 
 	// Categories & Locations
 	GetCategories(ctx context.Context) ([]models.Category, error)
+	// GetCategoryByID (client feedback #4): single-category lookup, used to
+	// stamp AuctionRequest.SubscriptionFee server-side from the category's
+	// FeeTier at request-creation time.
+	GetCategoryByID(ctx context.Context, id int) (*models.Category, error)
 	CreateCategory(ctx context.Context, c *models.Category) error
 	UpdateCategory(ctx context.Context, c *models.Category) error
 	DeleteCategory(ctx context.Context, id int) error
@@ -387,6 +391,7 @@ func (r *auctionRepo) GetCategories(ctx context.Context) ([]models.Category, err
 			c.is_active,
 			c.image_url,
 			c.has_subcategories,
+			c.fee_tier,
 			COALESCE((
 				SELECT COUNT(*)
 				FROM auctions a
@@ -404,16 +409,53 @@ func (r *auctionRepo) GetCategories(ctx context.Context) ([]models.Category, err
 	return cats, err
 }
 
+// GetCategoryByID (client feedback #4): looks up a single category's
+// fee_tier so the subscription fee can be stamped onto a new AuctionRequest
+// server-side. Kept minimal -- callers needing counts/subcategories should
+// use GetCategories instead.
+func (r *auctionRepo) GetCategoryByID(ctx context.Context, id int) (*models.Category, error) {
+	var cat models.Category
+	err := r.db.GetContext(ctx, &cat, `
+		SELECT id, name_ar, name_fr, name_en, parent_id, icon_name, display_order,
+		       is_active, image_url, has_subcategories, fee_tier
+		FROM categories WHERE id = $1`, id)
+	if err != nil {
+		return nil, err
+	}
+	return &cat, nil
+}
+
 func (r *auctionRepo) CreateCategory(ctx context.Context, c *models.Category) error {
-	query := `INSERT INTO categories (name_ar, name_fr, name_en, parent_id, icon_name, display_order, image_url, is_active)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`
-	return r.db.QueryRowContext(ctx, query, c.NameAr, c.NameFr, c.NameEn, c.ParentID, c.IconName, c.DisplayOrder, c.ImageURL, c.IsActive).Scan(&c.ID)
+	// fee_tier (client feedback #4): defaults to 'standard' when the caller
+	// leaves it empty -- same fallback as UpdateCategory below, so an
+	// existing/legacy client that never sends fee_tier at all still creates
+	// a standard category (matching the column's own DB DEFAULT), never
+	// silently rejected.
+	feeTier := c.FeeTier
+	if feeTier == "" {
+		feeTier = models.FeeTierStandard
+	}
+	query := `INSERT INTO categories (name_ar, name_fr, name_en, parent_id, icon_name, display_order, image_url, is_active, fee_tier)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
+	if err := r.db.QueryRowContext(ctx, query, c.NameAr, c.NameFr, c.NameEn, c.ParentID, c.IconName, c.DisplayOrder, c.ImageURL, c.IsActive, feeTier).Scan(&c.ID); err != nil {
+		return err
+	}
+	c.FeeTier = feeTier
+	return nil
 }
 
 func (r *auctionRepo) UpdateCategory(ctx context.Context, c *models.Category) error {
-	query := `UPDATE categories SET name_ar = $1, name_fr = $2, name_en = $3, parent_id = $4, icon_name = $5, display_order = $6, image_url = $7, is_active = $8
-              WHERE id = $9`
-	_, err := r.db.ExecContext(ctx, query, c.NameAr, c.NameFr, c.NameEn, c.ParentID, c.IconName, c.DisplayOrder, c.ImageURL, c.IsActive, c.ID)
+	// fee_tier (client feedback #4): defaults to 'standard' when the caller
+	// leaves it empty, so existing admin update call sites that don't yet
+	// know about this field never accidentally clear a category's tier back
+	// to empty (which the DB CHECK constraint would reject anyway).
+	feeTier := c.FeeTier
+	if feeTier == "" {
+		feeTier = models.FeeTierStandard
+	}
+	query := `UPDATE categories SET name_ar = $1, name_fr = $2, name_en = $3, parent_id = $4, icon_name = $5, display_order = $6, image_url = $7, is_active = $8, fee_tier = $9
+              WHERE id = $10`
+	_, err := r.db.ExecContext(ctx, query, c.NameAr, c.NameFr, c.NameEn, c.ParentID, c.IconName, c.DisplayOrder, c.ImageURL, c.IsActive, feeTier, c.ID)
 	return err
 }
 

@@ -29,7 +29,11 @@ export function CategoriesPage() {
     icon_name: '',
     display_order: 0,
     parent_id: null as number | null,
-    image_url: '' as string
+    image_url: '' as string,
+    // fee_tier (client feedback #4): admin-controlled subscription fee tier.
+    // New categories default to 'standard' -- never auto-classified as
+    // premium from name/id/icon_name, only an explicit admin choice here.
+    fee_tier: 'standard' as 'standard' | 'premium'
   })
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [uploadingFile, setUploadingFile] = useState(false)
@@ -79,7 +83,7 @@ export function CategoriesPage() {
 
   const openAdd = () => {
     setEditingCategory(null)
-    setForm({ name_ar: '', name_fr: '', name_en: '', icon_name: '', display_order: 0, parent_id: null, image_url: '' })
+    setForm({ name_ar: '', name_fr: '', name_en: '', icon_name: '', display_order: 0, parent_id: null, image_url: '', fee_tier: 'standard' })
     setIsModalOpen(true)
   }
 
@@ -92,7 +96,11 @@ export function CategoriesPage() {
       icon_name: cat.icon_name || '',
       display_order: cat.display_order,
       parent_id: cat.parent_id,
-      image_url: cat.image_url || ''
+      image_url: cat.image_url || '',
+      // fee_tier may be missing on categories fetched before this field
+      // existed in a cached response -- fall back to 'standard', matching
+      // the backend's own DB DEFAULT and UpdateCategory's empty-value fallback.
+      fee_tier: cat.fee_tier || 'standard'
     })
     setIsModalOpen(true)
   }
@@ -210,6 +218,20 @@ export function CategoriesPage() {
           {row.original.level === 0 ? 'فئة رئيسية' : 'فئة فرعية'}
         </span>
       )
+    },
+    {
+      header: 'رسوم النشر',
+      accessorKey: 'fee_tier',
+      cell: ({ row }) => {
+        const isPremium = row.original.fee_tier === 'premium'
+        return (
+          <span className={`text-xs px-2 py-1 rounded-full ${
+            isPremium ? 'bg-amber-500/20 text-amber-400' : 'bg-surface-border/40 text-surface-muted'
+          }`}>
+            {isPremium ? 'مميز — 500 أوقية' : 'عادي — 100 أوقية'}
+          </span>
+        )
+      }
     },
     {
       header: 'الصورة',
@@ -395,6 +417,21 @@ export function CategoriesPage() {
                     onChange={e => setForm(f => ({ ...f, icon_name: e.target.value }))}
                     placeholder="car, home, tech..."
                   />
+                </div>
+                <div className="space-y-2">
+                  {/* fee_tier (client feedback #4): admin explicitly chooses
+                      the subscription fee tier for auction requests filed
+                      under this category -- never inferred from the name/
+                      icon above. */}
+                  <label className="text-xs text-surface-muted font-bold block">فئة رسوم النشر</label>
+                  <select
+                    value={form.fee_tier}
+                    onChange={e => setForm(f => ({ ...f, fee_tier: e.target.value as 'standard' | 'premium' }))}
+                    className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white focus:border-mazad-primary/60 outline-none appearance-none"
+                  >
+                    <option value="standard">عادي — 100 أوقية</option>
+                    <option value="premium">مميز — 500 أوقية</option>
+                  </select>
                 </div>
               </div>
 

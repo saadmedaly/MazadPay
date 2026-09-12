@@ -687,7 +687,7 @@ func (h *AdminHandler) CreateCategory(c *fiber.Ctx) error {
 		return Unauthorized(c, "User not authenticated")
 	}
 	if err := h.svc.CreateCategory(c.Context(), &cat, adminID); err != nil {
-		return InternalError(c, "Failed to create category: "+err.Error())
+		return MapError(c, h.logger, err)
 	}
 	h.invalidateCategoriesCache(c.Context())
 	return Created(c, cat)
@@ -705,7 +705,7 @@ func (h *AdminHandler) UpdateCategory(c *fiber.Ctx) error {
 		return Unauthorized(c, "User not authenticated")
 	}
 	if err := h.svc.UpdateCategory(c.Context(), &cat, adminID); err != nil {
-		return InternalError(c, "Failed to update category: "+err.Error())
+		return MapError(c, h.logger, err)
 	}
 	h.invalidateCategoriesCache(c.Context())
 	return OK(c, cat)

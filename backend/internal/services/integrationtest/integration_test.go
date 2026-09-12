@@ -110,7 +110,7 @@ func setupEnv(t *testing.T) *testEnv {
 	wsHandler := handlers.NewWSHandler(ws.NewHub(logger), authSvc, auctionRepo, userRepo, logger)
 	boostSvc := services.NewAuctionBoostService(db)
 	boostHandler := handlers.NewAuctionBoostHandler(boostSvc, auctionRepo, userRepo, logger)
-	walletSvcForAutoBid := services.NewWalletService(db, walletRepo, repository.NewTransactionRepository(db, walletRepo), nil, nil, logger)
+	walletSvcForAutoBid := services.NewWalletService(db, walletRepo, repository.NewTransactionRepository(db, walletRepo), nil, nil, nil, logger)
 	autoBidSvc := services.NewBidAutoBidService(db, bidSvc, walletSvcForAutoBid)
 	autoBidHandler := handlers.NewBidAutoBidHandler(autoBidSvc, auctionRepo, userRepo, logger)
 
@@ -1135,7 +1135,7 @@ func TestInitiateDeposit_TNWallet_StampsTND(t *testing.T) {
 
 	user := createTestUserWithCountry(t, env, "TEST DEPOSIT TN J", "TN")
 
-	txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(100), "bank_transfer", "bank_transfer", "")
+	txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(100), "bank_transfer", "bank_transfer", "", nil)
 	if err != nil {
 		t.Fatalf("InitiateDeposit failed: %v", err)
 	}
@@ -1186,7 +1186,7 @@ func TestTransactionCurrency_ClientCannotSpoof(t *testing.T) {
 
 	// Even a gateway/payment_method string that looks like a currency code must have no
 	// effect on the stamped currency_code -- these fields are never interpreted as such.
-	txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(50), "EUR", "USD", "")
+	txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(50), "EUR", "USD", "", nil)
 	if err != nil {
 		t.Fatalf("InitiateDeposit failed: %v", err)
 	}
@@ -2132,6 +2132,330 @@ func TestFindAllAuctions_EndedStatusReturnsRealEndedAuctions(t *testing.T) {
 	t.Logf("confirmed: Ended tab total=%d (includes real ended auction), Active tab total=%d, no cross-contamination", endedTotal, activeTotal)
 }
 
+// createTestCategory inserts a temporary category with the given fee_tier
+// directly (client feedback #4) -- simpler than exercising the full admin
+// HTTP/auth stack just to set one field on a test fixture. Cleaned up via
+// t.Cleanup so it never lingers in the shared local test DB.
+func createTestCategory(t *testing.T, env *testEnv, feeTier string) int {
+	t.Helper()
+	ctx := context.Background()
+	var id int
+	err := env.db.GetContext(ctx, &id, `
+		INSERT INTO categories (name_ar, name_fr, fee_tier)
+		VALUES ($1, $2, $3) RETURNING id`,
+		"فئة اختبار "+uuid.New().String()[:6], "Test category", feeTier)
+	if err != nil {
+		t.Fatalf("failed to create test category: %v", err)
+	}
+	t.Cleanup(func() {
+		env.db.ExecContext(context.Background(), `DELETE FROM categories WHERE id = $1`, id)
+	})
+	return id
+}
+
+// Client feedback #4 (100/500 MRU subscription fee): proves the real,
+// end-to-end path -- CreateAuctionRequest stamps SubscriptionFee from the
+// request's actual category (never client-supplied, never guessed from name/
+// id/icon_name), a standard category yields 100, a premium category yields
+// 500, and changing a category's fee_tier afterward does NOT retroactively
+// change an already-created request's stamped fee (immutable once stamped,
+// same principle as CurrencyCode/MarketCountryISO).
+func TestCreateAuctionRequest_SubscriptionFeeFromCategory(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST FEE TIER USER")
+
+	standardCategoryID := createTestCategory(t, env, models.FeeTierStandard)
+	premiumCategoryID := createTestCategory(t, env, models.FeeTierPremium)
+
+	standardReq := newAuctionRequest(user.ID, "fee-standard-"+uuid.New().String()[:6])
+	standardReq.CategoryID = standardCategoryID
+	if err := env.reqSvc.CreateAuctionRequest(ctx, standardReq); err != nil {
+		t.Fatalf("CreateAuctionRequest (standard category) failed: %v", err)
+	}
+	if !standardReq.SubscriptionFee.Equal(models.StandardSubscriptionFee) {
+		t.Fatalf("expected standard category to stamp fee %s, got %s", models.StandardSubscriptionFee, standardReq.SubscriptionFee)
+	}
+
+	premiumReq := newAuctionRequest(user.ID, "fee-premium-"+uuid.New().String()[:6])
+	premiumReq.CategoryID = premiumCategoryID
+	if err := env.reqSvc.CreateAuctionRequest(ctx, premiumReq); err != nil {
+		t.Fatalf("CreateAuctionRequest (premium category) failed: %v", err)
+	}
+	if !premiumReq.SubscriptionFee.Equal(models.PremiumSubscriptionFee) {
+		t.Fatalf("expected premium category to stamp fee %s, got %s", models.PremiumSubscriptionFee, premiumReq.SubscriptionFee)
+	}
+
+	// Read back from the DB via the real repository path (not just the
+	// in-memory struct) to prove the Scan-order fix actually persists and
+	// reloads the value correctly.
+	reloaded, err := env.reqRepo.GetAuctionRequestByID(ctx, premiumReq.ID)
+	if err != nil {
+		t.Fatalf("GetAuctionRequestByID failed: %v", err)
+	}
+	if !reloaded.SubscriptionFee.Equal(models.PremiumSubscriptionFee) {
+		t.Fatalf("expected reloaded premium request to keep fee %s, got %s", models.PremiumSubscriptionFee, reloaded.SubscriptionFee)
+	}
+
+	// Changing the category's fee_tier afterward must NOT retroactively
+	// change the already-stamped request.
+	if _, err := env.db.ExecContext(ctx, `UPDATE categories SET fee_tier = $1 WHERE id = $2`, models.FeeTierStandard, premiumCategoryID); err != nil {
+		t.Fatalf("failed to flip category fee_tier: %v", err)
+	}
+	reloadedAfterCategoryChange, err := env.reqRepo.GetAuctionRequestByID(ctx, premiumReq.ID)
+	if err != nil {
+		t.Fatalf("GetAuctionRequestByID (after category change) failed: %v", err)
+	}
+	if !reloadedAfterCategoryChange.SubscriptionFee.Equal(models.PremiumSubscriptionFee) {
+		t.Fatalf("SECURITY/CORRECTNESS: expected already-created request to keep its stamped fee %s even after the category's fee_tier changed, got %s", models.PremiumSubscriptionFee, reloadedAfterCategoryChange.SubscriptionFee)
+	}
+	t.Logf("confirmed: standard=%s premium=%s stamped correctly, and an already-created request's fee survives a later category fee_tier change", standardReq.SubscriptionFee, premiumReq.SubscriptionFee)
+}
+
+// Client feedback #4: editing an existing draft/rejected request's category
+// must re-stamp the fee from the NEW category -- otherwise a user could
+// create a request under a "standard" category (100 MRU) then edit it to a
+// "premium" category (cars/real estate) while keeping the cheaper stamped
+// fee.
+func TestUpdateAuctionRequest_CategoryChangeRestampsSubscriptionFee(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST FEE RESTAMP USER")
+
+	standardCategoryID := createTestCategory(t, env, models.FeeTierStandard)
+	premiumCategoryID := createTestCategory(t, env, models.FeeTierPremium)
+
+	req := newAuctionRequest(user.ID, "fee-restamp-"+uuid.New().String()[:6])
+	req.CategoryID = standardCategoryID
+	req.Status = "draft"
+	if err := env.reqSvc.CreateAuctionRequest(ctx, req); err != nil {
+		t.Fatalf("CreateAuctionRequest failed: %v", err)
+	}
+	if !req.SubscriptionFee.Equal(models.StandardSubscriptionFee) {
+		t.Fatalf("expected initial standard fee %s, got %s", models.StandardSubscriptionFee, req.SubscriptionFee)
+	}
+
+	updates := *req
+	updates.CategoryID = premiumCategoryID
+	if err := env.reqSvc.UpdateAuctionRequest(ctx, req.ID, user.ID, &updates); err != nil {
+		t.Fatalf("UpdateAuctionRequest (category change) failed: %v", err)
+	}
+
+	reloaded, err := env.reqRepo.GetAuctionRequestByID(ctx, req.ID)
+	if err != nil {
+		t.Fatalf("GetAuctionRequestByID failed: %v", err)
+	}
+	if !reloaded.SubscriptionFee.Equal(models.PremiumSubscriptionFee) {
+		t.Fatalf("SECURITY: expected fee to be re-stamped to premium %s after changing to a premium category, got %s (user could underpay)", models.PremiumSubscriptionFee, reloaded.SubscriptionFee)
+	}
+	t.Logf("confirmed: editing a request's category from standard to premium correctly re-stamps the fee to %s", reloaded.SubscriptionFee)
+}
+
+// Client feedback #4 financial-integrity round: proves the real, previously-
+// missing enforcement -- WalletService.InitiateDeposit, when given a real
+// auction_request_id, IGNORES the client-supplied amount and substitutes the
+// request's own server-stamped subscription_fee (auction_requests.
+// subscription_fee), never recalculating it from category name/id/icon_name.
+// A generic wallet deposit (no auction_request_id) is completely unaffected.
+func TestInitiateDeposit_AuctionSubscriptionFee_ClientAmountIgnored(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	walletSvc := newWalletSvc(env)
+
+	user := createTestUser(t, env, "TEST FEE DEPOSIT USER")
+	standardCategoryID := createTestCategory(t, env, models.FeeTierStandard)
+	premiumCategoryID := createTestCategory(t, env, models.FeeTierPremium)
+
+	standardReq := newAuctionRequest(user.ID, "deposit-standard-"+uuid.New().String()[:6])
+	standardReq.CategoryID = standardCategoryID
+	if err := env.reqSvc.CreateAuctionRequest(ctx, standardReq); err != nil {
+		t.Fatalf("CreateAuctionRequest (standard) failed: %v", err)
+	}
+
+	premiumReq := newAuctionRequest(user.ID, "deposit-premium-"+uuid.New().String()[:6])
+	premiumReq.CategoryID = premiumCategoryID
+	if err := env.reqSvc.CreateAuctionRequest(ctx, premiumReq); err != nil {
+		t.Fatalf("CreateAuctionRequest (premium) failed: %v", err)
+	}
+
+	t.Run("standard request: deposit amount matches the expected 100 MRU fee", func(t *testing.T) {
+		txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(100), "bankily", "bankily", "", &standardReq.ID)
+		if err != nil {
+			t.Fatalf("InitiateDeposit (standard, correct amount) failed: %v", err)
+		}
+		if !txn.Amount.Equal(models.StandardSubscriptionFee) {
+			t.Fatalf("expected deposit amount %s, got %s", models.StandardSubscriptionFee, txn.Amount)
+		}
+	})
+
+	t.Run("premium request: deposit amount matches the expected 500 MRU fee", func(t *testing.T) {
+		txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(500), "bankily", "bankily", "", &premiumReq.ID)
+		if err != nil {
+			t.Fatalf("InitiateDeposit (premium, correct amount) failed: %v", err)
+		}
+		if !txn.Amount.Equal(models.PremiumSubscriptionFee) {
+			t.Fatalf("expected deposit amount %s, got %s", models.PremiumSubscriptionFee, txn.Amount)
+		}
+	})
+
+	t.Run("premium request + client sends 100 -- cannot underpay, backend overrides to 500", func(t *testing.T) {
+		// Fresh premium request so this test's deposit doesn't collide with
+		// the earlier subtest's non-rejected deposit for the same reference.
+		req := newAuctionRequest(user.ID, "deposit-tamper-100-"+uuid.New().String()[:6])
+		req.CategoryID = premiumCategoryID
+		if err := env.reqSvc.CreateAuctionRequest(ctx, req); err != nil {
+			t.Fatalf("CreateAuctionRequest failed: %v", err)
+		}
+		txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(100), "bankily", "bankily", "", &req.ID)
+		if err != nil {
+			t.Fatalf("InitiateDeposit (tampered 100) failed: %v", err)
+		}
+		if !txn.Amount.Equal(models.PremiumSubscriptionFee) {
+			t.Fatalf("SECURITY: client sent 100 for a premium (500) request and it was NOT overridden -- got stored amount %s", txn.Amount)
+		}
+	})
+
+	t.Run("premium request + client sends 1 -- cannot underpay", func(t *testing.T) {
+		req := newAuctionRequest(user.ID, "deposit-tamper-1-"+uuid.New().String()[:6])
+		req.CategoryID = premiumCategoryID
+		if err := env.reqSvc.CreateAuctionRequest(ctx, req); err != nil {
+			t.Fatalf("CreateAuctionRequest failed: %v", err)
+		}
+		txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(1), "bankily", "bankily", "", &req.ID)
+		if err != nil {
+			t.Fatalf("InitiateDeposit (tampered 1) failed: %v", err)
+		}
+		if !txn.Amount.Equal(models.PremiumSubscriptionFee) {
+			t.Fatalf("SECURITY: client sent 1 for a premium (500) request and it was NOT overridden -- got stored amount %s", txn.Amount)
+		}
+	})
+
+	t.Run("another user's auction_request_id is rejected (ownership enforced)", func(t *testing.T) {
+		otherUser := createTestUser(t, env, "TEST FEE DEPOSIT OTHER USER")
+		req := newAuctionRequest(user.ID, "deposit-ownership-"+uuid.New().String()[:6])
+		req.CategoryID = standardCategoryID
+		if err := env.reqSvc.CreateAuctionRequest(ctx, req); err != nil {
+			t.Fatalf("CreateAuctionRequest failed: %v", err)
+		}
+		_, err := walletSvc.InitiateDeposit(ctx, otherUser.ID, decimal.NewFromInt(100), "bankily", "bankily", "", &req.ID)
+		if err != apperr.ErrForbidden {
+			t.Fatalf("expected ErrForbidden when a different user references someone else's request, got %v", err)
+		}
+	})
+
+	t.Run("a nonexistent auction_request_id is rejected", func(t *testing.T) {
+		bogusID := uuid.New()
+		_, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(100), "bankily", "bankily", "", &bogusID)
+		if err != apperr.ErrNotFound {
+			t.Fatalf("expected ErrNotFound for a nonexistent auction_request_id, got %v", err)
+		}
+	})
+
+	t.Run("a duplicate non-rejected deposit for the same request is rejected", func(t *testing.T) {
+		req := newAuctionRequest(user.ID, "deposit-duplicate-"+uuid.New().String()[:6])
+		req.CategoryID = standardCategoryID
+		if err := env.reqSvc.CreateAuctionRequest(ctx, req); err != nil {
+			t.Fatalf("CreateAuctionRequest failed: %v", err)
+		}
+		if _, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(100), "bankily", "bankily", "", &req.ID); err != nil {
+			t.Fatalf("first InitiateDeposit failed: %v", err)
+		}
+		_, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(100), "bankily", "bankily", "", &req.ID)
+		if err != apperr.ErrConflict {
+			t.Fatalf("expected ErrConflict for a duplicate non-rejected deposit on the same request, got %v", err)
+		}
+	})
+
+	t.Run("generic wallet deposit (no auction_request_id) is completely unaffected", func(t *testing.T) {
+		txn, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(250), "bankily", "bankily", "", nil)
+		if err != nil {
+			t.Fatalf("InitiateDeposit (generic) failed: %v", err)
+		}
+		if !txn.Amount.Equal(decimal.NewFromInt(250)) {
+			t.Fatalf("expected generic deposit to keep the client-supplied amount 250, got %s (regression in unrelated wallet top-up flow)", txn.Amount)
+		}
+		if txn.Reference != nil {
+			t.Fatalf("expected a generic deposit to have no reference, got %v", *txn.Reference)
+		}
+	})
+}
+
+// Client feedback #4 (category create/edit consistency round): proves
+// AuctionRepository.CreateCategory actually persists an admin-selected
+// fee_tier through a real INSERT + read-back, not just in the in-memory
+// struct returned by the call. Before this round CreateCategory's INSERT
+// omitted fee_tier entirely, so a category created as "premium" would
+// silently persist as the column's DB DEFAULT ('standard') instead.
+func TestCreateCategory_PersistsFeeTier(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	t.Run("omitted fee_tier persists as standard", func(t *testing.T) {
+		cat := &models.Category{NameAr: "فئة اختبار بدون تحديد " + uuid.New().String()[:6], NameFr: "Test no tier"}
+		if err := env.auctionRepo.CreateCategory(ctx, cat); err != nil {
+			t.Fatalf("CreateCategory failed: %v", err)
+		}
+		t.Cleanup(func() { env.db.ExecContext(context.Background(), `DELETE FROM categories WHERE id = $1`, cat.ID) })
+
+		if cat.FeeTier != models.FeeTierStandard {
+			t.Fatalf("expected in-memory FeeTier to be 'standard' after create, got %q", cat.FeeTier)
+		}
+		reloaded, err := env.auctionRepo.GetCategoryByID(ctx, cat.ID)
+		if err != nil {
+			t.Fatalf("GetCategoryByID failed: %v", err)
+		}
+		if reloaded.FeeTier != models.FeeTierStandard {
+			t.Fatalf("expected persisted fee_tier='standard', got %q", reloaded.FeeTier)
+		}
+	})
+
+	t.Run("explicit fee_tier=standard persists as standard", func(t *testing.T) {
+		cat := &models.Category{NameAr: "فئة اختبار عادية " + uuid.New().String()[:6], NameFr: "Test standard", FeeTier: models.FeeTierStandard}
+		if err := env.auctionRepo.CreateCategory(ctx, cat); err != nil {
+			t.Fatalf("CreateCategory failed: %v", err)
+		}
+		t.Cleanup(func() { env.db.ExecContext(context.Background(), `DELETE FROM categories WHERE id = $1`, cat.ID) })
+
+		reloaded, err := env.auctionRepo.GetCategoryByID(ctx, cat.ID)
+		if err != nil {
+			t.Fatalf("GetCategoryByID failed: %v", err)
+		}
+		if reloaded.FeeTier != models.FeeTierStandard {
+			t.Fatalf("expected persisted fee_tier='standard', got %q", reloaded.FeeTier)
+		}
+	})
+
+	t.Run("explicit fee_tier=premium survives real DB persistence -- the actual bug this round fixes", func(t *testing.T) {
+		cat := &models.Category{NameAr: "فئة اختبار مميزة " + uuid.New().String()[:6], NameFr: "Test premium", FeeTier: models.FeeTierPremium}
+		if err := env.auctionRepo.CreateCategory(ctx, cat); err != nil {
+			t.Fatalf("CreateCategory failed: %v", err)
+		}
+		t.Cleanup(func() { env.db.ExecContext(context.Background(), `DELETE FROM categories WHERE id = $1`, cat.ID) })
+
+		if cat.FeeTier != models.FeeTierPremium {
+			t.Fatalf("expected in-memory FeeTier to be 'premium' after create, got %q", cat.FeeTier)
+		}
+		reloaded, err := env.auctionRepo.GetCategoryByID(ctx, cat.ID)
+		if err != nil {
+			t.Fatalf("GetCategoryByID failed: %v", err)
+		}
+		if reloaded.FeeTier != models.FeeTierPremium {
+			t.Fatalf("CATEGORY CREATE/EDIT INCONSISTENCY NOT FIXED: admin selected 'premium' at creation, but the DB persisted %q instead", reloaded.FeeTier)
+		}
+		// And the category's SubscriptionFee() helper correctly reflects it,
+		// proving a request filed under this category would be charged 500.
+		if !reloaded.SubscriptionFee().Equal(models.PremiumSubscriptionFee) {
+			t.Fatalf("expected a persisted premium category to yield SubscriptionFee()=%s, got %s", models.PremiumSubscriptionFee, reloaded.SubscriptionFee())
+		}
+	})
+
+	// Invalid fee_tier rejection is a service-layer (adminService.
+	// validateFeeTierInput) concern, unreachable from this package -- covered
+	// by internal/services/category_fee_tier_test.go's TestValidateFeeTierInput,
+	// which proves both CreateCategory and UpdateCategory share the identical
+	// accept/reject rule.
+}
+
 // --- Phase 1.4 helpers ---
 
 // httpCreateBoost performs a real HTTP-level POST against env.app's
@@ -2252,7 +2576,7 @@ func httpGetBidHistory(t *testing.T, env *testEnv, auctionID uuid.UUID, callerID
 // --- Phase 1.1 helpers ---
 
 func newWalletSvc(env *testEnv) services.WalletService {
-	return services.NewWalletService(env.db, env.walletRepo, repository.NewTransactionRepository(env.db, env.walletRepo), nil, nil, env.logger)
+	return services.NewWalletService(env.db, env.walletRepo, repository.NewTransactionRepository(env.db, env.walletRepo), env.reqRepo, nil, nil, env.logger)
 }
 
 // httpGetAuctionDetail performs a real HTTP-level request against env.app's

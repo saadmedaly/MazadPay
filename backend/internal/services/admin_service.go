@@ -907,7 +907,26 @@ func (s *adminService) ReviewKYC(ctx context.Context, userID uuid.UUID, status, 
 	return nil
 }
 
+// validateFeeTierInput (client feedback #4): shared by CreateCategory and
+// UpdateCategory so both accept exactly the same values with exactly the
+// same semantics. BodyParser doesn't run Go struct validate tags (same gap
+// already documented for WalletHandler.Deposit), so an invalid value would
+// otherwise only be caught by the DB CHECK constraint as a raw SQL error --
+// checked explicitly here for a clear, intentional rejection instead. Empty
+// stays allowed -- both repository methods default an empty FeeTier to
+// 'standard' rather than rejecting it, so an existing/legacy caller unaware
+// of this field keeps working on both create and update.
+func validateFeeTierInput(feeTier string) error {
+	if feeTier != "" && feeTier != models.FeeTierStandard && feeTier != models.FeeTierPremium {
+		return apperr.ErrBadRequest
+	}
+	return nil
+}
+
 func (s *adminService) CreateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error {
+	if err := validateFeeTierInput(c.FeeTier); err != nil {
+		return err
+	}
 	if err := s.auctionRepo.CreateCategory(ctx, c); err != nil {
 		return err
 	}
@@ -916,6 +935,9 @@ func (s *adminService) CreateCategory(ctx context.Context, c *models.Category, a
 }
 
 func (s *adminService) UpdateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error {
+	if err := validateFeeTierInput(c.FeeTier); err != nil {
+		return err
+	}
 	if err := s.auctionRepo.UpdateCategory(ctx, c); err != nil {
 		return err
 	}
