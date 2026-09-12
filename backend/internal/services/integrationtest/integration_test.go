@@ -2456,6 +2456,101 @@ func TestCreateCategory_PersistsFeeTier(t *testing.T) {
 	// accept/reject rule.
 }
 
+// Client feedback #15 (allow auction duration longer than 24 hours): the
+// backend's own 24h maximum was already removed in a prior round ("client
+// feedback Phase B item 15", auction_handler.go/AuctionService.Create) --
+// this proves the real repository/scheduler layer never had (or reintroduced)
+// any hidden 24h assumption of its own. A multi-day (7-day) auction must:
+// (1) be creatable with its true end_time persisted exactly, (2) NOT be
+// matched by the scheduler's FindEndedSince query while still genuinely
+// active, even well past the old 24h mark, and (3) be matched once its real
+// end_time has actually passed.
+func TestMultiDayAuction_DurationAndSchedulerSafety(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST MULTIDAY SELLER")
+
+	newInsuredAuction := func(start, end time.Time) *models.Auction {
+		lotNumber := "TEST-" + uuid.New().String()[:8]
+		marketISO := "MR"
+		currencyCode := "MRU"
+		a := &models.Auction{
+			ID:               uuid.New(),
+			SellerID:         seller.ID,
+			CategoryID:       mkCategoryID(),
+			TitleAr:          "مزاد اختبار مدة طويلة " + uuid.New().String()[:6],
+			LotNumber:        &lotNumber,
+			StartPrice:       decimal.NewFromInt(100),
+			CurrentPrice:     decimal.NewFromInt(100),
+			MinIncrement:     decimal.NewFromInt(10),
+			InsuranceAmount:  decimal.NewFromInt(20),
+			InsurancePolicy:  "not_required",
+			ReservePrice:     decimal.NewFromInt(100),
+			StartTime:        start,
+			EndTime:          end,
+			Status:           "active",
+			MarketCountryISO: &marketISO,
+			CurrencyCode:     &currencyCode,
+		}
+		if err := env.auctionRepo.Create(ctx, nil, a); err != nil {
+			t.Fatalf("failed to create multi-day fixture auction: %v", err)
+		}
+		return a
+	}
+
+	t.Run("a 7-day auction persists its true end_time, not truncated to 24h", func(t *testing.T) {
+		start := time.Now().Add(1 * time.Hour)
+		end := start.Add(7 * 24 * time.Hour)
+		a := newInsuredAuction(start, end)
+
+		reloaded, err := env.auctionRepo.FindByID(ctx, a.ID)
+		if err != nil {
+			t.Fatalf("FindByID failed: %v", err)
+		}
+		gotDuration := reloaded.EndTime.Sub(reloaded.StartTime)
+		wantDuration := 7 * 24 * time.Hour
+		if gotDuration < wantDuration-time.Second || gotDuration > wantDuration+time.Second {
+			t.Fatalf("expected persisted duration ~%s, got %s (end_time was truncated somewhere)", wantDuration, gotDuration)
+		}
+	})
+
+	t.Run("a still-active 7-day auction is NOT matched by the scheduler's ended-auction query, even well past 24h from its start", func(t *testing.T) {
+		start := time.Now().Add(-30 * time.Hour) // started 30h ago -- past the old 24h mark
+		end := start.Add(7 * 24 * time.Hour)      // but genuinely still 5+ days from ending
+		a := newInsuredAuction(start, end)
+
+		ended, err := env.auctionRepo.FindEndedSince(ctx, time.Now().Add(-1*time.Hour))
+		if err != nil {
+			t.Fatalf("FindEndedSince failed: %v", err)
+		}
+		for _, e := range ended {
+			if e.ID == a.ID {
+				t.Fatalf("SCHEDULER BUG: a still-active 7-day auction (ends in ~5 more days) was incorrectly matched as ended just because it started >24h ago")
+			}
+		}
+	})
+
+	t.Run("an auction whose true (multi-day-scheduled) end_time has now actually passed IS matched by the scheduler", func(t *testing.T) {
+		start := time.Now().Add(-73 * time.Hour) // started 73h ago
+		end := start.Add(72 * time.Hour)          // a real 72h auction -- ended 1h ago
+		a := newInsuredAuction(start, end)
+
+		ended, err := env.auctionRepo.FindEndedSince(ctx, time.Now().Add(-2*time.Hour))
+		if err != nil {
+			t.Fatalf("FindEndedSince failed: %v", err)
+		}
+		found := false
+		for _, e := range ended {
+			if e.ID == a.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected a genuinely-ended 72h auction to be matched by FindEndedSince, but it was not")
+		}
+	})
+}
+
 // --- Phase 1.4 helpers ---
 
 // httpCreateBoost performs a real HTTP-level POST against env.app's

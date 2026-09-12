@@ -147,12 +147,19 @@ class Auction {
       startPrice: double.tryParse(json['starting_price']?.toString() ?? json['start_price']?.toString() ?? '0') ?? 0,
       currentPrice: double.tryParse(json['current_price']?.toString() ?? json['current_bid']?.toString() ?? '0') ?? 0,
       minIncrement: double.tryParse(json['min_increment']?.toString() ?? '500') ?? 500,
-      endTime: () {
-        final raw = json['end_time'] != null ? DateTime.parse(json['end_time']) : DateTime.now();
-        final startRaw = json['start_time'] != null ? DateTime.parse(json['start_time']) : DateTime.now();
-        final maxEnd = startRaw.add(const Duration(hours: 24));
-        return raw.isAfter(maxEnd) ? maxEnd : raw;
-      }(),
+      // Client feedback #15: this used to clamp end_time to start_time + 24h
+      // (commit e984cfd, "cap auction end time to 24h in API and Flutter"),
+      // mirroring a matching backend cap in AuctionHandler.List/GetByID at
+      // the time. That backend cap was later removed entirely ("client
+      // feedback Phase B item 15: the 24h max-duration cap is removed --
+      // multi-day auctions (48h, 72h, several days) must now be allowed",
+      // see auction_handler.go) so the real end_time is now returned
+      // uncapped -- but this mobile-side clamp was never cleaned up,
+      // silently truncating every real multi-day auction back down to 24h
+      // client-side (countdown, active/ended display, everything downstream
+      // of Auction.endTime). Removed; the server's end_time is now trusted
+      // as-is, exactly like start_time already is.
+      endTime: json['end_time'] != null ? DateTime.parse(json['end_time']) : DateTime.now(),
       bidderCount: json['bidder_count'] ?? json['bid_count'] ?? 0,
       views: json['views'] ?? json['view_count'] ?? 0,
       lotNumber: json['lot_number']?.toString() ?? 'N/A',

@@ -167,8 +167,27 @@ export function AuctionsPage() {
       }
     }
 
-    // end_time is always start_time + 24h (enforced here regardless of form value)
-    const end_time = new Date(effectiveStart.getTime() + 24 * 60 * 60 * 1000).toISOString()
+    // end_time (client feedback #15): now the admin's own selection --
+    // previously always force-recomputed as start_time + 24h here regardless
+    // of what the form showed, which was the actual root cause preventing
+    // any multi-day auction duration end-to-end. The backend's own 24h
+    // maximum was already removed (client feedback Phase B item 15,
+    // auction_handler.go); it enforces only end_time > start_time, which is
+    // validated below to match.
+    if (!form.end_time) {
+      toast.error('وقت وتاريخ الإغلاق مطلوب')
+      return null
+    }
+    const et = new Date(form.end_time)
+    if (isNaN(et.getTime())) {
+      toast.error('تاريخ الإغلاق غير صالح')
+      return null
+    }
+    if (et.getTime() <= effectiveStart.getTime()) {
+      toast.error('وقت الإغلاق يجب أن يكون بعد وقت البدء')
+      return null
+    }
+    const end_time = et.toISOString()
 
     // Category validation
     if (!form.category_id || form.category_id === 0) {
@@ -825,17 +844,29 @@ export function AuctionsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ البدء</label>
+                {/* Client feedback #15: only suggests a default end time (start
+                    + 24h) when end_time is still empty -- never overwrites a
+                    value the admin already chose, so adjusting the start time
+                    after picking a multi-day end time doesn't silently reset it. */}
                 <Input type="datetime-local" value={form.start_time} onChange={e => {
                   const st = e.target.value
-                  const endAuto = st
-                    ? new Date(new Date(st).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
-                    : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
-                  setForm(f => ({...f, start_time: st, end_time: endAuto}))
+                  setForm(f => {
+                    if (f.end_time) return {...f, start_time: st}
+                    const endAuto = st
+                      ? new Date(new Date(st).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
+                      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
+                    return {...f, start_time: st, end_time: endAuto}
+                  })
                 }} />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ الإغلاق <span className="text-red-500">*</span> <span className="text-surface-muted text-xs">(24 ساعة تلقائياً)</span></label>
-                <Input type="datetime-local" value={form.end_time} readOnly className="opacity-70 cursor-not-allowed" onChange={() => {}} />
+                {/* Client feedback #15: the admin can now select any end
+                    date/time (days, not just 24h) -- previously this field
+                    was read-only and force-recomputed as start_time + 24h on
+                    every submit regardless of what was shown here. */}
+                <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ الإغلاق <span className="text-red-500">*</span></label>
+                <Input type="datetime-local" value={form.end_time} onChange={e => setForm(f => ({...f, end_time: e.target.value}))} />
+                <p className="text-[10px] text-surface-muted">يمكن تحديد مدة المزاد حسب الحاجة (يوم أو يومين أو أكثر)</p>
               </div>
               </div>
             </div>
