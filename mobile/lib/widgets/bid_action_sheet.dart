@@ -3,8 +3,68 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auction_provider_api.dart';
+import '../services/auction_api.dart';
 import '../services/bid_api.dart';
 import '../utils/money_formatter.dart';
+
+// Arabic message shown for a repeat-bid rejection, shared between the
+// proactive UI state (has_bid == true, shown before the user even tries)
+// and the reactive 409 bid_already_placed error path below (defense-in-depth
+// for stale local state) -- see bidPlacementErrorMessage.
+const String kAlreadyBidMessageAr = 'لقد قمت بالمزايدة على هذا المزاد مسبقًا';
+
+/// Pure mapping from PlaceBid's raw error string (backend/internal/handlers/
+/// response.go MapError codes, client feedback #19's bid_already_placed
+/// included) to a safe, localized, user-facing message -- never surfaces the
+/// raw internal error string. Extracted from the widget's catch block so it
+/// can be tested directly without pumping a widget tree or mocking the
+/// network layer (see test/bid_action_sheet_logic_test.dart).
+String bidPlacementErrorMessage(String raw, String locale) {
+  if (raw.contains('insufficient_funds') || raw.contains('insufficient_balance')) {
+    return locale == 'ar'
+        ? 'رصيدك غير كافٍ لإتمام هذه المزايدة'
+        : (locale == 'fr' ? 'Solde insuffisant pour placer cette enchère' : 'Insufficient balance to place this bid');
+  } else if (raw.contains('self_bid') || raw.contains('cannot_bid_own_auction')) {
+    return locale == 'ar'
+        ? 'لا يمكنك المزايدة على مزادك الخاص'
+        : (locale == 'fr' ? 'Vous ne pouvez pas enchérir sur votre propre enchère' : 'You cannot bid on your own auction');
+  } else if (raw.contains('cross_market_bid_not_allowed')) {
+    return locale == 'ar'
+        ? 'لا يمكن المزايدة على مزادات من سوق دولة أخرى'
+        : (locale == 'fr' ? "Impossible d'enchérir sur une enchère d'un autre marché" : 'You cannot bid on an auction from another market');
+  } else if (raw.contains('wallet_currency_mismatch')) {
+    return locale == 'ar'
+        ? 'تعذر إتمام العملية بسبب عدم تطابق العملة'
+        : (locale == 'fr' ? 'Opération impossible : devise incompatible' : 'Unable to complete: currency mismatch');
+  } else if (raw.contains('bid_too_low')) {
+    return locale == 'ar'
+        ? 'مبلغ المزايدة منخفض جدًا'
+        : (locale == 'fr' ? "Le montant de l'enchère est trop bas" : 'Bid amount is too low');
+  } else if (raw.contains('auction_ended') || raw.contains('auction_not_active')) {
+    return locale == 'ar'
+        ? 'هذا المزاد لم يعد نشطًا'
+        : (locale == 'fr' ? "Cette enchère n'est plus active" : 'This auction is no longer active');
+  } else if (raw.contains('bid_already_placed')) {
+    // Client feedback #19: a user may successfully bid on a given auction at
+    // most once, ever. Surfaces the backend's 409 with the same friendly
+    // message shown proactively when local state was stale (e.g. another
+    // device placed this user's first bid concurrently).
+    return locale == 'ar'
+        ? kAlreadyBidMessageAr
+        : (locale == 'fr' ? 'Vous avez déjà enchéri sur cette enchère' : 'You have already bid on this auction');
+  }
+  return locale == 'ar'
+      ? 'تعذر إتمام المزايدة، حاول مرة أخرى'
+      : (locale == 'fr' ? "Impossible de placer l'enchère, réessayez" : 'Could not place bid, please try again');
+}
+
+/// Whether the repeat-bid action should be blocked, per client feedback #19
+/// (one successful bid per user per auction, ever). Deliberately keyed only
+/// on has_bid -- NOT on is_highest_bid/isUserHighestBidder, which reflects
+/// "currently winning" and is a completely different concept: an outbid user
+/// still has has_bid == true and must remain blocked even though they are no
+/// longer the highest bidder.
+bool isRepeatBidBlocked(bool hasBid) => hasBid;
 
 class BidActionSheet extends ConsumerStatefulWidget {
   final String auctionId;
@@ -36,11 +96,30 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
   double _bidAmount = 0.0;
   bool _isLoading = false;
   final BidApi _bidApi = BidApi();
+  final AuctionApi _auctionApi = AuctionApi();
+  // hasAlreadyBid (client feedback #19): a user may successfully bid on a
+  // given auction at most once, ever -- checked proactively via the
+  // existing GET /auctions/:id/bid-status endpoint so the bid control can
+  // be disabled before the user even tries. The backend's 409
+  // bid_already_placed rejection (handled below) remains authoritative
+  // regardless -- this is purely a UX head start, never the real guard.
+  bool _hasAlreadyBid = false;
+  bool _checkingBidStatus = true;
 
   @override
   void initState() {
     super.initState();
     _bidAmount = widget.currentPrice + widget.minIncrement;
+    _checkBidStatus();
+  }
+
+  Future<void> _checkBidStatus() async {
+    final response = await _auctionApi.getBidStatus(widget.auctionId);
+    if (!mounted) return;
+    setState(() {
+      _hasAlreadyBid = response.success && response.data?['has_bid'] == true;
+      _checkingBidStatus = false;
+    });
   }
 
   @override
@@ -71,8 +150,31 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
     return Column(
       children: [
         Text(AppLocalizations.of(context)!.text_368, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 18, fontWeight: FontWeight.bold)),
+        if (_hasAlreadyBid) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    kAlreadyBidMessageAr,
+                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: Colors.orange[800]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
-        
+
         // Header info box
         Container(
           padding: const EdgeInsets.all(20),
@@ -145,7 +247,7 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
       width: double.infinity,
       height: 60,
       child: ElevatedButton(
-        onPressed: _isLoading ? null : () async {
+        onPressed: (_isLoading || _checkingBidStatus || isRepeatBidBlocked(_hasAlreadyBid)) ? null : () async {
           if (_step == 1) {
             setState(() => _step = 2);
           } else {
@@ -170,41 +272,15 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
             } catch (e) {
               if (mounted) {
                 setState(() => _isLoading = false);
-                
+
                 // Safe, localized, non-leaking messages for the actual Phase 1
                 // error codes (backend/internal/handlers/response.go MapError) --
                 // never surface the raw internal error string to the user.
                 final raw = e.toString();
-                String errorMessage;
                 final locale = Localizations.localeOf(context).languageCode;
-                if (raw.contains('insufficient_funds') || raw.contains('insufficient_balance')) {
-                  errorMessage = locale == 'ar'
-                      ? 'رصيدك غير كافٍ لإتمام هذه المزايدة'
-                      : (locale == 'fr' ? 'Solde insuffisant pour placer cette enchère' : 'Insufficient balance to place this bid');
-                } else if (raw.contains('self_bid') || raw.contains('cannot_bid_own_auction')) {
-                  errorMessage = locale == 'ar'
-                      ? 'لا يمكنك المزايدة على مزادك الخاص'
-                      : (locale == 'fr' ? 'Vous ne pouvez pas enchérir sur votre propre enchère' : 'You cannot bid on your own auction');
-                } else if (raw.contains('cross_market_bid_not_allowed')) {
-                  errorMessage = locale == 'ar'
-                      ? 'لا يمكن المزايدة على مزادات من سوق دولة أخرى'
-                      : (locale == 'fr' ? "Impossible d'enchérir sur une enchère d'un autre marché" : 'You cannot bid on an auction from another market');
-                } else if (raw.contains('wallet_currency_mismatch')) {
-                  errorMessage = locale == 'ar'
-                      ? 'تعذر إتمام العملية بسبب عدم تطابق العملة'
-                      : (locale == 'fr' ? 'Opération impossible : devise incompatible' : 'Unable to complete: currency mismatch');
-                } else if (raw.contains('bid_too_low')) {
-                  errorMessage = locale == 'ar'
-                      ? 'مبلغ المزايدة منخفض جدًا'
-                      : (locale == 'fr' ? "Le montant de l'enchère est trop bas" : 'Bid amount is too low');
-                } else if (raw.contains('auction_ended') || raw.contains('auction_not_active')) {
-                  errorMessage = locale == 'ar'
-                      ? 'هذا المزاد لم يعد نشطًا'
-                      : (locale == 'fr' ? "Cette enchère n'est plus active" : 'This auction is no longer active');
-                } else {
-                  errorMessage = locale == 'ar'
-                      ? 'تعذر إتمام المزايدة، حاول مرة أخرى'
-                      : (locale == 'fr' ? "Impossible de placer l'enchère, réessayez" : 'Could not place bid, please try again');
+                final errorMessage = bidPlacementErrorMessage(raw, locale);
+                if (raw.contains('bid_already_placed')) {
+                  setState(() => _hasAlreadyBid = true);
                 }
 
                 ScaffoldMessenger.of(context).showSnackBar(

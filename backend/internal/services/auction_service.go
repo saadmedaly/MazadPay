@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -723,11 +724,28 @@ func (s *auctionService) GetBidStatus(ctx context.Context, auctionID, userID uui
 		return nil, apperr.ErrNotFound
 	}
 
-	// Récupérer la plus haute bid de l'utilisateur
+	// Récupérer la plus haute bid de l'utilisateur -- sql.ErrNoRows (the
+	// user has never bid on this auction) is the normal, expected state for
+	// most callers of this endpoint, not a failure: GetBidStatus's own
+	// contract already returns my_bid_amount=nil/is_highest_bid=false for
+	// exactly this case below. Only report a genuine error for anything
+	// else -- pre-existing bug, found while wiring has_bid (client feedback
+	// #19): every user who had never bid previously got a 404 here instead
+	// of a normal has_bid=false/my_bid_amount=nil response.
 	highestBid, err := s.auctionRepo.GetUserHighestBid(ctx, auctionID, userID)
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
+
+	// has_bid (client feedback #19): whether this user has already consumed
+	// their one-and-only bid on this auction -- the authoritative source is
+	// auction_bid_participants (the same guard table PlaceBid claims a row
+	// in), not merely "did GetUserHighestBid find a row", so this stays
+	// correct even if bid history read paths ever change independently.
+	var hasBid bool
+	_ = s.db.GetContext(ctx, &hasBid,
+		`SELECT EXISTS(SELECT 1 FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2)`,
+		auctionID, userID)
 
 	status := map[string]interface{}{
 		"auction_id":     auctionID,
@@ -735,6 +753,7 @@ func (s *auctionService) GetBidStatus(ctx context.Context, auctionID, userID uui
 		"my_bid_amount":  nil,
 		"current_price":  auction.CurrentPrice,
 		"auction_status": auction.Status,
+		"has_bid":        hasBid,
 	}
 
 	if highestBid != nil {

@@ -242,6 +242,11 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "bid_conflict":
 		logger.Warn("Bid conflict occurred", logFields...)
 		return Fail(c, 409, "bid_conflict", "Bid conflict, please retry")
+	case "bid_already_placed":
+		// Client feedback #19: a user may successfully bid on a given
+		// auction at most once, ever -- even after being outbid.
+		logger.Info("Duplicate bid rejected (user already participated)", logFields...)
+		return Fail(c, 409, "bid_already_placed", "لقد قمت بالمزايدة على هذا المزاد مسبقًا")
 	case "conflict":
 		// Client feedback #4 financial-integrity round: InitiateDeposit
 		// returns this for a duplicate non-rejected subscription deposit on

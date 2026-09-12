@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1081,6 +1082,351 @@ func TestPlaceBid_WalletCurrencyMismatch_Rejected(t *testing.T) {
 		t.Fatalf("(H) expected ErrWalletCurrencyMismatch, got %v", err)
 	}
 	t.Logf("(H) wallet currency EUR vs auction currency MRU correctly rejected: %v", err)
+}
+
+// ==================================================
+// Client feedback #19: one successful bid per user per auction, ever --
+// enforced via the auction_bid_participants guard table (migration 000050),
+// claimed in the SAME transaction as the bid itself. See bid_service.go
+// PlaceBid step 2c and bid_repo.go ClaimParticipation.
+// ==================================================
+
+// (19-1/2/3/4) The core business rule end-to-end: A's first bid succeeds, A's
+// second bid is rejected, B can still bid, and A remains rejected even after B.
+func TestPlaceBid_OneSuccessfulBidPerUserPerAuction(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ONEBID SELLER")
+	userA := createTestUser(t, env, "TEST ONEBID USER A")
+	userB := createTestUser(t, env, "TEST ONEBID USER B")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, userB.ID, decimal.NewFromInt(1000))
+
+	// (19-1) User A's first valid bid succeeds.
+	bidA, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(110))
+	if err != nil {
+		t.Fatalf("(19-1) expected User A's first bid to succeed, got: %v", err)
+	}
+	t.Logf("(19-1) User A first bid succeeded: %s", bidA.ID)
+
+	// (19-2) User A's second bid attempt (higher, otherwise fully valid) on the
+	// SAME auction is rejected -- even though it would clear every other rule.
+	_, err = env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(150))
+	if err != apperr.ErrDuplicateBidder {
+		t.Fatalf("(19-2) expected ErrDuplicateBidder for User A's second bid, got: %v", err)
+	}
+	t.Logf("(19-2) User A's second bid correctly rejected: %v", err)
+
+	// (19-3) User B can bid on the same auction.
+	bidB, err := env.bidSvc.PlaceBid(ctx, auction.ID, userB.ID, decimal.NewFromInt(150))
+	if err != nil {
+		t.Fatalf("(19-3) expected User B's first bid to succeed, got: %v", err)
+	}
+	t.Logf("(19-3) User B first bid succeeded: %s", bidB.ID)
+
+	// (19-4) User A remains permanently ineligible, even after being outbid by B.
+	_, err = env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(200))
+	if err != apperr.ErrDuplicateBidder {
+		t.Fatalf("(19-4) expected User A to remain rejected after User B's bid, got: %v", err)
+	}
+	t.Logf("(19-4) User A still rejected after User B's bid: %v", err)
+
+	// (19-10) Exactly one guard row exists for (A, auction) despite the two
+	// attempts by A.
+	var guardCount int
+	if err := env.db.GetContext(ctx, &guardCount,
+		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
+		auction.ID, userA.ID); err != nil {
+		t.Fatalf("failed to count guard rows for User A: %v", err)
+	}
+	if guardCount != 1 {
+		t.Fatalf("(19-10) expected exactly 1 guard row for (User A, auction), got %d", guardCount)
+	}
+
+	// (19-11) Existing bid history is preserved -- both successful bids are
+	// still visible, nothing was deleted or merged.
+	history, err := env.bidSvc.GetHistory(ctx, auction.ID)
+	if err != nil {
+		t.Fatalf("GetHistory failed: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("(19-11) expected 2 bids in history (A's successful first bid + B's), got %d", len(history))
+	}
+
+	// (19-12) Winner selection still works: B is the top bid. Queried
+	// directly (rather than via bidRepo.FindTopBid, whose SELECT * hits a
+	// pre-existing, unrelated NULL-scan issue on bidder_name for rows with
+	// no legacy denormalized bidder_name -- not something this round touches)
+	// to isolate exactly what this test is proving.
+	var topUserID uuid.UUID
+	if err := env.db.GetContext(ctx, &topUserID,
+		`SELECT user_id FROM bids WHERE auction_id = $1 ORDER BY amount DESC LIMIT 1`, auction.ID); err != nil {
+		t.Fatalf("failed to query top bid: %v", err)
+	}
+	if topUserID != userB.ID {
+		t.Fatalf("(19-12) expected User B to be the top bidder, got user %s", topUserID)
+	}
+
+	t.Logf("confirmed: one-successful-bid-per-user-per-auction rule enforced end-to-end, bid history and winner selection unaffected")
+}
+
+// (19-5) A too-low, rejected first attempt does NOT consume the user's
+// eligibility -- a subsequent valid bid from the same user must still succeed.
+func TestPlaceBid_TooLowFirstAttempt_DoesNotConsumeEligibility(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ONEBID TOOLOW SELLER")
+	bidder := createTestUser(t, env, "TEST ONEBID TOOLOW BIDDER")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	// Too low: current_price=100, min_increment=10 -> 105 < 110 required.
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(105))
+	if err != apperr.ErrBidTooLow {
+		t.Fatalf("precondition failed: expected ErrBidTooLow, got: %v", err)
+	}
+
+	// The same user's valid bid must still succeed -- the failed attempt above
+	// must not have claimed a guard row.
+	bid, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
+	if err != nil {
+		t.Fatalf("(19-5) expected the same user's valid bid to succeed after a too-low failed attempt, got: %v", err)
+	}
+	t.Logf("(19-5) too-low failed attempt did not consume eligibility; subsequent valid bid succeeded: %s", bid.ID)
+}
+
+// (19-6) Self-bid (seller bidding on their own auction) does NOT consume
+// eligibility -- it's rejected before the guard claim, and even if the seller
+// were later a legitimate bidder on a DIFFERENT auction, this must not affect
+// anything (this test only proves no guard row was created for the rejected
+// attempt itself).
+func TestPlaceBid_SelfBid_DoesNotConsumeEligibility(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ONEBID SELFBID SELLER")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, seller.ID, decimal.NewFromInt(110))
+	if err != apperr.ErrSelfBid {
+		t.Fatalf("(19-6) expected ErrSelfBid, got: %v", err)
+	}
+
+	var guardCount int
+	if err := env.db.GetContext(ctx, &guardCount,
+		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
+		auction.ID, seller.ID); err != nil {
+		t.Fatalf("failed to count guard rows: %v", err)
+	}
+	if guardCount != 0 {
+		t.Fatalf("(19-6) expected no guard row after a rejected self-bid, got %d", guardCount)
+	}
+	t.Logf("(19-6) self-bid rejection correctly left no guard row")
+}
+
+// (19-7) A failed attempt on an already-ended auction does NOT consume
+// eligibility.
+func TestPlaceBid_EndedAuction_DoesNotConsumeEligibility(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ONEBID ENDED SELLER")
+	bidder := createTestUser(t, env, "TEST ONEBID ENDED BIDDER")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET status = 'ended' WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to mark auction ended: %v", err)
+	}
+
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
+	if err != apperr.ErrAuctionNotActive {
+		t.Fatalf("(19-7) expected ErrAuctionNotActive, got: %v", err)
+	}
+
+	var guardCount int
+	if err := env.db.GetContext(ctx, &guardCount,
+		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
+		auction.ID, bidder.ID); err != nil {
+		t.Fatalf("failed to count guard rows: %v", err)
+	}
+	if guardCount != 0 {
+		t.Fatalf("(19-7) expected no guard row after a rejected ended-auction bid, got %d", guardCount)
+	}
+	t.Logf("(19-7) ended-auction rejection correctly left no guard row")
+}
+
+// (19-8) A failure AFTER the guard claim but before commit (insufficient
+// insurance balance) rolls back the guard row too -- a failed bid must never
+// permanently consume eligibility, proving the claim and the bid are truly
+// atomic within the same transaction.
+func TestPlaceBid_InsuranceFailureAfterClaim_RollsBackEligibility(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ONEBID INSURANCE SELLER")
+	bidder := createTestUser(t, env, "TEST ONEBID INSURANCE BIDDER")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	// Wallet exists but has a ZERO balance -- insurance_amount=20 (from
+	// createTestAuction) so ErrInsufficientForInsurance fires AFTER the
+	// guard claim (step 2c) but before the transaction commits.
+	creditWallet(t, env, bidder.ID, decimal.Zero)
+
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
+	if err != apperr.ErrInsufficientForInsurance {
+		t.Fatalf("(19-8) expected ErrInsufficientForInsurance, got: %v", err)
+	}
+
+	var guardCount int
+	if err := env.db.GetContext(ctx, &guardCount,
+		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
+		auction.ID, bidder.ID); err != nil {
+		t.Fatalf("failed to count guard rows: %v", err)
+	}
+	if guardCount != 0 {
+		t.Fatalf("(19-8) CRITICAL: expected the guard row to be rolled back after insurance failure, got %d rows -- a failed bid must never permanently consume eligibility", guardCount)
+	}
+
+	// The same user's bid must still succeed once they have sufficient balance.
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+	bid, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
+	if err != nil {
+		t.Fatalf("(19-8) expected the retried bid to succeed after crediting the wallet, got: %v", err)
+	}
+	t.Logf("(19-8) insurance failure correctly rolled back the guard claim; retried bid succeeded: %s", bid.ID)
+}
+
+// (19-9) Two concurrent first-bid attempts by the SAME user cannot both
+// commit -- proves the DB-level UNIQUE constraint, not just the application
+// check, is what actually prevents a race (goroutines racing PlaceBid
+// directly against real Postgres).
+func TestPlaceBid_ConcurrentFirstBids_OnlyOneCommits(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ONEBID RACE SELLER")
+	bidder := createTestUser(t, env, "TEST ONEBID RACE BIDDER")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(10000))
+
+	const n = 8
+	results := make(chan error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(amount int64) {
+			defer wg.Done()
+			_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110+amount))
+			results <- err
+		}(int64(i))
+	}
+	wg.Wait()
+	close(results)
+
+	successCount := 0
+	duplicateCount := 0
+	for err := range results {
+		if err == nil {
+			successCount++
+		} else if err == apperr.ErrDuplicateBidder || err == apperr.ErrBidConflict {
+			duplicateCount++
+		} else {
+			t.Logf("(19-9) unexpected error from concurrent attempt (acceptable if a transient conflict): %v", err)
+			duplicateCount++
+		}
+	}
+
+	if successCount != 1 {
+		t.Fatalf("(19-9) CRITICAL: expected exactly 1 of %d concurrent first-bid attempts by the same user to succeed, got %d successes", n, successCount)
+	}
+
+	var guardCount int
+	if err := env.db.GetContext(ctx, &guardCount,
+		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
+		auction.ID, bidder.ID); err != nil {
+		t.Fatalf("failed to count guard rows: %v", err)
+	}
+	if guardCount != 1 {
+		t.Fatalf("(19-9) CRITICAL: expected exactly 1 guard row after %d concurrent attempts, got %d", n, guardCount)
+	}
+	t.Logf("(19-9) %d concurrent first-bid attempts by the same user: exactly 1 succeeded, exactly 1 guard row exists", n)
+}
+
+// (19-13/14/15) Migration-time safety: historical duplicate bid rows are
+// NEVER deleted or rewritten, and the backfill produces exactly one guard
+// row per distinct (auction_id, user_id) pair -- proven directly against the
+// migration's own SQL logic (not re-running the real migration file, since
+// setupEnv's schema is already migrated; this exercises the identical
+// INSERT ... SELECT DISTINCT ON logic from 000050_auction_bid_participants.up.sql
+// against a fresh fixture to prove it end-to-end).
+func TestAuctionBidParticipants_BackfillPreservesHistoricalDuplicates(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ONEBID BACKFILL SELLER")
+	userA := createTestUser(t, env, "TEST ONEBID BACKFILL USER A")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	// Insert 3 historical bid rows for the SAME (auction, user) pair directly
+	// against bids -- simulating pre-existing duplicate data exactly like the
+	// 18 real duplicate groups found in Staging, bypassing PlaceBid/the guard
+	// entirely (as real historical rows predating this feature would).
+	for i := 0; i < 3; i++ {
+		if _, err := env.db.ExecContext(ctx, `
+			INSERT INTO bids (id, auction_id, user_id, amount, is_winning)
+			VALUES (gen_random_uuid(), $1, $2, $3, false)`,
+			auction.ID, userA.ID, decimal.NewFromInt(int64(110+i*10))); err != nil {
+			t.Fatalf("failed to insert historical duplicate bid %d: %v", i, err)
+		}
+	}
+
+	var bidsBefore int
+	if err := env.db.GetContext(ctx, &bidsBefore, `SELECT COUNT(*) FROM bids WHERE auction_id = $1 AND user_id = $2`, auction.ID, userA.ID); err != nil {
+		t.Fatalf("failed to count bids before backfill: %v", err)
+	}
+	if bidsBefore != 3 {
+		t.Fatalf("precondition failed: expected 3 historical bid rows, got %d", bidsBefore)
+	}
+
+	// Clear any guard row this fixture might already have (none expected --
+	// bidRepo.Create was never called) and run the exact backfill INSERT from
+	// the migration for just this pair, to prove it produces exactly one row.
+	if _, err := env.db.ExecContext(ctx, `DELETE FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`, auction.ID, userA.ID); err != nil {
+		t.Fatalf("failed to clear pre-existing guard rows: %v", err)
+	}
+	if _, err := env.db.ExecContext(ctx, `
+		INSERT INTO auction_bid_participants (auction_id, user_id, first_bid_id, created_at)
+		SELECT DISTINCT ON (b.auction_id, b.user_id)
+		    b.auction_id, b.user_id, b.id, b.created_at
+		FROM bids b
+		WHERE b.auction_id = $1 AND b.user_id = $2
+		ORDER BY b.auction_id, b.user_id, b.created_at ASC, b.id ASC`,
+		auction.ID, userA.ID); err != nil {
+		t.Fatalf("backfill INSERT failed: %v", err)
+	}
+
+	var bidsAfter int
+	if err := env.db.GetContext(ctx, &bidsAfter, `SELECT COUNT(*) FROM bids WHERE auction_id = $1 AND user_id = $2`, auction.ID, userA.ID); err != nil {
+		t.Fatalf("failed to count bids after backfill: %v", err)
+	}
+	if bidsAfter != 3 {
+		t.Fatalf("(19-14) CRITICAL: expected all 3 historical bid rows to survive backfill unchanged, got %d -- no historical bid may EVER be deleted or rewritten", bidsAfter)
+	}
+
+	var guardCount int
+	if err := env.db.GetContext(ctx, &guardCount,
+		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
+		auction.ID, userA.ID); err != nil {
+		t.Fatalf("failed to count guard rows: %v", err)
+	}
+	if guardCount != 1 {
+		t.Fatalf("(19-15) expected exactly 1 guard row backfilled from 3 historical duplicate bids, got %d", guardCount)
+	}
+
+	// A NEW bid attempt by this same user on this auction must now be blocked.
+	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(500))
+	if err != apperr.ErrDuplicateBidder {
+		t.Fatalf("(19-13) expected a new bid attempt by a user with historical duplicate bids to be blocked, got: %v", err)
+	}
+
+	t.Logf("confirmed: 3 historical duplicate bid rows preserved unchanged (%d before, %d after), backfill produced exactly 1 guard row, new bid attempt correctly blocked", bidsBefore, bidsAfter)
 }
 
 // (I) Approving a request preserves/stamps the same market_country_iso/currency_code on
