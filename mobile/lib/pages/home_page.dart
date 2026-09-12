@@ -47,6 +47,24 @@ import 'package:mezadpay/utils/money_formatter.dart';
 
 
 
+/// Which content the Hero Banner carousel should render for a given
+/// (loading, banners) state -- extracted as pure logic so it's directly
+/// testable without pumping the full HomePage widget tree (client
+/// feedback: Bug F). `loading` and `empty` both resolve to the neutral
+/// placeholder (never assets/announcement.png, the old commercial ad that
+/// used to flash on cold start during the `loading` window); only `data`
+/// renders real server banners.
+enum BannerSlideMode { loading, empty, data }
+
+BannerSlideMode bannerSlideMode({
+  required bool isLoadingBanners,
+  required List<Map<String, dynamic>> banners,
+}) {
+  if (isLoadingBanners) return BannerSlideMode.loading;
+  if (banners.isEmpty) return BannerSlideMode.empty;
+  return BannerSlideMode.data;
+}
+
 class HomePage extends ConsumerStatefulWidget {
 
   const HomePage({super.key});
@@ -1225,13 +1243,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                   aspectRatio: 16 / 7,
                   child: Builder(
                     builder: (context) {
-                      final slides = _isLoadingBanners
-                          ? [_buildBannerCard(isDarkMode)]
-                          : _banners.isEmpty
-                              ? [_buildBannerCard(isDarkMode)]
-                              : _banners
-                                  .map((banner) => _buildDynamicBannerCard(banner, isDarkMode))
-                                  .toList();
+                      final mode = bannerSlideMode(
+                        isLoadingBanners: _isLoadingBanners,
+                        banners: _banners,
+                      );
+                      final slides = switch (mode) {
+                        BannerSlideMode.loading => [_buildBannerPlaceholder(isDarkMode, showSpinner: true)],
+                        BannerSlideMode.empty => [_buildBannerPlaceholder(isDarkMode)],
+                        BannerSlideMode.data => _banners
+                            .map((banner) => _buildDynamicBannerCard(banner, isDarkMode))
+                            .toList(),
+                      };
                       return PageView(
                         controller: _bannerPageController,
                         onPageChanged: (index) => _bannerPage = index,
@@ -1603,19 +1625,23 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
-  Widget _buildBannerCard(bool isDarkMode) {
+  // Neutral banner placeholder (client feedback: Bug F). Used while the
+  // banner API request is still pending (cold start, before cache or
+  // network data exists) AND for the empty/error/no-active-banners case --
+  // NEVER the old assets/announcement.png commercial ad, which used to
+  // render in exactly this loading window and flash briefly on every cold
+  // start before the real server banner replaced it. [showSpinner]
+  // distinguishes the two: true only while a request is genuinely pending,
+  // so a real empty/failed result doesn't spin forever.
+  Widget _buildBannerPlaceholder(bool isDarkMode, {bool showSpinner = false}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: Image.asset(
-        'assets/announcement.png',
+      child: Container(
         width: double.infinity,
-        fit: BoxFit.contain,
-        errorBuilder: (c, e, s) => Container(
-          color: Colors.grey[300],
-          child: const Center(
-            child: Icon(Icons.broken_image, size: 48, color: Colors.grey),
-          ),
-        ),
+        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.grey[200],
+        child: showSpinner
+            ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            : null,
       ),
     );
   }
