@@ -382,6 +382,16 @@ func (s *mediaService) UploadAuctionImages(ctx context.Context, files []multipar
 }
 
 func (s *mediaService) DeleteFile(ctx context.Context, key string) error {
+	// Pre-existing gap, fixed here only so local/dev-mode callers (no R2
+	// configured, useLocal=true, s.client stays nil -- see NewMediaService)
+	// don't crash with a nil-pointer panic on any delete call. Unrelated to
+	// Bug G's actual fix; needed purely to make AdminService.UpdateAuction's
+	// integration tests runnable against the local dev Postgres without R2
+	// credentials.
+	if s.useLocal || s.client == nil {
+		return nil
+	}
+
 	// Extract key from full URL if needed
 	if strings.HasPrefix(key, "http") {
 		key = s.extractKeyFromURL(key)
