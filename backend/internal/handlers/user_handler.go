@@ -221,7 +221,67 @@ func (h *UserHandler) ListFavorites(c *fiber.Ctx) error {
 	if err != nil {
 		return InternalError(c, "Failed to get favorites")
 	}
-	return OK(c, auctions)
+
+	// Bug I fix (client feedback, Favorites/Home image consistency audit):
+	// this used to return OK(c, auctions) directly -- the raw models.Auction
+	// slice, whose only image field (ImageURLs) serializes as
+	// "image_urls": "url1,url2" (a comma-separated STRING). Mobile's
+	// favorites_page.dart (like Auction.fromJson used by Home) only ever
+	// looks for an "images" LIST field, so the image was never picked up
+	// even after favorite_repo.go's ListByUserID was fixed to actually
+	// populate ImageURLs. Response.data must stay a plain List (Bug C: the
+	// favorites parser expects exactly that shape, not a wrapper key) --
+	// only each element's shape changes here, mirroring the SAME
+	// "images": auction.GetImagesArray() convention AuctionHandler.List
+	// already uses for Home, so the identical mobile parsing code that
+	// already works for Home now also works for Favorites unchanged.
+	response := make([]fiber.Map, 0, len(auctions))
+	for _, auction := range auctions {
+		response = append(response, fiber.Map{
+			"id":               auction.ID,
+			"seller_id":        auction.SellerID,
+			"category_id":      auction.CategoryID,
+			"sub_category_id":  auction.SubCategoryID,
+			"location_id":      auction.LocationID,
+			"title_ar":         auction.TitleAr,
+			"title_fr":         auction.TitleFr,
+			"title_en":         auction.TitleEn,
+			"description_ar":   auction.DescriptionAr,
+			"description_fr":   auction.DescriptionFr,
+			"description_en":   auction.DescriptionEn,
+			"start_price":      auction.StartPrice,
+			"current_price":    auction.CurrentPrice,
+			"min_increment":    auction.MinIncrement,
+			"insurance_amount": auction.InsuranceAmount,
+			"reserve_price":    auction.ReservePrice,
+			"start_time":       auction.StartTime,
+			"end_time":         auction.EndTime,
+			"status":           auction.Status,
+			"lot_number":       auction.LotNumber,
+			"views":            auction.Views,
+			"bidder_count":     auction.BidderCount,
+			"winner_id":        auction.WinnerID,
+			"winning_bid_id":   auction.WinningBidID,
+			"payment_deadline": auction.PaymentDeadline,
+			"is_featured":      auction.IsFeatured,
+			"featured_until":   auction.FeaturedUntil,
+			"rejection_reason": auction.RejectionReason,
+			"item_details":     auction.ItemDetails,
+			"buy_now_price":    auction.BuyNowPrice,
+			"condition":        auction.Condition,
+			"brand":            auction.Brand,
+			"is_verified":      auction.IsVerified,
+			"video_url":        auction.VideoURL,
+			"quantity":         auction.Quantity,
+			"category":         auction.CategoryNameAr,
+			"city":             auction.CityNameAr,
+			"images":           auction.GetImagesArray(),
+			"created_at":       auction.CreatedAt,
+			"currency_code":      auction.EffectiveCurrencyCode(),
+			"market_country_iso": auction.EffectiveMarketCountryISO(),
+		})
+	}
+	return OK(c, response)
 }
 
 func (h *UserHandler) MyAuctions(c *fiber.Ctx) error {

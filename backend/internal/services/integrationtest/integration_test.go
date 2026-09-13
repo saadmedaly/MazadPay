@@ -65,6 +65,7 @@ type testEnv struct {
 	auctHandler *handlers.AuctionHandler
 	bidHandler  *handlers.BidHandler
 	wsHandler   *handlers.WSHandler
+	userHandler *handlers.UserHandler
 	app         *fiber.App
 }
 
@@ -120,6 +121,7 @@ func setupEnv(t *testing.T) *testEnv {
 	walletSvcForAutoBid := services.NewWalletService(db, walletRepo, repository.NewTransactionRepository(db, walletRepo), nil, nil, nil, logger)
 	autoBidSvc := services.NewBidAutoBidService(db, bidSvc, walletSvcForAutoBid)
 	autoBidHandler := handlers.NewBidAutoBidHandler(autoBidSvc, auctionRepo, userRepo, logger)
+	userHandler := handlers.NewUserHandler(userSvc, logger)
 
 	// Minimal fiber app for HTTP-level tests of handler-layer logic (e.g. GetByID's /
 	// History's market-isolation checks, which live in the handler layer, not the
@@ -135,12 +137,17 @@ func setupEnv(t *testing.T) *testEnv {
 	app.Get("/auctions/:id/boosts/as/:userID", fakeAuthFromParam(), boostHandler.GetAuctionBoosts)
 	app.Post("/auctions/:id/boost/as/:userID", fakeAuthFromParam(), boostHandler.CreateBoost)
 	app.Post("/auctions/:id/auto-bid/as/:userID", fakeAuthFromParam(), autoBidHandler.CreateAutoBid)
+	// Bug I fix verification: exercises UserHandler.ListFavorites at the full
+	// HTTP-handler level (not just favoriteRepo.ListByUserID) so the test
+	// proves the actual "images" response-field transformation the mobile
+	// app depends on, not only that the DB query returns image_urls.
+	app.Get("/favorites/as/:userID", fakeAuthFromParam(), userHandler.ListFavorites)
 
 	return &testEnv{
 		db: db, rdb: rdb, logger: logger,
 		userRepo: userRepo, auctionRepo: auctionRepo, reqRepo: reqRepo, walletRepo: walletRepo, bidRepo: bidRepo,
 		authSvc: authSvc, reqSvc: reqSvc, auctSvc: auctSvc, bidSvc: bidSvc, userSvc: userSvc, notifSvc: notifSvc,
-		auctHandler: auctHandler, bidHandler: bidHandler, wsHandler: wsHandler, app: app,
+		auctHandler: auctHandler, bidHandler: bidHandler, wsHandler: wsHandler, userHandler: userHandler, app: app,
 	}
 }
 
@@ -1751,6 +1758,421 @@ func TestListFavorites_ExcludesCrossMarket(t *testing.T) {
 		t.Fatalf("(T) expected same-market MR favorite to still be present, got %d favorites", len(favorites))
 	}
 	t.Logf("(T) favorites list correctly excluded stale cross-market TN favorite, kept MR favorite (%d total)", len(favorites))
+}
+
+// === Bug I: Favorites/Home image consistency ===
+//
+// Client feedback: a favorited auction with a real, persisted image showed
+// the neutral Bug H placeholder in Favorites while the SAME auction showed
+// its real image correctly on Home. Root cause: favoriteRepo.ListByUserID's
+// query never joined auction_images (a.ImageURLs was always NULL), and
+// UserHandler.ListFavorites returned the raw model instead of building the
+// same "images" response field AuctionHandler.List already builds via
+// GetImagesArray(). These tests exercise both the repository fix (image_urls
+// populated) and the handler fix (images field present in the JSON
+// response), using the real Postgres-backed testEnv already established by
+// this file for prior Favorites tests (see (T) above).
+
+// httpGetFavorites calls GET /favorites/as/:userID (test-only route wired in
+// setupEnv) and parses the JSON body into a slice of raw maps, mirroring
+// exactly what favorites_page.dart/favorites_service.dart receive as
+// response.data.
+func httpGetFavorites(t *testing.T, env *testEnv, callerID uuid.UUID) []map[string]interface{} {
+	t.Helper()
+	req := httptest.NewRequest("GET", fmt.Sprintf("/favorites/as/%s", callerID), nil)
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("GET /favorites/as/%s: expected 200, got %d", callerID, resp.StatusCode)
+	}
+	var body struct {
+		Success bool                     `json:"success"`
+		Data    []map[string]interface{} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode favorites response: %v", err)
+	}
+	if !body.Success {
+		t.Fatalf("expected success=true in favorites response")
+	}
+	return body.Data
+}
+
+// findFavoriteByID locates one auction's entry in a parsed favorites response
+// by its "id" field.
+func findFavoriteByID(favorites []map[string]interface{}, auctionID uuid.UUID) map[string]interface{} {
+	target := auctionID.String()
+	for _, f := range favorites {
+		if id, _ := f["id"].(string); id == target {
+			return f
+		}
+	}
+	return nil
+}
+
+// (1) A favorited auction with exactly one persisted image returns
+// images=[URL] in the Favorites HTTP response -- the exact contract mobile's
+// favorites_page.dart (auction['images']) and Auction.fromJson (Home) both
+// already parse identically.
+func TestFavorites_SingleImage_ReturnsImagesArray(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVIMG SELLER 1")
+	user := createTestUser(t, env, "TEST FAVIMG USER 1")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	imageURL := "https://pub-test.r2.dev/auctions/" + auction.ID.String() + "/photo.jpg"
+	seedAuctionImage(t, env, auction.ID, imageURL, 1)
+
+	if err := env.userSvc.AddFavorite(ctx, user.ID, auction.ID); err != nil {
+		t.Fatalf("AddFavorite failed: %v", err)
+	}
+
+	favorites := httpGetFavorites(t, env, user.ID)
+	entry := findFavoriteByID(favorites, auction.ID)
+	if entry == nil {
+		t.Fatalf("favorited auction %s not found in favorites response", auction.ID)
+	}
+
+	images, ok := entry["images"].([]interface{})
+	if !ok {
+		t.Fatalf("expected \"images\" to be a JSON array, got %T: %v", entry["images"], entry["images"])
+	}
+	if len(images) != 1 {
+		t.Fatalf("expected exactly 1 image, got %d: %v", len(images), images)
+	}
+	if images[0] != imageURL {
+		t.Fatalf("expected image URL %q, got %q", imageURL, images[0])
+	}
+}
+
+// (2) A favorited auction with multiple images returns them in
+// display_order -- proves the string_agg subquery's ORDER BY is preserved
+// end-to-end through the handler's GetImagesArray() split.
+func TestFavorites_MultipleImages_PreservesDisplayOrder(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVIMG SELLER 2")
+	user := createTestUser(t, env, "TEST FAVIMG USER 2")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	urlFirst := "https://pub-test.r2.dev/auctions/" + auction.ID.String() + "/first.jpg"
+	urlSecond := "https://pub-test.r2.dev/auctions/" + auction.ID.String() + "/second.jpg"
+	urlThird := "https://pub-test.r2.dev/auctions/" + auction.ID.String() + "/third.jpg"
+	// Seeded out of order on purpose -- display_order (not insertion order)
+	// must determine the returned sequence.
+	seedAuctionImage(t, env, auction.ID, urlThird, 3)
+	seedAuctionImage(t, env, auction.ID, urlFirst, 1)
+	seedAuctionImage(t, env, auction.ID, urlSecond, 2)
+
+	if err := env.userSvc.AddFavorite(ctx, user.ID, auction.ID); err != nil {
+		t.Fatalf("AddFavorite failed: %v", err)
+	}
+
+	favorites := httpGetFavorites(t, env, user.ID)
+	entry := findFavoriteByID(favorites, auction.ID)
+	if entry == nil {
+		t.Fatalf("favorited auction %s not found in favorites response", auction.ID)
+	}
+	images, ok := entry["images"].([]interface{})
+	if !ok || len(images) != 3 {
+		t.Fatalf("expected exactly 3 images, got %v", entry["images"])
+	}
+	want := []string{urlFirst, urlSecond, urlThird}
+	for i, w := range want {
+		if images[i] != w {
+			t.Fatalf("image at position %d: expected %q, got %q (full order: %v)", i, w, images[i], images)
+		}
+	}
+}
+
+// (3) A favorited auction with NO persisted images returns an empty images
+// array -- never omits the field, never fabricates a placeholder URL (Bug H
+// contract: the mobile app's neutral fallback is what must render this
+// case, never a fake stock photo).
+func TestFavorites_NoImages_ReturnsEmptyArrayNeverFabricated(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVIMG SELLER 3")
+	user := createTestUser(t, env, "TEST FAVIMG USER 3")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	// No seedAuctionImage call -- this auction genuinely has zero images.
+
+	if err := env.userSvc.AddFavorite(ctx, user.ID, auction.ID); err != nil {
+		t.Fatalf("AddFavorite failed: %v", err)
+	}
+
+	favorites := httpGetFavorites(t, env, user.ID)
+	entry := findFavoriteByID(favorites, auction.ID)
+	if entry == nil {
+		t.Fatalf("favorited auction %s not found in favorites response", auction.ID)
+	}
+	images, ok := entry["images"].([]interface{})
+	if !ok {
+		t.Fatalf("expected \"images\" key present as an array (possibly empty), got %T: %v", entry["images"], entry["images"])
+	}
+	if len(images) != 0 {
+		t.Fatalf("expected 0 images for an auction with none persisted, got %d: %v", len(images), images)
+	}
+	// Explicit anti-Bug-H-regression check: no fabricated/placeholder URL string.
+	for _, img := range images {
+		if s, _ := img.(string); strings.Contains(strings.ToLower(s), "corolla") {
+			t.Fatalf("CRITICAL: a fabricated placeholder image URL leaked into the Favorites response: %q", s)
+		}
+	}
+}
+
+// (4) The SAME auction returns the SAME first/current image URL from both
+// Home's list endpoint (AuctionHandler.List, via auctionRepo.FindAll) and
+// Favorites (UserHandler.ListFavorites) -- the exact consistency contract
+// Bug I was filed against.
+func TestFavorites_HomeConsistency_SameAuctionSameImage(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVIMG SELLER 4")
+	user := createTestUser(t, env, "TEST FAVIMG USER 4")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	imageURL := "https://pub-test.r2.dev/auctions/" + auction.ID.String() + "/consistent.jpg"
+	seedAuctionImage(t, env, auction.ID, imageURL, 1)
+
+	if err := env.userSvc.AddFavorite(ctx, user.ID, auction.ID); err != nil {
+		t.Fatalf("AddFavorite failed: %v", err)
+	}
+
+	// Home's data source: auctionRepo.FindAll (same repository method
+	// AuctionHandler.List calls, see auction_handler.go's List handler).
+	homeAuctions, _, err := env.auctionRepo.FindAll(ctx, repository.AuctionFilters{Status: "active"})
+	if err != nil {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+	var homeAuction *models.Auction
+	for i := range homeAuctions {
+		if homeAuctions[i].ID == auction.ID {
+			homeAuction = &homeAuctions[i]
+		}
+	}
+	if homeAuction == nil {
+		t.Fatalf("auction %s not found via Home's FindAll", auction.ID)
+	}
+	homeImages := homeAuction.GetImagesArray()
+	if len(homeImages) != 1 || homeImages[0] != imageURL {
+		t.Fatalf("expected Home to show image %q, got %v", imageURL, homeImages)
+	}
+
+	favorites := httpGetFavorites(t, env, user.ID)
+	entry := findFavoriteByID(favorites, auction.ID)
+	if entry == nil {
+		t.Fatalf("favorited auction %s not found in favorites response", auction.ID)
+	}
+	favImages, ok := entry["images"].([]interface{})
+	if !ok || len(favImages) != 1 {
+		t.Fatalf("expected Favorites to show exactly 1 image, got %v", entry["images"])
+	}
+	if favImages[0] != imageURL {
+		t.Fatalf("IMAGE INCONSISTENCY (Bug I regression): Home shows %q but Favorites shows %q for the SAME auction %s", imageURL, favImages[0], auction.ID)
+	}
+}
+
+// (5) Bug C preservation: the Favorites response wrapper contract (data is a
+// plain JSON array, never a {"favorites": [...]} nested wrapper) still
+// holds after the Bug I handler change -- only each element's shape gained
+// fields, the outer response.data shape is untouched.
+func TestFavorites_BugC_WrapperShapePreserved(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVIMG SELLER 5")
+	user := createTestUser(t, env, "TEST FAVIMG USER 5")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if err := env.userSvc.AddFavorite(ctx, user.ID, auction.ID); err != nil {
+		t.Fatalf("AddFavorite failed: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/favorites/as/%s", user.ID), nil)
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var raw map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	data, ok := raw["data"]
+	if !ok {
+		t.Fatalf("expected top-level \"data\" key, response: %v", raw)
+	}
+	if _, isList := data.([]interface{}); !isList {
+		t.Fatalf("Bug C REGRESSION: expected response.data to be a plain JSON array, got %T -- extractFavoriteAuctionIds/extractFavoriteAuctions in favorites_service.dart expect exactly this shape", data)
+	}
+	if _, hasNestedWrapper := raw["favorites"]; hasNestedWrapper {
+		t.Fatalf("Bug C REGRESSION: response must never contain a nested \"favorites\" wrapper key")
+	}
+}
+
+// (6) Unrelated favorite fields (title, price, status, seller_id, etc.)
+// remain present and unchanged after the Bug I handler rewrite -- proves the
+// new fiber.Map construction is a faithful mirror of AuctionHandler.List's
+// fields, not an accidental narrowing of the response.
+func TestFavorites_UnrelatedFieldsUnchanged(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVIMG SELLER 6")
+	user := createTestUser(t, env, "TEST FAVIMG USER 6")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if err := env.userSvc.AddFavorite(ctx, user.ID, auction.ID); err != nil {
+		t.Fatalf("AddFavorite failed: %v", err)
+	}
+
+	favorites := httpGetFavorites(t, env, user.ID)
+	entry := findFavoriteByID(favorites, auction.ID)
+	if entry == nil {
+		t.Fatalf("favorited auction %s not found in favorites response", auction.ID)
+	}
+
+	for _, field := range []string{
+		"id", "seller_id", "category_id", "title_ar", "start_price",
+		"current_price", "status", "lot_number", "views", "bidder_count",
+		"currency_code", "market_country_iso",
+	} {
+		if _, present := entry[field]; !present {
+			t.Fatalf("expected unrelated field %q to still be present in favorites response, it was dropped", field)
+		}
+	}
+	if entry["status"] != auction.Status {
+		t.Fatalf("expected status %q, got %v", auction.Status, entry["status"])
+	}
+	if entry["seller_id"] != seller.ID.String() {
+		t.Fatalf("expected seller_id %q, got %v", seller.ID.String(), entry["seller_id"])
+	}
+}
+
+// (7) Cross-user favorites isolation remains intact after the Bug I
+// rewrite: user B's favorite images/data must never appear in user A's
+// favorites response.
+func TestFavorites_CrossUserIsolation_ImagesNotLeaked(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVIMG SELLER 7")
+	userA := createTestUser(t, env, "TEST FAVIMG USER 7A")
+	userB := createTestUser(t, env, "TEST FAVIMG USER 7B")
+	auctionA := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	auctionB := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	imageA := "https://pub-test.r2.dev/auctions/" + auctionA.ID.String() + "/a.jpg"
+	imageB := "https://pub-test.r2.dev/auctions/" + auctionB.ID.String() + "/b.jpg"
+	seedAuctionImage(t, env, auctionA.ID, imageA, 1)
+	seedAuctionImage(t, env, auctionB.ID, imageB, 1)
+
+	if err := env.userSvc.AddFavorite(ctx, userA.ID, auctionA.ID); err != nil {
+		t.Fatalf("AddFavorite(A) failed: %v", err)
+	}
+	if err := env.userSvc.AddFavorite(ctx, userB.ID, auctionB.ID); err != nil {
+		t.Fatalf("AddFavorite(B) failed: %v", err)
+	}
+
+	favoritesA := httpGetFavorites(t, env, userA.ID)
+	if findFavoriteByID(favoritesA, auctionB.ID) != nil {
+		t.Fatalf("CRITICAL: user B's favorite auction leaked into user A's favorites response")
+	}
+	entryA := findFavoriteByID(favoritesA, auctionA.ID)
+	if entryA == nil {
+		t.Fatalf("user A's own favorite auction missing from their own favorites response")
+	}
+	imgsA, _ := entryA["images"].([]interface{})
+	if len(imgsA) != 1 || imgsA[0] != imageA {
+		t.Fatalf("expected user A's favorite to show image %q, got %v", imageA, imgsA)
+	}
+}
+
+// (9) Customer #20 realtime-refetch compatibility: the Favorites HTTP
+// response contract that RealtimeSyncService's auction.updated handler
+// triggers a plain re-fetch against (favorites_page.dart calls
+// FavoritesService().getFavoriteAuctions(), which calls this same endpoint)
+// is unchanged in kind -- still a 200 with a plain array in response.data,
+// now simply carrying real images. No new fields required on the mobile
+// side, confirming the realtime wiring needs no changes.
+func TestFavorites_Customer20RefetchContractUnchanged(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVIMG SELLER 9")
+	user := createTestUser(t, env, "TEST FAVIMG USER 9")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if err := env.userSvc.AddFavorite(ctx, user.ID, auction.ID); err != nil {
+		t.Fatalf("AddFavorite failed: %v", err)
+	}
+
+	// Simulate the realtime handler's refetch: calling the SAME endpoint a
+	// second time (e.g. after an auction.updated event) must keep returning
+	// a plain 200 + array, and must reflect an image added between calls --
+	// i.e. a subsequent fetch after content changes picks up the change,
+	// exactly as auction.updated -> _loadAuctions() -> a fresh GET expects.
+	before := httpGetFavorites(t, env, user.ID)
+	entryBefore := findFavoriteByID(before, auction.ID)
+	if entryBefore == nil {
+		t.Fatalf("favorite missing on first fetch")
+	}
+	imagesBefore, _ := entryBefore["images"].([]interface{})
+	if len(imagesBefore) != 0 {
+		t.Fatalf("expected no images yet, got %v", imagesBefore)
+	}
+
+	newImage := "https://pub-test.r2.dev/auctions/" + auction.ID.String() + "/added-later.jpg"
+	seedAuctionImage(t, env, auction.ID, newImage, 1)
+
+	after := httpGetFavorites(t, env, user.ID)
+	entryAfter := findFavoriteByID(after, auction.ID)
+	if entryAfter == nil {
+		t.Fatalf("favorite missing on refetch")
+	}
+	imagesAfter, ok := entryAfter["images"].([]interface{})
+	if !ok || len(imagesAfter) != 1 || imagesAfter[0] != newImage {
+		t.Fatalf("expected refetch to reflect the newly added image %q, got %v", newImage, imagesAfter)
+	}
+}
+
+// (10) An auction with genuinely no image never has a URL fabricated for it
+// -- direct repository-level check that image_urls is an empty string
+// (never a placeholder), independent of the handler transformation tested
+// above.
+func TestFavoriteRepo_NoImages_ImageURLsEmptyNeverFabricated(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FAVIMG SELLER 10")
+	user := createTestUser(t, env, "TEST FAVIMG USER 10")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if err := env.userSvc.AddFavorite(ctx, user.ID, auction.ID); err != nil {
+		t.Fatalf("AddFavorite failed: %v", err)
+	}
+
+	favoriteRepo := repository.NewFavoriteRepository(env.db)
+	favorites, err := favoriteRepo.ListByUserID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ListByUserID failed: %v", err)
+	}
+	var found *models.Auction
+	for i := range favorites {
+		if favorites[i].ID == auction.ID {
+			found = &favorites[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("favorited auction not found via ListByUserID")
+	}
+	if found.ImageURLs == nil {
+		t.Fatalf("expected ImageURLs to be a non-nil empty string (COALESCE default), got nil")
+	}
+	if *found.ImageURLs != "" {
+		t.Fatalf("expected empty image_urls for an auction with no images, got %q", *found.ImageURLs)
+	}
+	images := found.GetImagesArray()
+	if len(images) != 0 {
+		t.Fatalf("expected 0 images, got %v", images)
+	}
 }
 
 // === Phase 1.2 final isolation fixes ===
