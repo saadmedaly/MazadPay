@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/side_menu_drawer.dart';
 import '../widgets/live_indicator.dart';
+import '../utils/auction_image.dart';
 
 import 'all_auctions_page.dart';
 
@@ -1890,7 +1891,14 @@ class _HomePageState extends ConsumerState<HomePage> {
     final price = MoneyFormatter.format(auction.currentPrice, auction.currencyCode);
     final bidCount = auction.bidderCount;
     final time = TimeUtils.formatDuration(context, auction.endTime.difference(DateTime.now()));
-    final imageUrl = auction.imageUrls.isNotEmpty ? auction.imageUrls[0] : 'assets/corolla.png';
+    // Client feedback: Bug H -- no generic/default product image (e.g. a car
+    // photo) may ever stand in for an auction's real image.
+    // resolveAuctionImageUrl is the single tested decision for "is there a
+    // real image?"; both the no-image and broken-image cases route to the
+    // neutral placeholder below, never to a fake stock asset.
+    final resolvedImageUrl = resolveAuctionImageUrl(auction.imageUrls);
+    final hasRealImage = resolvedImageUrl != null;
+    final imageUrl = resolvedImageUrl ?? '';
     final isNetworkImage = imageUrl.startsWith('http');
 
 
@@ -1961,7 +1969,11 @@ class _HomePageState extends ConsumerState<HomePage> {
 
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
 
-                  child: isNetworkImage
+                  child: !hasRealImage
+
+                    ? Container(height: 110, color: Colors.grey[200], child: const Icon(Icons.image, color: Colors.grey))
+
+                    : isNetworkImage
 
                     ? CachedNetworkImage(
 
@@ -1983,17 +1995,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
                         ),
 
-                        errorWidget: (c, e, s) => Image.asset(
-
-                          'assets/corolla.png',
-
-                          height: 110,
-
-                          width: double.infinity,
-
-                          fit: BoxFit.cover,
-
-                        ),
+                        errorWidget: (c, e, s) => Container(height: 110, color: Colors.grey[200], child: const Icon(Icons.image, color: Colors.grey)),
 
                       )
 

@@ -24,6 +24,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../utils/time_utils.dart';
 import '../utils/money_formatter.dart';
+import '../utils/auction_image.dart';
 
 class AuctionDetailsPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -1780,9 +1781,13 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   ) {
     final favoritesAsync = ref.watch(favoritesProvider);
     final isFavorite = favoritesAsync.value?.contains(auction.id) ?? false;
-    final imagePath = auction.imageUrls.isNotEmpty
-        ? auction.imageUrls[0]
-        : 'assets/corolla.png';
+    // Client feedback: Bug H -- no generic/default product image (e.g. a
+    // car photo) may ever stand in for an auction's real image. Empty
+    // imagePath (no real image) and a failed load both route to the same
+    // neutral placeholder below, never to a fake stock asset.
+    final resolvedImagePath = resolveAuctionImageUrl(auction.imageUrls);
+    final hasRealImage = resolvedImagePath != null;
+    final imagePath = resolvedImagePath ?? '';
 
     return GestureDetector(
       onTap: () {
@@ -1823,7 +1828,13 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(16),
                   ),
-                  child: imagePath.startsWith('http')
+                  child: !hasRealImage
+                      ? Container(
+                          height: 120,
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                        )
+                      : imagePath.startsWith('http')
                       ? CachedNetworkImage(
                           imageUrl: imagePath,
                           height: 120,
@@ -1834,11 +1845,10 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                             highlightColor: Colors.grey[100]!,
                             child: Container(color: Colors.white),
                           ),
-                          errorWidget: (c, e, s) => Image.asset(
-                            'assets/corolla.png',
+                          errorWidget: (c, e, s) => Container(
                             height: 120,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.image_not_supported, color: Colors.grey),
                           ),
                         )
                       : Image.asset(
@@ -1846,8 +1856,11 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                           height: 120,
                           width: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) =>
-                              Container(height: 120, color: Colors.grey[300]),
+                          errorBuilder: (c, e, s) => Container(
+                            height: 120,
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                          ),
                         ),
                 ),
                 Positioned(

@@ -152,13 +152,17 @@ class AuctionNotifierApi extends _$AuctionNotifierApi {
     return Auction.fromJson(data);
   }
   
-  /// Enchère par défaut en cas d'erreur
+  /// Enchère par défaut en cas d'erreur. Currently unused (dead code -- no
+  /// call site references it), but fixed regardless per client feedback:
+  /// Bug H, since its name and doc comment mark it explicitly as an
+  /// auction-image fallback: imageUrls must never contain a fake stock
+  /// photo (e.g. assets/corolla.png) standing in for a real auction image.
   Auction _getDefaultAuction(String id) {
     return Auction(
       id: id,
       title: 'Chargement...',
       description: '',
-      imageUrls: ['assets/corolla.png'],
+      imageUrls: const [],
       startPrice: 0,
       currentPrice: 0,
       minIncrement: 500,

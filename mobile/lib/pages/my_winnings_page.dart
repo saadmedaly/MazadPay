@@ -6,6 +6,7 @@ import 'auction_winner_page.dart';
 import '../services/auction_api.dart';
 import '../services/cache_service.dart';
 import '../utils/money_formatter.dart';
+import '../utils/auction_image.dart';
 
 class MyWinningsPage extends ConsumerStatefulWidget {
   const MyWinningsPage({super.key});
@@ -221,16 +222,23 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
     // fell through to the generic placeholder asset even when real images
     // existed. Mirrors the same comma-separated-string-or-List handling
     // already established in my_auctions_page.dart for this identical field.
-    String imageUrl = 'assets/corolla.png';
+    //
+    // Client feedback: Bug H -- the placeholder used to default to
+    // 'assets/corolla.png' (a real, bundled stock photo), which rendered
+    // successfully as though it were the auction's own image whenever no
+    // real image existed. Defaults to '' instead, so the no-image case
+    // reaches the same neutral Icons.image_not_supported placeholder below
+    // as a genuinely broken/failed image load.
+    String imageUrl = '';
     final rawImageUrls = winning['image_urls'];
     if (rawImageUrls != null && rawImageUrls.toString().isNotEmpty) {
       if (rawImageUrls is List && rawImageUrls.isNotEmpty) {
-        imageUrl = rawImageUrls[0].toString();
+        imageUrl = resolveAuctionImageUrl(rawImageUrls.map((e) => e.toString()).toList()) ?? '';
       } else {
-        imageUrl = rawImageUrls.toString().split(',').first.trim();
+        imageUrl = resolveAuctionImageUrl(rawImageUrls.toString().split(',')) ?? '';
       }
     } else if (winning['images'] != null && winning['images'] is List && (winning['images'] as List).isNotEmpty) {
-      imageUrl = (winning['images'] as List)[0].toString();
+      imageUrl = resolveAuctionImageUrl((winning['images'] as List).map((e) => e.toString()).toList()) ?? '';
     } else if (winning['image_url'] != null) {
       imageUrl = winning['image_url'].toString();
     } else if (winning['image'] != null) {
@@ -253,7 +261,14 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: imageUrl.startsWith('http')
+                child: imageUrl.isEmpty
+                    ? Container(
+                        width: 80,
+                        height: 80,
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                      )
+                    : imageUrl.startsWith('http')
                     ? Image.network(
                         imageUrl,
                         width: 80,
