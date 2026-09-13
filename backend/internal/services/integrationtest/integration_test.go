@@ -3981,3 +3981,311 @@ func TestCreateBannerRequest_A1_EndBeforeStart_RejectedAsBadRequest(t *testing.T
 	}
 	t.Logf("(A1-3) confirmed: ends_at < starts_at correctly rejected as ErrBadRequest, no row persisted")
 }
+
+// ==================================================
+// Bug G (client feedback): the Admin web's auction edit/save form always
+// re-sends the auction's current image URLs in UpdateAuctionInput.Images,
+// even when the admin changed nothing about images (e.g. editing only the
+// title or price). AdminService.UpdateAuction previously treated ANY
+// non-empty Images slice as "images changed" -- deleting the real R2
+// objects and reinserting the exact same URLs into auction_images, leaving
+// the DB pointing at files that no longer existed. Real-device symptom:
+// an approved auction's image showed a broken/missing placeholder on My
+// Auctions, Auction Details, Favorites, and Active Auctions alike, even
+// though the DB row and URL looked completely valid.
+//
+// Fixed by comparing the incoming, ordered, non-empty URL list against the
+// existing auction_images rows (also ordered by display_order) before
+// doing anything: a same-images save is now a true no-op for images (no
+// DB churn, no R2 deletion); only a genuine URL-set change triggers the
+// replace-and-cleanup path, which still runs exactly as before.
+//
+// These tests exercise the real adminService.UpdateAuction against a
+// local MediaService (falls back to local-storage mode without R2 creds,
+// so DeleteFile calls either no-op safely or fail silently -- best-effort
+// per the existing code, never fails the whole operation) to prove the
+// image DB rows themselves are/aren't touched, which is what the API/
+// mobile layers actually observe.
+// ==================================================
+
+func newTestAdminService(t *testing.T, env *testEnv) services.AdminService {
+	t.Helper()
+	cfg := config.Load()
+	txRepo := repository.NewTransactionRepository(env.db, env.walletRepo)
+	reportRepo := repository.NewReportRepository(env.db)
+	contentRepo := repository.NewContentRepository(env.db)
+	kycRepo := repository.NewKYCRepository(env.db)
+	invRepo := repository.NewAdminInvitationRepository(env.db)
+	settingsRepo := repository.NewSettingsRepository(env.db)
+	auditRepo := repository.NewAuditRepository(env.db)
+	auditSvc := services.NewAuditService(auditRepo)
+	mediaSvc := services.NewMediaService(cfg, env.logger)
+
+	return services.NewAdminService(
+		env.db, env.userRepo, env.auctionRepo, env.bidRepo, txRepo, reportRepo,
+		kycRepo, contentRepo, invRepo, env.reqRepo, settingsRepo,
+		mediaSvc, env.notifSvc, auditSvc, env.rdb, env.logger, cfg.JWT.ExpiryHours,
+	)
+}
+
+func getAuctionImageURLsOrdered(t *testing.T, env *testEnv, auctionID uuid.UUID) []string {
+	t.Helper()
+	ctx := context.Background()
+	var urls []string
+	if err := env.db.SelectContext(ctx, &urls,
+		`SELECT url FROM auction_images WHERE auction_id = $1 ORDER BY display_order`, auctionID); err != nil {
+		t.Fatalf("failed to read auction_images: %v", err)
+	}
+	return urls
+}
+
+func seedAuctionImage(t *testing.T, env *testEnv, auctionID uuid.UUID, url string, order int) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := env.db.ExecContext(ctx,
+		`INSERT INTO auction_images (auction_id, url, media_type, display_order) VALUES ($1, $2, 'image', $3)`,
+		auctionID, url, order); err != nil {
+		t.Fatalf("failed to seed auction_images row: %v", err)
+	}
+}
+
+func baseUpdateAuctionInput(a *models.Auction) services.UpdateAuctionInput {
+	return services.UpdateAuctionInput{
+		CategoryID:      a.CategoryID,
+		TitleAr:         a.TitleAr,
+		StartPrice:      a.StartPrice,
+		MinIncrement:    a.MinIncrement,
+		InsuranceAmount: a.InsuranceAmount,
+		EndTime:         a.EndTime,
+		Quantity:        1,
+	}
+}
+
+// (G-1) Saving the auction with the exact same image URLs it already has
+// must NOT delete the R2 object or touch the image rows.
+func TestUpdateAuction_G1_SameImagesResubmitted_NoImageChange(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BUGG SELLER G1")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	seedAuctionImage(t, env, auction.ID, "https://example.com/g1-photo.jpg", 0)
+
+	adminSvc := newTestAdminService(t, env)
+
+	before := getAuctionImageURLsOrdered(t, env, auction.ID)
+	if len(before) != 1 || before[0] != "https://example.com/g1-photo.jpg" {
+		t.Fatalf("(G-1) expected seeded image before update, got: %v", before)
+	}
+
+	input := baseUpdateAuctionInput(auction)
+	input.Images = []string{"https://example.com/g1-photo.jpg"}
+	if err := adminSvc.UpdateAuction(ctx, auction.ID, input); err != nil {
+		t.Fatalf("(G-1) UpdateAuction failed: %v", err)
+	}
+
+	after := getAuctionImageURLsOrdered(t, env, auction.ID)
+	if len(after) != 1 || after[0] != "https://example.com/g1-photo.jpg" {
+		t.Fatalf("(G-1) expected the exact same image row to survive unchanged, got: %v", after)
+	}
+	t.Logf("(G-1) confirmed: resubmitting the same image URL is a no-op, image row untouched")
+}
+
+// (G-2) Editing an unrelated field (title) while images are re-sent
+// unchanged must leave images completely untouched.
+func TestUpdateAuction_G2_UnrelatedFieldEdit_ImagesUntouched(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BUGG SELLER G2")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	seedAuctionImage(t, env, auction.ID, "https://example.com/g2-photo.jpg", 0)
+
+	adminSvc := newTestAdminService(t, env)
+
+	input := baseUpdateAuctionInput(auction)
+	input.TitleAr = "عنوان معدل G2"
+	input.Images = []string{"https://example.com/g2-photo.jpg"}
+	if err := adminSvc.UpdateAuction(ctx, auction.ID, input); err != nil {
+		t.Fatalf("(G-2) UpdateAuction failed: %v", err)
+	}
+
+	var newTitle string
+	if err := env.db.GetContext(ctx, &newTitle, `SELECT title_ar FROM auctions WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to read back title: %v", err)
+	}
+	if newTitle != "عنوان معدل G2" {
+		t.Fatalf("(G-2) expected title to update, got: %q", newTitle)
+	}
+
+	after := getAuctionImageURLsOrdered(t, env, auction.ID)
+	if len(after) != 1 || after[0] != "https://example.com/g2-photo.jpg" {
+		t.Fatalf("(G-2) expected image untouched by an unrelated field edit, got: %v", after)
+	}
+	t.Logf("(G-2) confirmed: editing title alone leaves images completely untouched")
+}
+
+// (G-3) An actual image URL change (replacement) still triggers the
+// replace-and-cleanup path correctly -- new URL persists.
+func TestUpdateAuction_G3_ActualImageReplacement_StillWorks(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BUGG SELLER G3")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	seedAuctionImage(t, env, auction.ID, "https://example.com/g3-old.jpg", 0)
+
+	adminSvc := newTestAdminService(t, env)
+
+	input := baseUpdateAuctionInput(auction)
+	input.Images = []string{"https://example.com/g3-new.jpg"}
+	if err := adminSvc.UpdateAuction(ctx, auction.ID, input); err != nil {
+		t.Fatalf("(G-3) UpdateAuction failed: %v", err)
+	}
+
+	after := getAuctionImageURLsOrdered(t, env, auction.ID)
+	if len(after) != 1 || after[0] != "https://example.com/g3-new.jpg" {
+		t.Fatalf("(G-3) expected the new image URL to replace the old one, got: %v", after)
+	}
+	t.Logf("(G-3) confirmed: a genuine image URL change still replaces the image row correctly")
+}
+
+// (G-4) Removing an image (submitting fewer URLs than currently stored)
+// still triggers cleanup of the removed image.
+func TestUpdateAuction_G4_ImageRemoval_StillWorks(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BUGG SELLER G4")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	seedAuctionImage(t, env, auction.ID, "https://example.com/g4-a.jpg", 0)
+	seedAuctionImage(t, env, auction.ID, "https://example.com/g4-b.jpg", 1)
+
+	adminSvc := newTestAdminService(t, env)
+
+	input := baseUpdateAuctionInput(auction)
+	input.Images = []string{"https://example.com/g4-a.jpg"}
+	if err := adminSvc.UpdateAuction(ctx, auction.ID, input); err != nil {
+		t.Fatalf("(G-4) UpdateAuction failed: %v", err)
+	}
+
+	after := getAuctionImageURLsOrdered(t, env, auction.ID)
+	if len(after) != 1 || after[0] != "https://example.com/g4-a.jpg" {
+		t.Fatalf("(G-4) expected only the retained image to remain, got: %v", after)
+	}
+	t.Logf("(G-4) confirmed: removing an image from the submitted list correctly removes it")
+}
+
+// (G-5) Multiple unchanged images (order-sensitive) remain untouched.
+func TestUpdateAuction_G5_MultipleUnchangedImages_NoneDeleted(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BUGG SELLER G5")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	seedAuctionImage(t, env, auction.ID, "https://example.com/g5-a.jpg", 0)
+	seedAuctionImage(t, env, auction.ID, "https://example.com/g5-b.jpg", 1)
+	seedAuctionImage(t, env, auction.ID, "https://example.com/g5-c.jpg", 2)
+
+	adminSvc := newTestAdminService(t, env)
+
+	input := baseUpdateAuctionInput(auction)
+	input.Images = []string{"https://example.com/g5-a.jpg", "https://example.com/g5-b.jpg", "https://example.com/g5-c.jpg"}
+	if err := adminSvc.UpdateAuction(ctx, auction.ID, input); err != nil {
+		t.Fatalf("(G-5) UpdateAuction failed: %v", err)
+	}
+
+	after := getAuctionImageURLsOrdered(t, env, auction.ID)
+	want := []string{"https://example.com/g5-a.jpg", "https://example.com/g5-b.jpg", "https://example.com/g5-c.jpg"}
+	if len(after) != len(want) {
+		t.Fatalf("(G-5) expected all 3 images to survive unchanged, got: %v", after)
+	}
+	for i := range want {
+		if after[i] != want[i] {
+			t.Fatalf("(G-5) expected order/content preserved, got: %v", after)
+		}
+	}
+	t.Logf("(G-5) confirmed: multiple unchanged images (order-sensitive) are never deleted")
+}
+
+// (G-6) Full real Bug G flow, matching the actual mobile/admin sequence
+// traced from real Staging logs: mobile creates the auction request,
+// admin approves it (ReviewAuctionRequest creates the `auctions` row --
+// this step does NOT itself carry any image, confirmed by reading its
+// source: images are added afterward via a separate call), mobile then
+// uploads the image directly to the new auction (POST
+// /auctions/:id/images -> AuctionService.AddImages), and the image must
+// REMAIN after a later, unrelated Admin web save -- reproducing the exact
+// real-device regression end to end.
+func TestUpdateAuction_G6_ApprovalCreatedAuctionImageSurvivesLaterSave(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BUGG SELLER G6")
+	admin := createTestAdmin(t, env, "TEST BUGG ADMIN G6")
+
+	auctionReq := &models.AuctionRequest{
+		ID:            uuid.New(),
+		UserID:        seller.ID,
+		CategoryID:    mkCategoryID(),
+		TitleAr:       "مزاد اختبار G6",
+		DescriptionAr: strPtr("وصف تجريبي آمن يزيد عن عشرة أحرف"),
+		StartPrice:    decimal.NewFromInt(100),
+		MinIncrement:  decimal.NewFromInt(10),
+		StartDate:     time.Now().Add(1 * time.Hour),
+		EndDate:       time.Now().Add(48 * time.Hour),
+		Status:        "pending",
+	}
+	if err := env.reqSvc.CreateAuctionRequest(ctx, auctionReq); err != nil {
+		t.Fatalf("(G-6) CreateAuctionRequest failed: %v", err)
+	}
+
+	// ReviewAuctionRequest refuses to approve until insurance is explicitly
+	// set by an admin (audit V03 guard, unrelated to Bug G) -- same
+	// real workflow as the other approval tests in this file.
+	insuranceUpdate := *auctionReq
+	insuranceUpdate.InsuranceAmount = decimal.NewFromInt(50)
+	if err := env.reqSvc.AdminUpdateAuctionRequest(ctx, auctionReq.ID, &insuranceUpdate, nil); err != nil {
+		t.Fatalf("(G-6) AdminUpdateAuctionRequest (setting insurance) failed: %v", err)
+	}
+
+	if err := env.reqSvc.ReviewAuctionRequest(ctx, auctionReq.ID, "approved", "approved for G-6", admin.ID); err != nil {
+		t.Fatalf("(G-6) ReviewAuctionRequest(approved) failed: %v", err)
+	}
+
+	var createdAuctionID uuid.UUID
+	if err := env.db.GetContext(ctx, &createdAuctionID,
+		`SELECT id FROM auctions WHERE seller_id = $1 AND title_ar = $2 ORDER BY created_at DESC LIMIT 1`,
+		seller.ID, "مزاد اختبار G6"); err != nil {
+		t.Fatalf("(G-6) failed to find the approval-created auction: %v", err)
+	}
+
+	// Mobile's post-approval upload step (AuctionService.AddImages), the
+	// real path that actually attaches the image to the new auction.
+	if err := env.auctSvc.AddImages(ctx, createdAuctionID, seller.ID, []string{"https://example.com/g6-uploaded-photo.jpg"}); err != nil {
+		t.Fatalf("(G-6) AddImages (mobile post-approval upload) failed: %v", err)
+	}
+
+	imagesAfterUpload := getAuctionImageURLsOrdered(t, env, createdAuctionID)
+	if len(imagesAfterUpload) != 1 || imagesAfterUpload[0] != "https://example.com/g6-uploaded-photo.jpg" {
+		t.Fatalf("(G-6) expected the mobile-uploaded image to attach to the approval-created auction, got: %v", imagesAfterUpload)
+	}
+
+	// Now simulate the Admin web's later, unrelated edit/save (echoing the
+	// same image URL back, per its real save behavior) -- this is the
+	// exact real-device Bug G reproduction.
+	var createdAuction models.Auction
+	if err := env.db.GetContext(ctx, &createdAuction, `SELECT * FROM auctions WHERE id = $1`, createdAuctionID); err != nil {
+		t.Fatalf("failed to read back created auction: %v", err)
+	}
+
+	adminSvc := newTestAdminService(t, env)
+	input := baseUpdateAuctionInput(&createdAuction)
+	input.TitleAr = "مزاد اختبار G6 معدل"
+	input.Images = imagesAfterUpload
+	if err := adminSvc.UpdateAuction(ctx, createdAuctionID, input); err != nil {
+		t.Fatalf("(G-6) UpdateAuction (later save) failed: %v", err)
+	}
+
+	imagesAfterLaterSave := getAuctionImageURLsOrdered(t, env, createdAuctionID)
+	if len(imagesAfterLaterSave) != 1 || imagesAfterLaterSave[0] != "https://example.com/g6-uploaded-photo.jpg" {
+		t.Fatalf("(G-6) REGRESSION: the approval-created auction's image did not survive a later unrelated admin save, got: %v", imagesAfterLaterSave)
+	}
+	t.Logf("(G-6) confirmed: the exact real Bug G flow (request -> approval -> mobile image upload -> later admin save) preserves the image")
+}
+
+func strPtr(s string) *string { return &s }

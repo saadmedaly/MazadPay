@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -584,23 +585,41 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 		return err
 	}
 
-	// Only sync images if explicitly provided in the request
-	var existingImages []models.AuctionImage
-	hasNewImages := false
+	// Only sync images if the submitted URL set actually differs from what's
+	// already stored (client feedback: Bug G). The admin web's edit/save
+	// form always re-sends the auction's current image URLs in input.Images,
+	// even when the admin changed nothing about images (e.g. editing only
+	// the title or price) -- treating "images present in the request" as
+	// "images changed" caused every such save to delete-then-recreate the
+	// image rows and, worse, permanently delete the real R2 objects, even
+	// though the exact same URLs were being written straight back into the
+	// DB. The DB then pointed at URLs whose backing files no longer
+	// existed. Comparing the incoming, ordered, non-empty URL list against
+	// the existing rows (also ordered by display_order) makes a same-images
+	// save a true no-op: no DB churn, no R2 deletion.
+	var incomingURLs []string
 	for _, url := range input.Images {
 		if url != "" {
-			hasNewImages = true
-			break
+			incomingURLs = append(incomingURLs, url)
 		}
 	}
 
-	if hasNewImages {
-		// Get existing images before deleting (for R2 cleanup)
-		var imgErr error
-		existingImages, imgErr = s.auctionRepo.GetImages(ctx, id)
-		if imgErr != nil {
-			return fmt.Errorf("failed to get existing images: %w", imgErr)
-		}
+	existingImagesForCompare, imgErr := s.auctionRepo.GetImages(ctx, id)
+	if imgErr != nil {
+		return fmt.Errorf("failed to get existing images: %w", imgErr)
+	}
+	var existingURLs []string
+	for _, img := range existingImagesForCompare {
+		existingURLs = append(existingURLs, img.URL)
+	}
+
+	imagesChanged := len(incomingURLs) > 0 && !slices.Equal(incomingURLs, existingURLs)
+
+	var existingImages []models.AuctionImage
+	if imagesChanged {
+		// Existing images already fetched above for comparison -- reuse
+		// them for R2 cleanup instead of re-querying.
+		existingImages = existingImagesForCompare
 
 		// Replace images
 		if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
