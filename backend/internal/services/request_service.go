@@ -95,9 +95,10 @@ type requestService struct {
 	auditSvc            AuditService
 	notificationService NotificationService
 	logger              *zap.Logger
+	globalHub           GlobalHub
 }
 
-func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, userRepo repository.UserRepository, auditSvc AuditService, notificationService NotificationService, logger *zap.Logger) RequestService {
+func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, userRepo repository.UserRepository, auditSvc AuditService, notificationService NotificationService, logger *zap.Logger, globalHub GlobalHub) RequestService {
 	return &requestService{
 		repo:                repo,
 		auctionRepo:         auctionRepo,
@@ -106,7 +107,32 @@ func NewRequestService(repo repository.RequestRepository, auctionRepo repository
 		auditSvc:            auditSvc,
 		notificationService: notificationService,
 		logger:              logger,
+		globalHub:           globalHub,
 	}
+}
+
+// emitRequestUpdated broadcasts a Customer #20 hardening-round private event
+// (request.updated) to ONLY the request's owner, over the same GlobalHub
+// used for auction/content events -- BroadcastToUser, never Broadcast or
+// BroadcastAuctionEvent, since a request's review outcome must never be
+// visible to any user other than its owner (unlike FAQ/banner/category,
+// which are public, or auction events, which are market-scoped but still
+// visible to every user in that market). Called only after the triggering
+// review's transaction has already committed. Coexists with, and does not
+// replace, the existing SendLocalizedPush notification: FCM tells the user
+// "something happened" even if the app is closed; this WS event tells an
+// already-OPEN Requests page to refetch right now, without the user having
+// to act on the notification at all.
+func (s *requestService) emitRequestUpdated(ownerID uuid.UUID, requestID uuid.UUID) {
+	if s.globalHub == nil {
+		return
+	}
+	s.globalHub.BroadcastToUser(ownerID.String(), models.GlobalWSEvent{
+		Type:       models.EventRequestUpdated,
+		EntityType: "request",
+		EntityID:   requestID.String(),
+		UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 // Auction Requests
@@ -348,6 +374,8 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+
+	s.emitRequestUpdated(req.UserID, id)
 
 	// Log audit
 	if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_request_reviewed_%s", status), "auction_request", &id,
@@ -738,6 +766,8 @@ func (s *requestService) ReviewBannerRequest(ctx context.Context, id uuid.UUID, 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+
+	s.emitRequestUpdated(req.UserID, id)
 
 	// Log audit
 	if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_request_reviewed_%s", status), "banner_request", &id,

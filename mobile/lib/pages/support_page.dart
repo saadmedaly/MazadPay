@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/services/faq_api.dart';
+import 'package:mezadpay/services/realtime_sync_service.dart';
 
 class SupportPage extends StatefulWidget {
   const SupportPage({super.key});
@@ -13,16 +15,46 @@ class _SupportPageState extends State<SupportPage> {
   final FaqApi _faqApi = FaqApi();
   List<dynamic> _faqs = [];
   bool _isLoadingFaqs = true;
+  StreamSubscription? _realtimeEventSub;
+  StreamSubscription? _realtimeCatchUpSub;
 
   @override
   void initState() {
     super.initState();
     _loadFaqs();
+    // Customer #20: support_page.dart previously had no refresh mechanism at
+    // all (no RefreshIndicator, no realtime) -- an admin FAQ edit was only
+    // visible after leaving and re-entering this page or restarting the
+    // app. Refetches FAQ only (Phase 7: targeted invalidation), never the
+    // whole page/app.
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.type == RealtimeEventType.faqUpdated) {
+        _loadFaqs();
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      _loadFaqs();
+    });
   }
 
+  @override
+  void dispose() {
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
+    super.dispose();
+  }
+
+  // Customer #20 hardening (out-of-order response guard): _loadFaqs can now
+  // be triggered concurrently by a realtime faq.updated event and app-resume
+  // catch-up.
+  int _faqsRequestGeneration = 0;
+
   Future<void> _loadFaqs() async {
+    final myGeneration = ++_faqsRequestGeneration;
     final response = await _faqApi.getFaqs();
-    if (mounted) {
+    if (mounted && myGeneration == _faqsRequestGeneration) {
       setState(() {
         if (response.success && response.data != null) {
           _faqs = response.data!;

@@ -157,6 +157,7 @@ type adminService struct {
 	rdb          *redis.Client
 	logger       *zap.Logger
 	jwtExpiry    int
+	globalHub    GlobalHub
 }
 
 func NewAdminService(
@@ -177,6 +178,7 @@ func NewAdminService(
 	rdb *redis.Client,
 	logger *zap.Logger,
 	jwtExpiry int,
+	globalHub GlobalHub,
 ) AdminService {
 	return &adminService{
 		db:           db,
@@ -196,10 +198,30 @@ func NewAdminService(
 		rdb:          rdb,
 		logger:       logger,
 		jwtExpiry:    jwtExpiry,
+		globalHub:    globalHub,
 	}
 }
 
 var _ AdminService = (*adminService)(nil)
+
+// emitAuctionEvent mirrors auctionService.emitAuctionEvent -- see its doc
+// comment for the full contract (called only after commit, best-effort,
+// market-scoped). Duplicated rather than shared because adminService and
+// auctionService are separate structs with no common embedding; the
+// duplication is 6 lines and keeps each service's zero-value/test behavior
+// independent (a nil globalHub in one service's tests never affects the
+// other's).
+func (s *adminService) emitAuctionEvent(auction *models.Auction, eventType string) {
+	if s.globalHub == nil || auction == nil {
+		return
+	}
+	s.globalHub.BroadcastAuctionEvent(auction.EffectiveMarketCountryISO(), models.GlobalWSEvent{
+		Type:       eventType,
+		EntityType: "auction",
+		EntityID:   auction.ID.String(),
+		UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+	})
+}
 
 func (s *adminService) GetDashboardStats(ctx context.Context) (map[string]interface{}, error) {
 	totalUsers, _, err := s.userRepo.GetStats(ctx)
@@ -441,6 +463,15 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 		return err
 	}
 
+	// Customer #20: this is the exact moment a "pending" auction becomes
+	// visible on mobile's Home/Active lists (approve) or is confirmed as
+	// never appearing there (reject) -- emit right after the status write
+	// commits, using the freshly updated auction so the market/ID are
+	// correct even if the later re-fetch below fails.
+	if updated, findErr2 := s.auctionRepo.FindByID(ctx, id); findErr2 == nil {
+		s.emitAuctionEvent(updated, models.EventAuctionStatusChanged)
+	}
+
 	if findErr == nil && s.auditSvc != nil {
 		action := "auction_rejected"
 		if approve {
@@ -655,10 +686,17 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 		}
 	}
 
+	s.emitAuctionEvent(auction, models.EventAuctionUpdated)
+
 	return nil
 }
 
 func (s *adminService) DeleteAuction(ctx context.Context, id uuid.UUID) error {
+	// Fetched before deletion for both R2 image cleanup (existing behavior)
+	// and the Customer #20 event below (need the auction's market/ID after
+	// its row is already gone).
+	auctionBeforeDelete, _ := s.auctionRepo.FindByID(ctx, id)
+
 	// Get existing images before deleting (for R2 cleanup)
 	existingImages, err := s.auctionRepo.GetImages(ctx, id)
 	if err != nil {
@@ -679,6 +717,8 @@ func (s *adminService) DeleteAuction(ctx context.Context, id uuid.UUID) error {
 			}
 		}
 	}
+
+	s.emitAuctionEvent(auctionBeforeDelete, models.EventAuctionDeleted)
 
 	return nil
 }
@@ -961,6 +1001,14 @@ func (s *adminService) UpdateCategory(ctx context.Context, c *models.Category, a
 		return err
 	}
 	s.logCategoryAudit(ctx, adminID, "category_updated", c.ID, c.NameAr)
+	if s.globalHub != nil {
+		s.globalHub.Broadcast(models.GlobalWSEvent{
+			Type:       models.EventCategoryUpdated,
+			EntityType: "category",
+			EntityID:   strconv.Itoa(c.ID),
+			UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+		})
+	}
 	return nil
 }
 
@@ -1976,5 +2024,12 @@ func (s *adminService) AdminAddAuctionImages(ctx context.Context, auctionID uuid
 			return fmt.Errorf("failed to save image: %w", err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	if auction, findErr := s.auctionRepo.FindByID(ctx, auctionID); findErr == nil {
+		s.emitAuctionEvent(auction, models.EventAuctionUpdated)
+	}
+	return nil
 }

@@ -12,9 +12,24 @@ part 'auction_provider_api.g.dart';
 @riverpod
 class AuctionNotifierApi extends _$AuctionNotifierApi {
   final AuctionApi _auctionApi = AuctionApi();
-  
+  // Customer #20 hardening (out-of-order response guard): build() is called
+  // again on every ref.invalidate(auctionNotifierApiProvider(id)) (e.g. the
+  // realtime auction.updated handler in auction_details_page.dart) --
+  // Riverpod tears down and replaces THIS notifier instance when that
+  // happens, but a _refreshInBackground call already in flight from the
+  // PREVIOUS instance is a bare async function with no cancellation of its
+  // own; without this flag its `state = AsyncValue.data(auction)` could
+  // still land after the new instance's own build() already produced fresh
+  // state, silently reverting the UI to older data. Set via ref.onDispose,
+  // which Riverpod calls synchronously when this exact instance is
+  // superseded/disposed -- guarantees the flag is set before any new
+  // instance's own state can be observed as stale by this old one.
+  bool _disposed = false;
+
   @override
   Future<Auction> build(String id) async {
+    ref.onDispose(() => _disposed = true);
+
     // 1. Essayer de charger depuis le cache d'abord (Immédiat)
     final cachedData = await CacheService.instance.getCachedAuctionDetail(id);
     if (cachedData != null) {
@@ -33,6 +48,11 @@ class AuctionNotifierApi extends _$AuctionNotifierApi {
   Future<void> _refreshInBackground(String id) async {
     try {
       final auction = await _fetchFromApi(id);
+      // Out-of-order guard: if this exact notifier instance was already
+      // superseded (e.g. by a realtime-triggered invalidate that started
+      // and finished its OWN fresh fetch while this older background
+      // refresh was still in flight), never let this stale result win.
+      if (_disposed) return;
       state = AsyncValue.data(auction);
     } catch (e) {
       // Silencieux car on a déjà les données du cache

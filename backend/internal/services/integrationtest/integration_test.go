@@ -107,8 +107,8 @@ func setupEnv(t *testing.T) *testEnv {
 	mediaSvc := services.NewMediaService(cfg, logger)
 
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, "development", "", nil, 4, cfg.Redis.OTPTTLMinutes, rdb, logger)
-	auctSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger)
-	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger)
+	auctSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger, nil)
+	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger, nil)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, noopHub{})
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
 
@@ -4024,7 +4024,7 @@ func newTestAdminService(t *testing.T, env *testEnv) services.AdminService {
 	return services.NewAdminService(
 		env.db, env.userRepo, env.auctionRepo, env.bidRepo, txRepo, reportRepo,
 		kycRepo, contentRepo, invRepo, env.reqRepo, settingsRepo,
-		mediaSvc, env.notifSvc, auditSvc, env.rdb, env.logger, cfg.JWT.ExpiryHours,
+		mediaSvc, env.notifSvc, auditSvc, env.rdb, env.logger, cfg.JWT.ExpiryHours, nil,
 	)
 }
 

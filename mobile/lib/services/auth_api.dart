@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:mezadpay/models/api_response.dart';
 import 'package:mezadpay/services/api_service.dart';
 import 'package:mezadpay/services/auth_service.dart';
+import 'package:mezadpay/services/realtime_sync_service.dart';
 
 /// Total-call timeout for every verified-public, pre-login auth endpoint
 /// (register/login/otp/reset-password -- see backend routes.go: no
@@ -66,6 +67,19 @@ class AuthApi {
         if (user != null && user['id'] != null) {
           await _authService.saveUserId(user['id'].toString());
         }
+        // Customer #20 hardening: restart realtime for the NEWLY
+        // authenticated identity right away, rather than waiting for the
+        // next app-resume to open the global channel for the first time.
+        // RealtimeSyncService().start() -> GlobalWebsocketService().connect()
+        // always reads AuthService().getToken() fresh at call time, so this
+        // is never a stale/previous-user token; restart() (rather than a
+        // bare start()) additionally guarantees any prior connection -- e.g.
+        // a leftover one from a user who logged out via a path that didn't
+        // go through AuthService.logout(), or a stale reconnect timer from
+        // this same login flow retried -- is torn down first, so a user
+        // switch can never end up with two overlapping physical
+        // connections or a previous user's socket still attached.
+        await RealtimeSyncService().restart();
       }
 
       return apiResponse;

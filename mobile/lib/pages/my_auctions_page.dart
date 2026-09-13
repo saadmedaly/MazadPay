@@ -2,6 +2,7 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import 'dart:convert';
 
 import 'auction_details_page.dart';
@@ -11,6 +12,7 @@ import 'edit_auction_page.dart';
 import '../services/auction_api.dart';
 import '../services/cache_service.dart';
 import '../services/api_service.dart';
+import '../services/realtime_sync_service.dart';
 import '../utils/money_formatter.dart';
 
 class MyAuctionsPage extends ConsumerStatefulWidget {
@@ -43,17 +45,40 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
 
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
+  StreamSubscription? _realtimeEventSub;
+  StreamSubscription? _realtimeCatchUpSub;
+
   @override
   void initState() {
     super.initState();
     _loadMyAuctions();
     _scrollController.addListener(_onScroll);
+    // Customer #20: _loadMyAuctions() already shows cached data first, then
+    // always fetches live and overwrites it (see its own body) -- calling
+    // it again on a realtime event is therefore safe and correct (the
+    // fresh REST response always wins last, so a stale cache can never
+    // clobber a realtime-triggered refresh). Any auction event refetches
+    // the whole My Auctions list, mirroring Favorites' targeted-invalidation
+    // reasoning above (this domain's own small, user-scoped list, not a
+    // full-app refresh).
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.isAuctionEvent) {
+        _loadMyAuctions();
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      _loadMyAuctions();
+    });
   }
-  
+
   @override
   void dispose() {
     _searchController.dispose();
     _scrollController.dispose();
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
     super.dispose();
   }
   
@@ -117,21 +142,28 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
     return aStatus == fStatus;
   }
 
+  // Customer #20 hardening (out-of-order response guard): this can now be
+  // triggered concurrently by a manual pull-to-refresh, a realtime auction
+  // event, and app-resume catch-up. Guards against an older, reordered
+  // network response overwriting a newer one's result.
+  int _myAuctionsRequestGeneration = 0;
+
   Future<void> _loadMyAuctions() async {
+    final myGeneration = ++_myAuctionsRequestGeneration;
     try {
       setState(() {
         _currentPage = 1;
         _hasMore = true;
       });
-      
+
        final cachedMyAuctions = await CacheService.instance.getCachedMyAuctions();
       final isCacheValid = await CacheService.instance.isMyAuctionsCacheValid();
 
       if (cachedMyAuctions != null && isCacheValid) {
         List<dynamic> auctionList = [];
         auctionList = (cachedMyAuctions['auctions'] ?? cachedMyAuctions['data'] ?? []) as List<dynamic>;
-        
-        if (!mounted) return;
+
+        if (!mounted || myGeneration != _myAuctionsRequestGeneration) return;
         setState(() {
           _isLoading = false;
           _myAuctions = auctionList.map((item) => item as Map<String, dynamic>).toList();
@@ -142,38 +174,38 @@ class _MyAuctionsPageState extends ConsumerState<MyAuctionsPage> {
       // === CHARGER DEPUIS L'API EN ARRIÈRE-PLAN ===
       debugPrint('Chargement des encheres depuis API...');
       final response = await _auctionApi.getMyAuctions();
-      
+
       debugPrint('Reponse API - success: ${response.success}');
       debugPrint('Reponse API - count: ${response.data?.length ?? 0}');
 
       if (response.success && response.data != null) {
         final List<dynamic> auctionList = response.data!;
         debugPrint('${auctionList.length} encheres recues de l API');
-        
+
         // Cache mes encheres
         await CacheService.instance.cacheMyAuctions({
           'data': auctionList,
           'success': true,
         });
 
-        if (!mounted) return;
+        if (!mounted || myGeneration != _myAuctionsRequestGeneration) return;
         setState(() {
           _isLoading = false;
           _myAuctions = auctionList.map((item) => item as Map<String, dynamic>).toList();
           _filterAuctions();
         });
-        
+
         debugPrint('${_myAuctions.length} encheres affichees');
       } else {
         debugPrint('Echec API: success=${response.success}, data=${response.data}');
-        if (cachedMyAuctions == null && mounted) {
+        if (cachedMyAuctions == null && mounted && myGeneration == _myAuctionsRequestGeneration) {
           setState(() => _isLoading = false);
         }
       }
     } catch (e, stackTrace) {
       debugPrint('Erreur _loadMyAuctions: $e');
       debugPrint('StackTrace: $stackTrace');
-      if (!mounted) return;
+      if (!mounted || myGeneration != _myAuctionsRequestGeneration) return;
       setState(() {
         _isLoading = false;
         _error = e.toString();

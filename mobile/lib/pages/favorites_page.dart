@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
 import 'package:mezadpay/services/favorites_service.dart';
 import 'package:mezadpay/services/api_service.dart';
+import 'package:mezadpay/services/realtime_sync_service.dart';
 import 'auction_details_page.dart';
 import '../utils/money_formatter.dart';
 
@@ -16,6 +18,8 @@ class FavoritesPage extends ConsumerStatefulWidget {
 
 class _FavoritesPageState extends ConsumerState<FavoritesPage> {
   Future<List<Map<String, dynamic>>>? _auctionsFuture;
+  StreamSubscription? _realtimeEventSub;
+  StreamSubscription? _realtimeCatchUpSub;
 
   void _loadAuctions() {
     setState(() {
@@ -27,6 +31,32 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
   void initState() {
     super.initState();
     _auctionsFuture = FavoritesService().getFavoriteAuctions();
+    // Customer #20: this page previously had no realtime/refresh mechanism
+    // (initState-only fetch, no RefreshIndicator) -- an edit to a favorited
+    // auction was invisible until leaving and re-entering this page. Any
+    // auction event refetches the whole favorites list (favorites is a
+    // small, user-scoped list -- unlike Home's full auction catalog, there
+    // is no cheaper per-item patch available here without a dedicated
+    // by-ID lookup, so a full favorites refetch stays within Phase 7's
+    // "targeted invalidation" intent: this domain's own data, not the
+    // whole app).
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.isAuctionEvent) {
+        _loadAuctions();
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      _loadAuctions();
+    });
+  }
+
+  @override
+  void dispose() {
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
+    super.dispose();
   }
 
   @override

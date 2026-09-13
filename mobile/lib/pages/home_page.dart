@@ -19,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/side_menu_drawer.dart';
 import '../widgets/live_indicator.dart';
 import '../utils/auction_image.dart';
+import '../services/realtime_sync_service.dart';
 
 import 'all_auctions_page.dart';
 
@@ -144,6 +145,9 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
+  StreamSubscription? _realtimeEventSub;
+  StreamSubscription? _realtimeCatchUpSub;
+
   @override
 
   void initState() {
@@ -166,6 +170,26 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     _checkFirstTimeLocation();
 
+    // Customer #20: this page previously only refreshed via manual
+    // pull-to-refresh (see the RefreshIndicator further below). Auctions
+    // list refetches for any auction event (created/updated/status
+    // changed/deleted all mean the Home/Active list may now be wrong);
+    // banners refetch only for banner.updated (Phase 7: targeted
+    // invalidation, not a full-page reload for every event type).
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.isAuctionEvent) {
+        _loadCitiesWithAuctions();
+      } else if (event.type == RealtimeEventType.bannerUpdated) {
+        _loadBanners();
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      _loadCitiesWithAuctions();
+      _loadBanners();
+    });
+
   }
 
   @override
@@ -173,6 +197,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     _bannerTimer?.cancel();
     _bannerTimer = null;
     _bannerPageController.dispose();
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
     super.dispose();
   }
 
@@ -637,15 +663,26 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   }
 
+  // Customer #20 hardening (out-of-order response guard): _loadBanners can
+  // now be triggered concurrently from multiple sources (manual
+  // pull-to-refresh, a realtime banner.updated event, app-resume catch-up).
+  // If an OLDER call's network response arrives after a NEWER call's
+  // (e.g. reordered on a flaky connection), the older one must not
+  // overwrite the newer, more current server state. Each call captures its
+  // own generation number; only the call still holding the latest
+  // generation when its response arrives is allowed to setState.
+  int _bannersRequestGeneration = 0;
+
   Future<void> _loadBanners() async {
+    final myGeneration = ++_bannersRequestGeneration;
     try {
       debugPrint('=== LOADING BANNERS ===');
-      
+
       final cachedBanners = await CacheService.instance.getCachedBanners();
       final isCacheValid = await CacheService.instance.isBannersCacheValid();
-      
+
       if (cachedBanners != null && cachedBanners.isNotEmpty && isCacheValid) {
-        if (!mounted) return;
+        if (!mounted || myGeneration != _bannersRequestGeneration) return;
         setState(() {
           _banners = cachedBanners;
           _isLoadingBanners = false;
@@ -668,7 +705,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
         debugPrint('Active banners: ${activeBanners.length}');
 
-        if (!mounted) return;
+        if (!mounted || myGeneration != _bannersRequestGeneration) return;
         setState(() {
           _banners = activeBanners;
           _isLoadingBanners = false;
@@ -778,7 +815,16 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
+  // Customer #20 hardening (out-of-order response guard): the realtime
+  // auction-event handler in initState above can call
+  // _loadCitiesWithAuctions() (which itself calls this) concurrently with a
+  // user-triggered city switch or manual pull-to-refresh. Captures the
+  // generation at call time so an older, reordered network response can
+  // never overwrite a newer one's result.
+  int _auctionsRequestGeneration = 0;
+
   Future<void> _loadAuctions({String? locationId}) async {
+    final myGeneration = ++_auctionsRequestGeneration;
 
     try {
 
@@ -796,7 +842,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
-      if (!mounted) return;
+      if (!mounted || myGeneration != _auctionsRequestGeneration) return;
       setState(() {
 
         _isLoading = false;
@@ -821,7 +867,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     } catch (e) {
 
-      if (!mounted) return;
+      if (!mounted || myGeneration != _auctionsRequestGeneration) return;
       setState(() => _isLoading = false);
 
       if (mounted) {

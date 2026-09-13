@@ -81,9 +81,10 @@ type auctionService struct {
 	walletRepo  repository.WalletRepository
 	auditSvc    AuditService
 	logger      *zap.Logger
+	globalHub   GlobalHub
 }
 
-func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client, walletRepo repository.WalletRepository, auditSvc AuditService, logger *zap.Logger) AuctionService {
+func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client, walletRepo repository.WalletRepository, auditSvc AuditService, logger *zap.Logger, globalHub GlobalHub) AuctionService {
 	return &auctionService{
 		db:          db,
 		auctionRepo: auctionRepo,
@@ -95,7 +96,28 @@ func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, re
 		walletRepo:  walletRepo,
 		auditSvc:    auditSvc,
 		logger:      logger,
+		globalHub:   globalHub,
 	}
+}
+
+// emitAuctionEvent broadcasts a Customer #20 global invalidation event for
+// auction over globalHub, scoped to the auction's own market (see
+// GlobalHub.BroadcastAuctionEvent). Called ONLY after the triggering DB
+// write has already committed successfully -- every call site below sits
+// after its transaction's tx.Commit()/repo call returns nil, never before.
+// Never fails the caller: globalHub is best-effort real-time delivery, REST
+// remains the source of truth (mobile catches up via reconnect/resume
+// refetch even if this silently no-ops, e.g. globalHub == nil in tests).
+func (s *auctionService) emitAuctionEvent(auction *models.Auction, eventType string) {
+	if s.globalHub == nil || auction == nil {
+		return
+	}
+	s.globalHub.BroadcastAuctionEvent(auction.EffectiveMarketCountryISO(), models.GlobalWSEvent{
+		Type:       eventType,
+		EntityType: "auction",
+		EntityID:   auction.ID.String(),
+		UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 // PubliclyVisibleAuctionStatuses liste les statuts qu'un visiteur anonyme
@@ -291,6 +313,12 @@ func (s *auctionService) Create(ctx context.Context, sellerID uuid.UUID, input C
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
+
+	// Customer #20: a newly created auction is still "pending" (not yet
+	// admin-approved) so it isn't visible on Home/Active lists yet -- no
+	// broadcast here. The visible-to-mobile transition happens in
+	// adminService.ValidateAuction (approve -> "active"), which emits
+	// EventAuctionStatusChanged instead.
 
 	return auction, nil
 }
@@ -673,6 +701,8 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 		}
 	}
 
+	s.emitAuctionEvent(auction, models.EventAuctionUpdated)
+
 	return nil
 }
 
@@ -713,6 +743,13 @@ func (s *auctionService) DeleteAuction(ctx context.Context, id uuid.UUID, userID
 			}
 		}
 	}
+
+	// A "pending" auction was never approved/visible on any mobile list yet
+	// (see Create's comment above), but a client could still be viewing its
+	// own pending auction (e.g. Auction Details, My Auctions) -- emit so
+	// that view catches up rather than silently keeping a now-deleted
+	// auction on screen.
+	s.emitAuctionEvent(auction, models.EventAuctionDeleted)
 
 	return nil
 }
@@ -797,7 +834,12 @@ func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid
 			return fmt.Errorf("failed to save uploaded image URL to database: %w", err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	s.emitAuctionEvent(auction, models.EventAuctionUpdated)
+	return nil
 }
 
 func (s *auctionService) BuyNow(ctx context.Context, auctionID, buyerID uuid.UUID) (*models.Auction, error) {
@@ -845,6 +887,11 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 	if err := s.auctionRepo.Update(ctx, auction); err != nil {
 		return err
 	}
+
+	// Emitted right after the status write commits -- the wallet-hold-release
+	// step below is a separate best-effort side effect with its own early
+	// returns and must not gate this event.
+	s.emitAuctionEvent(auction, models.EventAuctionStatusChanged)
 
 	if s.auditSvc != nil {
 		details := fmt.Sprintf("seller_id=%s old_status=%s new_status=canceled reason=%s", sellerID, oldStatus, reason)
@@ -937,6 +984,7 @@ func (s *auctionService) RelistAuction(ctx context.Context, auctionID, sellerID 
 			}
 		}
 	}
+	s.emitAuctionEvent(auction, models.EventAuctionStatusChanged)
 	return nil
 }
 
@@ -976,6 +1024,7 @@ func (s *auctionService) ExtendAuction(ctx context.Context, auctionID, sellerID 
 			}
 		}
 	}
+	s.emitAuctionEvent(auction, models.EventAuctionUpdated)
 	return nil
 }
 
@@ -987,6 +1036,14 @@ func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 	}
 	for _, a := range auctions {
 		_ = s.auctionRepo.UpdateStatus(ctx, a.ID, "ended")
+
+		// Customer #20: auto-close (time-based end, not an admin/seller
+		// action) must still move the auction from Active to Ended on any
+		// connected mobile client -- same event type as the admin/seller
+		// status-change paths above, since mobile only cares "did the status
+		// change", not who/what triggered it.
+		auctionCopy := a
+		s.emitAuctionEvent(&auctionCopy, models.EventAuctionStatusChanged)
 
 		// Libère la caution des enchérisseurs non-gagnants (audit de sécurité V03/V09).
 		// Le hold du gagnant (s'il y en a un) reste actif : il n'existe pas encore de

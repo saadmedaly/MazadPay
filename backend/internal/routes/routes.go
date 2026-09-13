@@ -37,6 +37,10 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	// Hub
 	hub := ws.NewHub(logger)
 	adminHub := ws.NewAdminHub(logger)
+	// Customer Request #20: authenticated mobile-wide channel for
+	// list/content invalidation events (auction.created, faq.updated,
+	// banner.updated, category.updated, ...) -- see internal/websocket/global_hub.go.
+	globalHub := ws.NewGlobalHub(logger)
 
 	// Media service for R2 uploads (must be created before auctionSvc and adminSvc)
 	mediaSvc := services.NewMediaService(cfg, logger)
@@ -46,13 +50,13 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	smsSvc := services.NewSMSService(cfg.Wablas.Token, cfg.Wablas.SecretKey, cfg.Wablas.ServerURL, logger)
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4, cfg.Redis.OTPTTLMinutes, rdb, logger)
 	auditSvc := services.NewAuditService(auditRepo)
-	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger)
+	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger, globalHub)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
-	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
+	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours, globalHub)
 	walletSvc := services.NewWalletService(db, walletRepo, txRepo, reqRepo, notifSvc, auditSvc, logger)
-	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc)
-	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger)
+	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc, globalHub)
+	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger, globalHub)
 	reportSvc := services.NewReportService(txRepo)
 
 
@@ -78,6 +82,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	wsHandler := handlers.NewWSHandler(hub, authSvc, auctionRepo, userRepo, logger)
 
 	adminWSHandler := handlers.NewAdminWSHandler(adminHub, cfg.JWT.Secret, logger)
+	globalWSHandler := handlers.NewGlobalWSHandler(globalHub, authSvc, userRepo, logger)
 	bidHandler := handlers.NewBidHandler(bidSvc, auctionRepo, userRepo, logger)
 	userHandler := handlers.NewUserHandler(userSvc, logger)
 	adminHandler := handlers.NewAdminHandler(adminSvc, reportSvc, logger, rdb)
@@ -108,6 +113,10 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	// Admin WebSocket
 	app.Use("/ws/admin", adminWSHandler.UpgradeMiddleware())
 	app.Get("/ws/admin", websocket.New(adminWSHandler.HandleAdmin))
+
+	// Customer Request #20: authenticated mobile-wide channel
+	app.Use("/ws/global", globalWSHandler.UpgradeMiddleware())
+	app.Get("/ws/global", websocket.New(globalWSHandler.HandleGlobal))
 
 	// Routes registration
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)

@@ -25,6 +25,7 @@ import 'package:shimmer/shimmer.dart';
 import '../utils/time_utils.dart';
 import '../utils/money_formatter.dart';
 import '../utils/auction_image.dart';
+import '../services/realtime_sync_service.dart';
 
 class AuctionDetailsPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -56,6 +57,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   // Temporary bid history (could be refactored to provider later)
   List<model_bid.Bid>? _bidHistory;
   bool _isDisposed = false;
+  StreamSubscription? _realtimeEventSub;
+  StreamSubscription? _realtimeCatchUpSub;
 
   @override
   void initState() {
@@ -68,6 +71,28 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
 
     // Incrémenter les vues une seule fois à l'ouverture
     _auctionApi.incrementViews(widget.auctionId);
+
+    // Customer #20, Phase 9: when an auction.updated/status_changed/deleted
+    // event arrives for THIS open auction, invalidate
+    // auctionNotifierApiProvider(widget.auctionId) rather than trying to
+    // merge title/end_time/images/status fields in manually -- Riverpod
+    // then refetches via the provider's existing REST call
+    // (auctionNotifierApiProvider's build()), so title/countdown/gallery/
+    // status all update together from one canonical source. bid_placed
+    // handling (current price/bidder count) is untouched -- that already
+    // works via the per-auction /ws/auction/:id socket this page already
+    // listens to (see AuctionNotifierApi._listenToWebsocket), a completely
+    // separate code path from this global-channel subscription.
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.isAuctionEvent && event.entityId == widget.auctionId) {
+        ref.invalidate(auctionNotifierApiProvider(widget.auctionId));
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      ref.invalidate(auctionNotifierApiProvider(widget.auctionId));
+    });
   }
 
   Future<void> _loadUserId() async {
@@ -246,6 +271,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     _timer = null;
     _isDisposed = true;
     _pageController.dispose();
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
     super.dispose();
   }
 

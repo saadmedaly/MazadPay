@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:mezadpay/services/realtime_sync_service.dart';
 
 /// Service de gestion du JWT token
 /// Utilise flutter_secure_storage pour stocker le token de manière sécurisée
@@ -129,14 +130,26 @@ class AuthService {
   }
   
   /// Déconnexion - Supprimer tous les tokens
+  ///
+  /// Customer #20 hardening: stops the global realtime connection HERE,
+  /// the single lowest-level place both call paths that end a session
+  /// (AuthApi.logout()'s finally block, and any direct AuthService().logout()
+  /// call such as settings_page.dart's) funnel through -- so no old user's
+  /// socket/reconnect timer can ever survive past this call, regardless of
+  /// which higher-level logout wrapper triggered it. RealtimeSyncService.stop()
+  /// cancels the pending reconnect timer and closes the physical connection
+  /// (see GlobalWebsocketService.disconnect()'s _explicitlyDisconnected
+  /// flag), so a subsequent login's restart() always starts clean.
   Future<void> logout() async {
+    RealtimeSyncService().stop();
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _userIdKey);
   }
-  
+
   /// Nettoyer toutes les données stockées
   Future<void> clearAll() async {
+    RealtimeSyncService().stop();
     await _storage.deleteAll();
   }
 }

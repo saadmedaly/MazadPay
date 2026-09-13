@@ -19,6 +19,7 @@ type Client struct {
     send   chan []byte
     userID string
     Role   string // Admin role (admin, super_admin) for admin connections
+    market string // Customer #20 global channel: connecting user's EffectiveAccountCountryISO(), used by GlobalHub.BroadcastAuctionEvent's market filter. Empty for per-auction/admin clients, which don't need it.
     logger *zap.Logger
 }
 
@@ -29,6 +30,13 @@ func NewClient(conn *websocket.Conn, userID string, logger *zap.Logger) *Client 
         userID: userID,
         logger: logger,
     }
+}
+
+// SetMarket stamps the connecting user's market onto the client (Customer
+// #20 global channel only) -- exported so HandleGlobal can set it without
+// needing a market-aware constructor variant.
+func (c *Client) SetMarket(market string) {
+    c.market = market
 }
 
 // WritePump envoie les messages en attente au client WebSocket
