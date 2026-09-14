@@ -1571,4 +1571,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String text_407(Object amount, Object title) {
     return 'J\'ai remporté l\'enchère « $title » sur MazadPay pour $amount.';
   }
+
+  @override
+  String get text_408 => 'Site web';
+
+  @override
+  String get text_409 => 'Impossible d\'ouvrir le lien';
 }

@@ -1577,4 +1577,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String text_407(Object amount, Object title) {
     return 'لقد فزت بالمزاد «$title» على MazadPay بسعر $amount.';
   }
+
+  @override
+  String get text_408 => 'الموقع الإلكتروني';
+
+  @override
+  String get text_409 => 'تعذّر فتح الرابط';
 }

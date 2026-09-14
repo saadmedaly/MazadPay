@@ -3,6 +3,28 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/services/faq_api.dart';
 import 'package:mezadpay/services/realtime_sync_service.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// Customer Request #25: pure helpers for the contact URIs this page opens,
+/// extracted so they can be unit-tested without a live url_launcher call
+/// (mirrors the existing wa.me pattern already used in
+/// auction_details_page.dart's _openWhatsApp).
+class SupportContactUris {
+  /// Mauritania international WhatsApp deep link. Reuses the exact same
+  /// "222" + local-number concatenation already established in
+  /// auction_details_page.dart's _supportPhone/_openWhatsApp -- no new
+  /// international-format convention invented here.
+  static Uri whatsApp(String localNumber) => Uri.parse('https://wa.me/222$localNumber');
+
+  // Strips display-only spaces (the visible value keeps them for
+  // readability, e.g. "+222 36 60 11 75") -- the tel: URI itself must be a
+  // clean number.
+  static Uri phoneCall(String rawNumber) => Uri.parse('tel:${rawNumber.replaceAll(' ', '')}');
+
+  static Uri email(String address) => Uri.parse('mailto:$address');
+
+  static Uri website(String url) => Uri.parse(url);
+}
 
 class SupportPage extends StatefulWidget {
   const SupportPage({super.key});
@@ -12,6 +34,19 @@ class SupportPage extends StatefulWidget {
 }
 
 class _SupportPageState extends State<SupportPage> {
+  // Customer Request #25 (client QA item #18): the current canonical contact
+  // values -- confirmed to already match login_page.dart's "forgot PIN"
+  // contact modal and app_modals.dart's contact sheet (both independently
+  // use '47601175'/'mazadpay@gmail.com'), unlike this page's own prior
+  // stale values ('+222 36 60 11 75' / 'support@mazadpay.mr'), which nothing
+  // else in the app agreed with. The phone-call number is deliberately kept
+  // as its own distinct pre-existing value per explicit product decision --
+  // NOT unified with the WhatsApp number.
+  static const String whatsappNumber = '47601175';
+  static const String phoneCallNumber = '+222 36 60 11 75';
+  static const String emailAddress = 'mazadpay@gmail.com';
+  static const String websiteUrl = 'https://mazadpay.com/';
+
   final FaqApi _faqApi = FaqApi();
   List<dynamic> _faqs = [];
   bool _isLoadingFaqs = true;
@@ -44,6 +79,24 @@ class _SupportPageState extends State<SupportPage> {
     _realtimeEventSub?.cancel();
     _realtimeCatchUpSub?.cancel();
     super.dispose();
+  }
+
+  // Customer #25: safe external-URI launch shared by WhatsApp/phone/email/
+  // website taps -- canLaunchUrl/launchUrl guarded exactly like the existing
+  // auction_details_page.dart._openWhatsApp pattern (external app mode, a
+  // snackbar on failure, never a crash/unhandled exception).
+  Future<void> _launchSafely(Uri uri, String failureMessage) async {
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failureMessage)));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failureMessage)));
+    }
   }
 
   // Customer #20 hardening (out-of-order response guard): _loadFaqs can now
@@ -106,25 +159,53 @@ class _SupportPageState extends State<SupportPage> {
               _buildContactTile(
                 icon: Icons.chat_bubble_outline,
                 title: AppLocalizations.of(context)!.text_312,
-                subtitle: AppLocalizations.of(context)!.text_313,
+                subtitle: whatsappNumber,
+                subtitleIsLtrValue: true,
                 color: const Color(0xFF25D366),
                 isDarkMode: isDarkMode,
+                onTap: () => _launchSafely(
+                  SupportContactUris.whatsApp(whatsappNumber),
+                  AppLocalizations.of(context)!.text_409,
+                ),
               ),
               const SizedBox(height: 16),
               _buildContactTile(
                 icon: Icons.phone_in_talk_outlined,
                 title: AppLocalizations.of(context)!.text_314,
-                subtitle: '+222 36 60 11 75',
+                subtitle: phoneCallNumber,
+                subtitleIsLtrValue: true,
                 color: const Color(0xFF0081FF),
                 isDarkMode: isDarkMode,
+                onTap: () => _launchSafely(
+                  SupportContactUris.phoneCall(phoneCallNumber),
+                  AppLocalizations.of(context)!.text_409,
+                ),
               ),
               const SizedBox(height: 16),
               _buildContactTile(
                 icon: Icons.alternate_email,
                 title: AppLocalizations.of(context)!.text_41,
-                subtitle: 'support@mazadpay.mr',
+                subtitle: emailAddress,
+                subtitleIsLtrValue: true,
                 color: Colors.orange,
                 isDarkMode: isDarkMode,
+                onTap: () => _launchSafely(
+                  SupportContactUris.email(emailAddress),
+                  AppLocalizations.of(context)!.text_409,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildContactTile(
+                icon: Icons.language,
+                title: AppLocalizations.of(context)!.text_408,
+                subtitle: websiteUrl,
+                subtitleIsLtrValue: true,
+                color: const Color(0xFF6C5CE7),
+                isDarkMode: isDarkMode,
+                onTap: () => _launchSafely(
+                  SupportContactUris.website(websiteUrl),
+                  AppLocalizations.of(context)!.text_409,
+                ),
               ),
               const SizedBox(height: 40),
               Text(
@@ -161,8 +242,39 @@ class _SupportPageState extends State<SupportPage> {
       );
   }
 
-  Widget _buildContactTile({required IconData icon, required String title, required String subtitle, required Color color, required bool isDarkMode}) {
-    return Container(
+  // Customer #25: subtitleIsLtrValue marks a subtitle that is a contact
+  // VALUE (phone number, email, URL) rather than descriptive text --
+  // wrapped in its own Directionality(TextDirection.ltr) so digits/URLs
+  // render in the correct logical left-to-right order even while the
+  // surrounding page stays RTL for Arabic (only this one Text is isolated,
+  // never the whole page/tile). Rendered in solid black (bold, per the
+  // client's explicit "black text" requirement) instead of the previous
+  // grey descriptive-text style, which only ever applied to non-value
+  // subtitles (e.g. "Fast direct response") and is preserved for onTap==null
+  // tiles if any are ever added again.
+  Widget _buildContactTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required bool isDarkMode,
+    bool subtitleIsLtrValue = false,
+    VoidCallback? onTap,
+  }) {
+    final subtitleText = Text(
+      subtitle,
+      style: TextStyle(
+        fontFamily: 'Plus Jakarta Sans',
+        color: subtitleIsLtrValue ? (isDarkMode ? Colors.white : Colors.black) : Colors.grey,
+        fontWeight: subtitleIsLtrValue ? FontWeight.w600 : FontWeight.normal,
+        fontSize: subtitleIsLtrValue ? 14 : 12,
+      ),
+    );
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
@@ -186,12 +298,15 @@ class _SupportPageState extends State<SupportPage> {
               children: [
                 Text(title, style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 4),
-                Text(subtitle, style: TextStyle(fontFamily: 'Plus Jakarta Sans', color: Colors.grey, fontSize: 12)),
+                subtitleIsLtrValue
+                    ? Directionality(textDirection: TextDirection.ltr, child: subtitleText)
+                    : subtitleText,
               ],
             ),
           ),
           const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
         ],
+      ),
       ),
     );
   }

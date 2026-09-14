@@ -499,5 +499,7 @@
   "error_otp_expired": "Le code OTP a expiré",
   "error_otp_max_attempts": "Trop de tentatives échouées. Veuillez demander un nouveau code.",
   "text_406": "Félicitations, vous avez remporté l'enchère",
-  "text_407": "J'ai remporté l'enchère « {title} » sur MazadPay pour {amount}."
+  "text_407": "J'ai remporté l'enchère « {title} » sur MazadPay pour {amount}.",
+  "text_408": "Site web",
+  "text_409": "Impossible d'ouvrir le lien"
 }

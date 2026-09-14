@@ -3147,6 +3147,18 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'لقد فزت بالمزاد «{title}» على MazadPay بسعر {amount}.'**
   String text_407(Object amount, Object title);
+
+  /// No description provided for @text_408.
+  ///
+  /// In ar, this message translates to:
+  /// **'الموقع الإلكتروني'**
+  String get text_408;
+
+  /// No description provided for @text_409.
+  ///
+  /// In ar, this message translates to:
+  /// **'تعذّر فتح الرابط'**
+  String get text_409;
 }
 
 class _AppLocalizationsDelegate

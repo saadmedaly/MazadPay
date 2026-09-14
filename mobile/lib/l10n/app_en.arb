@@ -507,5 +507,7 @@
   "error_otp_expired": "OTP code has expired",
   "error_otp_max_attempts": "Too many failed attempts. Please request a new code.",
   "text_406": "Congratulations, you won the auction",
-  "text_407": "I won the auction \"{title}\" on MazadPay for {amount}."
+  "text_407": "I won the auction \"{title}\" on MazadPay for {amount}.",
+  "text_408": "Website",
+  "text_409": "Couldn't open the link"
 }
