@@ -9,7 +9,9 @@ import 'package:mezadpay/pages/auction_details_page.dart';
 import 'package:mezadpay/pages/auction_winner_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/deposit_page.dart';
+import 'package:mezadpay/pages/notification_detail_page.dart';
 import 'package:mezadpay/services/fcm_service.dart';
+import 'package:mezadpay/services/notifications_api.dart';
 
 /// Global key pour accéder au Navigator depuis n'importe où
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -92,7 +94,7 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
     // S'assurer que le widget est monté avant de naviguer
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      
+
       final String? type = data['type'];
       final String? auctionId = data['auctionId'] ?? data['auction_id'];
 
@@ -106,6 +108,8 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
         case 'auction_won':
           if (auctionId != null) {
             _navigateToWinner(auctionId);
+          } else {
+            _openGenericDetailById(data);
           }
           break;
         case 'auction_pending':
@@ -115,6 +119,8 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
         case 'bid_outbid':
           if (auctionId != null) {
             _navigateToAuction(auctionId);
+          } else {
+            _openGenericDetailById(data);
           }
           break;
         case 'new_message':
@@ -126,11 +132,85 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
         case 'withdrawal_processed':
           _navigateToWallet();
           break;
+        // Customer #22: admin broadcast notifications (general/new_auction/
+        // transaction) previously fell into `default: _navigateToHome()` --
+        // a misleading redirect that wiped the nav stack and gave no
+        // indication the tap was notification-related. Preferred
+        // specialized navigation first (if this specific push DOES carry a
+        // real auctionId), then the generic detail screen looked up by
+        // notification_id, matching the exact routing precedence used by
+        // the in-app list (notifications_page.dart's _onNotificationTap).
+        case 'general':
+        case 'transaction':
+        case 'new_auction':
+          if (auctionId != null) {
+            _navigateToAuction(auctionId);
+          } else {
+            _openGenericDetailById(data);
+          }
+          break;
         default:
-          // Navigation vers la page d'accueil par défaut
-          _navigateToHome();
+          // Customer #22: an unrecognized type still deserves an attempt at
+          // opening its real content (via notification_id) rather than an
+          // unconditional silent redirect to Home -- _openGenericDetailById
+          // itself falls back to Home only if no id is present or the
+          // lookup fails, matching the "fail safely" requirement.
+          _openGenericDetailById(data);
       }
     });
+  }
+
+  /// Customer #22: looks up the tapped push's own DB row via the
+  /// already-user-scoped GET /notifications (never a new GET
+  /// /notifications/:id endpoint), then opens NotificationDetailPage for it.
+  /// Used both for a genuinely generic/broadcast type and as the "no real
+  /// target present" fallback for types that normally have a specialized
+  /// destination. Fails safely to Home if notification_id is absent, the
+  /// fetch fails (e.g. auth not ready yet), or no matching row is found --
+  /// never throws, never crashes.
+  Future<void> _openGenericDetailById(Map<String, dynamic> data) async {
+    final notificationId = data['notification_id']?.toString();
+    if (notificationId == null || notificationId.isEmpty) {
+      _navigateToHome();
+      return;
+    }
+
+    try {
+      final response = await NotificationsApi().getNotifications();
+      if (!mounted) return;
+      if (!response.success || response.data == null) {
+        _navigateToHome();
+        return;
+      }
+      final match = response.data!.whereType<Map<String, dynamic>>().where(
+            (n) => n['id']?.toString() == notificationId,
+          );
+      if (match.isEmpty) {
+        _navigateToHome();
+        return;
+      }
+      final notification = match.first;
+      final createdAtRaw = notification['created_at']?.toString();
+      final createdAt = createdAtRaw != null
+          ? (DateTime.tryParse(createdAtRaw) ?? DateTime.now())
+          : DateTime.now();
+
+      final navigator = navigatorKey.currentState;
+      if (navigator == null) return;
+      navigator.push(
+        MaterialPageRoute(
+          builder: (context) => NotificationDetailPage(
+            title: notification['title']?.toString() ?? '',
+            body: notification['body']?.toString(),
+            imageUrl: notification['image_url']?.toString(),
+            createdAt: createdAt,
+          ),
+        ),
+      );
+    } catch (e) {
+      developer.log('Notification detail lookup error: $e');
+      if (mounted) _navigateToHome();
+    }
   }
 
   void _navigateToAuction(String auctionId) {

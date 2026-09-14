@@ -97,6 +97,9 @@ export const useSendNotification = () => {
       type?: string;
       data?: Record<string, string>;
       broadcast?: boolean;
+      // Customer #22: optional broadcast image URL, set via
+      // POST /admin/notifications/upload before this mutation fires.
+      image_url?: string;
     }) => {
       const response = await api.post('/v1/api/admin/notifications/send', data);
       return response.data;

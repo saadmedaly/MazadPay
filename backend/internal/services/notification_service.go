@@ -18,6 +18,12 @@ type NotificationService interface {
 	SavePushToken(ctx context.Context, userID uuid.UUID, fcmToken, deviceID, platform string) error
 	SendPush(ctx context.Context, userID uuid.UUID, title, body string, notifType string, data map[string]string) error
 	SendLocalizedPush(ctx context.Context, userID uuid.UUID, notificationType, language string, params map[string]string, data map[string]string) error
+	// SendPushWithImage (Customer #22) is SendPush plus an optional imageURL
+	// persisted onto the created notification row -- a separate method rather
+	// than adding a parameter to SendPush itself, so the 4 existing SendPush
+	// call sites (none of which have an image to send) need no changes.
+	// imageURL == "" behaves identically to SendPush.
+	SendPushWithImage(ctx context.Context, userID uuid.UUID, title, body string, notifType string, data map[string]string, imageURL string) error
 	NotifyAdmins(ctx context.Context, title, body string, data map[string]string) error
 	NotifyAdminsLocalized(ctx context.Context, notificationType string, params map[string]string, data map[string]string) error
 	// SendBroadcast returns (targetUsers, sent, failed, err) so the Admin
@@ -27,6 +33,14 @@ type NotificationService interface {
 	// includes DB persistence (see SendPush) -- FCM delivery on top of that
 	// is attempted per-user but never fails the persisted count.
 	SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) (targetUsers, sent, failed int, err error)
+	// SendBroadcastWithImage (Customer #22) is SendBroadcast plus an optional
+	// imageURL: the SAME URL string is reused across every per-user
+	// notification row this broadcast creates (the image itself is uploaded
+	// to R2 exactly once by the admin, before this is ever called -- see
+	// NotificationHandler.SendNotification) -- never a separate
+	// upload/object per recipient. imageURL == "" behaves identically to
+	// SendBroadcast.
+	SendBroadcastWithImage(ctx context.Context, title, body, notifType string, data map[string]string, imageURL string) (targetUsers, sent, failed int, err error)
 	ListNotifications(ctx context.Context, userID uuid.UUID, limit int) ([]models.Notification, error)
 	MarkAllAsRead(ctx context.Context, userID uuid.UUID) error
 	MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
@@ -103,6 +117,37 @@ func (s *notificationService) SavePushToken(ctx context.Context, userID uuid.UUI
 }
 
 func (s *notificationService) SendPush(ctx context.Context, userID uuid.UUID, title, body string, notifType string, data map[string]string) error {
+	return s.sendPush(ctx, userID, title, body, notifType, data, "")
+}
+
+func (s *notificationService) SendPushWithImage(ctx context.Context, userID uuid.UUID, title, body string, notifType string, data map[string]string, imageURL string) error {
+	return s.sendPush(ctx, userID, title, body, notifType, data, imageURL)
+}
+
+// buildFCMData (Customer #22, Phase 5, extracted during final hardening for
+// direct unit testing without a live *messaging.Client) builds the FCM data
+// payload for a single recipient's push: a copy of the caller's own data map
+// (never mutated -- SendBroadcast's per-user loop passes the same map to
+// every recipient) plus notification_id, the just-created DB row's own ID.
+// Because each call site passes that recipient's own freshly-created
+// notification.ID, a broadcast to N users naturally produces N distinct
+// notification_id values -- one real DB row ID per recipient, never a
+// single ID shared across the broadcast -- letting a push tap look up its
+// own row via the already-user-scoped GET /notifications.
+func buildFCMData(data map[string]string, notificationID uuid.UUID) map[string]string {
+	fcmData := make(map[string]string, len(data)+1)
+	for k, v := range data {
+		fcmData[k] = v
+	}
+	fcmData["notification_id"] = notificationID.String()
+	return fcmData
+}
+
+// sendPush is the shared implementation behind SendPush/SendPushWithImage --
+// imageURL == "" is the exact pre-Customer-#22 SendPush behavior (no image
+// column set, no FCM ImageURL), so every existing caller of SendPush is
+// unaffected.
+func (s *notificationService) sendPush(ctx context.Context, userID uuid.UUID, title, body string, notifType string, data map[string]string, imageURL string) error {
 	// 1. Log in database
 	notification := &models.Notification{
 		ID:     uuid.New(),
@@ -111,6 +156,9 @@ func (s *notificationService) SendPush(ctx context.Context, userID uuid.UUID, ti
 		Title:  title,
 		Body:   &body,
 		IsRead: false,
+	}
+	if imageURL != "" {
+		notification.ImageURL = &imageURL
 	}
 	if data != nil {
 		notification.Data = make(models.JSONB)
@@ -148,13 +196,15 @@ func (s *notificationService) SendPush(ctx context.Context, userID uuid.UUID, ti
 		return nil
 	}
 
+	fcmData := buildFCMData(data, notification.ID)
+
 	message := &messaging.MulticastMessage{
 		Tokens: tokens,
 		Notification: &messaging.Notification{
 			Title: title,
 			Body:  body,
 		},
-		Data: data,
+		Data: fcmData,
 	}
 
 	response, err := s.fcm.SendMulticast(ctx, message)
@@ -188,6 +238,17 @@ func (s *notificationService) NotifyAdmins(ctx context.Context, title, body stri
 }
 
 func (s *notificationService) SendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string) (int, int, int, error) {
+	return s.sendBroadcast(ctx, title, body, notifType, data, "")
+}
+
+func (s *notificationService) SendBroadcastWithImage(ctx context.Context, title, body, notifType string, data map[string]string, imageURL string) (int, int, int, error) {
+	return s.sendBroadcast(ctx, title, body, notifType, data, imageURL)
+}
+
+// sendBroadcast is the shared implementation behind SendBroadcast/
+// SendBroadcastWithImage -- imageURL == "" is the exact pre-Customer-#22
+// SendBroadcast behavior.
+func (s *notificationService) sendBroadcast(ctx context.Context, title, body, notifType string, data map[string]string, imageURL string) (int, int, int, error) {
 	// Staging blocker fix (client feedback item 10/16 follow-up): this used
 	// to iterate GetAllActiveTokens (push_tokens rows) instead of actual
 	// users -- a user with no push token registered (or a deactivated one)
@@ -214,7 +275,7 @@ func (s *notificationService) SendBroadcast(ctx context.Context, title, body, no
 	sent := 0
 	failed := 0
 	for _, userID := range userIDs {
-		if err := s.SendPush(ctx, userID, title, body, notifType, data); err != nil {
+		if err := s.sendPush(ctx, userID, title, body, notifType, data, imageURL); err != nil {
 			failed++
 			s.logger.Warn("broadcast: failed to deliver to user", zap.String("user_id", userID.String()), zap.Error(err))
 			continue

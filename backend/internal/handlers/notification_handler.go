@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"path/filepath"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -156,12 +157,17 @@ func (h *NotificationHandler) AdminList(c *fiber.Ctx) error {
 }
 
 type SendNotificationRequest struct {
-	UserID     string `json:"user_id"`
-	Title      string `json:"title" validate:"required"`
-	Body       string `json:"body" validate:"required"`
-	Type       string `json:"type"`
-	Data       map[string]string `json:"data"`
-	Broadcast  bool   `json:"broadcast"`
+	UserID    string            `json:"user_id"`
+	Title     string            `json:"title" validate:"required"`
+	Body      string            `json:"body" validate:"required"`
+	Type      string            `json:"type"`
+	Data      map[string]string `json:"data"`
+	Broadcast bool              `json:"broadcast"`
+	// ImageURL (Customer #22): optional, set by the admin uploading exactly
+	// one image via POST /admin/notifications/upload before calling this
+	// endpoint. Never required -- omitted/empty behaves identically to
+	// before this field existed.
+	ImageURL string `json:"image_url"`
 }
 
 // Get notification templates
@@ -259,7 +265,7 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 	// Priority: broadcast > specific user > admins
 	if req.Broadcast {
 		// Send to all users
-		targetUsers, sent, failed, err := h.svc.SendBroadcast(c.Context(), req.Title, message, req.Type, req.Data)
+		targetUsers, sent, failed, err := h.svc.SendBroadcastWithImage(c.Context(), req.Title, message, req.Type, req.Data, req.ImageURL)
 		if err != nil {
 			h.logger.Error("broadcast failed", zap.Error(err))
 			return MapError(c, h.logger, err)
@@ -335,6 +341,73 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 	}
 
 	return OK(c, fiber.Map{"message": "Notification sent to admins"})
+}
+
+// UploadNotificationImage (Customer #22): admin-only, one image, reuses
+// MediaService/R2 exactly like UploadBannerImage. Does NOT create any
+// notification/DB row -- it only returns a public URL, which the admin web
+// then submits as part of a subsequent POST /admin/notifications/send call
+// (req.ImageURL). This mirrors the upload-first-then-reference pattern
+// already used by banners/FAQ/tutorials, including that same
+// upload-then-cancel orphan risk, which is an accepted existing pattern in
+// this codebase (see BannerHandler.UploadBannerImage), not something newly
+// introduced here.
+func (h *NotificationHandler) UploadNotificationImage(c *fiber.Ctx) error {
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		h.logger.Error("[UploadNotificationImage] Media service not available")
+		return InternalError(c, "Media service not available")
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		h.logger.Error("[UploadNotificationImage] Failed to get file", zap.Error(err))
+		return BadRequest(c, "No file provided")
+	}
+
+	// Client feedback #22: 10MB (stricter than MediaService's own 20MB
+	// ceiling), matching the same stricter handler-level cap already used by
+	// UploadBannerImage -- a push-notification image should stay small.
+	if file.Size > 10*1024*1024 {
+		h.logger.Warn("[UploadNotificationImage] File too large", zap.Int64("size", file.Size))
+		return BadRequest(c, "File too large (max 10MB)")
+	}
+
+	// jpg/jpeg/png/webp only (no .gif) -- MediaService.UploadFile itself
+	// re-validates the actual MIME type from file bytes (http.DetectContentType),
+	// this is just the handler-level extension pre-check, same pattern as
+	// UploadBannerImage.
+	ext := filepath.Ext(file.Filename)
+	allowedExts := map[string]bool{
+		".jpg": true, ".jpeg": true, ".png": true, ".webp": true,
+	}
+	if !allowedExts[ext] {
+		h.logger.Warn("[UploadNotificationImage] Invalid file type", zap.String("ext", ext))
+		return BadRequest(c, "Invalid file type (only jpg, jpeg, png, webp allowed)")
+	}
+
+	fileReader, err := file.Open()
+	if err != nil {
+		h.logger.Error("[UploadNotificationImage] Failed to open file", zap.Error(err))
+		return InternalError(c, "Failed to open file")
+	}
+	defer fileReader.Close()
+
+	url, err := mediaSvc.UploadFile(c.Context(), fileReader, file, "notifications")
+	if err != nil {
+		h.logger.Error("[UploadNotificationImage] R2 upload failed", zap.Error(err))
+		return InternalError(c, "Failed to upload image: "+err.Error())
+	}
+
+	h.logger.Info("[UploadNotificationImage] Upload successful", zap.String("url", url))
+
+	return OK(c, fiber.Map{
+		"message": "Image uploaded successfully",
+		"url":     url,
+		"type":    "image",
+		"size":    file.Size,
+		"name":    file.Filename,
+	})
 }
 
 func (h *NotificationHandler) GetTemplates(c *fiber.Ctx) error {

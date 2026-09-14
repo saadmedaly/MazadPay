@@ -10,6 +10,12 @@ class Notification {
   final String? referenceId;
   final String? referenceType;
   final Map<String, dynamic>? data;
+  // Customer #22: image_url/action_url already existed as backend DB columns
+  // and on models.Notification (migration 000030) but were never parsed here
+  // -- both are optional and absent/null on every pre-existing notification
+  // type, so this is purely additive: nothing that already worked changes.
+  final String? imageUrl;
+  final String? actionUrl;
   final DateTime createdAt;
 
   Notification({
@@ -22,6 +28,8 @@ class Notification {
     this.referenceId,
     this.referenceType,
     this.data,
+    this.imageUrl,
+    this.actionUrl,
     required this.createdAt,
   });
 
@@ -38,6 +46,8 @@ class Notification {
       data: json['data'] != null
           ? Map<String, dynamic>.from(json['data'])
           : null,
+      imageUrl: json['image_url'],
+      actionUrl: json['action_url'],
       // Client feedback #10: DateTime.parse throws on a malformed string,
       // which would crash the whole notifications list for one bad row.
       // tryParse degrades to "now" instead, matching the missing-field
@@ -59,6 +69,8 @@ class Notification {
       'reference_id': referenceId,
       'reference_type': referenceType,
       'data': data,
+      'image_url': imageUrl,
+      'action_url': actionUrl,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -75,6 +87,8 @@ class Notification {
       referenceId: referenceId,
       referenceType: referenceType,
       data: data,
+      imageUrl: imageUrl,
+      actionUrl: actionUrl,
       createdAt: createdAt,
     );
   }

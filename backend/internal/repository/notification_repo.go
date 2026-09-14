@@ -35,9 +35,14 @@ func NewNotificationRepository(db *sqlx.DB) NotificationRepository {
 }
 
 func (r *notificationRepo) Create(ctx context.Context, n *models.Notification) error {
+	// Customer #22: image_url/action_url/action_label already existed as
+	// columns (migration 000030) and on models.Notification, but were never
+	// listed in this INSERT -- so even a caller that set them on the struct
+	// (e.g. SendPushWithImage) had them silently dropped before reaching the
+	// database. Purely additive: every other column/behavior unchanged.
 	_, err := r.db.NamedExecContext(ctx, `
-		INSERT INTO notifications (id, user_id, type, title, body, reference_id, reference_type, data)
-		VALUES (:id, :user_id, :type, :title, :body, :reference_id, :reference_type, :data)
+		INSERT INTO notifications (id, user_id, type, title, body, reference_id, reference_type, data, image_url, action_url, action_label)
+		VALUES (:id, :user_id, :type, :title, :body, :reference_id, :reference_type, :data, :image_url, :action_url, :action_label)
 	`, n)
 	if err != nil {
 		return fmt.Errorf("failed to create notification: %w", err)

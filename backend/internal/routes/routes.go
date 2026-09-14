@@ -126,7 +126,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	setupAdminRoutes(api, adminHandler, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupBannerRoutes(api, bannerHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupContentRoutes(api, contentHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
-	setupNotificationRoutes(api, notifHandler, cfg.JWT.Secret, logger, rdb)
+	setupNotificationRoutes(api, notifHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupRequestRoutes(api, reqHandler, cfg.JWT.Secret, logger, auditRepo, rdb, cfg, mediaSvc)
 	// New routes
 	setupPaymentMethodRoutes(api, paymentMethodHandler, cfg.JWT.Secret, logger, rdb)
@@ -542,7 +542,7 @@ func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, mediaSvc s
 	})
 }
 
-func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.NotificationHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.NotificationHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	adminMiddleware := middleware.AdminOnly(logger)
 
@@ -563,6 +563,12 @@ func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.Notificati
 	admin.Put("/read-all", notifHandler.MarkAllAsRead)
 	admin.Delete("/:id", notifHandler.AdminDelete)
 	admin.Get("/templates", notifHandler.GetTemplates)
+	// Customer #22: one optional notification image, reusing MediaService/R2
+	// exactly like the banner/FAQ/tutorial upload routes above.
+	admin.Post("/upload", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return notifHandler.UploadNotificationImage(c)
+	})
 }
 
 func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, jwtSecret string, logger *zap.Logger, auditRepo repository.AuditRepository, rdb *redis.Client, cfg *config.Config, mediaSvc services.MediaService) {

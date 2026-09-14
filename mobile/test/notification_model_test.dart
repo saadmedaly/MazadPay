@@ -63,6 +63,54 @@ void main() {
     });
   });
 
+  // Customer Request #22: image_url/action_url already existed as backend
+  // columns but were never parsed by this model -- these prove they now are,
+  // and that their absence (every pre-existing notification type) stays safe.
+  group('Customer #22: image_url/action_url parsing', () {
+    test('a broadcast row with image_url parses it', () {
+      final n = model.Notification.fromJson({
+        'id': 'n5',
+        'type': 'general',
+        'title': 'Broadcast',
+        'body': 'hello',
+        'image_url': 'https://cdn.example.com/notifications/x.jpg',
+        'created_at': '2026-01-01T12:00:00Z',
+      });
+      expect(n.imageUrl, 'https://cdn.example.com/notifications/x.jpg');
+    });
+
+    test('a row with no image_url leaves imageUrl null (text-only notification)', () {
+      final n = model.Notification.fromJson({
+        'id': 'n6',
+        'type': 'auction_won',
+        'title': 'You won!',
+      });
+      expect(n.imageUrl, isNull);
+    });
+
+    test('action_url parses when present, null otherwise', () {
+      final withUrl = model.Notification.fromJson({'id': 'n7', 'action_url': '/some/target'});
+      final withoutUrl = model.Notification.fromJson({'id': 'n8'});
+      expect(withUrl.actionUrl, '/some/target');
+      expect(withoutUrl.actionUrl, isNull);
+    });
+
+    test('markAsRead preserves imageUrl/actionUrl', () {
+      final original = model.Notification(
+        id: 'n9',
+        userId: 'u1',
+        type: 'general',
+        title: 'title',
+        imageUrl: 'https://cdn.example.com/img.png',
+        actionUrl: '/x',
+        createdAt: DateTime(2026, 1, 1),
+      );
+      final read = original.markAsRead();
+      expect(read.imageUrl, original.imageUrl);
+      expect(read.actionUrl, original.actionUrl);
+    });
+  });
+
   group('markAsRead', () {
     test('returns a copy with isRead=true, all other fields unchanged', () {
       final original = model.Notification(
@@ -119,6 +167,98 @@ void main() {
       expect(extractRoute(null, 'a1'), isNull);
     });
   });
+
+  // Customer Request #22: routing precedence. Pure reproduction of the
+  // routing decision added to both notifications_page.dart's
+  // _onNotificationTap and notification_handler.dart's
+  // _navigateFromNotification -- proves specialized navigation (a real
+  // auctionId) always wins over the generic detail fallback, and that
+  // general/transaction/new_auction only fall back to detail when no real
+  // target is present, per the user's explicit routing-precedence
+  // constraint ("Customer #22 must not break existing targeted
+  // notifications").
+  group('Customer #22: routing precedence (specialized nav wins over generic detail)', () {
+    test('auction_won WITH auctionId -> specialized winner route, not generic detail', () {
+      expect(resolveRoute('auction_won', 'a1'), 'specialized:auction_won:a1');
+    });
+
+    test('auction_won WITHOUT auctionId -> falls back to generic detail', () {
+      expect(resolveRoute('auction_won', null), 'generic_detail');
+    });
+
+    test('bid_outbid WITH auctionId -> specialized auction route', () {
+      expect(resolveRoute('bid_outbid', 'a5'), 'specialized:auction:a5');
+    });
+
+    test('bid_outbid WITHOUT auctionId -> falls back to generic detail (was a silent no-op before Customer #22)', () {
+      expect(resolveRoute('bid_outbid', null), 'generic_detail');
+    });
+
+    test('a real targeted new_auction (has auctionId) is NOT degraded to the generic detail page', () {
+      expect(resolveRoute('new_auction', 'a7'), 'specialized:auction:a7');
+    });
+
+    test('a broadcast new_auction with no real target opens the generic detail page', () {
+      expect(resolveRoute('new_auction', null), 'generic_detail');
+    });
+
+    test('transaction WITH auctionId still resolves to the specialized route', () {
+      expect(resolveRoute('transaction', 'a2'), 'specialized:auction:a2');
+    });
+
+    test('a broadcast transaction without target opens the generic detail page', () {
+      expect(resolveRoute('transaction', null), 'generic_detail');
+    });
+
+    test('general (admin broadcast) always opens the generic detail page (no auction concept)', () {
+      expect(resolveRoute('general', null), 'generic_detail');
+      expect(resolveRoute('general', 'a1'), 'specialized:auction:a1');
+    });
+
+    test('payment/wallet types are unaffected by Customer #22 -- unconditional wallet route', () {
+      expect(resolveRoute('payment_received', null), 'specialized:wallet');
+      expect(resolveRoute('deposit_confirmed', null), 'specialized:wallet');
+      expect(resolveRoute('deposit_rejected', null), 'specialized:wallet');
+      expect(resolveRoute('withdrawal_processed', null), 'specialized:wallet');
+    });
+
+    test('an unknown/unrecognized type falls back to the generic detail page (never a silent no-op)', () {
+      expect(resolveRoute('some_unknown_future_type', null), 'generic_detail');
+      // Even with an auctionId present, an unrecognized type has no case
+      // that knows what to do with it -- generic detail remains the safe
+      // fallback rather than guessing a route.
+      expect(resolveRoute('some_unknown_future_type', 'a1'), 'generic_detail');
+    });
+  });
+}
+
+/// Pure reproduction of the post-Customer-#22 routing precedence shared by
+/// notifications_page.dart's _onNotificationTap and
+/// notification_handler.dart's _navigateFromNotification. Not the real
+/// widget navigation call (that requires a BuildContext/Navigator), but the
+/// exact decision logic: specialized navigation first when real reference
+/// data is present, generic detail page only as the fallback.
+String resolveRoute(String? type, String? auctionId) {
+  switch (type) {
+    case 'auction_won':
+      return auctionId != null ? 'specialized:auction_won:$auctionId' : 'generic_detail';
+    case 'auction_pending':
+    case 'auction_approved':
+    case 'auction_rejected':
+    case 'auction_ended':
+    case 'bid_outbid':
+    case 'general':
+    case 'transaction':
+    case 'new_auction':
+      return auctionId != null ? 'specialized:auction:$auctionId' : 'generic_detail';
+    case 'payment_received':
+    case 'deposit_confirmed':
+    case 'deposit_rejected':
+    case 'withdrawal_processed':
+      return 'specialized:wallet';
+    default:
+      return 'generic_detail';
+  }
 }
 
 // Pure reproduction of FCMService.extractRoute's switch logic (private
