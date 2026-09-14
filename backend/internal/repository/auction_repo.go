@@ -47,6 +47,19 @@ type AuctionRepository interface {
 	UpdatePrice(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, newPrice decimal.Decimal, version int) (bool, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
 	SetWinner(ctx context.Context, tx *sqlx.Tx, id, winnerID, winningBidID uuid.UUID) error
+	// TrySetWinnerAtomically/TryEndAuctionAtomically (Customer #23): the
+	// race-safe canonical-finalizer primitives -- see their doc comments on
+	// the auctionRepo implementation for why WHERE status = 'active' is
+	// itself the concurrency guard.
+	TrySetWinnerAtomically(ctx context.Context, tx *sqlx.Tx, id, winnerID, winningBidID uuid.UUID) (won bool, err error)
+	TryEndAuctionAtomically(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (won bool, err error)
+	// TryCancelAuctionAtomically/TryRelistAuctionAtomically/TryBuyNowAtomically
+	// (Bug J): the race-safe lifecycle-transition primitives replacing the
+	// generic Update for Cancel/Relist/BuyNow -- see their doc comments on
+	// the auctionRepo implementation for exact semantics and guards.
+	TryCancelAuctionAtomically(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, reason string) (won bool, err error)
+	TryRelistAuctionAtomically(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, newEndTime time.Time, newPrice decimal.Decimal) (won bool, err error)
+	TryBuyNowAtomically(ctx context.Context, tx *sqlx.Tx, id, buyerID uuid.UUID, buyNowPrice decimal.Decimal) (won bool, err error)
 	IncrementViews(ctx context.Context, id uuid.UUID, userID *uuid.UUID) error
 	IncrementBidderCount(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error
 	FindExpiredActive(ctx context.Context) ([]models.Auction, error)
@@ -321,6 +334,138 @@ func (r *auctionRepo) SetWinner(ctx context.Context, tx *sqlx.Tx, id, winnerID, 
          WHERE id = $3`,
 		winnerID, winningBidID, id)
 	return err
+}
+
+// TrySetWinnerAtomically (Customer #23 canonical finalizer) is the race-safe
+// replacement for SetWinner when called from a background closer that may
+// run concurrently with another closer for the same auction. The WHERE
+// status = 'active' clause IS the race guard: under Postgres's default READ
+// COMMITTED isolation, when two transactions concurrently run this same
+// UPDATE for the same row, the second to acquire the row lock blocks until
+// the first commits, then re-evaluates WHERE status = 'active' against the
+// now-committed row -- which the first caller just changed to 'ended' -- so
+// it matches zero rows and RETURNING yields none. Exactly one caller ever
+// observes won=true for a given auction; every other concurrent/later
+// caller safely no-ops. This is why correctness here does not depend on
+// Redis or any application-level lock -- the guarantee comes from the
+// database's own transactional row-level locking.
+func (r *auctionRepo) TrySetWinnerAtomically(ctx context.Context, tx *sqlx.Tx, id, winnerID, winningBidID uuid.UUID) (won bool, err error) {
+	var returnedID uuid.UUID
+	err = tx.GetContext(ctx, &returnedID, `
+		UPDATE auctions SET winner_id = $1, winning_bid_id = $2, status = 'ended',
+         payment_deadline = now() + interval '48 hours'
+         WHERE id = $3 AND status = 'active'
+         RETURNING id`,
+		winnerID, winningBidID, id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// TryEndAuctionAtomically (Customer #23 canonical finalizer) is the no-bid
+// counterpart of TrySetWinnerAtomically: no winner exists, so only the
+// status transition itself needs the same race guard (WHERE status =
+// 'active' ... RETURNING id) -- see TrySetWinnerAtomically's comment for why
+// this alone is sufficient for exactly-once semantics without Redis.
+func (r *auctionRepo) TryEndAuctionAtomically(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (won bool, err error) {
+	var returnedID uuid.UUID
+	err = tx.GetContext(ctx, &returnedID, `
+		UPDATE auctions SET status = 'ended'
+         WHERE id = $1 AND status = 'active'
+         RETURNING id`,
+		id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// TryCancelAuctionAtomically (Bug J) is the race-safe replacement for
+// CancelAuction's prior use of the generic Update, whose SQL column list
+// never included status/rejection_reason -- cancellation used to silently
+// no-op on the DB while returning no error and still emitting a realtime
+// "canceled" event for a row that never actually changed. The WHERE clause
+// is both the correctness guard (only a legal source status may transition)
+// and the race guard (see TrySetWinnerAtomically's comment for the exact
+// mechanism): matches the EXISTING business rule pinned by CancelAuction's
+// own prior precondition (`status == "ended" || status == "canceled"` were
+// the only disallowed source statuses) -- i.e. both "pending" and "active"
+// auctions may be cancelled, never "ended" or already-"canceled" ones.
+func (r *auctionRepo) TryCancelAuctionAtomically(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, reason string) (won bool, err error) {
+	var returnedID uuid.UUID
+	err = tx.GetContext(ctx, &returnedID, `
+		UPDATE auctions SET status = 'canceled', rejection_reason = $1
+         WHERE id = $2 AND status NOT IN ('ended', 'canceled')
+         RETURNING id`,
+		reason, id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// TryRelistAuctionAtomically (Bug J) is the race-safe replacement for
+// RelistAuction's prior use of the generic Update. Clears ALL winner-
+// finalization state from the auction's previous run (winner_id,
+// winning_bid_id, payment_deadline) together -- not just winner_id -- since
+// winning_bid_id/payment_deadline are themselves finalization state tied to
+// that same prior winner_id; leaving either behind would attach a stale old-
+// run winner reference to a freshly relisted auction. Historical bid ROWS
+// are never touched here (relist has never deleted/reset bids, and Bug J
+// does not change that). Guard matches RelistAuction's own existing
+// precondition (`status IN ("canceled", "ended")`).
+func (r *auctionRepo) TryRelistAuctionAtomically(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, newEndTime time.Time, newPrice decimal.Decimal) (won bool, err error) {
+	var returnedID uuid.UUID
+	err = tx.GetContext(ctx, &returnedID, `
+		UPDATE auctions SET status = 'pending', end_time = $1, current_price = $2,
+         winner_id = NULL, winning_bid_id = NULL, payment_deadline = NULL
+         WHERE id = $3 AND status IN ('canceled', 'ended')
+         RETURNING id`,
+		newEndTime, newPrice, id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// TryBuyNowAtomically (Bug J) is the race-safe replacement for BuyNow's
+// prior use of the generic Update. Reuses the exact WHERE status = 'active'
+// ... RETURNING id race guard established by TrySetWinnerAtomically (see its
+// comment for the mechanism), so BuyNow-vs-expiration and concurrent
+// double-BuyNow races are both closed the same proven way. winning_bid_id is
+// deliberately left NULL -- a Buy Now purchase has no real Bid row (it is an
+// instant purchase, not a winning bid), matching BuyNow's own original
+// intent; a fake Bid row is never invented. payment_deadline is deliberately
+// NOT set here (Bug J is persistence/race-correctness only, not a new
+// BuyNow business rule -- see the accompanying audit finding).
+func (r *auctionRepo) TryBuyNowAtomically(ctx context.Context, tx *sqlx.Tx, id, buyerID uuid.UUID, buyNowPrice decimal.Decimal) (won bool, err error) {
+	var returnedID uuid.UUID
+	err = tx.GetContext(ctx, &returnedID, `
+		UPDATE auctions SET winner_id = $1, status = 'ended', current_price = $2,
+         winning_bid_id = NULL
+         WHERE id = $3 AND status = 'active'
+         RETURNING id`,
+		buyerID, buyNowPrice, id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *auctionRepo) FindExpiredActive(ctx context.Context) ([]models.Auction, error) {

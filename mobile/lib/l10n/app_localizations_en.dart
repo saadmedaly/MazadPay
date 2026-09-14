@@ -1538,4 +1538,12 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get error_too_many_requests =>
       'Too many attempts. Please try again later.';
+
+  @override
+  String get text_406 => 'Congratulations, you won the auction';
+
+  @override
+  String text_407(Object amount, Object title) {
+    return 'I won the auction \"$title\" on MazadPay for $amount.';
+  }
 }

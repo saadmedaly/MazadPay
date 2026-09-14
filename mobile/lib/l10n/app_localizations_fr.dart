@@ -1563,4 +1563,12 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get error_too_many_requests =>
       'Trop de tentatives. Veuillez réessayer plus tard.';
+
+  @override
+  String get text_406 => 'Félicitations, vous avez remporté l\'enchère';
+
+  @override
+  String text_407(Object amount, Object title) {
+    return 'J\'ai remporté l\'enchère « $title » sur MazadPay pour $amount.';
+  }
 }

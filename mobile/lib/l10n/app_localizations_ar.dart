@@ -1569,4 +1569,12 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get error_too_many_requests =>
       'محاولات كثيرة جدا. يرجى المحاولة مرة أخرى في وقت لاحق.';
+
+  @override
+  String get text_406 => 'مبروك، ربحت المزاد';
+
+  @override
+  String text_407(Object amount, Object title) {
+    return 'لقد فزت بالمزاد «$title» على MazadPay بسعر $amount.';
+  }
 }

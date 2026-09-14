@@ -62,6 +62,10 @@ dependencies:
   # Environment Variables
   flutter_dotenv: ^5.1.0
 
+  # Customer Request #23: winner-share ("share the win with friends") --
+  # no share package existed in this project before.
+  share_plus: ^10.1.4
+
   # Location & Geocoding
   geolocator: ^10.1.0
   geocoding: ^2.1.1

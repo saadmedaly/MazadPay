@@ -50,7 +50,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	smsSvc := services.NewSMSService(cfg.Wablas.Token, cfg.Wablas.SecretKey, cfg.Wablas.ServerURL, logger)
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4, cfg.Redis.OTPTTLMinutes, rdb, logger)
 	auditSvc := services.NewAuditService(auditRepo)
-	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger, globalHub)
+	auctionSvc := services.NewAuctionService(db, auctionRepo, bidRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger, globalHub)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
 	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours, globalHub)
@@ -61,7 +61,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 
 
 	// Create and start auction scheduler for notifications
-	auctionScheduler := services.NewAuctionScheduler(db, auctionRepo, bidRepo, notifSvc, userRepo, rdb, logger)
+	auctionScheduler := services.NewAuctionScheduler(auctionRepo, auctionSvc, logger)
 
 	// New services from migration 000031
 	paymentMethodSvc := services.NewPaymentMethodService(db)

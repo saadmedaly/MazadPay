@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 import 'auction_winner_page.dart';
 import '../services/auction_api.dart';
 import '../services/cache_service.dart';
+import '../services/realtime_sync_service.dart';
 import '../utils/money_formatter.dart';
 import '../utils/auction_image.dart';
 
@@ -15,16 +19,55 @@ class MyWinningsPage extends ConsumerStatefulWidget {
   ConsumerState<MyWinningsPage> createState() => _MyWinningsPageState();
 }
 
-class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
+class _MyWinningsPageState extends ConsumerState<MyWinningsPage> with WidgetsBindingObserver {
   final AuctionApi _auctionApi = AuctionApi();
   List<Map<String, dynamic>> _winnings = [];
   bool _isLoading = true;
   String? _error;
 
+  // Customer #23: reuses Customer #20's existing global-channel event
+  // stream -- no new realtime architecture. auction.status_changed already
+  // fires for every real auction closure (see
+  // AuctionService.FinalizeExpiredAuction/emitAuctionEvent); this page just
+  // needed to actually listen for it and refetch, which it never did
+  // before.
+  StreamSubscription<RealtimeEvent>? _realtimeSubscription;
+  StreamSubscription<void>? _catchUpSubscription;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadWinnings();
+
+    _realtimeSubscription = RealtimeSyncService().events.listen((event) {
+      if (event.type == RealtimeEventType.auctionStatusChanged && mounted) {
+        _loadWinnings();
+      }
+    });
+    // App-resume refresh (Customer #20's existing catch-up signal): fires on
+    // reconnect/resume, refetches current state -- never replays historical
+    // wins as a new popup (this page only refreshes its own list, it never
+    // opens AuctionWinnerPage automatically -- see notification_handler.dart
+    // for the foreground winner coordinator that owns that behavior).
+    _catchUpSubscription = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (mounted) _loadWinnings();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _loadWinnings();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _realtimeSubscription?.cancel();
+    _catchUpSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadWinnings() async {
@@ -209,11 +252,26 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
               l10n.no_title;
     }
     
+    // Customer #23: current_price is the ONLY field the backend actually
+    // sends for the settled winning amount (models.Auction has no separate
+    // winning_price/final_price column) -- final_price/current_bid were
+    // never real backend fields, just dead fallback branches that could
+    // never fire. Kept as a defensive secondary fallback only in case a
+    // legacy cached response shape still has them, per the implementation
+    // brief ("if legacy fallback compatibility is demonstrably needed, keep
+    // it only as a secondary compatibility fallback") -- current_price is
+    // tried first.
     final price = MoneyFormatter.format(
       num.tryParse((winning['current_price'] ?? winning['final_price'] ?? winning['current_bid'] ?? 0).toString()) ?? 0,
       winning['currency_code']?.toString(),
     );
     final isPaid = winning['is_paid'] == true || winning['payment_status'] == 'paid';
+
+    // Customer #23: end_time IS returned by the backend (models.Auction's
+    // json:"end_time") but was never rendered on this card at all.
+    final endTimeRaw = winning['end_time']?.toString();
+    final endDate = endTimeRaw != null ? DateTime.tryParse(endTimeRaw) : null;
+    final endDateLabel = endDate != null ? DateFormat('yyyy-MM-dd').format(endDate.toLocal()) : null;
 
     // Gestion des images. Customer feedback #11: /users/me/winnings returns
     // auctions via AuctionRepository.ListPaginated, whose image_urls field is a
@@ -319,6 +377,17 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> {
                         color: Color(0xFF0081FF),
                       ),
                     ),
+                    if (endDateLabel != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        endDateLabel,
+                        style: TextStyle(
+                          fontFamily: 'Plus Jakarta Sans',
+                          fontSize: 11,
+                          color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

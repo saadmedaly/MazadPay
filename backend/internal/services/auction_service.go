@@ -64,6 +64,16 @@ type AuctionService interface {
 	RelistAuction(ctx context.Context, auctionID, sellerID uuid.UUID, newEndTime time.Time) error
 	ExtendAuction(ctx context.Context, auctionID uuid.UUID, sellerID uuid.UUID, hours int) error
 	CloseExpiredAuctions(ctx context.Context) error
+	// FinalizeExpiredAuction (Customer #23 canonical finalizer) is the SINGLE
+	// authoritative operation for transitioning one expired auction from
+	// active -> ended, replacing the two previously-independent
+	// implementations (AuctionScheduler.checkEndedAuctions's own winner
+	// logic, and this service's own CloseExpiredAuctions winner logic).
+	// Race-safe: see auctionRepo.TrySetWinnerAtomically/TryEndAuctionAtomically
+	// for why concurrent callers for the same auction ID cannot both "win".
+	// Notifications/realtime events are only ever sent by whichever single
+	// caller's transaction actually performed the transition.
+	FinalizeExpiredAuction(ctx context.Context, auctionID uuid.UUID) error
 	GetCategories(ctx context.Context) ([]models.Category, error)
 	GetLocations(ctx context.Context) ([]models.Location, error)
 	GetCountries(ctx context.Context) ([]models.Country, error)
@@ -73,6 +83,7 @@ type AuctionService interface {
 type auctionService struct {
 	db          *sqlx.DB
 	auctionRepo repository.AuctionRepository
+	bidRepo     repository.BidRepository
 	reportRepo  repository.ReportRepository
 	notifSvc    NotificationService
 	userRepo    repository.UserRepository
@@ -84,10 +95,11 @@ type auctionService struct {
 	globalHub   GlobalHub
 }
 
-func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client, walletRepo repository.WalletRepository, auditSvc AuditService, logger *zap.Logger, globalHub GlobalHub) AuctionService {
+func NewAuctionService(db *sqlx.DB, auctionRepo repository.AuctionRepository, bidRepo repository.BidRepository, reportRepo repository.ReportRepository, notifSvc NotificationService, userRepo repository.UserRepository, mediaSvc MediaService, rdb *redis.Client, walletRepo repository.WalletRepository, auditSvc AuditService, logger *zap.Logger, globalHub GlobalHub) AuctionService {
 	return &auctionService{
 		db:          db,
 		auctionRepo: auctionRepo,
+		bidRepo:     bidRepo,
 		reportRepo:  reportRepo,
 		notifSvc:    notifSvc,
 		userRepo:    userRepo,
@@ -842,6 +854,16 @@ func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid
 	return nil
 }
 
+// BuyNow (Bug J) validates preconditions, then performs the winner
+// transition via TryBuyNowAtomically -- the same WHERE status='active' ...
+// RETURNING id race guard already proven correct for Customer #23's
+// expiration finalizer, closing the BuyNow-vs-expiration and concurrent
+// double-BuyNow races. If another caller (a concurrent BuyNow, or the
+// expiration scheduler) already transitioned the auction out of 'active'
+// between the FindByID precondition check above and this atomic write, won
+// is false and this call safely fails with ErrConflict rather than silently
+// overwriting -- or previously, silently no-op'ing while still reporting
+// success (the exact Bug J defect).
 func (s *auctionService) BuyNow(ctx context.Context, auctionID, buyerID uuid.UUID) (*models.Auction, error) {
 	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
 	if err != nil {
@@ -857,18 +879,39 @@ func (s *auctionService) BuyNow(ctx context.Context, auctionID, buyerID uuid.UUI
 		return nil, fmt.Errorf("cannot buy your own auction")
 	}
 
-	// Update auction as ended with winner
-	auction.WinnerID = &buyerID
-	auction.Status = "ended"
-	auction.CurrentPrice = *auction.BuyNowPrice
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 
-	if err := s.auctionRepo.Update(ctx, auction); err != nil {
+	won, err := s.auctionRepo.TryBuyNowAtomically(ctx, tx, auctionID, buyerID, *auction.BuyNowPrice)
+	if err != nil {
+		return nil, err
+	}
+	if !won {
+		return nil, apperr.ErrConflict
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
+	auction.WinnerID = &buyerID
+	auction.Status = "ended"
+	auction.CurrentPrice = *auction.BuyNowPrice
 	return auction, nil
 }
 
+// CancelAuction (Bug J) validates preconditions, then performs the status
+// transition via TryCancelAuctionAtomically -- the WHERE status NOT IN
+// ('ended','canceled') guard matches the exact pre-existing business rule
+// (both 'pending' and 'active' auctions were always cancellable) and closes
+// the Cancel-vs-expiration race: if FinalizeExpiredAuction already
+// transitioned the auction to 'ended' between the precondition check above
+// and this atomic write, won is false and Cancel now correctly fails with
+// ErrConflict instead of the prior defect (reporting success, emitting a
+// realtime "canceled" event, and releasing holds -- all for a DB row that
+// silently never changed).
 func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID uuid.UUID, reason string) error {
 	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
 	if err != nil {
@@ -882,11 +925,26 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 	}
 
 	oldStatus := auction.Status
-	auction.Status = "canceled"
-	auction.RejectionReason = &reason
-	if err := s.auctionRepo.Update(ctx, auction); err != nil {
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
+
+	won, err := s.auctionRepo.TryCancelAuctionAtomically(ctx, tx, auctionID, reason)
+	if err != nil {
+		return err
+	}
+	if !won {
+		return apperr.ErrConflict
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	auction.Status = "canceled"
+	auction.RejectionReason = &reason
 
 	// Emitted right after the status write commits -- the wallet-hold-release
 	// step below is a separate best-effort side effect with its own early
@@ -945,6 +1003,17 @@ func (s *auctionService) CancelAuction(ctx context.Context, auctionID, sellerID 
 	return nil
 }
 
+// RelistAuction (Bug J) validates preconditions, then performs the status/
+// winner-reset transition via TryRelistAuctionAtomically. Clears winner_id,
+// winning_bid_id, AND payment_deadline together -- winning_bid_id and
+// payment_deadline are themselves finalization state tied to the SAME prior
+// winner_id (set together by SetWinner/TrySetWinnerAtomically/
+// TryBuyNowAtomically), so leaving either behind after clearing winner_id
+// would attach a stale old-run winner reference to a freshly relisted
+// auction. Historical bid ROWS are never touched (relist has never deleted/
+// reset bids; that is unchanged). Guard (status IN ('canceled','ended'))
+// matches the exact pre-existing precondition and additionally closes any
+// theoretical Relist-vs-concurrent-lifecycle-change race.
 func (s *auctionService) RelistAuction(ctx context.Context, auctionID, sellerID uuid.UUID, newEndTime time.Time) error {
 	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
 	if err != nil {
@@ -958,13 +1027,30 @@ func (s *auctionService) RelistAuction(ctx context.Context, auctionID, sellerID 
 	}
 
 	oldStatus := auction.Status
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	won, err := s.auctionRepo.TryRelistAuctionAtomically(ctx, tx, auctionID, newEndTime, auction.StartPrice)
+	if err != nil {
+		return err
+	}
+	if !won {
+		return apperr.ErrConflict
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
 	auction.Status = "pending"
 	auction.EndTime = newEndTime
 	auction.WinnerID = nil
+	auction.WinningBidID = nil
+	auction.PaymentDeadline = nil
 	auction.CurrentPrice = auction.StartPrice
-	if err := s.auctionRepo.Update(ctx, auction); err != nil {
-		return err
-	}
 
 	if s.auditSvc != nil {
 		details := fmt.Sprintf("old_status=%s new_status=pending new_end_time=%s", oldStatus, newEndTime.Format(time.RFC3339))
@@ -1028,124 +1114,167 @@ func (s *auctionService) ExtendAuction(ctx context.Context, auctionID, sellerID 
 	return nil
 }
 
-// CloseExpiredAuctions — appelé par le Cron toutes les 30 secondes
+// CloseExpiredAuctions — appelé par le Cron toutes les 30 secondes.
+// Customer #23: this used to contain its own independent winner-selection/
+// persistence logic (never calling SetWinner), which raced against
+// AuctionScheduler.checkEndedAuctions's own separate implementation --
+// whichever loop's UpdateStatus("ended") landed first silently starved the
+// other, since both queried on status='active'. Now a pure discovery loop:
+// find candidate auction IDs, delegate the entire finalize decision (winner
+// selection, persistence, notifications, realtime event) to the single
+// canonical FinalizeExpiredAuction. Every auction this finds is finalized
+// exactly the same way regardless of which background loop discovered it
+// first, and a candidate already finalized by the other loop safely no-ops
+// here (FinalizeExpiredAuction re-checks status='active' itself).
 func (s *auctionService) CloseExpiredAuctions(ctx context.Context) error {
 	auctions, err := s.auctionRepo.FindExpiredActive(ctx)
 	if err != nil {
 		return err
 	}
 	for _, a := range auctions {
-		_ = s.auctionRepo.UpdateStatus(ctx, a.ID, "ended")
-
-		// Customer #20: auto-close (time-based end, not an admin/seller
-		// action) must still move the auction from Active to Ended on any
-		// connected mobile client -- same event type as the admin/seller
-		// status-change paths above, since mobile only cares "did the status
-		// change", not who/what triggered it.
-		auctionCopy := a
-		s.emitAuctionEvent(&auctionCopy, models.EventAuctionStatusChanged)
-
-		// Libère la caution des enchérisseurs non-gagnants (audit de sécurité V03/V09).
-		// Le hold du gagnant (s'il y en a un) reste actif : il n'existe pas encore de
-		// flow de capture/remboursement final après la clôture d'un auction dans ce
-		// projet — le laisser actif évite de rendre les fonds prématurément avant
-		// qu'une décision de paiement/livraison ne soit prise (voir rapport).
-		var winnerID *uuid.UUID
-		if wID, err := s.auctionRepo.GetHighestBidder(ctx, a.ID); err == nil && wID != uuid.Nil {
-			winnerID = &wID
-		}
-		if dbtx, err := s.db.BeginTxx(ctx, nil); err == nil {
-			if err := s.walletRepo.ReleaseHoldsForNonWinners(ctx, dbtx, a.ID, winnerID); err == nil {
-				dbtx.Commit()
-				if s.auditSvc != nil {
-					// Résumé unique par mazad (pas par enchérisseur) — CloseExpiredAuctions
-					// tourne toutes les 30s sur potentiellement plusieurs mazads, éviter le
-					// bruit d'un log par utilisateur (Auction audit logs, exclusion explicite
-					// des events par bid). actor_type=system + WithSystemActor() : aucun
-					// acteur humain réel, uuid.Nil ne doit pas être stocké comme si c'était
-					// un identifiant valide (Audit Schema Phase B - Auction only).
-					detailsJSON := models.JSONB{
-						"auction_id":          a.ID.String(),
-						"hold_release_reason": "expired_non_winners",
-					}
-					if auditErr := s.auditSvc.Log(ctx, uuid.Nil, "auction_holds_released", "auction", &a.ID, "reason=expired_non_winners",
-						WithActorType("system"),
-						WithSystemActor(),
-						WithDetailsJSON(detailsJSON),
-					); auditErr != nil {
-						if s.logger != nil {
-							s.logger.Error("CloseExpiredAuctions: failed to write audit log", zap.String("auction_id", a.ID.String()), zap.Error(auditErr))
-						}
-					}
-				}
-			} else {
-				dbtx.Rollback()
+		if err := s.FinalizeExpiredAuction(ctx, a.ID); err != nil {
+			if s.logger != nil {
+				s.logger.Error("CloseExpiredAuctions: FinalizeExpiredAuction failed", zap.String("auction_id", a.ID.String()), zap.Error(err))
 			}
 		}
+	}
+	return nil
+}
 
-		// Notifier le vendeur que l'enchère est terminée
-		seller, err := s.userRepo.FindByID(ctx, a.SellerID)
-		if err == nil && seller != nil {
-			language := "ar"
-			if seller.LanguagePref != "" {
-				language = seller.LanguagePref
+// FinalizeExpiredAuction (Customer #23 canonical finalizer) is the single
+// authoritative active -> ended transition for one auction. Safe to call
+// concurrently for the same auctionID from multiple goroutines/processes:
+// exactly one call actually performs the transition (see
+// auctionRepo.TrySetWinnerAtomically/TryEndAuctionAtomically for the DB-level
+// race guard); every other concurrent call observes won=false and returns
+// nil immediately, sending no notifications and emitting no realtime event
+// -- so "DB state is the primary idempotency guard", not Redis.
+func (s *auctionService) FinalizeExpiredAuction(ctx context.Context, auctionID uuid.UUID) error {
+	a, _, err := s.GetByID(ctx, auctionID)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return nil
+	}
+	// Only ever finalize an auction that is actually still active -- a
+	// cheap pre-check before opening a transaction; the real race guard is
+	// still the atomic WHERE status='active' inside the transaction below,
+	// this is purely an optimization to skip the transaction+bid lookup
+	// entirely for an auction that's obviously already settled.
+	if a.Status != "active" {
+		return nil
+	}
+
+	topBid, bidErr := s.bidRepo.FindTopBid(ctx, auctionID)
+	hasWinner := bidErr == nil && topBid != nil && a.CurrentPrice.GreaterThan(a.StartPrice) && a.BidderCount > 0
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var won bool
+	var winnerID uuid.UUID
+	var winningBidID uuid.UUID
+	if hasWinner {
+		winnerID = topBid.UserID
+		winningBidID = topBid.ID
+		won, err = s.auctionRepo.TrySetWinnerAtomically(ctx, tx, auctionID, winnerID, winningBidID)
+	} else {
+		won, err = s.auctionRepo.TryEndAuctionAtomically(ctx, tx, auctionID)
+	}
+	if err != nil {
+		return err
+	}
+	if !won {
+		// Another concurrent caller (the other background loop, or a
+		// duplicate discovery of the same candidate) already finalized this
+		// auction first -- safe no-op, no notifications, no event.
+		return nil
+	}
+
+	// Libère la caution des enchérisseurs non-gagnants (audit de sécurité V03/V09),
+	// dans la MEME transaction que la transition de statut -- si l'une échoue,
+	// les deux sont annulées ensemble plutôt que de laisser un état partiel
+	// (auction 'ended' mais holds non libérés).
+	var winnerIDPtr *uuid.UUID
+	if hasWinner {
+		winnerIDPtr = &winnerID
+	}
+	if err := s.walletRepo.ReleaseHoldsForNonWinners(ctx, tx, auctionID, winnerIDPtr); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Everything below only runs for the single caller that actually
+	// performed the transition (won == true, transaction committed) --
+	// notifications/realtime events are sent exactly once per real
+	// auction-close, never per background-loop tick.
+	auctionCopy := *a
+	auctionCopy.Status = "ended"
+	s.emitAuctionEvent(&auctionCopy, models.EventAuctionStatusChanged)
+
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"auction_id":          auctionID.String(),
+			"hold_release_reason": "expired_non_winners",
+		}
+		if auditErr := s.auditSvc.Log(ctx, uuid.Nil, "auction_holds_released", "auction", &auctionID, "reason=expired_non_winners",
+			WithActorType("system"),
+			WithSystemActor(),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("FinalizeExpiredAuction: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
 			}
+		}
+	}
 
-			params := map[string]string{
+	seller, sellerErr := s.userRepo.FindByID(ctx, a.SellerID)
+	if sellerErr == nil && seller != nil {
+		language := "ar"
+		if seller.LanguagePref != "" {
+			language = seller.LanguagePref
+		}
+		params := map[string]string{
+			"auctionTitle": a.TitleAr,
+			"finalPrice":   a.CurrentPrice.String(),
+			"currency":     a.EffectiveCurrencyCode(),
+		}
+		data := map[string]string{
+			"type":       "auction_ended",
+			"auctionId":  auctionID.String(),
+			"finalPrice": a.CurrentPrice.String(),
+		}
+		_ = s.notifSvc.SendLocalizedPush(ctx, a.SellerID, "auction_ended", language, params, data)
+	}
+
+	if hasWinner {
+		winner, winnerErr := s.userRepo.FindByID(ctx, winnerID)
+		if winnerErr == nil && winner != nil {
+			winnerLang := "ar"
+			if winner.LanguagePref != "" {
+				winnerLang = winner.LanguagePref
+			}
+			winnerParams := map[string]string{
 				"auctionTitle": a.TitleAr,
 				"finalPrice":   a.CurrentPrice.String(),
 				"currency":     a.EffectiveCurrencyCode(),
 			}
-			data := map[string]string{
-				"type":       "auction_ended",
-				"auctionId":  a.ID.String(),
+			winnerData := map[string]string{
+				"type":       "auction_won",
+				"auctionId":  auctionID.String(),
 				"finalPrice": a.CurrentPrice.String(),
 			}
-
-			// Notifier le vendeur
-			_ = s.notifSvc.SendLocalizedPush(ctx, a.SellerID, "auction_ended", language, params, data)
-
-			// Notifier le gagnant s'il y a des enchères
-			if a.CurrentPrice.GreaterThan(a.StartPrice) && a.BidderCount > 0 {
-				winnerID, err := s.auctionRepo.GetHighestBidder(ctx, a.ID)
-				if err == nil && winnerID != uuid.Nil {
-					winner, err := s.userRepo.FindByID(ctx, winnerID)
-					if err == nil && winner != nil {
-						winnerLang := "ar"
-						if winner.LanguagePref != "" {
-							winnerLang = winner.LanguagePref
-						}
-
-						winnerParams := map[string]string{
-							"auctionTitle": a.TitleAr,
-							"finalPrice":   a.CurrentPrice.String(),
-							"currency":     a.EffectiveCurrencyCode(),
-						}
-						winnerData := map[string]string{
-							"type":       "auction_won",
-							"auctionId":  a.ID.String(),
-							"finalPrice": a.CurrentPrice.String(),
-						}
-
-						// Envoyer notification au gagnant
-						_ = s.notifSvc.SendLocalizedPush(ctx, winnerID, "auction_won", winnerLang, winnerParams, winnerData)
-
-						// Diffuser via WebSocket aux admins
-						sellerName := "Vendeur"
-						if seller.FullName != nil {
-							sellerName = *seller.FullName
-						}
-						s.notifSvc.NotifyNewAuctionRequest(
-							a.ID.String(),
-							a.SellerID.String(),
-							sellerName,
-							a.TitleAr,
-						)
-					}
-				}
-			}
+			_ = s.notifSvc.SendLocalizedPush(ctx, winnerID, "auction_won", winnerLang, winnerParams, winnerData)
 		}
 	}
+
 	return nil
 }
 

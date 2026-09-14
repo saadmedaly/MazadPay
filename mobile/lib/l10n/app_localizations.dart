@@ -3135,6 +3135,18 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'محاولات كثيرة جدا. يرجى المحاولة مرة أخرى في وقت لاحق.'**
   String get error_too_many_requests;
+
+  /// No description provided for @text_406.
+  ///
+  /// In ar, this message translates to:
+  /// **'مبروك، ربحت المزاد'**
+  String get text_406;
+
+  /// No description provided for @text_407.
+  ///
+  /// In ar, this message translates to:
+  /// **'لقد فزت بالمزاد «{title}» على MazadPay بسعر {amount}.'**
+  String text_407(Object amount, Object title);
 }
 
 class _AppLocalizationsDelegate

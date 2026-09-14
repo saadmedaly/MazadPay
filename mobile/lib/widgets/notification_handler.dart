@@ -10,8 +10,10 @@ import 'package:mezadpay/pages/auction_winner_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/deposit_page.dart';
 import 'package:mezadpay/pages/notification_detail_page.dart';
+import 'package:mezadpay/services/auction_api.dart';
 import 'package:mezadpay/services/fcm_service.dart';
 import 'package:mezadpay/services/notifications_api.dart';
+import 'package:mezadpay/services/realtime_sync_service.dart';
 
 /// Global key pour accéder au Navigator depuis n'importe où
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -33,11 +35,86 @@ class NotificationHandler extends ConsumerStatefulWidget {
 class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
   FCMService? _fcmService;
   StreamSubscription? _notificationSubscription;
+  StreamSubscription<RealtimeEvent>? _winnerRealtimeSubscription;
+
+  // Customer #23: session-level "already surfaced" guard -- the smallest
+  // safe mechanism to satisfy "foreground realtime event may trigger
+  // congratulations once" without any new persistence. Cleared on app
+  // restart (in-memory only) by design: a genuinely new session re-showing
+  // a still-recent win is an acceptable, conservative trade-off versus the
+  // alternative of needing new persisted state; the explicit anti-goal is
+  // "do NOT automatically replay every old historical win as a new popup"
+  // on a normal resume/reconnect within the SAME session, which this set
+  // fully prevents since it is never cleared by resume/reconnect.
+  final Set<String> _surfacedWinnerAuctionIds = {};
+  bool _winnerCheckInFlight = false;
 
   @override
   void initState() {
     super.initState();
     _initializeFCM();
+    _winnerRealtimeSubscription = RealtimeSyncService().events.listen((event) {
+      if (event.type == RealtimeEventType.auctionStatusChanged) {
+        _maybeShowForegroundWinner(event.entityId);
+      }
+    });
+  }
+
+  /// Customer #23 foreground winner coordinator: on ANY auction.status_changed
+  /// event (an auction closing is the only thing that ever fires it -- see
+  /// AuctionService.FinalizeExpiredAuction/emitAuctionEvent), checks whether
+  /// the CURRENT signed-in user actually won THAT auction, using the real
+  /// authoritative GET /users/me/winnings endpoint -- never guessing winner
+  /// identity client-side from the event itself, which carries no winner
+  /// information. If the changed auction is present in the response and
+  /// hasn't already been surfaced this session, opens AuctionWinnerPage once.
+  /// This runs regardless of whether MyWinningsPage is currently open --
+  /// exactly the "global foreground experience" requirement -- since
+  /// NotificationHandler lives at the app root, not inside any one page.
+  Future<void> _maybeShowForegroundWinner(String auctionId) async {
+    if (auctionId.isEmpty) return;
+    if (_surfacedWinnerAuctionIds.contains(auctionId)) return;
+    // Coalesce overlapping calls (e.g. several status_changed events in a
+    // short burst) into a single in-flight winnings check at a time, rather
+    // than firing one request per event.
+    if (_winnerCheckInFlight) return;
+    _winnerCheckInFlight = true;
+    try {
+      final response = await AuctionApi().getMyWinnings();
+      if (!mounted) return;
+      if (!response.success || response.data == null) return;
+
+      final dynamic responseData = response.data!;
+      List<dynamic> winnings = [];
+      if (responseData is List) {
+        winnings = responseData;
+      } else if (responseData is Map<String, dynamic>) {
+        winnings = (responseData['auctions'] ?? responseData['data'] ?? []) as List<dynamic>;
+      }
+
+      final match = winnings.whereType<Map<String, dynamic>>().where(
+            (w) => w['id']?.toString() == auctionId,
+          );
+      if (match.isEmpty) {
+        // Either this user isn't the winner of the changed auction, or the
+        // change wasn't a win at all (e.g. a no-bid/cancelled close) --
+        // both are simply "nothing to show", not an error.
+        return;
+      }
+
+      if (_surfacedWinnerAuctionIds.contains(auctionId)) return; // re-check after await
+      _surfacedWinnerAuctionIds.add(auctionId);
+
+      final navigator = navigatorKey.currentState;
+      if (navigator == null) return;
+      navigator.push(
+        MaterialPageRoute(builder: (context) => AuctionWinnerPage(auctionId: auctionId)),
+      );
+    } catch (e) {
+      developer.log('Foreground winner check error: $e');
+    } finally {
+      _winnerCheckInFlight = false;
+    }
   }
   
   Future<void> _initializeFCM() async {
@@ -72,6 +149,7 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
   @override
   void dispose() {
     _notificationSubscription?.cancel();
+    _winnerRealtimeSubscription?.cancel();
     _fcmService?.onNotificationTap = null;
     super.dispose();
   }
