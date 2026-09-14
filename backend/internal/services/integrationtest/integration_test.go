@@ -142,6 +142,12 @@ func setupEnv(t *testing.T) *testEnv {
 	// proves the actual "images" response-field transformation the mobile
 	// app depends on, not only that the DB query returns image_urls.
 	app.Get("/favorites/as/:userID", fakeAuthFromParam(), userHandler.ListFavorites)
+	// Bug L diagnosis: exercises UserHandler.MyWinnings at the full HTTP
+	// handler level (real JSON marshaling of []models.Auction through OK()),
+	// not just userSvc.ListMyWinnings directly -- proves the actual wire
+	// response contract the mobile app parses, not only that the DB query
+	// finds the right rows.
+	app.Get("/users/me/winnings/as/:userID", fakeAuthFromParam(), userHandler.MyWinnings)
 
 	return &testEnv{
 		db: db, rdb: rdb, logger: logger,
@@ -2819,6 +2825,92 @@ func TestListMyWinnings_RealWinnerAppears_OthersExcluded(t *testing.T) {
 			t.Fatalf("SECURITY: winner %s's win (auction %s) leaked into otherUser %s's My Winnings", winner.ID, wonAuction.ID, otherUser.ID)
 		}
 	}
+}
+
+// httpGetMyWinnings calls GET /users/me/winnings/as/:userID (test-only route
+// wired in setupEnv) and parses the JSON body into a slice of raw maps,
+// mirroring exactly what my_winnings_page.dart's _loadWinnings() receives as
+// response.data -- proves the real HTTP/JSON contract (OK() envelope +
+// models.Auction marshaling), not just that the service call returns the
+// right rows.
+func httpGetMyWinnings(t *testing.T, env *testEnv, callerID uuid.UUID) (int, []map[string]interface{}) {
+	t.Helper()
+	req := httptest.NewRequest("GET", fmt.Sprintf("/users/me/winnings/as/%s", callerID), nil)
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return resp.StatusCode, nil
+	}
+	var body struct {
+		Success bool                     `json:"success"`
+		Data    []map[string]interface{} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode my-winnings response: %v", err)
+	}
+	if !body.Success {
+		t.Fatalf("expected success=true in my-winnings response")
+	}
+	return resp.StatusCode, body.Data
+}
+
+// Bug L diagnosis: reproduces the exact real-device report end-to-end
+// through the ACTUAL HTTP handler (UserHandler.MyWinnings -> OK() -> JSON),
+// not just userSvc.ListMyWinnings directly. A single real bid on a fresh
+// auction, finalized via the exact scheduler persistence path
+// (finalizeAuctionAsWinner == repository.SetWinner, the same call
+// FinalizeExpiredAuction makes), then asserts the winner's auction appears
+// in the raw decoded JSON with the exact fields my_winnings_page.dart reads
+// (id, winner_id, current_price, end_time, status) all present and correct
+// -- proving there is no wire-format/marshaling defect between the DB and
+// the mobile parser.
+func TestMyWinningsHTTP_RealWinAppearsInJSONResponse(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST WINNINGS HTTP SELLER")
+	winner := createTestUser(t, env, "TEST WINNINGS HTTP WINNER")
+	creditWallet(t, env, winner.ID, decimal.NewFromInt(1000))
+
+	auction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+	bid, err := env.bidSvc.PlaceBid(ctx, auction.ID, winner.ID, decimal.NewFromInt(150))
+	if err != nil {
+		t.Fatalf("failed to place winning bid: %v", err)
+	}
+	finalizeAuctionAsWinner(t, env, auction.ID, winner.ID, bid.ID)
+
+	status, data := httpGetMyWinnings(t, env, winner.ID)
+	if status != 200 {
+		t.Fatalf("BUG L: GET /users/me/winnings returned HTTP %d for the real winner, expected 200", status)
+	}
+
+	var found map[string]interface{}
+	for _, item := range data {
+		if id, _ := item["id"].(string); id == auction.ID.String() {
+			found = item
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("BUG L NOT REPRODUCED HERE: real win (auction %s) absent from the actual HTTP JSON response body; raw response had %d items: %+v", auction.ID, len(data), data)
+	}
+
+	if winnerID, _ := found["winner_id"].(string); winnerID != winner.ID.String() {
+		t.Fatalf("expected winner_id=%s in JSON response, got %v", winner.ID, found["winner_id"])
+	}
+	if status, _ := found["status"].(string); status != "ended" {
+		t.Fatalf("expected status=ended in JSON response, got %v", found["status"])
+	}
+	if _, ok := found["current_price"]; !ok {
+		t.Fatalf("expected current_price field present in JSON response, mobile reads this for the winning amount")
+	}
+	if _, ok := found["end_time"]; !ok {
+		t.Fatalf("expected end_time field present in JSON response, mobile reads this for the win date")
+	}
+	t.Logf("confirmed: real HTTP JSON response for GET /users/me/winnings contains the winner's auction with all fields mobile depends on (id=%s, winner_id=%v, status=%v)", auction.ID, found["winner_id"], found["status"])
 }
 
 // Customer feedback #12 (restore Active/Ended auctions selector): the mobile

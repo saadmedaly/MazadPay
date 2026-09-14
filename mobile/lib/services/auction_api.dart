@@ -126,13 +126,26 @@ class AuctionApi {
   }
 
   /// Récupérer les enchères gagnées par l'utilisateur
-  Future<ApiResponse<Map<String, dynamic>>> getMyWinnings() async {
+  ///
+  /// Bug L fix: GET /users/me/winnings returns `data` as a raw JSON array
+  /// (backend/internal/handlers/user_handler.go MyWinnings -> OK(c, auctions),
+  /// auctions being a slice of models.Auction), never {"auctions": [...]} or
+  /// {"data": [...]} nested inside another object -- same wire shape as
+  /// getAuctions() below. ApiResponse of Map (String, dynamic) .fromJson used
+  /// to assign that array to a field declared/expected as a Map, which threw
+  /// a runtime type error inside the try block (a List is not a subtype of a
+  /// Map) on every single call, silently caught below and returned as
+  /// ApiResponse.error -- so my_winnings_page.dart's `else` branch (API
+  /// failed, no cache yet) always rendered the "no winnings yet" empty state
+  /// instead of the real data, regardless of whether the backend had
+  /// actually finalized a win.
+  Future<ApiResponse<List<dynamic>>> getMyWinnings() async {
     try {
       final response = await _apiService.get<Map<String, dynamic>>(
         '/users/me/winnings',
       );
-      
-      return ApiResponse<Map<String, dynamic>>.fromJson(response);
+
+      return ApiResponse<List<dynamic>>.fromJson(response);
     } catch (e) {
       return ApiResponse.error(e.toString());
     }

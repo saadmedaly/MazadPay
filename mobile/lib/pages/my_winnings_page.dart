@@ -101,21 +101,29 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> with WidgetsBin
         } else if (responseData is Map<String, dynamic>) {
           auctionList = (responseData['auctions'] ?? responseData['data'] ?? []) as List<dynamic>;
         }
-        
-        // Cache mes gains (seulement si c'est un Map)
-        if (responseData is Map<String, dynamic>) {
-          await CacheService.instance.cacheMyWinnings(responseData);
-        }
+
+        // Cache mes gains (dans la forme Map attendue par CacheService)
+        await CacheService.instance.cacheMyWinnings({'data': auctionList});
 
         if (!mounted) return;
         setState(() {
           _isLoading = false;
+          _error = null;
           _winnings = auctionList.map((item) => item as Map<String, dynamic>).toList();
         });
       } else {
-        // Si le cache existe mais l'API échoue, garder le cache
+        // Bug L fix: the fetch genuinely failed (network/timeout/backend
+        // error) -- previously this fell through silently with no error set,
+        // rendering the misleading "no winnings yet" empty state even when a
+        // real win existed server-side but simply couldn't be fetched right
+        // now. Only trust the cache's absence as "genuinely no winnings" when
+        // the API call actually succeeded; a failed call with no warm cache
+        // must show the retry/error state, never a false empty state.
         if (cachedMyWinnings == null && mounted) {
-          setState(() => _isLoading = false);
+          setState(() {
+            _isLoading = false;
+            _error = response.error?.message ?? response.message ?? 'fetch_failed';
+          });
         }
       }
     } catch (e) {

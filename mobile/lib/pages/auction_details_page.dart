@@ -1570,6 +1570,20 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     // صاحب المزاد لا يمكنه المزايدة
     final isOwner = _userId != null && _userId == auction.sellerId;
 
+    // Bug K fix: the bid CTA must never remain active once the auction has
+    // actually expired. Two independent guards, either one is sufficient to
+    // disable bidding -- the client must never wait for a server status
+    // update to arrive before disabling itself once its own countdown hits
+    // zero, but it also must not rely on the countdown alone (server is the
+    // source of truth once a status update does arrive, e.g. via
+    // auction.status_changed realtime or a fresh fetch). serverStatusActive
+    // defaults to true when status is absent (old cached response / field
+    // not yet loaded) so this is purely additive and never disables bidding
+    // for a case that worked before this fix existed.
+    final serverStatusActive = auction.status == null || auction.status == 'active';
+    final countdownExpired = _timeLeft <= Duration.zero;
+    final canBid = serverStatusActive && !countdownExpired;
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1613,7 +1627,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 )
               // ── مستخدم عادي: زر المزايدة ──
               : ElevatedButton(
-                  onPressed: auction.isUserHighestBidder
+                  onPressed: (auction.isUserHighestBidder || !canBid)
                       ? null
                       : () {
                           showModalBottomSheet(
@@ -1633,11 +1647,12 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: auction.isUserHighestBidder
                         ? const Color(0xFF00C58D)
-                        : const Color(0xFF0081FF),
+                        : (!canBid ? Colors.grey : const Color(0xFF0081FF)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    disabledBackgroundColor: const Color(0xFF00C58D),
+                    disabledBackgroundColor:
+                        auction.isUserHighestBidder ? const Color(0xFF00C58D) : Colors.grey,
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1651,6 +1666,21 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                         Flexible(
                           child: Text(
                             AppLocalizations.of(context)!.text_71,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Plus Jakarta Sans',
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ] else if (!canBid) ...[
+                        const Icon(Icons.block, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            AppLocalizations.of(context)!.text_364,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

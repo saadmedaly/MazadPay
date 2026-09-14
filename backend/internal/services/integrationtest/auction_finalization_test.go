@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
 	"github.com/shopspring/decimal"
@@ -945,4 +946,71 @@ func TestCloseExpiredAuctions_DelegatesToCanonicalFinalizer(t *testing.T) {
 	if final.WinningBidID == nil || *final.WinningBidID != topBid.ID {
 		t.Fatalf("expected winning_bid_id %s, got %v", topBid.ID, final.WinningBidID)
 	}
+}
+
+// Bug K defense-in-depth (Section 14 of the diagnosis brief): proves the
+// backend's own expiry guard in BidService.PlaceBid (bid_service.go,
+// `if time.Now().After(auction.EndTime) { return apperr.ErrAuctionEnded }`,
+// checked inside the SAME transaction as loading the auction row) actually
+// rejects a bid placed after end_time has passed but BEFORE the scheduler
+// has run to flip status to 'ended' -- the exact window the mobile-side CTA
+// fix (auction_details_page.dart canBid) is a client-side mirror of, not a
+// replacement for. This guard already existed prior to this round; this
+// test is new, confirming behavior that was previously unverified.
+func TestPlaceBid_RejectedAfterEndTime_BeforeSchedulerRuns(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST BID-AFTER-EXPIRY SELLER")
+	bidder := createTestUser(t, env, "TEST BID-AFTER-EXPIRY BIDDER")
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	// Auction still reports status='active' in the DB (scheduler has not
+	// run yet) but its end_time has already passed -- the exact race window
+	// this guard protects.
+	auction := createExpiredTestAuction(t, env, seller.ID)
+
+	var bidCountBefore int
+	if err := env.db.GetContext(ctx, &bidCountBefore, `SELECT COUNT(*) FROM bids WHERE auction_id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to count bids before attempt: %v", err)
+	}
+
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(150))
+
+	t.Run("bid rejected", func(t *testing.T) {
+		if err != apperr.ErrAuctionEnded {
+			t.Fatalf("expected apperr.ErrAuctionEnded, got %v", err)
+		}
+	})
+
+	var final models.Auction
+	if err := env.db.Get(&final, `SELECT * FROM auctions WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to read back auction: %v", err)
+	}
+
+	t.Run("no bid row created", func(t *testing.T) {
+		var bidCountAfter int
+		if err := env.db.GetContext(ctx, &bidCountAfter, `SELECT COUNT(*) FROM bids WHERE auction_id = $1`, auction.ID); err != nil {
+			t.Fatalf("failed to count bids after attempt: %v", err)
+		}
+		if bidCountAfter != bidCountBefore {
+			t.Fatalf("expected bid count to remain %d, got %d -- a bid row was created despite rejection", bidCountBefore, bidCountAfter)
+		}
+	})
+	t.Run("current_price unchanged", func(t *testing.T) {
+		if !final.CurrentPrice.Equal(auction.CurrentPrice) {
+			t.Fatalf("expected current_price to remain %s, got %s", auction.CurrentPrice.String(), final.CurrentPrice.String())
+		}
+	})
+	t.Run("bidder_count unchanged", func(t *testing.T) {
+		if final.BidderCount != auction.BidderCount {
+			t.Fatalf("expected bidder_count to remain %d, got %d", auction.BidderCount, final.BidderCount)
+		}
+	})
+	t.Run("no auction_won or bid notification created for this attempt", func(t *testing.T) {
+		count := countAuctionWonNotifications(t, env, bidder.ID, auction.ID)
+		if count != 0 {
+			t.Fatalf("expected 0 notifications from a rejected bid attempt, got %d", count)
+		}
+	})
 }

@@ -34,6 +34,12 @@ class Auction {
   /// display via MoneyFormatter, which falls back to MRU only when null.
   final String? currencyCode;
   final String? marketCountryIso;
+  /// Bug K fix: server-authoritative auction status ("active", "ended",
+  /// "canceled", "closed", ...). Additive/nullable, same pattern as
+  /// currencyCode above -- an old cached response won't carry it. The bid
+  /// CTA must never rely on the local countdown alone to decide whether
+  /// bidding is still allowed; this is the source of truth for that.
+  final String? status;
 
   Auction({
     required this.id,
@@ -64,6 +70,7 @@ class Auction {
     this.startTime,
     this.currencyCode,
     this.marketCountryIso,
+    this.status,
   });
 
   Auction copyWith({
@@ -95,6 +102,7 @@ class Auction {
     DateTime? startTime,
     String? currencyCode,
     String? marketCountryIso,
+    String? status,
   }) {
     return Auction(
       id: id ?? this.id,
@@ -125,6 +133,7 @@ class Auction {
       startTime: startTime ?? this.startTime,
       currencyCode: currencyCode ?? this.currencyCode,
       marketCountryIso: marketCountryIso ?? this.marketCountryIso,
+      status: status ?? this.status,
     );
   }
 
@@ -185,6 +194,7 @@ class Auction {
       // Additive, null-safe (Phase 2): absent on old cached responses.
       currencyCode: json['currency_code']?.toString(),
       marketCountryIso: json['market_country_iso']?.toString(),
+      status: json['status']?.toString(),
     );
   }
 
@@ -212,6 +222,7 @@ class Auction {
       'model': model,
       'currency_code': currencyCode,
       'market_country_iso': marketCountryIso,
+      'status': status,
     };
   }
 }
