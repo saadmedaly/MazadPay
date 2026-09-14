@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,7 +9,31 @@ import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/auction_details_page.dart';
 import '../services/auction_api.dart';
 import '../services/category_api.dart';
+import '../services/realtime_sync_service.dart';
 import '../utils/money_formatter.dart';
+
+/// Client feedback #24 (Active/Ended tabbed auction list only -- see
+/// all_auctions_page.dart's own card builder): active -> green border,
+/// ended -> red border. Any other status (pending/canceled/rejected/
+/// whatever else this screen might ever render) returns null, preserving
+/// the card's prior borderless look rather than guessing a color for a
+/// status this requirement never covered. A pure top-level function so it
+/// can be unit-tested without pumping the widget tree.
+///
+/// Colors reused from the app's existing status-color vocabulary (see
+/// my_auctions_page.dart's _getStatusColor: 0xFF00C58D for active/approved,
+/// 0xFFE31B23 for rejected/cancelled/deleted) -- no new color invented.
+Color? auctionStatusBorderColor(String? status) {
+  switch (status) {
+    case 'active':
+      return const Color(0xFF00C58D);
+    case 'ended':
+    case 'closed':
+      return const Color(0xFFE31B23);
+    default:
+      return null;
+  }
+}
 
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
@@ -62,6 +88,18 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   DateTime? _startDate;
   DateTime? _endDate;
 
+  // Client feedback #24: this screen previously had no realtime
+  // subscription at all -- an auction transitioning active -> ended (or
+  // vice versa) only ever became visible here after a manual
+  // pull-to-refresh/tab switch/page re-entry. Reuses Customer #20's
+  // existing auction.status_changed event exactly as my_winnings_page.dart/
+  // support_page.dart already do (no new realtime architecture): on that
+  // event, refetch so the just-changed auction's card (and its border
+  // color, added this same round) update live, without logout/restart/
+  // manual refresh.
+  StreamSubscription<RealtimeEvent>? _realtimeEventSub;
+  StreamSubscription<void>? _realtimeCatchUpSub;
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +108,21 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     _loadCategories();
     _loadAuctions();
     _loadTabCounts();
+
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.type == RealtimeEventType.auctionStatusChanged ||
+          event.type == RealtimeEventType.auctionUpdated ||
+          event.type == RealtimeEventType.auctionDeleted) {
+        _loadAuctions();
+        _loadTabCounts();
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      _loadAuctions();
+      _loadTabCounts();
+    });
   }
 
   void _onScroll() {
@@ -167,6 +220,8 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     _searchController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
     super.dispose();
   }
 
@@ -1104,7 +1159,16 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     final favoritesAsync = ref.watch(favoritesProvider);
     final isFavorite = favoritesAsync.value?.contains(id) ?? false;
 
-    final bool isFinished = auction['status'] == 'finished';
+    // Client feedback #24 fix: this previously checked == 'finished', a
+    // status value the backend never actually sends (the real vocabulary is
+    // active/ended/pending/canceled -- see models.AuctionStatus /
+    // AuctionRepository.ListPaginated) -- so this flag was silently always
+    // false. 'closed' is included alongside 'ended' since some call sites
+    // in this codebase (AuctionModel.isEnded) treat them as the same
+    // terminal state.
+    final String? auctionStatus = auction['status']?.toString();
+    final bool isFinished = auctionStatus == 'ended' || auctionStatus == 'closed';
+    final Color? cardBorderColor = auctionStatusBorderColor(auctionStatus);
 
     // Récupérer le titre selon la langue actuelle avec fallback intelligent
     final locale = Localizations.localeOf(context).languageCode;
@@ -1167,6 +1231,12 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         decoration: BoxDecoration(
           color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
           borderRadius: BorderRadius.circular(16),
+          // Client feedback #24: active -> green border, ended -> red
+          // border, any other status (pending/canceled/etc) preserves the
+          // card's prior borderless look -- cardBorderColor is null unless
+          // the status is exactly 'active' or 'ended'/'closed', see
+          // auctionStatusBorderColor below.
+          border: cardBorderColor != null ? Border.all(color: cardBorderColor, width: 2) : null,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.08),
