@@ -11,6 +11,35 @@ import 'auction_winner_page.dart';
 import 'deposit_page.dart';
 
 
+/// Customer #21 hardening round: pure tab-classification decision, extracted
+/// from _filteredNotifications for direct unit testing. The 'auctions' and
+/// 'payments' tabs are closed whitelists (an unrecognized type matches
+/// neither -- it still renders correctly under 'all', just isn't picked up
+/// by a specific tab); 'all' (or any other filter key) matches everything.
+///
+/// 'payments' additionally covers deposit_submitted/withdrawal_submitted
+/// (Customer #21's new submission-acknowledgment types) alongside the
+/// existing deposit_confirmed/deposit_rejected/withdrawal_processed outcome
+/// types -- both are wallet/payment notifications and belong on the same
+/// tab, even though only the outcome types were originally listed here.
+bool matchesNotificationTabFilter(String type, String filterKey) {
+  switch (filterKey) {
+    case 'auctions':
+      return const ['auction_pending', 'auction_approved', 'auction_rejected', 'auction_ended', 'auction_won'].contains(type);
+    case 'payments':
+      return const [
+        'payment_received',
+        'deposit_submitted',
+        'deposit_confirmed',
+        'deposit_rejected',
+        'withdrawal_submitted',
+        'withdrawal_processed',
+      ].contains(type);
+    default:
+      return true;
+  }
+}
+
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
 
@@ -83,15 +112,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     if (_selectedFilter == 'all') return _notifications;
     return _notifications.where((n) {
       final type = n['type']?.toString() ?? 'system';
-      switch (_selectedFilter) {
-        case 'auctions':
-          return ['auction_pending', 'auction_approved', 'auction_rejected', 'auction_ended', 'auction_won'].contains(type);
-
-        case 'payments':
-          return ['payment_received', 'deposit_confirmed', 'deposit_rejected', 'withdrawal_processed'].contains(type);
-        default:
-          return true;
-      }
+      return matchesNotificationTabFilter(type, _selectedFilter);
     }).toList();
   }
 

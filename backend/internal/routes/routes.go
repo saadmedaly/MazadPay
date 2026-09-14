@@ -54,7 +54,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
 	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours, globalHub)
-	walletSvc := services.NewWalletService(db, walletRepo, txRepo, reqRepo, notifSvc, auditSvc, logger)
+	walletSvc := services.NewWalletService(db, walletRepo, txRepo, reqRepo, userRepo, notifSvc, auditSvc, logger)
 	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc, globalHub)
 	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger, globalHub)
 	reportSvc := services.NewReportService(txRepo)

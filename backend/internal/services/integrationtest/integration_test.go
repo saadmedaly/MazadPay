@@ -118,7 +118,7 @@ func setupEnv(t *testing.T) *testEnv {
 	wsHandler := handlers.NewWSHandler(ws.NewHub(logger), authSvc, auctionRepo, userRepo, logger)
 	boostSvc := services.NewAuctionBoostService(db)
 	boostHandler := handlers.NewAuctionBoostHandler(boostSvc, auctionRepo, userRepo, logger)
-	walletSvcForAutoBid := services.NewWalletService(db, walletRepo, repository.NewTransactionRepository(db, walletRepo), nil, nil, nil, logger)
+	walletSvcForAutoBid := services.NewWalletService(db, walletRepo, repository.NewTransactionRepository(db, walletRepo), nil, nil, nil, nil, logger)
 	autoBidSvc := services.NewBidAutoBidService(db, bidSvc, walletSvcForAutoBid)
 	autoBidHandler := handlers.NewBidAutoBidHandler(autoBidSvc, auctionRepo, userRepo, logger)
 	userHandler := handlers.NewUserHandler(userSvc, logger)
@@ -3586,7 +3586,7 @@ func httpGetBidHistory(t *testing.T, env *testEnv, auctionID uuid.UUID, callerID
 // --- Phase 1.1 helpers ---
 
 func newWalletSvc(env *testEnv) services.WalletService {
-	return services.NewWalletService(env.db, env.walletRepo, repository.NewTransactionRepository(env.db, env.walletRepo), env.reqRepo, nil, nil, env.logger)
+	return services.NewWalletService(env.db, env.walletRepo, repository.NewTransactionRepository(env.db, env.walletRepo), env.reqRepo, env.userRepo, env.notifSvc, nil, env.logger)
 }
 
 // httpGetAuctionDetail performs a real HTTP-level request against env.app's
@@ -4708,6 +4708,518 @@ func TestUpdateAuction_G6_ApprovalCreatedAuctionImageSurvivesLaterSave(t *testin
 		t.Fatalf("(G-6) REGRESSION: the approval-created auction's image did not survive a later unrelated admin save, got: %v", imagesAfterLaterSave)
 	}
 	t.Logf("(G-6) confirmed: the exact real Bug G flow (request -> approval -> mobile image upload -> later admin save) preserves the image")
+}
+
+// === Customer Request #21: deposit/withdrawal in-app notifications ===
+//
+// Root cause (see audit): deposit_confirmed/deposit_rejected/withdrawal_processed
+// were already correctly used by adminService.ValidateTransaction, but were never
+// added to the notifications table's chk_notif_type CHECK constraint after
+// migration 000038 -- every INSERT attempt silently failed the constraint, and
+// NotificationService.SendPush swallows repo.Create errors (logs only), so the
+// failure was invisible. Separately, wallet_service.go's InitiateDeposit/
+// RequestWithdraw never attempted a notification at all -- migration 000051 fixes
+// the constraint, and this round adds two new, deliberately distinct submission-
+// acknowledgment types (deposit_submitted/withdrawal_submitted) so a still-pending
+// request is never reported using the outcome types.
+
+// getLatestNotification returns the most recent notification row of exactly one
+// type for a user, or nil if none exists. Used to assert on the outcome of a
+// specific action without over-matching an unrelated notification the same
+// fixture user might also have received.
+func getLatestNotificationOfType(t *testing.T, env *testEnv, userID uuid.UUID, notifType string) *models.Notification {
+	t.Helper()
+	notifs, err := env.notifSvc.ListNotifications(context.Background(), userID, 50)
+	if err != nil {
+		t.Fatalf("ListNotifications failed: %v", err)
+	}
+	for _, n := range notifs {
+		if n.Type == notifType {
+			cp := n
+			return &cp
+		}
+	}
+	return nil
+}
+
+func countNotificationsOfType(t *testing.T, env *testEnv, userID uuid.UUID, notifType string) int {
+	t.Helper()
+	notifs, err := env.notifSvc.ListNotifications(context.Background(), userID, 50)
+	if err != nil {
+		t.Fatalf("ListNotifications failed: %v", err)
+	}
+	count := 0
+	for _, n := range notifs {
+		if n.Type == notifType {
+			count++
+		}
+	}
+	return count
+}
+
+// (1-4) Migration 000051: allows the three real outcome types plus preserves
+// every previously-valid type. Exercised directly against the notifications
+// table (bypassing the service layer) since the whole point is to test the DB
+// CHECK constraint itself.
+func TestNotificationMigration_AllowsWalletOutcomeTypes(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST NOTIF MIGRATION USER")
+
+	for _, notifType := range []string{"deposit_confirmed", "deposit_rejected", "withdrawal_processed", "deposit_submitted", "withdrawal_submitted"} {
+		_, err := env.db.ExecContext(ctx,
+			`INSERT INTO notifications (id, user_id, type, title, body) VALUES ($1, $2, $3, $4, $5)`,
+			uuid.New(), user.ID, notifType, "test title", "test body")
+		if err != nil {
+			t.Fatalf("(1-4) migration 000051 REGRESSION: inserting type %q was rejected: %v", notifType, err)
+		}
+	}
+	t.Logf("(1-4) all 5 wallet notification types accepted by chk_notif_type")
+}
+
+func TestNotificationMigration_PreservesAllPreviousTypes(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST NOTIF PRESERVE USER")
+
+	// Exact set from 000038_expand_notification_types.up.sql -- if migration
+	// 000051 accidentally narrowed this set instead of only widening it, one of
+	// these inserts would fail.
+	previousTypes := []string{
+		"bid", "win", "payment", "system", "ad", "general", "new_auction",
+		"transaction", "report", "auction_sold", "new_message",
+		"auction_ending_soon", "auction_approved", "auction_rejected",
+		"banner_approved", "banner_rejected", "auction_pending",
+		"auction_won", "auction_ended", "payment_received", "auction_reported",
+	}
+	for _, notifType := range previousTypes {
+		_, err := env.db.ExecContext(ctx,
+			`INSERT INTO notifications (id, user_id, type, title, body) VALUES ($1, $2, $3, $4, $5)`,
+			uuid.New(), user.ID, notifType, "test title", "test body")
+		if err != nil {
+			t.Fatalf("(4) REGRESSION: previously-valid type %q was rejected after migration 000051 -- the constraint was narrowed instead of only widened: %v", notifType, err)
+		}
+	}
+	t.Logf("(4) all %d previously-valid notification types remain accepted", len(previousTypes))
+}
+
+// (5-7) Deposit submission acknowledgment.
+func TestDeposit_SubmissionCreatesAcknowledgment(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST DEPOSIT SUBMIT USER")
+	walletSvc := newWalletSvc(env)
+
+	tx, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(500), "bankily", "mobile_money", "", nil)
+	if err != nil {
+		t.Fatalf("(5) InitiateDeposit failed: %v", err)
+	}
+	if tx.Status != "pending" {
+		t.Fatalf("(5) expected newly-submitted deposit to be 'pending', got %q", tx.Status)
+	}
+
+	notif := getLatestNotificationOfType(t, env, user.ID, "deposit_submitted")
+	if notif == nil {
+		t.Fatalf("(5) expected a deposit_submitted notification, found none")
+	}
+	if notif.Title == "" || notif.Body == nil || *notif.Body == "" {
+		t.Fatalf("(5) expected non-empty title/body, got title=%q body=%v", notif.Title, notif.Body)
+	}
+	// Anti-Bug-I-class-regression: submission ack must never use the outcome
+	// type, even though both are triggered by "a deposit was made" in casual
+	// language -- deposit_confirmed means an admin already approved it.
+	if countNotificationsOfType(t, env, user.ID, "deposit_confirmed") != 0 {
+		t.Fatalf("(5) CRITICAL: a still-pending deposit must never create a deposit_confirmed notification")
+	}
+}
+
+func TestDeposit_SubmissionNotificationBelongsToCorrectUser(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	userA := createTestUser(t, env, "TEST DEPOSIT SCOPE USER A")
+	userB := createTestUser(t, env, "TEST DEPOSIT SCOPE USER B")
+	walletSvc := newWalletSvc(env)
+
+	if _, err := walletSvc.InitiateDeposit(ctx, userA.ID, decimal.NewFromInt(300), "bankily", "mobile_money", "", nil); err != nil {
+		t.Fatalf("(6) InitiateDeposit(A) failed: %v", err)
+	}
+
+	if getLatestNotificationOfType(t, env, userA.ID, "deposit_submitted") == nil {
+		t.Fatalf("(6) user A should have received their own deposit_submitted notification")
+	}
+	if getLatestNotificationOfType(t, env, userB.ID, "deposit_submitted") != nil {
+		t.Fatalf("(6) CRITICAL: user B received user A's deposit_submitted notification")
+	}
+}
+
+func TestDeposit_FailedCreationCreatesNoNotification(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST DEPOSIT FAIL USER")
+	walletSvc := newWalletSvc(env)
+
+	// A zero/negative amount is rejected by InitiateDeposit's own validation
+	// before any transaction row (and therefore any notification) is created.
+	_, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.Zero, "bankily", "mobile_money", "", nil)
+	if err == nil {
+		t.Fatalf("(7) expected InitiateDeposit to reject a zero amount")
+	}
+	if countNotificationsOfType(t, env, user.ID, "deposit_submitted") != 0 {
+		t.Fatalf("(7) CRITICAL: a failed deposit creation must never produce a false deposit_submitted notification")
+	}
+}
+
+// (8-10) Deposit admin-approval outcome notifications.
+func TestDeposit_ApprovalCreatesDepositConfirmed(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST DEPOSIT APPROVE USER")
+	admin := createTestAdmin(t, env, "TEST DEPOSIT APPROVE ADMIN")
+	walletSvc := newWalletSvc(env)
+	adminSvc := newTestAdminService(t, env)
+
+	tx, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(1000), "bankily", "mobile_money", "", nil)
+	if err != nil {
+		t.Fatalf("(8) InitiateDeposit failed: %v", err)
+	}
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID); err != nil {
+		t.Fatalf("(8) ValidateTransaction(approve) failed: %v", err)
+	}
+
+	notif := getLatestNotificationOfType(t, env, user.ID, "deposit_confirmed")
+	if notif == nil {
+		t.Fatalf("(8) expected a deposit_confirmed notification after approval, found none -- this is the exact Customer #21 regression (chk_notif_type gap)")
+	}
+}
+
+func TestDeposit_RejectionCreatesDepositRejected(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST DEPOSIT REJECT USER")
+	admin := createTestAdmin(t, env, "TEST DEPOSIT REJECT ADMIN")
+	walletSvc := newWalletSvc(env)
+	adminSvc := newTestAdminService(t, env)
+
+	tx, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(1000), "bankily", "mobile_money", "", nil)
+	if err != nil {
+		t.Fatalf("(9) InitiateDeposit failed: %v", err)
+	}
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, false, "insufficient proof", admin.ID); err != nil {
+		t.Fatalf("(9) ValidateTransaction(reject) failed: %v", err)
+	}
+
+	notif := getLatestNotificationOfType(t, env, user.ID, "deposit_rejected")
+	if notif == nil {
+		t.Fatalf("(9) expected a deposit_rejected notification after rejection, found none")
+	}
+}
+
+func TestDeposit_RepeatedValidationDoesNotDuplicateOutcomeNotification(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST DEPOSIT DEDUPE USER")
+	admin := createTestAdmin(t, env, "TEST DEPOSIT DEDUPE ADMIN")
+	walletSvc := newWalletSvc(env)
+	adminSvc := newTestAdminService(t, env)
+
+	tx, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(1000), "bankily", "mobile_money", "", nil)
+	if err != nil {
+		t.Fatalf("(10) InitiateDeposit failed: %v", err)
+	}
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID); err != nil {
+		t.Fatalf("(10) ValidateTransaction (first call) failed: %v", err)
+	}
+	// Second call on an already-terminal transaction: the existing terminal-
+	// status guard in ValidateTransaction/UpdateStatus must make this a no-op,
+	// not a duplicate notification.
+	_ = adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID)
+
+	count := countNotificationsOfType(t, env, user.ID, "deposit_confirmed")
+	if count != 1 {
+		t.Fatalf("(10) expected exactly 1 deposit_confirmed notification after 2 validation calls (idempotency guard), got %d", count)
+	}
+}
+
+// (11-13) Withdrawal submission acknowledgment.
+func TestWithdrawal_SubmissionCreatesAcknowledgment(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST WITHDRAW SUBMIT USER")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(2000))
+	walletSvc := newWalletSvc(env)
+
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(500), "bankily")
+	if err != nil {
+		t.Fatalf("(11) RequestWithdraw failed: %v", err)
+	}
+	if tx.Status != "pending_review" {
+		t.Fatalf("(11) expected newly-submitted withdrawal to be 'pending_review', got %q", tx.Status)
+	}
+
+	notif := getLatestNotificationOfType(t, env, user.ID, "withdrawal_submitted")
+	if notif == nil {
+		t.Fatalf("(11) expected a withdrawal_submitted notification, found none")
+	}
+	if countNotificationsOfType(t, env, user.ID, "withdrawal_processed") != 0 {
+		t.Fatalf("(11) CRITICAL: a still-pending withdrawal must never create a withdrawal_processed notification")
+	}
+}
+
+func TestWithdrawal_SubmissionNotificationBelongsToCorrectUser(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	userA := createTestUser(t, env, "TEST WITHDRAW SCOPE USER A")
+	userB := createTestUser(t, env, "TEST WITHDRAW SCOPE USER B")
+	creditWallet(t, env, userA.ID, decimal.NewFromInt(2000))
+	walletSvc := newWalletSvc(env)
+
+	if _, err := walletSvc.RequestWithdraw(ctx, userA.ID, decimal.NewFromInt(500), "bankily"); err != nil {
+		t.Fatalf("(12) RequestWithdraw(A) failed: %v", err)
+	}
+
+	if getLatestNotificationOfType(t, env, userA.ID, "withdrawal_submitted") == nil {
+		t.Fatalf("(12) user A should have received their own withdrawal_submitted notification")
+	}
+	if getLatestNotificationOfType(t, env, userB.ID, "withdrawal_submitted") != nil {
+		t.Fatalf("(12) CRITICAL: user B received user A's withdrawal_submitted notification")
+	}
+}
+
+func TestWithdrawal_FailedCreationCreatesNoNotification(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST WITHDRAW FAIL USER")
+	// Deliberately no creditWallet call -- insufficient balance must make
+	// FreezeForWithdraw fail before any transaction/notification is created.
+	walletSvc := newWalletSvc(env)
+
+	_, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(999999), "bankily")
+	if err == nil {
+		t.Fatalf("(13) expected RequestWithdraw to fail on insufficient balance")
+	}
+	if countNotificationsOfType(t, env, user.ID, "withdrawal_submitted") != 0 {
+		t.Fatalf("(13) CRITICAL: a failed withdrawal creation must never produce a false withdrawal_submitted notification")
+	}
+}
+
+// (14-16) Withdrawal admin-approval outcome notifications.
+func TestWithdrawal_CompletionCreatesWithdrawalProcessed(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST WITHDRAW COMPLETE USER")
+	admin := createTestAdmin(t, env, "TEST WITHDRAW COMPLETE ADMIN")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(2000))
+	walletSvc := newWalletSvc(env)
+	adminSvc := newTestAdminService(t, env)
+
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(800), "bankily")
+	if err != nil {
+		t.Fatalf("(14) RequestWithdraw failed: %v", err)
+	}
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID); err != nil {
+		t.Fatalf("(14) ValidateTransaction(approve) failed: %v", err)
+	}
+
+	notif := getLatestNotificationOfType(t, env, user.ID, "withdrawal_processed")
+	if notif == nil {
+		t.Fatalf("(14) expected a withdrawal_processed notification after completion, found none")
+	}
+}
+
+func TestWithdrawal_RejectionProducesSemanticallyCorrectNotification(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST WITHDRAW REJECT USER")
+	admin := createTestAdmin(t, env, "TEST WITHDRAW REJECT ADMIN")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(2000))
+	walletSvc := newWalletSvc(env)
+	adminSvc := newTestAdminService(t, env)
+
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(800), "bankily")
+	if err != nil {
+		t.Fatalf("(15) RequestWithdraw failed: %v", err)
+	}
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, false, "suspicious activity", admin.ID); err != nil {
+		t.Fatalf("(15) ValidateTransaction(reject) failed: %v", err)
+	}
+
+	// Client feedback #10 (already in place): rejection reuses withdrawal_processed
+	// (not a separate withdrawal_rejected type mobile doesn't recognize),
+	// distinguished by the {status}/{reason} params baked into the notification
+	// body at send time -- so the correct assertion here is that the type fired
+	// is still withdrawal_processed, not that a distinct type exists.
+	notif := getLatestNotificationOfType(t, env, user.ID, "withdrawal_processed")
+	if notif == nil {
+		t.Fatalf("(15) expected a withdrawal_processed notification after rejection (reuses the single withdrawal outcome type by design), found none")
+	}
+}
+
+func TestWithdrawal_RepeatedValidationDoesNotDuplicateNotification(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST WITHDRAW DEDUPE USER")
+	admin := createTestAdmin(t, env, "TEST WITHDRAW DEDUPE ADMIN")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(2000))
+	walletSvc := newWalletSvc(env)
+	adminSvc := newTestAdminService(t, env)
+
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(800), "bankily")
+	if err != nil {
+		t.Fatalf("(16) RequestWithdraw failed: %v", err)
+	}
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID); err != nil {
+		t.Fatalf("(16) ValidateTransaction (first call) failed: %v", err)
+	}
+	_ = adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID)
+
+	count := countNotificationsOfType(t, env, user.ID, "withdrawal_processed")
+	if count != 1 {
+		t.Fatalf("(16) expected exactly 1 withdrawal_processed notification after 2 validation calls, got %d", count)
+	}
+}
+
+// (17-19) Notifications API surface.
+func TestNotificationsAPI_ReturnsDepositNotification(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST NOTIF API DEPOSIT USER")
+	walletSvc := newWalletSvc(env)
+
+	if _, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(400), "bankily", "mobile_money", "", nil); err != nil {
+		t.Fatalf("(17) InitiateDeposit failed: %v", err)
+	}
+
+	notifs, err := env.notifSvc.ListNotifications(ctx, user.ID, 50)
+	if err != nil {
+		t.Fatalf("(17) ListNotifications failed: %v", err)
+	}
+	found := false
+	for _, n := range notifs {
+		if n.Type == "deposit_submitted" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("(17) expected GET /notifications (ListNotifications) to return the deposit_submitted row")
+	}
+}
+
+func TestNotificationsAPI_ReturnsWithdrawalNotification(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST NOTIF API WITHDRAW USER")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(2000))
+	walletSvc := newWalletSvc(env)
+
+	if _, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(500), "bankily"); err != nil {
+		t.Fatalf("(18) RequestWithdraw failed: %v", err)
+	}
+
+	notifs, err := env.notifSvc.ListNotifications(ctx, user.ID, 50)
+	if err != nil {
+		t.Fatalf("(18) ListNotifications failed: %v", err)
+	}
+	found := false
+	for _, n := range notifs {
+		if n.Type == "withdrawal_submitted" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("(18) expected GET /notifications (ListNotifications) to return the withdrawal_submitted row")
+	}
+}
+
+func TestNotificationsAPI_UnrelatedUserCannotSeeWalletNotification(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	userA := createTestUser(t, env, "TEST NOTIF API ISOLATION USER A")
+	userB := createTestUser(t, env, "TEST NOTIF API ISOLATION USER B")
+	walletSvc := newWalletSvc(env)
+
+	if _, err := walletSvc.InitiateDeposit(ctx, userA.ID, decimal.NewFromInt(400), "bankily", "mobile_money", "", nil); err != nil {
+		t.Fatalf("(19) InitiateDeposit(A) failed: %v", err)
+	}
+
+	notifsB, err := env.notifSvc.ListNotifications(ctx, userB.ID, 50)
+	if err != nil {
+		t.Fatalf("(19) ListNotifications(B) failed: %v", err)
+	}
+	for _, n := range notifsB {
+		if n.Type == "deposit_submitted" {
+			t.Fatalf("(19) CRITICAL: user B's notification list contains user A's deposit_submitted row")
+		}
+	}
+}
+
+// (20-24) Non-regression: existing notification types/paths remain unaffected
+// by the migration 000051 constraint widening.
+func TestNotificationRegression_AuctionApprovedRemainsValid(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST NOTIF REGRESSION AUCTION APPROVED")
+	if err := env.notifSvc.SendLocalizedPush(ctx, user.ID, "auction_approved", "en", map[string]string{"auctionTitle": "Test"}, nil); err != nil {
+		t.Fatalf("(20) REGRESSION: auction_approved notification failed after migration 000051: %v", err)
+	}
+	if getLatestNotificationOfType(t, env, user.ID, "auction_approved") == nil {
+		t.Fatalf("(20) REGRESSION: auction_approved notification row not created")
+	}
+}
+
+func TestNotificationRegression_AuctionWonRemainsValid(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST NOTIF REGRESSION AUCTION WON")
+	if err := env.notifSvc.SendLocalizedPush(ctx, user.ID, "auction_won", "en", map[string]string{"auctionTitle": "Test", "finalPrice": "100", "currency": "MRU"}, nil); err != nil {
+		t.Fatalf("(21) REGRESSION: auction_won notification failed after migration 000051: %v", err)
+	}
+	if getLatestNotificationOfType(t, env, user.ID, "auction_won") == nil {
+		t.Fatalf("(21) REGRESSION: auction_won notification row not created")
+	}
+}
+
+func TestNotificationRegression_BidOutbidRemainsValid(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST NOTIF REGRESSION BID OUTBID")
+	if err := env.notifSvc.SendLocalizedPush(ctx, user.ID, "bid_outbid", "en", map[string]string{"auctionTitle": "Test", "newPrice": "100", "currency": "MRU"}, nil); err != nil {
+		t.Fatalf("(22) REGRESSION: bid_outbid notification failed after migration 000051: %v", err)
+	}
+	if getLatestNotificationOfType(t, env, user.ID, "bid_outbid") == nil {
+		t.Fatalf("(22) REGRESSION: bid_outbid notification row not created")
+	}
+}
+
+func TestNotificationRegression_AdminBroadcastRemainsValid(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST NOTIF REGRESSION BROADCAST")
+	if err := env.notifSvc.SendPush(ctx, user.ID, "Broadcast title", "Broadcast body", "system", nil); err != nil {
+		t.Fatalf("(23) REGRESSION: admin broadcast (system type) notification failed after migration 000051: %v", err)
+	}
+	if getLatestNotificationOfType(t, env, user.ID, "system") == nil {
+		t.Fatalf("(23) REGRESSION: system (broadcast) notification row not created")
+	}
+}
+
+func TestNotificationRegression_APIContractUnchanged(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST NOTIF REGRESSION API CONTRACT")
+	if err := env.notifSvc.SendPush(ctx, user.ID, "Test", "Test body", "system", nil); err != nil {
+		t.Fatalf("(24) SendPush failed: %v", err)
+	}
+	notifs, err := env.notifSvc.ListNotifications(ctx, user.ID, 50)
+	if err != nil {
+		t.Fatalf("(24) ListNotifications failed: %v", err)
+	}
+	if len(notifs) == 0 {
+		t.Fatalf("(24) REGRESSION: ListNotifications returned no rows for a user with a known notification")
+	}
+	// Bug C-class contract check: ListNotifications must return a plain slice
+	// (not a wrapper), matching handlers.OK(c, notifications)'s existing
+	// bare-array response.data contract that notifications_api.dart parses.
+	var _ []models.Notification = notifs
 }
 
 func strPtr(s string) *string { return &s }

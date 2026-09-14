@@ -46,13 +46,47 @@ type walletService struct {
 	// the authoritative subscription_fee and verify ownership. Never used by
 	// the generic wallet-top-up path.
 	reqRepo  repository.RequestRepository
+	// userRepo (Customer #21): looked up only to resolve the caller's
+	// LanguagePref for the deposit/withdrawal submission-acknowledgment
+	// notification -- mirrors the same lookup adminService.ValidateTransaction
+	// already does for the outcome notification. May be nil in tests that
+	// don't exercise the notification path (see notifSvc nil-guard below).
+	userRepo repository.UserRepository
 	notifSvc NotificationService
 	auditSvc AuditService
 	logger   *zap.Logger
 }
 
-func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, reqRepo repository.RequestRepository, notifSvc NotificationService, auditSvc AuditService, logger *zap.Logger) WalletService {
-	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, reqRepo: reqRepo, notifSvc: notifSvc, auditSvc: auditSvc, logger: logger}
+func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, reqRepo repository.RequestRepository, userRepo repository.UserRepository, notifSvc NotificationService, auditSvc AuditService, logger *zap.Logger) WalletService {
+	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, reqRepo: reqRepo, userRepo: userRepo, notifSvc: notifSvc, auditSvc: auditSvc, logger: logger}
+}
+
+// notifySubmissionAcknowledgment sends the Customer #21 deposit_submitted/
+// withdrawal_submitted notification AFTER tx has already been persisted
+// successfully (every call site below is placed after s.txRepo.Create
+// returns nil) -- never before, and never on a failed creation. Best-effort
+// exactly like every other SendLocalizedPush call in this codebase: a
+// notification/FCM failure must never fail the underlying financial
+// operation, so its error is deliberately discarded, matching
+// adminService.ValidateTransaction's identical `_ = s.notifSvc...` pattern.
+// A nil notifSvc/userRepo (some test wiring) makes this a safe no-op.
+func (s *walletService) notifySubmissionAcknowledgment(ctx context.Context, tx *models.Transaction, notifType string) {
+	if s.notifSvc == nil || s.userRepo == nil {
+		return
+	}
+	language := "ar"
+	if user, err := s.userRepo.FindByID(ctx, tx.UserID); err == nil && user.LanguagePref != "" {
+		language = user.LanguagePref
+	}
+	params := map[string]string{
+		"amount":   tx.Amount.String(),
+		"currency": tx.EffectiveCurrencyCode(),
+	}
+	data := map[string]string{
+		"type":           notifType,
+		"transaction_id": tx.ID.String(),
+	}
+	_ = s.notifSvc.SendLocalizedPush(ctx, tx.UserID, notifType, language, params, data)
 }
 
 func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
@@ -133,6 +167,10 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 	if err := s.txRepo.Create(ctx, tx); err != nil {
 		return nil, err
 	}
+	// Customer #21: submission acknowledgment only -- the transaction is still
+	// "pending" here, never "deposit_confirmed" (that type is reserved for an
+	// actual admin approval in adminService.ValidateTransaction).
+	s.notifySubmissionAcknowledgment(ctx, tx, "deposit_submitted")
 	return tx, nil
 }
 
@@ -213,6 +251,11 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 	if err != nil {
 		return nil, err
 	}
+	// Customer #21: submission acknowledgment only -- the withdrawal is still
+	// "pending_review" here, never "withdrawal_processed" (that type is
+	// reserved for an actual admin approval/rejection in
+	// adminService.ValidateTransaction).
+	s.notifySubmissionAcknowledgment(ctx, txModel, "withdrawal_submitted")
 	if s.auditSvc != nil {
 		details := fmt.Sprintf("user_id=%s amount=%s status=%s (balance frozen)", userID, amount.String(), txModel.Status)
 		detailsJSON := models.JSONB{
