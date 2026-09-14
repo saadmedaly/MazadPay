@@ -1301,29 +1301,24 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                       textAlign: TextAlign.right,
                     ),
                     const SizedBox(height: 6), // Reduced from 10
-                    // Interaction Row: [Timer] [Heart] [Bids+Gavel]
+                    // Interaction Row: [Timer] [Heart] [Bid count]
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Bid count + gavel (leftmost = endmost in RTL code)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              (auction['bidder_count'] ?? auction['bids'] ?? 0).toString(),
-                              style: GoogleFonts.plusJakartaSans(
-                                color: softRed,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                            Icon(
-                              Icons.gavel_rounded,
-                              color: isDarkMode ? Colors.white54 : Colors.black54,
-                              size: 16,
-                            ),
-                          ],
+                        // Client feedback #26: the decorative gavel icon
+                        // beside the bid count is removed per explicit
+                        // client request -- the count itself, its color, and
+                        // its position in this row are otherwise unchanged.
+                        // No replacement icon, no reserved icon width; the
+                        // Row now collapses to just the count (mainAxisSize:
+                        // min keeps it from claiming extra space).
+                        Text(
+                          (auction['bidder_count'] ?? auction['bids'] ?? 0).toString(),
+                          style: GoogleFonts.plusJakartaSans(
+                            color: softRed,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
                         ),
                         // Heart / favorite
                         GestureDetector(
