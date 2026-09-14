@@ -11,12 +11,23 @@ export function useCategories() {
   })
 }
 
+// Admin listing (Customer #27): includes hidden (is_active=false)
+// categories/subcategories, unlike useCategories() above which uses the
+// public endpoint and excludes them.
+export function useAdminCategories() {
+  return useQuery({
+    queryKey: ['admin-categories'],
+    queryFn: api.fetchAdminCategories
+  })
+}
+
 export function useCreateCategory() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: api.createCategory,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['categories'] })
+      qc.invalidateQueries({ queryKey: ['admin-categories'] })
       toast.success('تمت إضافة الفئة بنجاح')
     },
     onError: () => toast.error('فشل إضافة الفئة')
@@ -29,6 +40,7 @@ export function useUpdateCategory() {
     mutationFn: ({ id, payload }: { id: number; payload: Partial<Category> }) => api.updateCategory(id, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['categories'] })
+      qc.invalidateQueries({ queryKey: ['admin-categories'] })
       toast.success('تم تحديث الفئة بنجاح')
     },
     onError: () => toast.error('فشل تحديث الفئة')
@@ -41,9 +53,23 @@ export function useDeleteCategory() {
     mutationFn: api.deleteCategory,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['categories'] })
+      qc.invalidateQueries({ queryKey: ['admin-categories'] })
       toast.success('تم حذف الفئة بنجاح')
     },
     onError: () => toast.error('فشل حذف الفئة')
+  })
+}
+
+export function useToggleCategory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => api.toggleCategory(id, isActive),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['categories'] })
+      qc.invalidateQueries({ queryKey: ['admin-categories'] })
+      toast.success(variables.isActive ? 'تم إظهار الفئة' : 'تم إخفاء الفئة')
+    },
+    onError: () => toast.error('فشل تحديث حالة الفئة')
   })
 }
 

@@ -392,8 +392,12 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Get("/reports/revenue/export", adminHandler.ExportRevenueCSV)
 
 	// Category management
+	admin.Get("/categories", adminHandler.AdminListCategories)
 	admin.Post("/categories", adminHandler.CreateCategory)
 	admin.Put("/categories/:id", adminHandler.UpdateCategory)
+	// Customer #27: hide/show, mirroring the existing /admin/banners/:id/toggle
+	// pattern -- minimal targeted status write, not the full-entity Update.
+	admin.Put("/categories/:id/toggle", adminHandler.ToggleCategory)
 	admin.Delete("/categories/:id", adminHandler.DeleteCategory)
 	admin.Post("/categories/upload", func(c *fiber.Ctx) error {
 		c.Locals("mediaService", mediaSvc)

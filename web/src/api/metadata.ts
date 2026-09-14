@@ -16,6 +16,17 @@ export async function deleteCategory(id: number): Promise<void> {
   await client.delete(`/v1/api/admin/categories/${id}`)
 }
 
+export async function toggleCategory(id: number, isActive: boolean): Promise<void> {
+  await client.put(`/v1/api/admin/categories/${id}/toggle`, { is_active: isActive })
+}
+
+// Admin listing (includes hidden categories) -- distinct from the public
+// fetchCategories() below, which excludes is_active=false rows.
+export async function fetchAdminCategories(): Promise<Category[]> {
+  const { data } = await client.get<APIResponse<Category[]>>('/v1/api/admin/categories')
+  return data.data
+}
+
 // Locations
 export async function createLocation(payload: Partial<Location>): Promise<Location> {
   const { data } = await client.post<APIResponse<Location>>('/v1/api/admin/locations', payload)

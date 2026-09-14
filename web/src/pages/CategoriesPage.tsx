@@ -2,9 +2,10 @@ import React, { useState, useMemo } from 'react'
 import {
   Plus, Search, Pencil, Trash2,
   AlertCircle, Loader2, ChevronRight, Folder,
-  Image as ImageIcon, Link, X, Eye, Upload
+  Image as ImageIcon, Link, X, Eye, Upload,
+  ToggleLeft, ToggleRight
 } from 'lucide-react'
-import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '@/hooks/useMetadata'
+import { useAdminCategories, useCreateCategory, useUpdateCategory, useDeleteCategory, useToggleCategory } from '@/hooks/useMetadata'
 import { type ColumnDef } from '@tanstack/react-table'
 import { type Category } from '@/types/api'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -14,10 +15,14 @@ import client from '@/api/client'
 import { toast } from 'sonner'
 
 export function CategoriesPage() {
-  const { data: categories, isLoading, isError } = useCategories()
+  // Customer #27: the admin page must keep seeing hidden categories, so it
+  // reads from the admin-only listing (unfiltered) rather than the public
+  // useCategories() that now excludes is_active=false rows.
+  const { data: categories, isLoading, isError } = useAdminCategories()
   const createMut = useCreateCategory()
   const updateMut = useUpdateCategory()
   const deleteMut = useDeleteCategory()
+  const toggleMut = useToggleCategory()
 
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -267,6 +272,19 @@ export function CategoriesPage() {
       )
     },
     {
+      header: 'الحالة',
+      accessorKey: 'is_active',
+      cell: ({ row }) => (
+        <span className={`text-xs px-2 py-1 rounded-full border ${
+          row.original.is_active
+            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+            : 'bg-red-500/20 text-red-400 border-red-500/30'
+        }`}>
+          {row.original.is_active ? 'نشطة' : 'مخفية'}
+        </span>
+      )
+    },
+    {
       header: 'الإجراءات',
       id: 'actions',
       cell: ({ row }) => (
@@ -274,13 +292,25 @@ export function CategoriesPage() {
           <button
             onClick={() => openEdit(row.original)}
             className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-all"
+            title="تعديل"
           >
             <Pencil className="w-4 h-4" />
           </button>
           <button
+            onClick={() => toggleMut.mutate({ id: row.original.id, isActive: !row.original.is_active })}
+            className={`p-1.5 rounded-lg transition-all ${
+              row.original.is_active
+                ? 'text-emerald-400 hover:bg-emerald-500/10'
+                : 'text-surface-muted hover:bg-surface-border'
+            }`}
+            title={row.original.is_active ? 'إخفاء الفئة' : 'إظهار الفئة'}
+          >
+            {row.original.is_active ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+          </button>
+          <button
             onClick={() => {
               const hasChildren = (row.original as any).children?.length > 0
-              const msg = hasChildren 
+              const msg = hasChildren
                 ? 'هذه الفئة تحتوي على فئات فرعية. حذفها سيحذف جميع الفئات الفرعية أيضاً. هل أنت متأكد؟'
                 : 'هل أنت متأكد من حذف هذه الفئة؟'
               if (confirm(msg)) {
@@ -288,6 +318,7 @@ export function CategoriesPage() {
               }
             }}
             className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-all"
+            title="حذف"
           >
             <Trash2 className="w-4 h-4" />
           </button>

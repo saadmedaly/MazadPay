@@ -92,6 +92,12 @@ type AuctionRepository interface {
 	GetCategoryByID(ctx context.Context, id int) (*models.Category, error)
 	CreateCategory(ctx context.Context, c *models.Category) error
 	UpdateCategory(ctx context.Context, c *models.Category) error
+	// UpdateCategoryStatus (Customer #27) is the minimal, targeted hide/show
+	// write -- mirrors contentRepo.UpdateBannerStatus's exact shape (a
+	// single-column UPDATE ... WHERE id, never the full-entity UpdateCategory
+	// path) so toggling visibility can never accidentally overwrite
+	// unrelated category fields (name/image/parent/fee_tier/etc).
+	UpdateCategoryStatus(ctx context.Context, id int, isActive bool) error
 	DeleteCategory(ctx context.Context, id int) error
 
 	GetLocations(ctx context.Context) ([]models.Location, error)
@@ -608,6 +614,17 @@ func (r *auctionRepo) UpdateCategory(ctx context.Context, c *models.Category) er
 	query := `UPDATE categories SET name_ar = $1, name_fr = $2, name_en = $3, parent_id = $4, icon_name = $5, display_order = $6, image_url = $7, is_active = $8, fee_tier = $9
               WHERE id = $10`
 	_, err := r.db.ExecContext(ctx, query, c.NameAr, c.NameFr, c.NameEn, c.ParentID, c.IconName, c.DisplayOrder, c.ImageURL, c.IsActive, feeTier, c.ID)
+	return err
+}
+
+// UpdateCategoryStatus (Customer #27): mirrors contentRepo.UpdateBannerStatus
+// exactly -- a single-column write, never touching name/image/parent_id/
+// fee_tier/display_order. Works identically for a parent category or a
+// subcategory (same table, distinguished only by parent_id being NULL or
+// not), matching the client's request to reuse the same hide/show behavior
+// for both.
+func (r *auctionRepo) UpdateCategoryStatus(ctx context.Context, id int, isActive bool) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE categories SET is_active = $1 WHERE id = $2`, isActive, id)
 	return err
 }
 

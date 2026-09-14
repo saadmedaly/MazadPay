@@ -711,6 +711,43 @@ func (h *AdminHandler) UpdateCategory(c *fiber.Ctx) error {
 	return OK(c, cat)
 }
 
+// ToggleCategory (Customer #27): hide/show, mirroring BannerHandler.Toggle's
+// exact request/response shape -- parses only { is_active }, never the full
+// category body, so an admin client cannot accidentally clear other fields
+// through this endpoint even if it sent a stale payload.
+func (h *AdminHandler) ToggleCategory(c *fiber.Ctx) error {
+	type ToggleRequest struct {
+		IsActive bool `json:"is_active"`
+	}
+	var req ToggleRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid category ID")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.ToggleCategory(c.Context(), id, req.IsActive, adminID); err != nil {
+		return MapError(c, h.logger, err)
+	}
+	h.invalidateCategoriesCache(c.Context())
+	return OK(c, fiber.Map{"message": "Category status updated"})
+}
+
+// AdminListCategories (Customer #27): the Admin panel's own category list,
+// unfiltered by is_active so a hidden category remains manageable/re-showable.
+func (h *AdminHandler) AdminListCategories(c *fiber.Ctx) error {
+	categories, err := h.svc.AdminListCategories(c.Context())
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, categories)
+}
+
 func (h *AdminHandler) DeleteCategory(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 	adminID, err := middleware.GetUserID(c)

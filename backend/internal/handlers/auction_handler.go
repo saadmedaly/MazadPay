@@ -486,7 +486,36 @@ func (h *AuctionHandler) GetCategories(c *fiber.Ctx) error {
 		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, categories)
+	// Customer #27: public listing excludes hidden (is_active = false)
+	// categories/subcategories -- filtered here, at the public HTTP
+	// boundary, rather than in the underlying GetCategories query itself,
+	// which stays unfiltered because it's also reused internally (see
+	// CreateAuction's category/subcategory name->ID mapping) and by the
+	// Admin panel's own unfiltered AdminListCategories, both of which must
+	// still be able to find/see a hidden category.
+	//
+	// Effective visibility for a subcategory whose PARENT is hidden: the
+	// subcategory's own is_active row is never mass-updated (the client's
+	// own DB state must stay untouched per-row), but it must still not be
+	// reachable through normal public category navigation once its parent
+	// is hidden -- so a subcategory is only included here when both it and
+	// its parent (if any) are individually active.
+	activeByID := make(map[int]bool, len(categories))
+	for _, cat := range categories {
+		activeByID[cat.ID] = cat.IsActive
+	}
+	visible := make([]models.Category, 0, len(categories))
+	for _, cat := range categories {
+		if !cat.IsActive {
+			continue
+		}
+		if cat.ParentID != nil && !activeByID[*cat.ParentID] {
+			continue
+		}
+		visible = append(visible, cat)
+	}
+
+	return OK(c, visible)
 }
 
 func (h *AuctionHandler) GetLocations(c *fiber.Ctx) error {

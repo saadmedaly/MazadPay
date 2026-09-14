@@ -56,6 +56,18 @@ type AdminService interface {
 	CreateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error
 	UpdateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error
 	DeleteCategory(ctx context.Context, id int, adminID uuid.UUID) error
+	// ToggleCategory (Customer #27): hide/show for a category or subcategory
+	// (same table). Mirrors contentService.ToggleBanner's shape exactly --
+	// minimal targeted write, audit log, then the same category.updated
+	// realtime broadcast UpdateCategory already emits.
+	ToggleCategory(ctx context.Context, id int, isActive bool, adminID uuid.UUID) error
+	// AdminListCategories (Customer #27): unfiltered category list for the
+	// Admin panel -- includes hidden (is_active = false) rows, unlike the
+	// public GetCategories path, so a hidden category remains reachable to
+	// be shown again. Reuses the exact same underlying data as
+	// GetCategories (no separate cache/SQL duplicated), just without any
+	// public-visibility filtering applied afterward.
+	AdminListCategories(ctx context.Context) ([]models.Category, error)
 	CreateLocation(ctx context.Context, l *models.Location, adminID uuid.UUID) error
 	UpdateLocation(ctx context.Context, l *models.Location, adminID uuid.UUID) error
 	DeleteLocation(ctx context.Context, id int, adminID uuid.UUID) error
@@ -1010,6 +1022,54 @@ func (s *adminService) UpdateCategory(ctx context.Context, c *models.Category, a
 		})
 	}
 	return nil
+}
+
+// ToggleCategory (Customer #27): hide/show for a category or subcategory.
+// Uses UpdateCategoryStatus's targeted single-column write (never the
+// full-entity UpdateCategory path), so this can never accidentally
+// overwrite name/image/parent_id/fee_tier/display_order. Emits the exact
+// same category.updated broadcast UpdateCategory already sends -- mobile's
+// existing categoriesProvider (Customer #20) picks this up with no new
+// wiring, matching the audit's finding that this event already exists and
+// mobile already listens for it.
+func (s *adminService) ToggleCategory(ctx context.Context, id int, isActive bool, adminID uuid.UUID) error {
+	if err := s.auctionRepo.UpdateCategoryStatus(ctx, id, isActive); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		action := "category_hidden"
+		if isActive {
+			action = "category_shown"
+		}
+		detailsJSON := models.JSONB{"category_id": id, "is_active": isActive}
+		if auditErr := s.auditSvc.Log(ctx, adminID, action, "category", nil, fmt.Sprintf("category_id=%d is_active=%v", id, isActive),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+			WithEntityKey(strconv.Itoa(id)),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("ToggleCategory: failed to write audit log", zap.Int("category_id", id), zap.Error(auditErr))
+			}
+		}
+	}
+	if s.globalHub != nil {
+		s.globalHub.Broadcast(models.GlobalWSEvent{
+			Type:       models.EventCategoryUpdated,
+			EntityType: "category",
+			EntityID:   strconv.Itoa(id),
+			UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+	return nil
+}
+
+// AdminListCategories (Customer #27): the Admin panel's own listing,
+// deliberately NOT filtered by is_active -- a hidden category must remain
+// visible/manageable in Admin so it can be shown again. Reuses the exact
+// same GetCategories query (no duplicated SQL); the public-facing filter is
+// applied separately, only in the public HTTP handler path.
+func (s *adminService) AdminListCategories(ctx context.Context) ([]models.Category, error) {
+	return s.auctionRepo.GetCategories(ctx)
 }
 
 func (s *adminService) DeleteCategory(ctx context.Context, id int, adminID uuid.UUID) error {
