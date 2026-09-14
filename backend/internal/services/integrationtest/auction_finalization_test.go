@@ -1014,3 +1014,165 @@ func TestPlaceBid_RejectedAfterEndTime_BeforeSchedulerRuns(t *testing.T) {
 		}
 	})
 }
+
+// Bug M diagnosis: reproduces the exact real-device symptom -- bid_count > 0
+// on the auction summary, but the bid-history list renders empty. The
+// suspected root cause is that BidHistoryEntry.BidderName/BidderPhone are
+// non-nullable Go strings, but the repository query
+// (COALESCE(b.bidder_name, u.full_name)) can legitimately produce SQL NULL
+// when BOTH the bid row's own denormalized bidder_name/bidder_phone AND the
+// joined user's full_name/phone are NULL -- sqlx's Scan then fails
+// ("converting NULL to string is unsupported"), GetHistory returns an
+// error, and the mobile Riverpod provider's catch-all silently swallows it
+// and returns an empty list (auction_provider_api.dart AuctionHistoryApi.build,
+// `catch (e) { ... return []; }`), producing exactly the observed
+// contradiction: bid_count=1 but "لا توجد مزايدات حتى الآن".
+func TestGetHistory_NullBidderNameAndUserFullName_DoesNotFailSilently(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST BIDHISTORY SELLER")
+	bidder := createTestUser(t, env, "TEST BIDHISTORY BIDDER")
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	// Null out the bidder's own full_name/phone AFTER creation (Register
+	// requires a phone; simulate the real-device condition where the
+	// joined user's full_name legitimately has no value) -- this mirrors
+	// the exact staging DB state found for the reported auction (both
+	// bids.bidder_name and users.full_name NULL for that bidder).
+	if _, err := env.db.ExecContext(ctx, `UPDATE users SET full_name = NULL WHERE id = $1`, bidder.ID); err != nil {
+		t.Fatalf("failed to null out fixture user full_name: %v", err)
+	}
+
+	auction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+
+	bid, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(150))
+	if err != nil {
+		t.Fatalf("PlaceBid failed: %v", err)
+	}
+
+	// Confirm the DB state matches the real-device condition: bid row's own
+	// bidder_name is NULL (never set by PlaceBid), and the joined user's
+	// full_name is now also NULL.
+	var bidderNameNull, fullNameNull bool
+	if err := env.db.QueryRowContext(ctx, `SELECT bidder_name IS NULL FROM bids WHERE id = $1`, bid.ID).Scan(&bidderNameNull); err != nil {
+		t.Fatalf("failed to check bids.bidder_name nullness: %v", err)
+	}
+	if err := env.db.QueryRowContext(ctx, `SELECT full_name IS NULL FROM users WHERE id = $1`, bidder.ID).Scan(&fullNameNull); err != nil {
+		t.Fatalf("failed to check users.full_name nullness: %v", err)
+	}
+	if !bidderNameNull || !fullNameNull {
+		t.Fatalf("fixture setup did not reproduce the real-device NULL condition: bids.bidder_name NULL=%v, users.full_name NULL=%v", bidderNameNull, fullNameNull)
+	}
+
+	history, err := env.bidSvc.GetHistory(ctx, auction.ID)
+	if err != nil {
+		t.Fatalf("BUG M REPRODUCED: GetHistory failed with a real bid present (bid_count=1) due to a NULL bidder_name/full_name scan error: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("expected exactly 1 bid history entry, got %d", len(history))
+	}
+	if history[0].ID != bid.ID {
+		t.Fatalf("expected the real bid %s in history, got %s", bid.ID, history[0].ID)
+	}
+}
+
+// Bug M: Section 13 required coverage -- ordering rule, multiple real
+// bidders, and cross-auction isolation for GetHistory/FindHistoryByAuction.
+func TestGetHistory_MultipleBidders_AllRenderedInCorrectOrder(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST HISTORY ORDER SELLER")
+	bidderA := createTestUser(t, env, "TEST HISTORY ORDER BIDDER A")
+	bidderB := createTestUser(t, env, "TEST HISTORY ORDER BIDDER B")
+	bidderC := createTestUser(t, env, "TEST HISTORY ORDER BIDDER C")
+	creditWallet(t, env, bidderA.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, bidderB.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, bidderC.ID, decimal.NewFromInt(1000))
+
+	auction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+
+	bidA, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidderA.ID, decimal.NewFromInt(150))
+	if err != nil {
+		t.Fatalf("bidderA PlaceBid failed: %v", err)
+	}
+	bidB, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidderB.ID, decimal.NewFromInt(200))
+	if err != nil {
+		t.Fatalf("bidderB PlaceBid failed: %v", err)
+	}
+	bidC, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidderC.ID, decimal.NewFromInt(250))
+	if err != nil {
+		t.Fatalf("bidderC PlaceBid failed: %v", err)
+	}
+
+	history, err := env.bidSvc.GetHistory(ctx, auction.ID)
+	if err != nil {
+		t.Fatalf("GetHistory failed: %v", err)
+	}
+
+	t.Run("all bidders rendered", func(t *testing.T) {
+		if len(history) != 3 {
+			t.Fatalf("expected 3 bid history entries, got %d", len(history))
+		}
+	})
+	t.Run("ordering rule: highest amount first (mirrors mobile's isWinner = index == 0)", func(t *testing.T) {
+		if history[0].ID != bidC.ID || history[0].Amount.String() != "250" {
+			t.Fatalf("expected highest bid (bidderC, 250) first, got id=%s amount=%s", history[0].ID, history[0].Amount.String())
+		}
+		if history[1].ID != bidB.ID {
+			t.Fatalf("expected second-highest bid (bidderB, 200) second, got id=%s", history[1].ID)
+		}
+		if history[2].ID != bidA.ID {
+			t.Fatalf("expected lowest bid (bidderA, 150) last, got id=%s", history[2].ID)
+		}
+	})
+}
+
+func TestGetHistory_WrongAuctionID_NotMixed(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST HISTORY ISOLATION SELLER")
+	bidder := createTestUser(t, env, "TEST HISTORY ISOLATION BIDDER")
+	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	auctionOne := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+	auctionTwo := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auctionOne.ID, bidder.ID, decimal.NewFromInt(150)); err != nil {
+		t.Fatalf("PlaceBid on auctionOne failed: %v", err)
+	}
+
+	historyTwo, err := env.bidSvc.GetHistory(ctx, auctionTwo.ID)
+	if err != nil {
+		t.Fatalf("GetHistory for auctionTwo failed: %v", err)
+	}
+	if len(historyTwo) != 0 {
+		t.Fatalf("expected auctionTwo (no bids) to have empty history, got %d entries -- a bid from a different auction leaked in", len(historyTwo))
+	}
+
+	historyOne, err := env.bidSvc.GetHistory(ctx, auctionOne.ID)
+	if err != nil {
+		t.Fatalf("GetHistory for auctionOne failed: %v", err)
+	}
+	if len(historyOne) != 1 {
+		t.Fatalf("expected auctionOne to have exactly 1 bid, got %d", len(historyOne))
+	}
+}
+
+func TestGetHistory_ZeroBids_ReturnsEmptyNotError(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+
+	seller := createTestUser(t, env, "TEST HISTORY EMPTY SELLER")
+	auction := createTestAuctionInsured(t, env, seller.ID, "MR", "MRU")
+
+	history, err := env.bidSvc.GetHistory(ctx, auction.ID)
+	if err != nil {
+		t.Fatalf("GetHistory failed for a zero-bid auction: %v", err)
+	}
+	if len(history) != 0 {
+		t.Fatalf("expected empty history for a zero-bid auction, got %d entries", len(history))
+	}
+}

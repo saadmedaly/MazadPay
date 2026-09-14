@@ -241,8 +241,21 @@ class AuctionHistoryApi extends _$AuctionHistoryApi {
       parsedAmount = amountValue.toDouble();
     }
     
+    // Bug M fix: the backend now sends '' (never SQL NULL, which used to
+    // fail the whole history query's row scan) when neither the bid's own
+    // bidder_name nor the joined user's full_name is set -- treat an empty
+    // string the same as a missing/null field, falling back to the existing
+    // 'Unknown' convention rather than rendering a blank name.
+    final rawBidderName = data['bidder_name'] as String?;
+    final rawUserName = data['user_name'] as String?;
+    final bidderName = (rawBidderName != null && rawBidderName.isNotEmpty)
+        ? rawBidderName
+        : (rawUserName != null && rawUserName.isNotEmpty)
+            ? rawUserName
+            : 'Unknown';
+
     return BidEntry(
-      bidderName: data['bidder_name'] ?? data['user_name'] ?? 'Unknown',
+      bidderName: bidderName,
       phoneNumber: data['bidder_phone'] ?? data['phone'] ?? '',
       amount: parsedAmount,
       timestamp: data['created_at'] != null
