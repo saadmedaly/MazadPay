@@ -35,6 +35,15 @@ Color? auctionStatusBorderColor(String? status) {
   }
 }
 
+/// Customer #32: Active/Ended status filter tab (chip) fill color when
+/// selected -- 'active' -> green, 'ended' -> red, same 0xFF00C58D/0xFFE31B23
+/// values as auctionStatusBorderColor above (no new color invented). A pure
+/// top-level function so it can be unit-tested without pumping the widget
+/// tree, mirroring auctionStatusBorderColor's own pattern.
+Color statusTabSelectedColor(String value) {
+  return value == 'active' ? const Color(0xFF00C58D) : const Color(0xFFE31B23);
+}
+
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
 
@@ -657,6 +666,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     required int count,
   }) {
     final isSelected = _statusFilter == value;
+    final selectedColor = statusTabSelectedColor(value);
     return GestureDetector(
       onTap: () {
         if (_statusFilter == value) return;
@@ -667,7 +677,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: isSelected ? primaryBlue : Colors.transparent,
+          color: isSelected ? selectedColor : Colors.transparent,
           borderRadius: BorderRadius.circular(18),
         ),
         child: Center(

@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mezadpay/pages/all_auctions_page.dart';
 
 // Customer feedback #12 (restore Active/Ended auctions selector). The status
 // tabs themselves (all_auctions_page.dart's _buildStatusTab/_statusFilter)
@@ -66,6 +68,16 @@ void main() {
     test('no category selected (all categories) sends a null category_id, not a placeholder string', () {
       final params = statusRequestParams('active', null);
       expect(params['category_id'], isNull);
+    });
+  });
+
+  group('Status tab selected color (Customer #32)', () {
+    test('the active tab resolves to green (0xFF00C58D)', () {
+      expect(statusTabSelectedColor('active'), const Color(0xFF00C58D));
+    });
+
+    test('the ended tab resolves to red (0xFFE31B23)', () {
+      expect(statusTabSelectedColor('ended'), const Color(0xFFE31B23));
     });
   });
 }
