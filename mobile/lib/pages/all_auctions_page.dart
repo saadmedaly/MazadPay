@@ -1178,7 +1178,6 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     // terminal state.
     final String? auctionStatus = auction['status']?.toString();
     final bool isFinished = auctionStatus == 'ended' || auctionStatus == 'closed';
-    final Color? cardBorderColor = auctionStatusBorderColor(auctionStatus);
 
     // Récupérer le titre selon la langue actuelle avec fallback intelligent
     final locale = Localizations.localeOf(context).languageCode;
@@ -1241,12 +1240,12 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         decoration: BoxDecoration(
           color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          // Client feedback #24: active -> green border, ended -> red
-          // border, any other status (pending/canceled/etc) preserves the
-          // card's prior borderless look -- cardBorderColor is null unless
-          // the status is exactly 'active' or 'ended'/'closed', see
-          // auctionStatusBorderColor below.
-          border: cardBorderColor != null ? Border.all(color: cardBorderColor, width: 2) : null,
+          // Client correction: the client's original #24 ask ("active ->
+          // green border, ended -> red border" on the CARD itself) was
+          // superseded -- only the Active/Ended status TABS above should be
+          // colored (see statusTabSelectedColor); auction cards must never
+          // have a green/red status border, restored to their normal
+          // neutral/borderless look here.
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.08),

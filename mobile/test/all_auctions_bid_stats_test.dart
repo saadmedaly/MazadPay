@@ -171,9 +171,13 @@ void main() {
     });
   });
 
-  group('Customer #26: Customer #24 border logic preserved (same file, unrelated feature)', () {
-    // auctionStatusBorderColor is unchanged this round -- re-imported and
-    // re-asserted here to prove the gavel-icon edit did not disturb it.
+  group('Customer #26: auctionStatusBorderColor mapping preserved (same file, unrelated feature)', () {
+    // auctionStatusBorderColor's pure status->color mapping is unchanged --
+    // re-imported and re-asserted here to prove the gavel-icon edit did not
+    // disturb it. Note: this function is no longer CALLED by the auction
+    // card itself (a later client correction removed the card border --
+    // see auction_status_border_test.dart), but the mapping logic remains
+    // intact and testable.
     test('active status still returns green', () {
       expect(auctionStatusBorderColor('active'), kActiveGreen);
     });

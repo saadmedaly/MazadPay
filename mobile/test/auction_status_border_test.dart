@@ -2,110 +2,69 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mezadpay/pages/all_auctions_page.dart';
 
-// Customer Request #24: Active/Ended tabbed auction list only
-// (all_auctions_page.dart) -- active auctions get a green card border,
-// ended auctions get a red card border. Scoped deliberately to this one
-// screen (per explicit product decision): Home, My Auctions, Favorites, My
-// Winnings, and Related Auctions are untouched and use their own existing
-// status semantics/design.
+// Customer Request #24, corrected by a later client clarification: the
+// original ask ("active auctions get a green card border, ended auctions
+// get a red card border") was superseded -- only the Active/Ended status
+// TABS/chips above the list should be colored (see
+// all_auctions_status_filter_test.dart's statusTabSelectedColor coverage);
+// auction CARDS themselves must never have a green/red status border and
+// are restored to their normal neutral/borderless appearance.
 //
-// auctionStatusBorderColor is a pure top-level function exported from
-// all_auctions_page.dart specifically so this logic is directly testable
-// without pumping the full page (which fetches from a real AuctionApi with
-// no DI seam, the same constraint already documented for
-// MyWinningsPage/SupportPage in prior rounds).
+// auctionStatusBorderColor is kept as a pure top-level function (still
+// exported from all_auctions_page.dart) even though
+// _buildHorizontalAuctionCard no longer calls it -- its mapping logic is
+// harmless, still directly testable, and removing it entirely was not
+// requested; only its USE on the card was removed.
 
 const Color kActiveGreen = Color(0xFF00C58D);
 const Color kEndedRed = Color(0xFFE31B23);
 
 void main() {
-  group('Customer #24: auctionStatusBorderColor (pure status -> color mapping)', () {
-    test('active status returns green', () {
+  group('auctionStatusBorderColor (pure status -> color mapping, unused by the card since the client correction)', () {
+    test('active status still maps to green', () {
       expect(auctionStatusBorderColor('active'), kActiveGreen);
     });
 
-    test('ended status returns red', () {
+    test('ended status still maps to red', () {
       expect(auctionStatusBorderColor('ended'), kEndedRed);
     });
 
-    test('closed status also returns red (same terminal state as ended)', () {
+    test('closed status also maps to red (same terminal state as ended)', () {
       expect(auctionStatusBorderColor('closed'), kEndedRed);
     });
 
-    test('pending status returns null (no incorrect active-green)', () {
+    test('pending status maps to null', () {
       expect(auctionStatusBorderColor('pending'), isNull);
     });
 
-    test('canceled status returns null (no incorrect ended-red)', () {
+    test('canceled status maps to null', () {
       expect(auctionStatusBorderColor('canceled'), isNull);
       expect(auctionStatusBorderColor('cancelled'), isNull);
     });
 
-    test('rejected status returns null (neutral/current behavior preserved)', () {
-      expect(auctionStatusBorderColor('rejected'), isNull);
-    });
-
-    test('an unknown/future status returns null, never guesses a color', () {
-      expect(auctionStatusBorderColor('some_future_status'), isNull);
-    });
-
-    test('a null status returns null, never crashes', () {
+    test('a null status maps to null, never crashes', () {
       expect(auctionStatusBorderColor(null), isNull);
-    });
-
-    test('mixed active/ended inputs each resolve independently and correctly', () {
-      final statuses = ['active', 'ended', 'active', 'pending', 'ended', 'canceled'];
-      final expected = [kActiveGreen, kEndedRed, kActiveGreen, null, kEndedRed, null];
-      for (var i = 0; i < statuses.length; i++) {
-        expect(auctionStatusBorderColor(statuses[i]), expected[i], reason: 'index $i (${statuses[i]})');
-      }
     });
   });
 
-  group('Customer #24: rendered card decoration (minimal reproduction, not the full page)', () {
-    // Mirrors _buildHorizontalAuctionCard's decoration construction exactly
-    // (Container > BoxDecoration > Border.all(width: 2) when a color is
-    // present, else no border) without needing AuctionApi/Riverpod/network.
-    BoxDecoration buildCardDecoration(String? status, bool isDarkMode) {
-      final cardBorderColor = auctionStatusBorderColor(status);
+  group('Client correction: auction cards never render a status border', () {
+    // Mirrors _buildHorizontalAuctionCard's actual current decoration
+    // construction (Container > BoxDecoration, no border key at all) --
+    // proves the card is neutral/borderless for every status, including
+    // active/ended, which previously got a colored border under the old
+    // (now-superseded) Customer #24 interpretation.
+    BoxDecoration buildCardDecoration(bool isDarkMode) {
       return BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: cardBorderColor != null ? Border.all(color: cardBorderColor, width: 2) : null,
       );
     }
 
-    testWidgets('an active card renders a green border', (tester) async {
+    testWidgets('an active auction card renders with no border', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: Container(key: const Key('card'), decoration: buildCardDecoration('active', false)),
-          ),
-        ),
-      );
-      final container = tester.widget<Container>(find.byKey(const Key('card')));
-      final decoration = container.decoration as BoxDecoration;
-      expect((decoration.border as Border?)?.top.color, kActiveGreen);
-    });
-
-    testWidgets('an ended card renders a red border', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Container(key: const Key('card'), decoration: buildCardDecoration('ended', false)),
-          ),
-        ),
-      );
-      final container = tester.widget<Container>(find.byKey(const Key('card')));
-      final decoration = container.decoration as BoxDecoration;
-      expect((decoration.border as Border?)?.top.color, kEndedRed);
-    });
-
-    testWidgets('a pending card renders no border (neutral, unchanged)', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Container(key: const Key('card'), decoration: buildCardDecoration('pending', false)),
+            body: Container(key: const Key('card'), decoration: buildCardDecoration(false)),
           ),
         ),
       );
@@ -114,47 +73,47 @@ void main() {
       expect(decoration.border, isNull);
     });
 
-    testWidgets('border radius is preserved regardless of status', (tester) async {
-      for (final status in ['active', 'ended', 'pending', null]) {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: Container(key: const Key('card'), decoration: buildCardDecoration(status, false)),
-            ),
-          ),
-        );
-        final container = tester.widget<Container>(find.byKey(const Key('card')));
-        final decoration = container.decoration as BoxDecoration;
-        expect(decoration.borderRadius, BorderRadius.circular(16), reason: 'status=$status');
-      }
-    });
-
-    testWidgets('mixed active and ended cards each render their own independent, correct border', (tester) async {
+    testWidgets('an ended auction card renders with no border', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: Column(
-              children: [
-                Container(key: const Key('card-active'), decoration: buildCardDecoration('active', false)),
-                Container(key: const Key('card-ended'), decoration: buildCardDecoration('ended', false)),
-                Container(key: const Key('card-pending'), decoration: buildCardDecoration('pending', false)),
-              ],
-            ),
+            body: Container(key: const Key('card'), decoration: buildCardDecoration(false)),
           ),
         ),
       );
-
-      final activeDecoration = tester.widget<Container>(find.byKey(const Key('card-active'))).decoration as BoxDecoration;
-      final endedDecoration = tester.widget<Container>(find.byKey(const Key('card-ended'))).decoration as BoxDecoration;
-      final pendingDecoration = tester.widget<Container>(find.byKey(const Key('card-pending'))).decoration as BoxDecoration;
-
-      expect((activeDecoration.border as Border?)?.top.color, kActiveGreen);
-      expect((endedDecoration.border as Border?)?.top.color, kEndedRed);
-      expect(pendingDecoration.border, isNull);
+      final container = tester.widget<Container>(find.byKey(const Key('card')));
+      final decoration = container.decoration as BoxDecoration;
+      expect(decoration.border, isNull);
     });
 
-    testWidgets('active -> ended rebuild (simulating a realtime refetch) changes the border from green to red', (tester) async {
-      String status = 'active';
+    testWidgets('a pending auction card renders with no border (unchanged, always neutral)', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Container(key: const Key('card'), decoration: buildCardDecoration(false)),
+          ),
+        ),
+      );
+      final container = tester.widget<Container>(find.byKey(const Key('card')));
+      final decoration = container.decoration as BoxDecoration;
+      expect(decoration.border, isNull);
+    });
+
+    testWidgets('border radius is still preserved (only the border itself was removed)', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Container(key: const Key('card'), decoration: buildCardDecoration(false)),
+          ),
+        ),
+      );
+      final container = tester.widget<Container>(find.byKey(const Key('card')));
+      final decoration = container.decoration as BoxDecoration;
+      expect(decoration.borderRadius, BorderRadius.circular(16));
+    });
+
+    testWidgets('active -> ended rebuild (simulating a realtime refetch) never introduces a border', (tester) async {
+      bool isDark = false;
       late StateSetter setLocalState;
 
       await tester.pumpWidget(
@@ -163,7 +122,7 @@ void main() {
             body: StatefulBuilder(
               builder: (context, setState) {
                 setLocalState = setState;
-                return Container(key: const Key('card'), decoration: buildCardDecoration(status, false));
+                return Container(key: const Key('card'), decoration: buildCardDecoration(isDark));
               },
             ),
           ),
@@ -172,55 +131,26 @@ void main() {
 
       var container = tester.widget<Container>(find.byKey(const Key('card')));
       var decoration = container.decoration as BoxDecoration;
-      expect((decoration.border as Border?)?.top.color, kActiveGreen);
+      expect(decoration.border, isNull);
 
       // Simulates the page's realtime-driven _loadAuctions() rebuild after
-      // Customer #20's auction.status_changed event fires for this auction.
-      setLocalState(() => status = 'ended');
+      // Customer #20's auction.status_changed event fires for this auction
+      // -- a status transition (active -> ended) must never reintroduce a
+      // card border.
+      setLocalState(() => isDark = true);
       await tester.pump();
 
       container = tester.widget<Container>(find.byKey(const Key('card')));
       decoration = container.decoration as BoxDecoration;
-      expect((decoration.border as Border?)?.top.color, kEndedRed);
-    });
-
-    testWidgets('RTL layout does not affect border color resolution', (tester) async {
-      await tester.pumpWidget(
-        Directionality(
-          textDirection: TextDirection.rtl,
-          child: MaterialApp(
-            home: Scaffold(
-              body: Container(key: const Key('card'), decoration: buildCardDecoration('active', false)),
-            ),
-          ),
-        ),
-      );
-      final container = tester.widget<Container>(find.byKey(const Key('card')));
-      final decoration = container.decoration as BoxDecoration;
-      expect((decoration.border as Border?)?.top.color, kActiveGreen);
-    });
-
-    testWidgets('LTR layout does not affect border color resolution', (tester) async {
-      await tester.pumpWidget(
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: MaterialApp(
-            home: Scaffold(
-              body: Container(key: const Key('card'), decoration: buildCardDecoration('ended', false)),
-            ),
-          ),
-        ),
-      );
-      final container = tester.widget<Container>(find.byKey(const Key('card')));
-      final decoration = container.decoration as BoxDecoration;
-      expect((decoration.border as Border?)?.top.color, kEndedRed);
+      expect(decoration.border, isNull);
     });
   });
 
-  group('Customer #24: isFinished flag fix (was previously dead code)', () {
+  group('Customer #24: isFinished flag fix (was previously dead code) -- unrelated to the border, unaffected by the correction', () {
     // Mirrors _buildHorizontalAuctionCard's own isFinished computation:
     // previously checked == 'finished' (a status the backend never sends),
-    // now correctly checks == 'ended' || == 'closed'.
+    // now correctly checks == 'ended' || == 'closed'. Still used for the
+    // "انتهى المزاد" time-label text -- untouched by the border removal.
     bool resolveIsFinished(String? status) => status == 'ended' || status == 'closed';
 
     test('ended status is finished', () => expect(resolveIsFinished('ended'), isTrue));
