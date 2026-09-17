@@ -1583,4 +1583,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_409 => 'تعذّر فتح الرابط';
+
+  @override
+  String get text_410 => 'مزايدة';
+
+  @override
+  String get text_411 => 'مزايدات';
 }

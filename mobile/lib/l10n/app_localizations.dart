@@ -3159,6 +3159,18 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'تعذّر فتح الرابط'**
   String get text_409;
+
+  /// No description provided for @text_410.
+  ///
+  /// In ar, this message translates to:
+  /// **'مزايدة'**
+  String get text_410;
+
+  /// No description provided for @text_411.
+  ///
+  /// In ar, this message translates to:
+  /// **'مزايدات'**
+  String get text_411;
 }
 
 class _AppLocalizationsDelegate

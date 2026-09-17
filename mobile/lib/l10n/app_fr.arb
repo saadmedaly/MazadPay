@@ -501,5 +501,7 @@
   "text_406": "Félicitations, vous avez remporté l'enchère",
   "text_407": "J'ai remporté l'enchère « {title} » sur MazadPay pour {amount}.",
   "text_408": "Site web",
-  "text_409": "Impossible d'ouvrir le lien"
+  "text_409": "Impossible d'ouvrir le lien",
+  "text_410": "enchère",
+  "text_411": "enchères"
 }

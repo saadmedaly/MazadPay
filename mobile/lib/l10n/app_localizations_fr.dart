@@ -1577,4 +1577,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get text_409 => 'Impossible d\'ouvrir le lien';
+
+  @override
+  String get text_410 => 'enchère';
+
+  @override
+  String get text_411 => 'enchères';
 }

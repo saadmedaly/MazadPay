@@ -1552,4 +1552,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get text_409 => 'Couldn\'t open the link';
+
+  @override
+  String get text_410 => 'bid';
+
+  @override
+  String get text_411 => 'bids';
 }

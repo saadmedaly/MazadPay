@@ -750,13 +750,17 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
 
               const SizedBox(height: 24),
 
-              // Stats Section - Description et Visites
-              // The "عدد المزايدين"/"عدد المزايدات" (bid count) box used to
-              // live here, duplicating the count already shown next to
-              // "مشاهدة كل المزايدين" in _buildBidHistorySection below. It is
-              // replaced with the auction's actual product description
-              // (client feedback A9); null/empty description hides this
-              // half of the row gracefully instead of showing a blank box.
+              // Stats Section - Bid Count et Visites
+              // Customer Request #29: the product-description box that used
+              // to occupy this half of the row (client feedback A9,
+              // Icons.description_outlined + auction.description) is
+              // replaced with a gavel icon + the real, dynamic bid count
+              // (auction.bidderCount -- the same field already used
+              // elsewhere on this page, e.g. _buildBidHistorySection below
+              // and the countdown/stats header), per the client's reference
+              // screenshot. Unlike the description box it replaces, this is
+              // always shown (never conditionally hidden), matching the
+              // screenshot's "1 مزايدة" example even at zero bids.
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -766,53 +770,52 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ),
                 child: Row(
                   children: [
-                    // Product description (replaces duplicate bid-count box)
-                    if (auction.description.trim().isNotEmpty)
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF0081FF,
-                                ).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.description_outlined,
-                                color: Color(0xFF0081FF),
-                                size: 20,
+                    // Bid count (replaces the product-description box)
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF0081FF,
+                              ).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.gavel_outlined,
+                              color: Color(0xFF0081FF),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              '${auction.bidderCount} ${auction.bidderCount == 1 ? AppLocalizations.of(context)!.text_410 : AppLocalizations.of(context)!.text_411}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: 'Plus Jakarta Sans',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDarkMode
+                                    ? Colors.white
+                                    : Colors.black87,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                auction.description.trim(),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontFamily: 'Plus Jakarta Sans',
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDarkMode
-                                      ? Colors.white
-                                      : Colors.black87,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
+                    ),
 
-                    // Separator (only when both sides have content)
-                    if (auction.description.trim().isNotEmpty)
-                      Container(
-                        width: 1,
-                        height: 40,
-                        margin: const EdgeInsets.symmetric(horizontal: 8),
-                        color: Colors.grey.withValues(alpha: 0.3),
-                      ),
+                    // Separator -- both sides always have content now that
+                    // the bid-count item is unconditional.
+                    Container(
+                      width: 1,
+                      height: 40,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      color: Colors.grey.withValues(alpha: 0.3),
+                    ),
 
                     // Nombre de visiteurs
                     Expanded(

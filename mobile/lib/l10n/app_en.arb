@@ -509,5 +509,7 @@
   "text_406": "Congratulations, you won the auction",
   "text_407": "I won the auction \"{title}\" on MazadPay for {amount}.",
   "text_408": "Website",
-  "text_409": "Couldn't open the link"
+  "text_409": "Couldn't open the link",
+  "text_410": "bid",
+  "text_411": "bids"
 }
