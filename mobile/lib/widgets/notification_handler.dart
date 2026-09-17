@@ -14,6 +14,7 @@ import 'package:mezadpay/services/auction_api.dart';
 import 'package:mezadpay/services/fcm_service.dart';
 import 'package:mezadpay/services/notifications_api.dart';
 import 'package:mezadpay/services/realtime_sync_service.dart';
+import 'package:mezadpay/providers/unread_notifications_provider.dart';
 
 /// Global key pour accéder au Navigator depuis n'importe où
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -57,6 +58,13 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
       if (event.type == RealtimeEventType.auctionStatusChanged) {
         _maybeShowForegroundWinner(event.entityId);
       }
+    });
+    // Customer Request #30: Home's bell badge. Loads the real unread count
+    // once at app start (NotificationHandler sits at the app root -- see
+    // its own class doc comment) so the badge is already correct the first
+    // time Home renders, without Home needing its own separate fetch.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(unreadNotificationsCountProvider.notifier).refresh();
     });
   }
 
@@ -161,6 +169,13 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
 
   /// Handler pour les notifications reçues
   void _handleNotification(Map<String, dynamic> data) {
+    // Customer Request #30: any real-time push means at least one new
+    // unread notification now exists server-side -- refresh the bell badge
+    // regardless of type, same as notifications_page.dart's own FCM
+    // listener already reloads its list on every incoming push (not only
+    // auction_reported).
+    if (mounted) ref.read(unreadNotificationsCountProvider.notifier).refresh();
+
     final String? type = data['type'];
     if (type == 'auction_reported') {
       _navigateFromNotification(data);

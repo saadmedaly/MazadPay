@@ -20,6 +20,7 @@ import '../widgets/side_menu_drawer.dart';
 import '../widgets/live_indicator.dart';
 import '../utils/auction_image.dart';
 import '../services/realtime_sync_service.dart';
+import '../providers/unread_notifications_provider.dart';
 
 import 'all_auctions_page.dart';
 
@@ -1131,15 +1132,56 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
 
               // Notifications
-              IconButton(
-                icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 28),
-                onPressed: () {
-                   Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsPage()),
-                  );
-                },
-              ),
+              // Customer Request #30: numeric unread badge, sourced from
+              // unreadNotificationsCountProvider (real GET /notifications
+              // data, refreshed on app start and on every FCM push via
+              // NotificationHandler -- see that provider's own doc comment
+              // for why this reuses the existing NotificationsApi rather
+              // than building a second notification system). Refreshed
+              // again here on return from NotificationsPage so marking
+              // notifications read updates the badge immediately.
+              Builder(builder: (context) {
+                final unreadCount = ref.watch(unreadNotificationsCountProvider);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 28),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const NotificationsPage()),
+                        ).then((_) {
+                          ref.read(unreadNotificationsCountProvider.notifier).refresh();
+                        });
+                      },
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 4,
+                        top: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            unreadCount > 99 ? '99+' : '$unreadCount',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              }),
 
             ],
 

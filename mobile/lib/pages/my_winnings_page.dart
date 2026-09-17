@@ -4,13 +4,45 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:url_launcher/url_launcher.dart';
 
 import 'auction_winner_page.dart';
+import 'support_page.dart' show SupportContactUris;
 import '../services/auction_api.dart';
 import '../services/cache_service.dart';
 import '../services/realtime_sync_service.dart';
 import '../utils/money_formatter.dart';
 import '../utils/auction_image.dart';
+
+// Customer Request #30: MazadPay's own official WhatsApp number (matches
+// support_page.dart's canonical whatsappNumber -- the same value already
+// confirmed there to agree with login_page.dart and app_modals.dart), used
+// for winners to manually coordinate payment. Deliberately NOT the
+// per-auction seller contact number (auction_details_page.dart's
+// _supportPhone) -- this is company-to-winner, not buyer-to-seller.
+const String kMazadPayWhatsAppNumber = '47601175';
+
+/// Pure builder for the pay-button's WhatsApp deep link, extracted so it is
+/// directly unit-testable without a live url_launcher call (mirrors
+/// SupportContactUris' own doc comment on why this pattern exists). Never
+/// includes JWT/UUIDs/internal IDs/email/private phone data -- only the
+/// auction title, LOT number (if present), and the winning amount, which
+/// are all already shown on-screen to the winner themselves.
+Uri buildWinnerPaymentWhatsAppUri({
+  required String auctionTitle,
+  required String? lotNumber,
+  required String formattedAmount,
+}) {
+  final buffer = StringBuffer('مرحباً، لقد فزت بمزاد ');
+  buffer.write('"$auctionTitle"');
+  if (lotNumber != null && lotNumber.trim().isNotEmpty) {
+    buffer.write(' (LOT-$lotNumber)');
+  }
+  buffer.write(' بمبلغ $formattedAmount. أرغب في إكمال عملية الدفع.');
+
+  final base = SupportContactUris.whatsApp(kMazadPayWhatsAppNumber);
+  return base.replace(queryParameters: {'text': buffer.toString()});
+}
 
 class MyWinningsPage extends ConsumerStatefulWidget {
   const MyWinningsPage({super.key});
@@ -68,6 +100,45 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> with WidgetsBin
     _realtimeSubscription?.cancel();
     _catchUpSubscription?.cancel();
     super.dispose();
+  }
+
+  // Customer Request #30: opens WhatsApp to MazadPay's own official number
+  // with a safe prefilled message so the winner can manually coordinate
+  // payment with the company. Reuses the exact same canLaunchUrl/launchUrl
+  // guard pattern already established in support_page.dart's
+  // _launchSafely/auction_details_page.dart's _openWhatsApp -- external app
+  // mode, a snackbar on failure, never a crash.
+  Future<void> _openPaymentWhatsApp({
+    required BuildContext context,
+    required String auctionTitle,
+    required String? lotNumber,
+    required String formattedAmount,
+  }) async {
+    final uri = buildWinnerPaymentWhatsAppUri(
+      auctionTitle: auctionTitle,
+      lotNumber: lotNumber,
+      formattedAmount: formattedAmount,
+    );
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        // context.mounted, not the State's own `mounted`: `context` is a
+        // parameter here, not necessarily this State's own BuildContext, so
+        // the analyzer correctly treats a bare `mounted` check as unrelated
+        // to whether THIS specific context is still safe to use after the
+        // await above.
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذّر فتح واتساب. تأكد من تثبيته على جهازك.')),
+        );
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذّر فتح واتساب. تأكد من تثبيته على جهازك.')),
+      );
+    }
   }
 
   Future<void> _loadWinnings() async {
@@ -447,9 +518,12 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> with WidgetsBin
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
-                      // TODO: Implémenter le paiement
-                    },
+                    onPressed: () => _openPaymentWhatsApp(
+                      context: context,
+                      auctionTitle: title,
+                      lotNumber: winning['lot_number']?.toString(),
+                      formattedAmount: price,
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0081FF),
                       foregroundColor: Colors.white,
