@@ -48,6 +48,19 @@ export function useRefundWinnerInsurance() {
   })
 }
 
+export function useRelistAuction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.relistAuction,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: auctionKeys.all })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast.success('تمت إعادة نشر المزاد بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message || 'فشل في إعادة نشر المزاد'),
+  })
+}
+
 export function useCreateAuction() {
   const qc = useQueryClient()
   return useMutation({

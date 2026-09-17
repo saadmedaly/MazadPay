@@ -501,6 +501,32 @@ func (h *AdminHandler) DeleteAuction(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{"message": "Auction deleted", "id": id.String()})
 }
 
+// RelistAuction (Customer #37): admin-only relist of an ended auction (client
+// reference: relist icon in the admin auctions list, ended auctions only).
+// Takes ONLY the auction ID -- the original duration is derived
+// authoritatively inside AdminService.RelistAuction, never trusted from the
+// client.
+func (h *AdminHandler) RelistAuction(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	auction, err := h.svc.RelistAuction(c.Context(), id, adminID)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, fiber.Map{
+		"message":  "Auction relisted",
+		"id":       auction.ID.String(),
+		"status":   auction.Status,
+		"end_time": auction.EndTime,
+	})
+}
+
 // List all transactions (Admin view)
 func (h *AdminHandler) ListTransactions(c *fiber.Ctx) error {
 	status := c.Query("status")

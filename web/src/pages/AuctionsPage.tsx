@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { toast } from 'sonner'
-import { 
+import {
   Tag, ImageIcon, MinusCircle, Plus, Search,
   Calendar, Eye, Check, X, Loader2, AlertCircle, Save, Pencil, Trash2,
-  MapPin, List
+  MapPin, List, RotateCcw
 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { ImageUpload } from '@/components/shared/ImageUpload'
 import {
   useAuctions, useValidateAuction, useCreateAuction,
-  useUpdateAuction, useDeleteAuction
+  useUpdateAuction, useDeleteAuction, useRelistAuction
 } from '@/hooks/useAuctions'
 import { useCategories, useLocations } from '@/hooks/useMetadata'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
@@ -52,6 +52,7 @@ export function AuctionsPage() {
   const [rejectDialog, setRejectDialog] = useState<{ id: string; reason: string } | null>(null)
   const [approveId, setApproveId]       = useState<string | null>(null)
   const [deleteId, setDeleteId]         = useState<string | null>(null)
+  const [relistId, setRelistId]         = useState<string | null>(null)
   const [q, setQ]                       = useState('')
   const [now, setNow]                   = useState(Date.now())
 
@@ -76,6 +77,7 @@ export function AuctionsPage() {
   const createMut   = useCreateAuction()
   const updateMut   = useUpdateAuction()
   const deleteMut   = useDeleteAuction()
+  const relistMut   = useRelistAuction()
 
   const { data: categories } = useCategories()
   const { data: locations }  = useLocations()
@@ -672,6 +674,24 @@ export function AuctionsPage() {
               ><X className="w-4 h-4" /></button>
             </>)}
 
+            {/* Customer #37: relist, ended auctions only. Reuses the Bug J
+                relist primitive server-side -- the original duration is
+                derived authoritatively on the backend, never computed here. */}
+            {auction.status === 'ended' && (
+              <button
+                onClick={() => setRelistId(auction.id)}
+                disabled={relistMut.isPending && relistMut.variables === auction.id}
+                className="p-1.5 rounded-lg text-mazad-primary hover:bg-mazad-primary/10 transition-all disabled:opacity-50"
+                title="إعادة النشر"
+              >
+                {relistMut.isPending && relistMut.variables === auction.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4" />
+                )}
+              </button>
+            )}
+
             <button
               onClick={() => setDeleteId(auction.id)}
               className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-all"
@@ -1129,6 +1149,20 @@ export function AuctionsPage() {
                     setDeleteId(null)
                     refetch()
           } })
+        }}
+      />
+
+      {/* Relist Dialog (Customer #37) */}
+      <ConfirmDialog
+        open={!!relistId}
+        onOpenChange={v => !v && setRelistId(null)}
+        title="إعادة نشر هذا المزاد؟"
+        description="سيتم نشر المزاد من جديد بنفس معلومات المزاد ونفس مدته، مع إعادة تعيين الفائز ومهلة الدفع."
+        confirmLabel="إعادة النشر"
+        variant="success"
+        loading={relistMut.isPending}
+        onConfirm={() => {
+          if (relistId) relistMut.mutate(relistId, { onSuccess: () => setRelistId(null) })
         }}
       />
 

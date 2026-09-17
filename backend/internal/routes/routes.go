@@ -377,6 +377,9 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 		c.Locals("mediaService", mediaSvc)
 		return adminHandler.UploadAuctionImages(c)
 	})
+	// Customer #37: admin-only relist of an ended auction (Bug J relist
+	// primitive, reused).
+	admin.Post("/auctions/:id/relist", adminHandler.RelistAuction)
 
 	// Additional management routes
 	admin.Get("/transactions", adminHandler.ListTransactions)

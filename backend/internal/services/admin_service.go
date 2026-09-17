@@ -53,6 +53,12 @@ type AdminService interface {
 	// never trusted from the client. See its own doc comment for the full
 	// authorization/idempotency/atomicity contract.
 	AdminAddBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error)
+	// RelistAuction (Customer #37): admin-only relist of an ended auction,
+	// reusing the Bug J atomic relist transition. Original duration is
+	// derived server-side from the auction's own stored start/end time,
+	// never trusted from the client. See its own doc comment for the full
+	// contract.
+	RelistAuction(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) (*models.Auction, error)
 	ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error)
 	ReviewReport(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
 	DeleteReport(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error
@@ -1014,6 +1020,79 @@ func (s *adminService) RefundWinnerInsurance(ctx context.Context, auctionID uuid
 	}
 
 	return ledgerTx, nil
+}
+
+// RelistAuction (Customer #37): admin-only relist of an ENDED auction,
+// reusing the exact same Bug J atomic transition (TryRelistAuctionAtomically)
+// already proven for the seller-facing relist flow -- same preserved data,
+// same winner/payment-state reset, same untouched bid history. Two
+// deliberate differences from the seller-facing auctionService.RelistAuction:
+//  1. No seller-ownership check -- an admin may relist any user's ended
+//     auction, which is the entire point of this admin action.
+//  2. The new end_time is derived authoritatively HERE from the auction's
+//     own stored (start_time, end_time) -- never trusted from client input,
+//     unlike the seller-facing flow where the caller supplies end_time
+//     directly. This guarantees the "preserve original duration" requirement
+//     always holds regardless of what an admin UI might send.
+func (s *adminService) RelistAuction(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) (*models.Auction, error) {
+	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+	if err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	if auction.Status != "ended" {
+		return nil, apperr.ErrConflict
+	}
+
+	originalDuration := auction.EndTime.Sub(auction.StartTime)
+	newEndTime := time.Now().Add(originalDuration)
+
+	dbtx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer dbtx.Rollback()
+
+	won, err := s.auctionRepo.TryRelistAuctionAtomically(ctx, dbtx, auctionID, newEndTime, auction.StartPrice)
+	if err != nil {
+		return nil, err
+	}
+	if !won {
+		// Lost the race (status changed between FindByID and this atomic
+		// UPDATE) -- reject cleanly rather than pretending success.
+		return nil, apperr.ErrConflict
+	}
+	if err := dbtx.Commit(); err != nil {
+		return nil, err
+	}
+
+	oldStatus := auction.Status
+	auction.Status = "pending"
+	auction.EndTime = newEndTime
+	auction.WinnerID = nil
+	auction.WinningBidID = nil
+	auction.PaymentDeadline = nil
+	auction.CurrentPrice = auction.StartPrice
+
+	if s.auditSvc != nil {
+		details := fmt.Sprintf("old_status=%s new_status=pending new_end_time=%s duration_preserved=%s", oldStatus, newEndTime.Format(time.RFC3339), originalDuration.String())
+		detailsJSON := models.JSONB{
+			"auction_id":   auctionID.String(),
+			"old_status":   oldStatus,
+			"new_status":   "pending",
+			"new_end_time": newEndTime.Format(time.RFC3339),
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "auction_relisted_by_admin", "auction", &auctionID, details,
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("RelistAuction: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+	s.emitAuctionEvent(auction, models.EventAuctionStatusChanged)
+
+	return auction, nil
 }
 
 // AdminAddBalance (Customer #35): admin-only direct credit to a user's

@@ -70,6 +70,17 @@ export async function refundWinnerInsurance(auctionId: string): Promise<{ transa
   return data.data
 }
 
+// Customer #37: admin relist of an ended auction, reusing the Bug J relist
+// primitive server-side. Takes only the auction id -- the new end_time is
+// derived authoritatively on the backend from the auction's own original
+// (start_time, end_time), never computed or supplied by this client.
+export async function relistAuction(auctionId: string): Promise<{ id: string; status: string; end_time: string }> {
+  const { data } = await client.post<APIResponse<{ id: string; status: string; end_time: string }>>(
+    `/v1/api/admin/auctions/${auctionId}/relist`
+  )
+  return data.data
+}
+
 export async function createAuction(payload: AuctionPayload): Promise<Auction> {
   const { data } = await client.post<APIResponse<Auction>>('/v1/api/auctions', payload)
   return data.data
