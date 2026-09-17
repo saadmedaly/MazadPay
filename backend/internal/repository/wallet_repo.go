@@ -20,6 +20,17 @@ type WalletRepository interface {
     ReleaseHold(ctx context.Context, tx *sqlx.Tx, holdID uuid.UUID) error
     ReleaseHoldsForAuction(ctx context.Context, tx *sqlx.Tx, auctionID uuid.UUID) error
     ReleaseHoldsForNonWinners(ctx context.Context, tx *sqlx.Tx, auctionID uuid.UUID, winnerID *uuid.UUID) error
+    // TryReleaseHoldForRefund (Customer #31): atomic active->released
+    // transition for exactly one hold, reporting whether THIS call is the
+    // one that actually performed it -- unlike ReleaseHold, which treats
+    // "already released" as a silent no-op success (right for the
+    // best-effort non-winner release path, wrong here: the caller needs to
+    // know whether to write a ledger row, per the requirement that a ledger
+    // row is created ONLY if the hold actually transitioned). Mirrors the
+    // exact WHERE-status-guard/RETURNING race-guard shape already
+    // established by TrySetWinnerAtomically/TryEndAuctionAtomically
+    // (auction_repo.go).
+    TryReleaseHoldForRefund(ctx context.Context, tx *sqlx.Tx, holdID uuid.UUID) (released bool, amount decimal.Decimal, userID uuid.UUID, err error)
     FreezeForWithdraw(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
     CaptureFrozenForWithdraw(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
     ReleaseFrozenForWithdraw(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
@@ -139,6 +150,34 @@ func (r *walletRepo) ReleaseHold(ctx context.Context, tx *sqlx.Tx, holdID uuid.U
         `UPDATE wallets SET balance = balance + $1, frozen_amount = frozen_amount - $1
          WHERE user_id = $2`, amount, userID)
     return err
+}
+
+// TryReleaseHoldForRefund (Customer #31): same atomic active->released
+// transition as ReleaseHold, but reports whether this call actually
+// performed it (released=false, no error, for an already-released/missing
+// hold) instead of silently treating that as success -- the admin
+// manual-refund flow needs this distinction to decide whether to write a
+// ledger row, and to reject a second refund attempt cleanly rather than
+// pretending it succeeded.
+func (r *walletRepo) TryReleaseHoldForRefund(ctx context.Context, tx *sqlx.Tx, holdID uuid.UUID) (bool, decimal.Decimal, uuid.UUID, error) {
+    var amount decimal.Decimal
+    var userID uuid.UUID
+    err := tx.QueryRowContext(ctx,
+        `UPDATE wallet_holds SET status = 'released', released_at = now()
+         WHERE id = $1 AND status = 'active'
+         RETURNING amount, user_id`, holdID).Scan(&amount, &userID)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return false, decimal.Zero, uuid.Nil, nil
+        }
+        return false, decimal.Zero, uuid.Nil, err
+    }
+    if _, err := tx.ExecContext(ctx,
+        `UPDATE wallets SET balance = balance + $1, frozen_amount = frozen_amount - $1
+         WHERE user_id = $2`, amount, userID); err != nil {
+        return false, decimal.Zero, uuid.Nil, err
+    }
+    return true, amount, userID, nil
 }
 
 // ReleaseHoldsForAuction libère tous les wallet_holds actifs d'un auction donné

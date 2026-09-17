@@ -590,6 +590,33 @@ func (h *AdminHandler) ValidateTransaction(c *fiber.Ctx) error {
 	})
 }
 
+// RefundWinnerInsurance (Customer #31): admin-only manual release of the
+// auction winner's own insurance hold -- the one case the automatic
+// non-winner refund (ReleaseHoldsForNonWinners, run at auction finalization)
+// deliberately never covers. Takes ONLY the auction ID from the request;
+// the winner's identity and the refunded amount are both derived
+// authoritatively inside AdminService.RefundWinnerInsurance, never trusted
+// from the client.
+func (h *AdminHandler) RefundWinnerInsurance(c *fiber.Ctx) error {
+	auctionID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	ledgerTx, err := h.svc.RefundWinnerInsurance(c.Context(), auctionID, adminID)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, fiber.Map{
+		"message":        "Winner insurance refunded",
+		"transaction_id": ledgerTx.ID.String(),
+		"amount":         ledgerTx.Amount.String(),
+	})
+}
+
 // Review/Action on report (Admin view)
 func (h *AdminHandler) ReviewReport(c *fiber.Ctx) error {
 	type ReviewRequest struct {

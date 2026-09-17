@@ -41,6 +41,12 @@ type AdminService interface {
 	ListTransactions(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error)
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error)
 	ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error
+	// RefundWinnerInsurance (Customer #31): admin-only manual release of the
+	// WINNER's own insurance hold for an ended auction -- the one case
+	// AuctionService.FinalizeExpiredAuction/ReleaseHoldsForNonWinners
+	// deliberately never auto-refunds. See its own doc comment for the full
+	// authorization/idempotency/atomicity contract.
+	RefundWinnerInsurance(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) (*models.Transaction, error)
 	ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error)
 	ReviewReport(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
 	DeleteReport(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error
@@ -157,6 +163,7 @@ type adminService struct {
 	auctionRepo  repository.AuctionRepository
 	bidRepo      repository.BidRepository
 	txRepo       repository.TransactionRepository
+	walletRepo   repository.WalletRepository
 	reportRepo   repository.ReportRepository
 	kycRepo      repository.KYCRepository
 	contentRepo  repository.ContentRepository
@@ -191,6 +198,7 @@ func NewAdminService(
 	logger *zap.Logger,
 	jwtExpiry int,
 	globalHub GlobalHub,
+	walletRepo repository.WalletRepository,
 ) AdminService {
 	return &adminService{
 		db:           db,
@@ -211,6 +219,7 @@ func NewAdminService(
 		logger:       logger,
 		jwtExpiry:    jwtExpiry,
 		globalHub:    globalHub,
+		walletRepo:   walletRepo,
 	}
 }
 
@@ -896,6 +905,109 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	}
 	_ = s.notifSvc.SendLocalizedPush(ctx, tx.UserID, notifType, language, params, data)
 	return nil
+}
+
+// RefundWinnerInsurance (Customer #31): the one case
+// AuctionService.FinalizeExpiredAuction/ReleaseHoldsForNonWinners
+// deliberately never auto-refunds -- the WINNER's own insurance hold stays
+// 'active' after auction close, by design (see ReleaseHoldsForNonWinners'
+// own doc comment), pending exactly this manual admin action.
+//
+// Every authoritative value (winner identity, hold amount, hold id) is
+// derived from the DB inside this one method -- the caller supplies only
+// auctionID and adminID, never an amount or target user, so an Admin UI can
+// never influence how much money moves or to whom (requirement #10).
+//
+// Atomicity (#6): auction/winner lookup, the hold's atomic active->released
+// transition, and the ledger row are all read/written inside ONE database
+// transaction; any failure at any step rolls back everything, so a ledger
+// row is never created without the hold actually having moved money (#9),
+// and the hold is never released without a ledger row existing for it (#8).
+//
+// Idempotency / double-refund protection (#7): TryReleaseHoldForRefund uses
+// the exact same atomic "UPDATE ... WHERE status = 'active' RETURNING ..."
+// guard already proven safe under concurrency by
+// TrySetWinnerAtomically/TryEndAuctionAtomically (Bug J) -- a hold can only
+// ever leave 'active' once. A second call (or two concurrent admin clicks)
+// for the same auction finds released=false and is rejected with
+// ErrNoActiveHold, never a silent success and never a second payout.
+func (s *adminService) RefundWinnerInsurance(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) (*models.Transaction, error) {
+	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+	if err != nil {
+		return nil, err
+	}
+	if auction.Status != "ended" {
+		return nil, apperr.ErrAuctionNotEnded
+	}
+	if auction.WinnerID == nil {
+		return nil, apperr.ErrNotAuctionWinner
+	}
+	winnerID := *auction.WinnerID
+
+	dbtx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer dbtx.Rollback()
+
+	hold, err := s.walletRepo.FindActiveHold(ctx, dbtx, winnerID, auctionID)
+	if err != nil {
+		return nil, apperr.ErrNoActiveHold
+	}
+
+	released, amount, releasedUserID, err := s.walletRepo.TryReleaseHoldForRefund(ctx, dbtx, hold.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !released {
+		// Lost the race (another admin request already refunded this exact
+		// hold between the FindActiveHold read above and this atomic
+		// UPDATE) -- reject cleanly rather than pretending success or
+		// double-crediting the wallet.
+		return nil, apperr.ErrNoActiveHold
+	}
+
+	currencyCode := auction.EffectiveCurrencyCode()
+	ledgerTx := &models.Transaction{
+		ID:           uuid.New(),
+		UserID:       releasedUserID,
+		AuctionID:    &auctionID,
+		Type:         "insurance_refund",
+		Amount:       amount,
+		Status:       "completed",
+		ReviewedBy:   &adminID,
+		WalletHoldID: &hold.ID,
+		CurrencyCode: &currencyCode,
+	}
+	if err := s.txRepo.CreateTx(ctx, dbtx, ledgerTx); err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(); err != nil {
+		return nil, err
+	}
+
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"auction_id":  auctionID.String(),
+			"winner_id":   releasedUserID.String(),
+			"hold_id":     hold.ID.String(),
+			"amount":      amount.String(),
+			"currency":    currencyCode,
+			"transaction": ledgerTx.ID.String(),
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "winner_insurance_refunded", "auction", &auctionID,
+			fmt.Sprintf("winner_id=%s amount=%s", releasedUserID, amount.String()),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("RefundWinnerInsurance: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return ledgerTx, nil
 }
 
 func (s *adminService) ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error) {

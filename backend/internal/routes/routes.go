@@ -53,7 +53,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	auctionSvc := services.NewAuctionService(db, auctionRepo, bidRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger, globalHub)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
-	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours, globalHub)
+	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours, globalHub, walletRepo)
 	walletSvc := services.NewWalletService(db, walletRepo, txRepo, reqRepo, userRepo, notifSvc, auditSvc, logger)
 	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc, globalHub)
 	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger, globalHub)
@@ -383,6 +383,9 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Get("/transactions/:id", adminHandler.GetTransaction)
 	admin.Get("/transactions/:id/receipt-url", walletHandler.GetReceiptURL)
 	admin.Put("/transactions/:id/validate", adminHandler.ValidateTransaction)
+	// Customer #31: manual admin release of a WINNER's own insurance hold
+	// (the auto non-winner refund at finalization never covers this).
+	admin.Post("/auctions/:id/refund-winner-insurance", adminHandler.RefundWinnerInsurance)
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)
 	admin.Delete("/reports/:id", adminHandler.DeleteReport)

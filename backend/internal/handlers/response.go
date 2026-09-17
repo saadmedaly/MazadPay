@@ -319,6 +319,15 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "wallet_locked":
 		logger.Warn("Wallet locked", logFields...)
 		return Fail(c, 403, "wallet_locked", "Wallet is currently locked")
+	case "auction_not_ended":
+		logger.Info("Winner insurance refund rejected: auction not ended", logFields...)
+		return Fail(c, 422, "auction_not_ended", "لا يمكن إرجاع مبلغ التأمين قبل انتهاء المزاد")
+	case "not_auction_winner":
+		logger.Info("Winner insurance refund rejected: auction has no winner", logFields...)
+		return Fail(c, 422, "not_auction_winner", "هذا المزاد ليس له فائز")
+	case "no_active_hold":
+		logger.Info("Winner insurance refund rejected: no active hold (already refunded or none existed)", logFields...)
+		return Fail(c, 409, "no_active_hold", "تم إرجاع مبلغ التأمين مسبقاً أو لا يوجد مبلغ تأمين محجوز")
 	case "receipt_required":
 		logger.Info("Receipt required for transaction", logFields...)
 		return Fail(c, 400, "receipt_required", "Receipt is required for this transaction")

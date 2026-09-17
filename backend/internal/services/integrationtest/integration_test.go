@@ -4539,6 +4539,7 @@ func newTestAdminService(t *testing.T, env *testEnv) services.AdminService {
 		env.db, env.userRepo, env.auctionRepo, env.bidRepo, txRepo, reportRepo,
 		kycRepo, contentRepo, invRepo, env.reqRepo, settingsRepo,
 		mediaSvc, env.notifSvc, auditSvc, env.rdb, env.logger, cfg.JWT.ExpiryHours, nil,
+		env.walletRepo,
 	)
 }
 

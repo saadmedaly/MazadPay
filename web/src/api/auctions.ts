@@ -58,6 +58,18 @@ export async function validateAuction(payload: {
   await client.put(`/v1/api/admin/auctions/${payload.id}/validate`, payload)
 }
 
+// Customer #31: admin manual release of the auction WINNER's own insurance
+// hold -- the one case the automatic non-winner refund (run at auction
+// finalization) never covers. Takes only the auction id; the backend
+// derives the winner and the refunded amount authoritatively, never from
+// this client.
+export async function refundWinnerInsurance(auctionId: string): Promise<{ transaction_id: string; amount: string }> {
+  const { data } = await client.post<APIResponse<{ transaction_id: string; amount: string }>>(
+    `/v1/api/admin/auctions/${auctionId}/refund-winner-insurance`
+  )
+  return data.data
+}
+
 export async function createAuction(payload: AuctionPayload): Promise<Auction> {
   const { data } = await client.post<APIResponse<Auction>>('/v1/api/auctions', payload)
   return data.data

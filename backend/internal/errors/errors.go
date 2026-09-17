@@ -77,6 +77,13 @@ var (
 	ErrWalletLocked        = errors.New("wallet_locked")
 	ErrReceiptRequired     = errors.New("receipt_required")
 
+	// Customer #31: admin manual winner-insurance refund. Distinct codes so
+	// the admin UI can show the exact right message rather than a generic
+	// failure for each of these genuinely different rejection reasons.
+	ErrAuctionNotEnded  = errors.New("auction_not_ended")   // status != 'ended'
+	ErrNotAuctionWinner = errors.New("not_auction_winner")  // target user_id != auctions.winner_id
+	ErrNoActiveHold     = errors.New("no_active_hold")      // no active wallet_holds row for (winner, auction) -- already refunded, or never held
+
 	// Chat / Messagerie
 	ErrConversationNotFound     = errors.New("conversation_not_found")
 	ErrNotConversationMember    = errors.New("not_conversation_member")

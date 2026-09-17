@@ -36,6 +36,18 @@ export function useValidateAuction() {
   })
 }
 
+export function useRefundWinnerInsurance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.refundWinnerInsurance,
+    onSuccess: (_, auctionId) => {
+      qc.invalidateQueries({ queryKey: [...auctionKeys.all, auctionId] })
+      toast.success('تم إرجاع مبلغ التأمين للفائز بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message || 'فشل إرجاع مبلغ التأمين'),
+  })
+}
+
 export function useCreateAuction() {
   const qc = useQueryClient()
   return useMutation({
