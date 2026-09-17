@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Modify this file to customize your launch splash screen -->
-<!-- Customer Request #28: see drawable/launch_background.xml's comment --
-     matches the new splash artwork's background blue instead of the
+<!-- Customer Request #28: see drawable/launch_background.xml's comment.
+     Matches the new splash artwork's background blue instead of the
      theme's default (light/white) colorBackground. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="#FF0B63D6" />
