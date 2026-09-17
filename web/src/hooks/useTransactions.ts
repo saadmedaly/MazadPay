@@ -46,10 +46,17 @@ export function useValidateTransaction() {
       qc.invalidateQueries({ queryKey: txnKeys.all })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       toast.success(vars.approve
-        ? 'تم اعتماد الإيداع بنجاح'
-        : 'تم رفض الإيداع'
+        ? 'تم القبول وحفظ الملاحظات بنجاح'
+        : 'تم رفض المعاملة'
       )
     },
+    onError: (err: Error) => toast.error(err.message),
+  })
+}
+
+export function useUploadReviewAttachment() {
+  return useMutation({
+    mutationFn: api.uploadReviewAttachment,
     onError: (err: Error) => toast.error(err.message),
   })
 }

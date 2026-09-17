@@ -387,6 +387,13 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	// (the auto non-winner refund at finalization never covers this).
 	admin.Post("/auctions/:id/refund-winner-insurance", adminHandler.RefundWinnerInsurance)
 	admin.Post("/transactions/:id/add-balance", adminHandler.AdminAddBalance)
+	// Customer #36: optional admin-side review attachment, unrelated to a
+	// specific transaction ID (returns a URL the client then submits with the
+	// validate call above).
+	admin.Post("/transactions/upload", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return adminHandler.UploadTransactionReviewAttachment(c)
+	})
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)
 	admin.Delete("/reports/:id", adminHandler.DeleteReport)

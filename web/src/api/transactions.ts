@@ -35,11 +35,28 @@ export async function validateTransaction(payload: {
   id: string
   approve: boolean
   notes: string
+  attachmentUrl?: string
 }): Promise<void> {
   await client.put(`/v1/api/admin/transactions/${payload.id}/validate`, {
     approve: payload.approve,
     notes:   payload.notes,
+    attachment_url: payload.attachmentUrl,
   })
+}
+
+// uploadReviewAttachment (Customer #36): an optional image the admin
+// attaches while approving/rejecting a transaction. Not tied to a specific
+// transaction id -- returns a URL the client then submits alongside
+// approve/notes in the validateTransaction call above.
+export async function uploadReviewAttachment(file: File): Promise<{ url: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await client.post<APIResponse<{ url: string }>>(
+    '/v1/api/admin/transactions/upload',
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } }
+  )
+  return data.data
 }
 
 // addBalance (Customer #35): admin credits a user's wallet directly from a

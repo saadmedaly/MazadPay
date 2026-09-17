@@ -80,6 +80,12 @@ type Transaction struct {
 	// should be sent to (e.g. via Bankily "خدمة بنكية"). Nil for deposits and
 	// for any withdrawal predating migration 000053.
 	BeneficiaryAccount *string `db:"beneficiary_account" json:"beneficiary_account,omitempty"`
+	// AdminAttachmentURL (Customer #36): an optional review-evidence image the
+	// ADMIN attaches while approving/rejecting -- distinct from ReceiptURL
+	// (the USER's own deposit proof). Uploaded via the public admin upload
+	// endpoint (same as banners), so unlike ReceiptURL it's safe to expose
+	// directly in JSON.
+	AdminAttachmentURL *string `db:"admin_attachment_url" json:"admin_attachment_url,omitempty"`
 	CreatedAt        time.Time        `db:"created_at"         json:"created_at"`
 	// CurrencyCode (migration 000046): stamped at transaction-creation time from
 	// the wallet's currency, so this historical record remains correctly

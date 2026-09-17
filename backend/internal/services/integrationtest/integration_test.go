@@ -4975,7 +4975,7 @@ func TestDeposit_ApprovalCreatesDepositConfirmed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("(8) InitiateDeposit failed: %v", err)
 	}
-	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID); err != nil {
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID, ""); err != nil {
 		t.Fatalf("(8) ValidateTransaction(approve) failed: %v", err)
 	}
 
@@ -4997,7 +4997,7 @@ func TestDeposit_RejectionCreatesDepositRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("(9) InitiateDeposit failed: %v", err)
 	}
-	if err := adminSvc.ValidateTransaction(ctx, tx.ID, false, "insufficient proof", admin.ID); err != nil {
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, false, "insufficient proof", admin.ID, ""); err != nil {
 		t.Fatalf("(9) ValidateTransaction(reject) failed: %v", err)
 	}
 
@@ -5019,13 +5019,13 @@ func TestDeposit_RepeatedValidationDoesNotDuplicateOutcomeNotification(t *testin
 	if err != nil {
 		t.Fatalf("(10) InitiateDeposit failed: %v", err)
 	}
-	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID); err != nil {
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID, ""); err != nil {
 		t.Fatalf("(10) ValidateTransaction (first call) failed: %v", err)
 	}
 	// Second call on an already-terminal transaction: the existing terminal-
 	// status guard in ValidateTransaction/UpdateStatus must make this a no-op,
 	// not a duplicate notification.
-	_ = adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID)
+	_ = adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID, "")
 
 	count := countNotificationsOfType(t, env, user.ID, "deposit_confirmed")
 	if count != 1 {
@@ -5157,7 +5157,7 @@ func TestWithdrawal_CompletionCreatesWithdrawalProcessed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("(14) RequestWithdraw failed: %v", err)
 	}
-	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID); err != nil {
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID, ""); err != nil {
 		t.Fatalf("(14) ValidateTransaction(approve) failed: %v", err)
 	}
 
@@ -5180,7 +5180,7 @@ func TestWithdrawal_RejectionProducesSemanticallyCorrectNotification(t *testing.
 	if err != nil {
 		t.Fatalf("(15) RequestWithdraw failed: %v", err)
 	}
-	if err := adminSvc.ValidateTransaction(ctx, tx.ID, false, "suspicious activity", admin.ID); err != nil {
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, false, "suspicious activity", admin.ID, ""); err != nil {
 		t.Fatalf("(15) ValidateTransaction(reject) failed: %v", err)
 	}
 
@@ -5208,10 +5208,10 @@ func TestWithdrawal_RepeatedValidationDoesNotDuplicateNotification(t *testing.T)
 	if err != nil {
 		t.Fatalf("(16) RequestWithdraw failed: %v", err)
 	}
-	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID); err != nil {
+	if err := adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID, ""); err != nil {
 		t.Fatalf("(16) ValidateTransaction (first call) failed: %v", err)
 	}
-	_ = adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID)
+	_ = adminSvc.ValidateTransaction(ctx, tx.ID, true, "", admin.ID, "")
 
 	count := countNotificationsOfType(t, env, user.ID, "withdrawal_processed")
 	if count != 1 {

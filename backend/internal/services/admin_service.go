@@ -40,7 +40,7 @@ type AdminService interface {
 	DeleteAuction(ctx context.Context, id uuid.UUID) error
 	ListTransactions(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error)
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error)
-	ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error
+	ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID, attachmentURL string) error
 	// RefundWinnerInsurance (Customer #31): admin-only manual release of the
 	// WINNER's own insurance hold for an ended auction -- the one case
 	// AuctionService.FinalizeExpiredAuction/ReleaseHoldsForNonWinners
@@ -794,7 +794,7 @@ func withdrawalReasonSuffix(notes, language string) string {
 	}
 }
 
-func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error {
+func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID, attachmentURL string) error {
 	status := "rejected"
 	if approve {
 		status = "completed"
@@ -804,7 +804,7 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	// financier — Financial audit logs, ne bloque jamais l'opération si l'audit échoue).
 	txBefore, findErr := s.txRepo.FindByID(ctx, id, nil)
 
-	if err := s.txRepo.UpdateStatus(ctx, id, status, notes, adminID); err != nil {
+	if err := s.txRepo.UpdateStatus(ctx, id, status, notes, adminID, attachmentURL); err != nil {
 		return err
 	}
 

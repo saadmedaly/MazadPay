@@ -556,13 +556,21 @@ func (h *AdminHandler) GetTransaction(c *fiber.Ctx) error {
 // Validate/Approve transaction (Admin view)
 func (h *AdminHandler) ValidateTransaction(c *fiber.Ctx) error {
 	type ValidateRequest struct {
-		Approve bool   `json:"approve"`
-		Notes   string `json:"notes"`
+		Approve       bool   `json:"approve"`
+		Notes         string `json:"notes"`
+		AttachmentURL string `json:"attachment_url"`
 	}
 
 	var req ValidateRequest
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
+	}
+
+	// Customer #36: rejection always requires a note -- the mobile/admin UI
+	// already enforces this, but the server must too (defense in depth,
+	// matching every other financial-integrity guard in this codebase).
+	if !req.Approve && strings.TrimSpace(req.Notes) == "" {
+		return BadRequest(c, "Notes are required when rejecting a transaction")
 	}
 
 	id, err := uuid.Parse(c.Params("id"))
@@ -574,7 +582,7 @@ func (h *AdminHandler) ValidateTransaction(c *fiber.Ctx) error {
 	if err != nil {
 		return Unauthorized(c)
 	}
-	if err := h.svc.ValidateTransaction(c.Context(), id, req.Approve, req.Notes, adminID); err != nil {
+	if err := h.svc.ValidateTransaction(c.Context(), id, req.Approve, req.Notes, adminID, req.AttachmentURL); err != nil {
 		return InternalError(c, "Failed to validate transaction")
 	}
 
@@ -648,6 +656,55 @@ func (h *AdminHandler) AdminAddBalance(c *fiber.Ctx) error {
 		"message":        "Balance added",
 		"transaction_id": ledgerTx.ID.String(),
 		"amount":         ledgerTx.Amount.String(),
+	})
+}
+
+// UploadTransactionReviewAttachment (Customer #36): an optional image the
+// ADMIN attaches while approving/rejecting a transaction (client reference
+// UI: attachment slot next to the notes textarea). Distinct from
+// wallet_handler.go's UploadReceipt, which is USER-scoped and 404s for any
+// transaction the caller doesn't own -- this endpoint isn't coupled to a
+// specific transaction at all (admin-only middleware is the only guard),
+// mirroring UploadBannerImage/UploadCategoryImage's public-R2-upload
+// pattern. The returned URL is submitted alongside notes/approve in the
+// next ValidateTransaction call, never persisted by this endpoint itself.
+func (h *AdminHandler) UploadTransactionReviewAttachment(c *fiber.Ctx) error {
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		h.logger.Error("[UploadTransactionReviewAttachment] Media service not available")
+		return InternalError(c, "Media service not available")
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		return BadRequest(c, "No file provided")
+	}
+	if file.Size > 10*1024*1024 {
+		return BadRequest(c, "File too large (max 10MB)")
+	}
+	ext := filepath.Ext(file.Filename)
+	allowedExts := map[string]bool{
+		".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true,
+	}
+	if !allowedExts[ext] {
+		return BadRequest(c, "Invalid file type (only jpg, jpeg, png, webp, gif allowed)")
+	}
+
+	fileReader, err := file.Open()
+	if err != nil {
+		return InternalError(c, "Failed to open file")
+	}
+	defer fileReader.Close()
+
+	url, err := mediaSvc.UploadFile(c.Context(), fileReader, file, "transaction-review")
+	if err != nil {
+		h.logger.Error("[UploadTransactionReviewAttachment] R2 upload failed", zap.Error(err))
+		return InternalError(c, "Failed to upload attachment: "+err.Error())
+	}
+
+	return OK(c, fiber.Map{
+		"message": "Attachment uploaded successfully",
+		"url":     url,
 	})
 }
 

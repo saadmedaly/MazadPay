@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
  import { ImagePreview } from '@/components/shared/ImagePreview'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
-import { useTransaction, useValidateTransaction, useReceiptURL, useAddBalance } from '@/hooks/useTransactions'
+import { useTransaction, useValidateTransaction, useReceiptURL, useAddBalance, useUploadReviewAttachment } from '@/hooks/useTransactions'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { GATEWAY_LABELS } from '@/lib/constants'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -20,10 +20,13 @@ export function TransactionDetailPage() {
   const [confirmAction, setConfirmAction] = useState<'approve' | 'reject' | null>(null)
   const [addBalanceAmount, setAddBalanceAmount] = useState('')
   const [confirmAddBalance, setConfirmAddBalance] = useState(false)
+  const [reviewAttachment, setReviewAttachment] = useState<File | null>(null)
+  const [reviewAttachmentPreview, setReviewAttachmentPreview] = useState<string | null>(null)
 
   const { data: txn, isLoading, isError } = useTransaction(id!)
   const validate = useValidateTransaction()
   const addBalance = useAddBalance()
+  const uploadAttachment = useUploadReviewAttachment()
   const { data: receiptData } = useReceiptURL(id!)
   const receiptRef = useRef<HTMLDivElement>(null)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
@@ -40,11 +43,28 @@ export function TransactionDetailPage() {
     }
   }
 
-  const handleValidate = (approve: boolean) => {
+  const handleValidate = async (approve: boolean) => {
+    let attachmentUrl: string | undefined
+    if (reviewAttachment) {
+      try {
+        const result = await uploadAttachment.mutateAsync(reviewAttachment)
+        attachmentUrl = result.url
+      } catch {
+        // uploadAttachment's onError already toasts; stop here rather than
+        // submitting the review without the attachment the admin expected.
+        return
+      }
+    }
     validate.mutate(
-      { id: id!, approve, notes },
+      { id: id!, approve, notes, attachmentUrl },
       { onSuccess: () => navigate('/transactions') }
     )
+  }
+
+  const handleReviewAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null
+    setReviewAttachment(file)
+    setReviewAttachmentPreview(file ? URL.createObjectURL(file) : null)
   }
 
   const addBalanceAmountValue = parseFloat(addBalanceAmount)
@@ -95,6 +115,10 @@ export function TransactionDetailPage() {
               { label: 'المستخدم',    value: <span className="font-bold cursor-pointer hover:text-mazad-primary transition-colors" onClick={() => navigate(`/users/${txn.user_id}`)}>{txn.user_full_name || txn.user_phone || shortID(txn.user_id)}</span>, icon: User },
               { label: 'المبلغ',      value: <span className="font-bold text-mazad-accent text-2xl">{formatPrice(parseFloat(txn.amount), txn.currency_code)}</span>, icon: CreditCard },
               { label: 'بوابة الدفع',   value: txn.gateway ? (GATEWAY_LABELS[txn.gateway] ?? txn.gateway) : '—', icon: null },
+              // beneficiary_account (Customer #34/#36): the phone/account a
+              // withdrawal is sent to -- shown only when present, so a
+              // deposit row never grows an empty/irrelevant field.
+              ...(txn.beneficiary_account ? [{ label: 'رقم المستفيد', value: <span className="font-mono font-bold">{txn.beneficiary_account}</span>, icon: null }] : []),
               { label: 'التاريخ',      value: <span className="font-medium">{formatDate(txn.created_at)}</span>, icon: Calendar },
               { label: 'الحالة',       value: <StatusBadge status={txn.status} />, icon: null },
             ].map(({ label, value }) => (
@@ -112,6 +136,18 @@ export function TransactionDetailPage() {
               <div className="text-sm text-white bg-surface-base/50 rounded-xl p-4 border border-surface-border font-medium italic">
                 {txn.admin_notes}
               </div>
+            </div>
+          )}
+
+          {/* Admin's own review attachment (Customer #36), if one was uploaded */}
+          {txn.admin_attachment_url && (
+            <div className="mt-6 pt-6 border-t border-surface-border">
+              <p className="text-xs text-surface-muted font-bold mb-2">مرفق المسؤول:</p>
+              <ImagePreview
+                src={txn.admin_attachment_url}
+                alt="مرفق المسؤول"
+                className="aspect-video bg-black/20"
+              />
             </div>
           )}
         </div>
@@ -176,6 +212,28 @@ export function TransactionDetailPage() {
             />
           </div>
 
+          {/* Optional attachment (Customer #36) */}
+          <div className="mb-8 relative">
+            <label className="text-xs font-bold text-surface-muted uppercase tracking-widest block mb-3">
+              إضافة صورة (اختياري)
+            </label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleReviewAttachmentChange}
+              className="w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg
+                         file:border-0 file:bg-mazad-primary/10 file:text-mazad-primary file:font-bold
+                         file:cursor-pointer cursor-pointer"
+            />
+            {reviewAttachmentPreview && (
+              <img
+                src={reviewAttachmentPreview}
+                alt="معاينة المرفق"
+                className="mt-3 max-h-40 rounded-xl border border-surface-border object-contain"
+              />
+            )}
+          </div>
+
           <div className="flex gap-4 relative">
             <button
               onClick={() => setConfirmAction('approve')}
@@ -183,7 +241,7 @@ export function TransactionDetailPage() {
                          bg-emerald-500 hover:bg-emerald-600 text-white transition-all shadow-lg shadow-emerald-500/20"
             >
               <Check className="w-5 h-5" />
-               تأكيد الإيداع وشحن المحفظة
+               تأكيد القبول وحفظ الملاحظات
             </button>
             <button
               disabled={!notes.trim()}
@@ -239,21 +297,25 @@ export function TransactionDetailPage() {
       <ConfirmDialog
         open={confirmAction === 'approve'}
         onOpenChange={(v) => !v && setConfirmAction(null)}
-        title={`هل أنت متأكد من الموافقة على مبلغ ${formatPrice(parseFloat(txn.amount), txn.currency_code)}؟`}
-        description="هذا الإجراء سيقوم بشحن محفظة المستخدم فوراً ولا يمكن التراجع عنه."
-        confirmLabel="تأكيد الموافقة"
+        title={`هل أنت متأكد من قبول هذه المعاملة بمبلغ ${formatPrice(parseFloat(txn.amount), txn.currency_code)}؟`}
+        description={txn.type === 'withdraw'
+          ? 'سيتم تأكيد تحويل المبلغ من رصيد المستخدم المجمد ولا يمكن التراجع عن هذا الإجراء.'
+          : 'هذا الإجراء سيقوم بشحن محفظة المستخدم فوراً ولا يمكن التراجع عنه.'}
+        confirmLabel="تأكيد القبول"
         variant="success"
-        loading={validate.isPending}
+        loading={validate.isPending || uploadAttachment.isPending}
         onConfirm={() => handleValidate(true)}
       />
       <ConfirmDialog
         open={confirmAction === 'reject'}
         onOpenChange={(v) => !v && setConfirmAction(null)}
-        title="هل أنت متأكد من رفض هذا الإيداع؟"
-        description="لن يتم شحن المحفظة وسيتلقى المستخدم إشعاراً بملاحظاتك."
+        title="هل أنت متأكد من رفض هذه المعاملة؟"
+        description={txn.type === 'withdraw'
+          ? 'سيتم إرجاع المبلغ المجمد إلى رصيد المستخدم وسيتلقى إشعاراً بملاحظاتك.'
+          : 'لن يتم شحن المحفظة وسيتلقى المستخدم إشعاراً بملاحظاتك.'}
         confirmLabel="تأكيد الرفض"
         variant="danger"
-        loading={validate.isPending}
+        loading={validate.isPending || uploadAttachment.isPending}
         onConfirm={() => handleValidate(false)}
       />
       <ConfirmDialog

@@ -106,6 +106,15 @@ export interface Transaction {
   // legacy rows -- treat absence as DEFAULT_CURRENCY_CODE ('MRU'), mirroring
   // backend Transaction.EffectiveCurrencyCode().
   currency_code?: string | null
+  // beneficiary_account (Customer #34, migration 000053): the phone/account
+  // a withdrawal is sent to. Absent/null for deposits and any withdrawal
+  // predating that migration.
+  beneficiary_account?: string | null
+  // admin_attachment_url (Customer #36, migration 000055): an optional
+  // review-evidence image the ADMIN attached while approving/rejecting --
+  // distinct from the user's own receipt (never returned directly, see
+  // useReceiptURL above).
+  admin_attachment_url?: string | null
 }
 
 export interface Bid {

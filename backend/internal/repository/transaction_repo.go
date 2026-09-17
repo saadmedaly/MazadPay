@@ -25,7 +25,7 @@ type TransactionRepository interface {
 	Create(ctx context.Context, tx *models.Transaction) error
 	CreateTx(ctx context.Context, dbtx *sqlx.Tx, tx *models.Transaction) error
 	UpdateReceipt(ctx context.Context, id uuid.UUID, userID uuid.UUID, url string, status string) error
-	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
+	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID, attachmentURL string) error
 	GetStats(ctx context.Context) (float64, float64, error) // Total, Today
 	GetPendingCount(ctx context.Context) (int, error)
 	GetWeeklySum(ctx context.Context) (float64, error)
@@ -94,7 +94,7 @@ const explicitTxJoinQuery = `
 		t.reference, t.receipt_url, t.admin_notes, t.reviewed_by, t.reviewed_at,
 		t.wallet_hold_id, t.receipt_image_temp, t.payment_method, t.fee_amount,
 		t.net_amount, t.description, t.failure_reason, t.created_at, t.currency_code,
-		t.beneficiary_account,
+		t.beneficiary_account, t.admin_attachment_url,
 		u.full_name AS user_full_name, u.phone AS user_phone
 	FROM transactions t
 	LEFT JOIN users u ON u.id = t.user_id
@@ -110,7 +110,7 @@ func scanTxJoinRow(row *sqlx.Row) (*models.Transaction, error) {
 		&tx.Reference, &tx.ReceiptURL, &tx.AdminNotes, &tx.ReviewedBy, &tx.ReviewedAt,
 		&tx.WalletHoldID, &tx.ReceiptImageTemp, &tx.PaymentMethod, &tx.FeeAmount,
 		&tx.NetAmount, &tx.Description, &tx.FailureReason, &tx.CreatedAt, &tx.CurrencyCode,
-		&tx.BeneficiaryAccount,
+		&tx.BeneficiaryAccount, &tx.AdminAttachmentURL,
 		&tx.UserFullName, &tx.UserPhone,
 	)
 	return &tx, err
@@ -199,7 +199,7 @@ func (r *transactionRepo) UpdateReceipt(ctx context.Context, id uuid.UUID, userI
 	return nil
 }
 
-func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error {
+func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID, attachmentURL string) error {
 	dbtx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -218,10 +218,14 @@ func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status
 		return apperr.ErrBadRequest
 	}
 
+	// attachmentURL empty -> NULLIF turns it into NULL rather than storing an
+	// empty string, matching every other optional string column's convention
+	// on this table (Gateway, Reference, BeneficiaryAccount, etc.).
 	if _, err := dbtx.ExecContext(ctx, `
 		UPDATE transactions
-		SET status = $1, admin_notes = $2, reviewed_by = $3, reviewed_at = now()
-		WHERE id = $4`, status, notes, adminID, id); err != nil {
+		SET status = $1, admin_notes = $2, reviewed_by = $3, reviewed_at = now(),
+		    admin_attachment_url = NULLIF($5, '')
+		WHERE id = $4`, status, notes, adminID, id, attachmentURL); err != nil {
 		return err
 	}
 
