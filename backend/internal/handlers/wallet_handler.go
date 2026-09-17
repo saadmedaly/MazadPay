@@ -240,8 +240,9 @@ func (h *WalletHandler) GetReceiptURL(c *fiber.Ctx) error {
 
 func (h *WalletHandler) Withdraw(c *fiber.Ctx) error {
 	type Request struct {
-		Amount  float64 `json:"amount"`
-		Gateway string  `json:"gateway"`
+		Amount             float64 `json:"amount"`
+		Gateway            string  `json:"gateway"`
+		BeneficiaryAccount string  `json:"beneficiary_account"`
 	}
 	var req Request
 	if err := c.BodyParser(&req); err != nil {
@@ -259,7 +260,7 @@ func (h *WalletHandler) Withdraw(c *fiber.Ctx) error {
 		return Unauthorized(c)
 	}
 	amount := decimal.NewFromFloat(req.Amount)
-	tx, err := h.svc.RequestWithdraw(c.Context(), userID, amount, req.Gateway)
+	tx, err := h.svc.RequestWithdraw(c.Context(), userID, amount, req.Gateway, req.BeneficiaryAccount)
 	if err != nil {
 		return InternalError(c, err.Error())
 	}

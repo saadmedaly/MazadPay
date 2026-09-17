@@ -1589,4 +1589,39 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_411 => 'مزايدات';
+
+  @override
+  String get text_412 => 'خدمة بنكية';
+
+  @override
+  String get text_413 =>
+      'أدخل رقم الشخص الذي تريد إرسال مبلغ السحب إليه عبر خدمة بنكية';
+
+  @override
+  String get text_414 => 'رقم المستفيد';
+
+  @override
+  String get text_415 => 'أدخل رقم الهاتف أو الحساب البنكي';
+
+  @override
+  String get text_416 => 'معلومات السحب';
+
+  @override
+  String get text_417 => 'المبلغ المطلوب سحبه';
+
+  @override
+  String get text_418 => 'الرسوم';
+
+  @override
+  String get text_419 => 'مجانية';
+
+  @override
+  String get text_420 =>
+      'سيتم إرسال المبلغ مباشرة إلى رقم المستفيد عبر خدمة بنكية.';
+
+  @override
+  String get text_421 => 'إرسال المبلغ';
+
+  @override
+  String get text_422 => 'يرجى إدخال رقم المستفيد';
 }

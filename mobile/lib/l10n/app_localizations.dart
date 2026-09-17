@@ -3171,6 +3171,72 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'مزايدات'**
   String get text_411;
+
+  /// No description provided for @text_412.
+  ///
+  /// In ar, this message translates to:
+  /// **'خدمة بنكية'**
+  String get text_412;
+
+  /// No description provided for @text_413.
+  ///
+  /// In ar, this message translates to:
+  /// **'أدخل رقم الشخص الذي تريد إرسال مبلغ السحب إليه عبر خدمة بنكية'**
+  String get text_413;
+
+  /// No description provided for @text_414.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم المستفيد'**
+  String get text_414;
+
+  /// No description provided for @text_415.
+  ///
+  /// In ar, this message translates to:
+  /// **'أدخل رقم الهاتف أو الحساب البنكي'**
+  String get text_415;
+
+  /// No description provided for @text_416.
+  ///
+  /// In ar, this message translates to:
+  /// **'معلومات السحب'**
+  String get text_416;
+
+  /// No description provided for @text_417.
+  ///
+  /// In ar, this message translates to:
+  /// **'المبلغ المطلوب سحبه'**
+  String get text_417;
+
+  /// No description provided for @text_418.
+  ///
+  /// In ar, this message translates to:
+  /// **'الرسوم'**
+  String get text_418;
+
+  /// No description provided for @text_419.
+  ///
+  /// In ar, this message translates to:
+  /// **'مجانية'**
+  String get text_419;
+
+  /// No description provided for @text_420.
+  ///
+  /// In ar, this message translates to:
+  /// **'سيتم إرسال المبلغ مباشرة إلى رقم المستفيد عبر خدمة بنكية.'**
+  String get text_420;
+
+  /// No description provided for @text_421.
+  ///
+  /// In ar, this message translates to:
+  /// **'إرسال المبلغ'**
+  String get text_421;
+
+  /// No description provided for @text_422.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى إدخال رقم المستفيد'**
+  String get text_422;
 }
 
 class _AppLocalizationsDelegate

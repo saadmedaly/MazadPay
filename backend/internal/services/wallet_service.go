@@ -27,7 +27,7 @@ type WalletService interface {
 	// a lower amount alongside a valid auction_request_id.
 	InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string, auctionRequestID *uuid.UUID) (*models.Transaction, error)
 	UploadReceipt(ctx context.Context, txID uuid.UUID, userID uuid.UUID, receiptURL string) error
-	RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error)
+	RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string, beneficiaryAccount string) (*models.Transaction, error)
 	GetTransactions(ctx context.Context, userID uuid.UUID, page, perPage int) ([]models.Transaction, int, error)
 	GetTransaction(ctx context.Context, userID uuid.UUID, txID uuid.UUID) (*models.Transaction, error)
 	// GetTransactionAny récupère une transaction sans filtrer par user_id — réservé aux
@@ -207,7 +207,7 @@ func (s *walletService) UploadReceipt(ctx context.Context, txID uuid.UUID, userI
 // FreezeForWithdraw (compare-and-set atomique). Ceci empêche qu'un utilisateur ne
 // soumette plusieurs demandes de retrait concurrentes dont la somme dépasse son
 // solde réel (audit de sécurité V09).
-func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error) {
+func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string, beneficiaryAccount string) (*models.Transaction, error) {
 	// Vérification défensive indépendante du handler (audit de sécurité V08) : un montant
 	// négatif ou nul contournait le contrôle de solde (balance >= montant négatif est
 	// toujours vrai) et pouvait, une fois approuvé côté admin, augmenter le solde au lieu
@@ -235,6 +235,9 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 		Gateway:      &gateway,
 		Status:       "pending_review",
 		CurrencyCode: &currencyCode,
+	}
+	if beneficiaryAccount != "" {
+		txModel.BeneficiaryAccount = &beneficiaryAccount
 	}
 
 	err = database.WithTransaction(s.db, func(tx *sqlx.Tx) error {

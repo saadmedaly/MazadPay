@@ -192,7 +192,7 @@ class WalletNotifier extends _$WalletNotifier {
   Future<bool> withdraw({
     required double amount,
     required String gateway,
-    Map<String, dynamic>? bankDetails,
+    String? beneficiaryAccount,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
 
@@ -200,7 +200,7 @@ class WalletNotifier extends _$WalletNotifier {
       final response = await _walletApi.withdraw(
         amount: amount,
         gateway: gateway,
-        bankDetails: bankDetails,
+        beneficiaryAccount: beneficiaryAccount,
       );
 
       if (response.success) {

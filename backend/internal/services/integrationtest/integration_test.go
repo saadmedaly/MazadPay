@@ -1527,7 +1527,7 @@ func TestRequestWithdraw_MRWallet_StampsMRU(t *testing.T) {
 	user := createTestUser(t, env, "TEST WITHDRAW MR K") // MR
 	creditWallet(t, env, user.ID, decimal.NewFromInt(500))
 
-	txn, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(100), "bank_transfer")
+	txn, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(100), "bank_transfer", "")
 	if err != nil {
 		t.Fatalf("RequestWithdraw failed: %v", err)
 	}
@@ -1590,7 +1590,7 @@ func TestWalletTransactionCurrency_CannotDiverge(t *testing.T) {
 	}
 
 	creditWallet(t, env, user.ID, decimal.NewFromInt(200))
-	txn, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(50), "bank_transfer")
+	txn, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(50), "bank_transfer", "")
 	if err != nil {
 		t.Fatalf("RequestWithdraw failed: %v", err)
 	}
@@ -5041,7 +5041,7 @@ func TestWithdrawal_SubmissionCreatesAcknowledgment(t *testing.T) {
 	creditWallet(t, env, user.ID, decimal.NewFromInt(2000))
 	walletSvc := newWalletSvc(env)
 
-	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(500), "bankily")
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(500), "bankily", "")
 	if err != nil {
 		t.Fatalf("(11) RequestWithdraw failed: %v", err)
 	}
@@ -5058,6 +5058,54 @@ func TestWithdrawal_SubmissionCreatesAcknowledgment(t *testing.T) {
 	}
 }
 
+// Customer #34: the beneficiary phone/account number (e.g. for Bankily
+// "خدمة بنكية") must be persisted on the transaction row so admin review can
+// see where to actually send the money -- not silently dropped like the
+// deposit-side phone field currently is.
+func TestWithdrawal_BeneficiaryAccountIsPersisted(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST WITHDRAW BENEFICIARY USER")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(2000))
+	walletSvc := newWalletSvc(env)
+
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(500), "bankily", "22247601175")
+	if err != nil {
+		t.Fatalf("RequestWithdraw failed: %v", err)
+	}
+	if tx.BeneficiaryAccount == nil || *tx.BeneficiaryAccount != "22247601175" {
+		t.Fatalf("expected BeneficiaryAccount '22247601175' on the returned transaction, got %v", tx.BeneficiaryAccount)
+	}
+
+	fetched, err := walletSvc.GetTransaction(ctx, user.ID, tx.ID)
+	if err != nil {
+		t.Fatalf("GetTransaction failed: %v", err)
+	}
+	if fetched.BeneficiaryAccount == nil || *fetched.BeneficiaryAccount != "22247601175" {
+		t.Fatalf("expected BeneficiaryAccount to survive a re-read from the DB, got %v", fetched.BeneficiaryAccount)
+	}
+}
+
+// An empty beneficiary account (e.g. a gateway that doesn't need one) must
+// store NULL, not an empty string -- keeps admin display logic simple
+// ("show beneficiary if present") and matches every other optional string
+// column's convention in this model (Gateway, Reference, Description, etc.).
+func TestWithdrawal_EmptyBeneficiaryAccountStaysNil(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST WITHDRAW NO BENEFICIARY USER")
+	creditWallet(t, env, user.ID, decimal.NewFromInt(2000))
+	walletSvc := newWalletSvc(env)
+
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(300), "bank_transfer", "")
+	if err != nil {
+		t.Fatalf("RequestWithdraw failed: %v", err)
+	}
+	if tx.BeneficiaryAccount != nil {
+		t.Fatalf("expected a nil BeneficiaryAccount when none was provided, got %q", *tx.BeneficiaryAccount)
+	}
+}
+
 func TestWithdrawal_SubmissionNotificationBelongsToCorrectUser(t *testing.T) {
 	env := setupEnv(t)
 	ctx := context.Background()
@@ -5066,7 +5114,7 @@ func TestWithdrawal_SubmissionNotificationBelongsToCorrectUser(t *testing.T) {
 	creditWallet(t, env, userA.ID, decimal.NewFromInt(2000))
 	walletSvc := newWalletSvc(env)
 
-	if _, err := walletSvc.RequestWithdraw(ctx, userA.ID, decimal.NewFromInt(500), "bankily"); err != nil {
+	if _, err := walletSvc.RequestWithdraw(ctx, userA.ID, decimal.NewFromInt(500), "bankily", ""); err != nil {
 		t.Fatalf("(12) RequestWithdraw(A) failed: %v", err)
 	}
 
@@ -5086,7 +5134,7 @@ func TestWithdrawal_FailedCreationCreatesNoNotification(t *testing.T) {
 	// FreezeForWithdraw fail before any transaction/notification is created.
 	walletSvc := newWalletSvc(env)
 
-	_, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(999999), "bankily")
+	_, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(999999), "bankily", "")
 	if err == nil {
 		t.Fatalf("(13) expected RequestWithdraw to fail on insufficient balance")
 	}
@@ -5105,7 +5153,7 @@ func TestWithdrawal_CompletionCreatesWithdrawalProcessed(t *testing.T) {
 	walletSvc := newWalletSvc(env)
 	adminSvc := newTestAdminService(t, env)
 
-	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(800), "bankily")
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(800), "bankily", "")
 	if err != nil {
 		t.Fatalf("(14) RequestWithdraw failed: %v", err)
 	}
@@ -5128,7 +5176,7 @@ func TestWithdrawal_RejectionProducesSemanticallyCorrectNotification(t *testing.
 	walletSvc := newWalletSvc(env)
 	adminSvc := newTestAdminService(t, env)
 
-	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(800), "bankily")
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(800), "bankily", "")
 	if err != nil {
 		t.Fatalf("(15) RequestWithdraw failed: %v", err)
 	}
@@ -5156,7 +5204,7 @@ func TestWithdrawal_RepeatedValidationDoesNotDuplicateNotification(t *testing.T)
 	walletSvc := newWalletSvc(env)
 	adminSvc := newTestAdminService(t, env)
 
-	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(800), "bankily")
+	tx, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(800), "bankily", "")
 	if err != nil {
 		t.Fatalf("(16) RequestWithdraw failed: %v", err)
 	}
@@ -5204,7 +5252,7 @@ func TestNotificationsAPI_ReturnsWithdrawalNotification(t *testing.T) {
 	creditWallet(t, env, user.ID, decimal.NewFromInt(2000))
 	walletSvc := newWalletSvc(env)
 
-	if _, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(500), "bankily"); err != nil {
+	if _, err := walletSvc.RequestWithdraw(ctx, user.ID, decimal.NewFromInt(500), "bankily", ""); err != nil {
 		t.Fatalf("(18) RequestWithdraw failed: %v", err)
 	}
 

@@ -1583,4 +1583,39 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get text_411 => 'enchères';
+
+  @override
+  String get text_412 => 'Service Bankily';
+
+  @override
+  String get text_413 =>
+      'Entrez le numéro de la personne à qui envoyer le montant via le service Bankily';
+
+  @override
+  String get text_414 => 'Numéro du bénéficiaire';
+
+  @override
+  String get text_415 => 'Entrez le numéro de téléphone ou de compte bancaire';
+
+  @override
+  String get text_416 => 'Informations de retrait';
+
+  @override
+  String get text_417 => 'Montant à retirer';
+
+  @override
+  String get text_418 => 'Frais';
+
+  @override
+  String get text_419 => 'Gratuit';
+
+  @override
+  String get text_420 =>
+      'Le montant sera envoyé directement au numéro du bénéficiaire via le service Bankily.';
+
+  @override
+  String get text_421 => 'Envoyer le montant';
+
+  @override
+  String get text_422 => 'Veuillez entrer le numéro du bénéficiaire';
 }

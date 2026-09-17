@@ -503,5 +503,16 @@
   "text_408": "Site web",
   "text_409": "Impossible d'ouvrir le lien",
   "text_410": "enchère",
-  "text_411": "enchères"
+  "text_411": "enchères",
+  "text_412": "Service Bankily",
+  "text_413": "Entrez le numéro de la personne à qui envoyer le montant via le service Bankily",
+  "text_414": "Numéro du bénéficiaire",
+  "text_415": "Entrez le numéro de téléphone ou de compte bancaire",
+  "text_416": "Informations de retrait",
+  "text_417": "Montant à retirer",
+  "text_418": "Frais",
+  "text_419": "Gratuit",
+  "text_420": "Le montant sera envoyé directement au numéro du bénéficiaire via le service Bankily.",
+  "text_421": "Envoyer le montant",
+  "text_422": "Veuillez entrer le numéro du bénéficiaire"
 }

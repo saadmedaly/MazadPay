@@ -47,10 +47,12 @@ class WalletApi {
   /// Le backend attend le champ `gateway` (voir wallet_handler.go: Request.Gateway,
   /// validate:"required") — l'ancien code envoyait `method`, que le backend ignore,
   /// d'où l'erreur "Gateway is required" systématique (fix appliqué ici).
+  /// beneficiaryAccount (Customer #34): numéro de téléphone/compte du bénéficiaire
+  /// (ex. Bankily "خدمة بنكية") — voir wallet_handler.go: Request.BeneficiaryAccount.
   Future<ApiResponse<Map<String, dynamic>>> withdraw({
     required double amount,
     required String gateway,
-    Map<String, dynamic>? bankDetails,
+    String? beneficiaryAccount,
   }) async {
     try {
       final response = await _apiService.post<Map<String, dynamic>>(
@@ -58,7 +60,7 @@ class WalletApi {
         data: {
           'amount': amount,
           'gateway': gateway,
-          'bank_details': ?bankDetails,
+          'beneficiary_account': ?beneficiaryAccount,
         },
       );
 

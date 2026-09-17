@@ -76,6 +76,10 @@ type Transaction struct {
 	UserPhone        *string          `db:"user_phone"         json:"user_phone,omitempty"`
 	Description      *string          `db:"description"        json:"description"`
 	FailureReason    *string          `db:"failure_reason"     json:"failure_reason"`
+	// BeneficiaryAccount (Customer #34): the phone/account number a withdrawal
+	// should be sent to (e.g. via Bankily "خدمة بنكية"). Nil for deposits and
+	// for any withdrawal predating migration 000053.
+	BeneficiaryAccount *string `db:"beneficiary_account" json:"beneficiary_account,omitempty"`
 	CreatedAt        time.Time        `db:"created_at"         json:"created_at"`
 	// CurrencyCode (migration 000046): stamped at transaction-creation time from
 	// the wallet's currency, so this historical record remains correctly

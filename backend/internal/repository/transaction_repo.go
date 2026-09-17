@@ -167,10 +167,12 @@ func (r *transactionRepo) CreateTx(ctx context.Context, dbtx *sqlx.Tx, tx *model
 	_, err := dbtx.NamedExecContext(ctx, `
 		INSERT INTO transactions
 			(id, user_id, auction_id, type, amount, gateway, status, reference,
-			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id, currency_code)
+			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id, currency_code,
+			 beneficiary_account)
 		VALUES
 			(:id, :user_id, :auction_id, :type, :amount, :gateway, :status, :reference,
-			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id, :currency_code)
+			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id, :currency_code,
+			 :beneficiary_account)
 	`, tx)
 	return err
 }
