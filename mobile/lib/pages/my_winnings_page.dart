@@ -22,13 +22,12 @@ import '../utils/auction_image.dart';
 // _supportPhone) -- this is company-to-winner, not buyer-to-seller.
 const String kMazadPayWhatsAppNumber = '47601175';
 
-/// Pure builder for the pay-button's WhatsApp deep link, extracted so it is
-/// directly unit-testable without a live url_launcher call (mirrors
-/// SupportContactUris' own doc comment on why this pattern exists). Never
-/// includes JWT/UUIDs/internal IDs/email/private phone data -- only the
-/// auction title, LOT number (if present), and the winning amount, which
-/// are all already shown on-screen to the winner themselves.
-Uri buildWinnerPaymentWhatsAppUri({
+/// Pure builder for the pay-button's WhatsApp message text, extracted so it
+/// is directly unit-testable and shared between both launch URIs below.
+/// Never includes JWT/UUIDs/internal IDs/email/private phone data -- only
+/// the auction title, LOT number (if present), and the winning amount,
+/// which are all already shown on-screen to the winner themselves.
+String buildWinnerPaymentMessage({
   required String auctionTitle,
   required String? lotNumber,
   required String formattedAmount,
@@ -39,9 +38,47 @@ Uri buildWinnerPaymentWhatsAppUri({
     buffer.write(' (LOT-$lotNumber)');
   }
   buffer.write(' بمبلغ $formattedAmount. أرغب في إكمال عملية الدفع.');
+  return buffer.toString();
+}
 
+/// Primary launch target: the universal https://wa.me/... link (works via
+/// the WhatsApp app when installed, or the browser otherwise).
+Uri buildWinnerPaymentWhatsAppUri({
+  required String auctionTitle,
+  required String? lotNumber,
+  required String formattedAmount,
+}) {
+  final text = buildWinnerPaymentMessage(
+    auctionTitle: auctionTitle,
+    lotNumber: lotNumber,
+    formattedAmount: formattedAmount,
+  );
   final base = SupportContactUris.whatsApp(kMazadPayWhatsAppNumber);
-  return base.replace(queryParameters: {'text': buffer.toString()});
+  return base.replace(queryParameters: {'text': text});
+}
+
+/// REAL DEVICE BUG fallback: WhatsApp's own native `whatsapp://send` deep
+/// link. On Android 11+ (targetSdk 30+), canLaunchUrl()/launchUrl() for the
+/// https://wa.me/... link can fail even with WhatsApp installed unless the
+/// host app declares package-visibility `<queries>` for that exact intent
+/// (fixed in AndroidManifest.xml) -- this native-scheme URI is a second,
+/// independent path to the same conversation/prefilled message, used only
+/// if the primary wa.me launch fails. iOS/other platforms never reach this
+/// path since the primary launch already succeeds there.
+Uri buildWinnerPaymentWhatsAppNativeUri({
+  required String auctionTitle,
+  required String? lotNumber,
+  required String formattedAmount,
+}) {
+  final text = buildWinnerPaymentMessage(
+    auctionTitle: auctionTitle,
+    lotNumber: lotNumber,
+    formattedAmount: formattedAmount,
+  );
+  return Uri.parse('whatsapp://send').replace(queryParameters: {
+    'phone': '222$kMazadPayWhatsAppNumber',
+    'text': text,
+  });
 }
 
 class MyWinningsPage extends ConsumerStatefulWidget {
@@ -102,38 +139,63 @@ class _MyWinningsPageState extends ConsumerState<MyWinningsPage> with WidgetsBin
     super.dispose();
   }
 
-  // Customer Request #30: opens WhatsApp to MazadPay's own official number
-  // with a safe prefilled message so the winner can manually coordinate
-  // payment with the company. Reuses the exact same canLaunchUrl/launchUrl
-  // guard pattern already established in support_page.dart's
-  // _launchSafely/auction_details_page.dart's _openWhatsApp -- external app
-  // mode, a snackbar on failure, never a crash.
+  // Customer Request #30 / REAL DEVICE BUG fix: opens WhatsApp to MazadPay's
+  // own official number with a safe prefilled message so the winner can
+  // manually coordinate payment with the company.
+  //
+  // canLaunchUrl() is deliberately NOT used as a gate before launching: on
+  // Android 11+ (targetSdk 30+, package visibility), it can return false for
+  // an https://wa.me/... URI even when WhatsApp IS installed, unless the
+  // host app declares <queries> visibility for that exact intent (now fixed
+  // in AndroidManifest.xml) -- a real-device bug this exact pattern caused
+  // ("تعذّر فتح واتساب" even with WhatsApp present). Instead this attempts
+  // launchUrl directly (letting a genuine failure throw), then falls back to
+  // WhatsApp's native whatsapp://send deep link before finally showing the
+  // error snackbar -- never trusting canLaunchUrl's possibly-false result as
+  // the sole signal. iOS/other platforms are unaffected (no package-
+  // visibility restriction there) and simply succeed on the first attempt.
   Future<void> _openPaymentWhatsApp({
     required BuildContext context,
     required String auctionTitle,
     required String? lotNumber,
     required String formattedAmount,
   }) async {
-    final uri = buildWinnerPaymentWhatsAppUri(
+    final primaryUri = buildWinnerPaymentWhatsAppUri(
+      auctionTitle: auctionTitle,
+      lotNumber: lotNumber,
+      formattedAmount: formattedAmount,
+    );
+    final nativeUri = buildWinnerPaymentWhatsAppNativeUri(
       auctionTitle: auctionTitle,
       lotNumber: lotNumber,
       formattedAmount: formattedAmount,
     );
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        // context.mounted, not the State's own `mounted`: `context` is a
-        // parameter here, not necessarily this State's own BuildContext, so
-        // the analyzer correctly treats a bare `mounted` check as unrelated
-        // to whether THIS specific context is still safe to use after the
-        // await above.
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذّر فتح واتساب. تأكد من تثبيته على جهازك.')),
-        );
-      }
+      final launched = await launchUrl(primaryUri, mode: LaunchMode.externalApplication);
+      if (launched) return;
+      // launchUrl returning false (no exception) is itself a "could not
+      // launch" signal on some platforms -- try the native fallback before
+      // giving up.
+      final fallbackLaunched = await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
+      if (fallbackLaunched) return;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذّر فتح واتساب. تأكد من تثبيته على جهازك.')),
+      );
     } catch (_) {
+      // The primary launch threw -- try the native whatsapp:// fallback
+      // before surfacing an error.
+      try {
+        final fallbackLaunched = await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
+        if (fallbackLaunched) return;
+      } catch (_) {
+        // fall through to the error snackbar below
+      }
+      // context.mounted, not the State's own `mounted`: `context` is a
+      // parameter here, not necessarily this State's own BuildContext, so
+      // the analyzer correctly treats a bare `mounted` check as unrelated
+      // to whether THIS specific context is still safe to use after the
+      // await above.
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تعذّر فتح واتساب. تأكد من تثبيته على جهازك.')),

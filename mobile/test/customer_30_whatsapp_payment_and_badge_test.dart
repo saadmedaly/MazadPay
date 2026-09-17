@@ -3,6 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mezadpay/pages/my_winnings_page.dart';
 import 'package:mezadpay/providers/unread_notifications_provider.dart';
 
+// REAL DEVICE BUG fix: on Android 11+ (targetSdk 30+, package visibility),
+// canLaunchUrl()/launchUrl() for the primary https://wa.me/... link can fail
+// even with WhatsApp installed unless the host app declares <queries>
+// visibility (fixed in AndroidManifest.xml). buildWinnerPaymentWhatsAppNativeUri
+// is the fallback path -- WhatsApp's own native whatsapp://send deep link --
+// tested here the same way the primary URI builder already is.
+
 // Customer Request #30: WhatsApp payment button (My Winnings) + Home
 // notification bell unread badge. Neither my_winnings_page.dart nor
 // home_page.dart has a DI seam (both construct their own API services /
@@ -60,6 +67,42 @@ void main() {
         formattedAmount: 'MRU 100',
       );
       expect(uriEmpty.queryParameters['text'], isNot(contains('LOT-')));
+    });
+  });
+
+  group('WhatsApp native fallback URI (REAL DEVICE BUG fix)', () {
+    test('uses the whatsapp:// native scheme with the correct international phone', () {
+      final uri = buildWinnerPaymentWhatsAppNativeUri(
+        auctionTitle: 'سيارة أوتوماتيك للبيع',
+        lotNumber: '116',
+        formattedAmount: 'MRU 7,200',
+      );
+      expect(uri.scheme, 'whatsapp');
+      expect(uri.host, 'send');
+      expect(uri.queryParameters['phone'], '22247601175');
+    });
+
+    test('carries the exact same prefilled message as the primary wa.me URI', () {
+      final primary = buildWinnerPaymentWhatsAppUri(
+        auctionTitle: 'سيارة أوتوماتيك للبيع',
+        lotNumber: '116',
+        formattedAmount: 'MRU 7,200',
+      );
+      final fallback = buildWinnerPaymentWhatsAppNativeUri(
+        auctionTitle: 'سيارة أوتوماتيك للبيع',
+        lotNumber: '116',
+        formattedAmount: 'MRU 7,200',
+      );
+      expect(fallback.queryParameters['text'], primary.queryParameters['text']);
+    });
+
+    test('omits the LOT segment safely when lotNumber is null, same as the primary URI', () {
+      final uri = buildWinnerPaymentWhatsAppNativeUri(
+        auctionTitle: 'سيارة',
+        lotNumber: null,
+        formattedAmount: 'MRU 100',
+      );
+      expect(uri.queryParameters['text'], isNot(contains('LOT-')));
     });
   });
 
