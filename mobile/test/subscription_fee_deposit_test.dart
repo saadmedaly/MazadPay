@@ -48,6 +48,11 @@ bool shouldNavigateToDepositAfterSubmit({
   return status == 'pending' && requestId != null && subscriptionFee != null;
 }
 
+// Mirrors DepositPage._buildMethodTile's Bankily-logo condition (Customer
+// #33): only the 'bankily' method code renders the bundled
+// assets/logo-bankily.png -- no other existing method gets a logo yet.
+bool showsBankilyLogo(String methodCode) => methodCode == 'bankily';
+
 void main() {
   group('DepositPage amount resolution', () {
     test('an auction request subscription fee (100) is used directly', () {
@@ -117,6 +122,18 @@ void main() {
     test('the generic wallet deposit never sends auction_request_id', () {
       final body = buildDepositRequestBody(amount: 250.0, gateway: 'bankily');
       expect(body.containsKey('auction_request_id'), isFalse);
+    });
+  });
+
+  group('Bankily logo display (Customer #33)', () {
+    test('the bankily method tile shows the bundled logo asset', () {
+      expect(showsBankilyLogo('bankily'), isTrue);
+    });
+
+    test('no other existing payment method code shows the bankily logo', () {
+      expect(showsBankilyLogo('masrvi'), isFalse);
+      expect(showsBankilyLogo('sedad'), isFalse);
+      expect(showsBankilyLogo('click'), isFalse);
     });
   });
 }

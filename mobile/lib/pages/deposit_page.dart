@@ -462,6 +462,14 @@ class _DepositPageState extends State<DepositPage> {
               size: 22,
             ),
             const SizedBox(width: 12),
+            // Customer #33: Bankily gets its bundled logo asset next to the
+            // name, matching the client reference screenshot. Other methods
+            // are untouched (server-driven logo_url isn't wired to any
+            // renderer yet -- out of scope for this ticket).
+            if (method.code == 'bankily') ...[
+              Image.asset('assets/logo-bankily.png', width: 28, height: 28, fit: BoxFit.contain),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Text(
                 _methodName(method),
