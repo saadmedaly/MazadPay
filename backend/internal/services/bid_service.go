@@ -74,19 +74,22 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 			return apperr.ErrBidTooLow
 		}
 
-		// 2c. One-bid-per-user-per-auction (client feedback #19): a user may
-		// successfully bid on a given auction at most once, ever -- even
-		// after being outbid later. Claimed here, in the SAME transaction as
-		// the bid itself, so a rolled-back bid (any later failure below)
-		// never consumes eligibility, and the UNIQUE constraint on
-		// auction_bid_participants -- not this check alone -- is what makes
-		// a truly concurrent double-claim by the same user impossible: only
-		// one of two racing transactions can ever commit this INSERT.
-		// Placed before the insurance/wallet work below so a doomed repeat
-		// bid never needlessly touches the wallet. The bid row doesn't exist
-		// yet at this point, so first_bid_id is attached afterward (step 6b).
-		if err := s.bidRepo.ClaimParticipation(ctx, tx, auctionID, userID); err != nil {
+		// 2c. No-consecutive-self-bids (Customer #38, replacing the old
+		// permanent "one bid per user ever" rule from client feedback #19):
+		// a user cannot place two bids in a row -- they may bid again once
+		// someone ELSE has bid in between. TryClaimBidTurn is a single
+		// atomic UPDATE ... WHERE (last_bidder_id IS DISTINCT FROM $userID)
+		// ... RETURNING, so this is race-safe the same way
+		// TrySetWinnerAtomically is: the WHERE clause itself is the
+		// concurrency guard, not a prior SELECT. Placed before the
+		// insurance/wallet work below so a doomed consecutive bid never
+		// needlessly touches the wallet.
+		claimed, err := s.auctionRepo.TryClaimBidTurn(ctx, tx, auctionID, userID)
+		if err != nil {
 			return err
+		}
+		if !claimed {
+			return apperr.ErrDuplicateBidder
 		}
 
 		// 2b. Country-scoped market check (migration 000046, V1) — the bidder and
@@ -179,12 +182,6 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 			IsWinning:     true,
 		}
 		if err := s.bidRepo.Create(ctx, tx, bid); err != nil {
-			return err
-		}
-
-		// 6b. Attach the now-existing bid ID to the participation claim made
-		// in step 2c (traceability only, see AttachFirstBid doc comment).
-		if err := s.bidRepo.AttachFirstBid(ctx, tx, auctionID, userID, bid.ID); err != nil {
 			return err
 		}
 

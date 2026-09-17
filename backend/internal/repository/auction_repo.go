@@ -60,6 +60,13 @@ type AuctionRepository interface {
 	TryCancelAuctionAtomically(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, reason string) (won bool, err error)
 	TryRelistAuctionAtomically(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, newEndTime time.Time, newPrice decimal.Decimal) (won bool, err error)
 	TryBuyNowAtomically(ctx context.Context, tx *sqlx.Tx, id, buyerID uuid.UUID, buyNowPrice decimal.Decimal) (won bool, err error)
+	// TryClaimBidTurn (Customer #38): the race-safe replacement for the old
+	// permanent auction_bid_participants "one bid per user ever" rule --
+	// atomically checks "is the CURRENT last_bidder_id different from
+	// userID" and, if so, claims the turn by setting it, in one guarded
+	// UPDATE. Same idiom as TrySetWinnerAtomically: the WHERE clause IS the
+	// concurrency guard, never a prior read trusted across a race window.
+	TryClaimBidTurn(ctx context.Context, tx *sqlx.Tx, id, userID uuid.UUID) (claimed bool, err error)
 	IncrementViews(ctx context.Context, id uuid.UUID, userID *uuid.UUID) error
 	IncrementBidderCount(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error
 	FindExpiredActive(ctx context.Context) ([]models.Auction, error)
@@ -287,6 +294,32 @@ func (r *auctionRepo) Create(ctx context.Context, tx *sqlx.Tx, a *models.Auction
 	}
 	_, err := r.db.NamedExecContext(ctx, query, a)
 	return err
+}
+
+// TryClaimBidTurn (Customer #38): atomically verifies the incoming bidder is
+// NOT the current last_bidder_id (i.e. not placing two consecutive bids)
+// and, if so, claims the turn in the same UPDATE. IS DISTINCT FROM handles
+// the NULL case (no bids yet) correctly -- unlike `!=`, it treats NULL as
+// distinct from any concrete userID, so an auction's first-ever bid is
+// always claimable. Called BEFORE UpdatePrice in the same transaction, as
+// its own atomic step, so UpdatePrice's own optimistic-version-conflict
+// path (ErrBidConflict, a legitimate "retry") stays completely separate
+// from this rule's rejection (ErrDuplicateBidder, not a retry -- the user
+// must wait for someone else to bid).
+func (r *auctionRepo) TryClaimBidTurn(ctx context.Context, tx *sqlx.Tx, id, userID uuid.UUID) (bool, error) {
+	var returnedID uuid.UUID
+	err := tx.GetContext(ctx, &returnedID, `
+		UPDATE auctions SET last_bidder_id = $1
+		WHERE id = $2 AND status = 'active' AND (last_bidder_id IS DISTINCT FROM $1)
+		RETURNING id`,
+		userID, id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // UpdatePrice — verrouillage optimiste. Retourne false si version conflict.

@@ -1,53 +1,52 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mezadpay/widgets/bid_action_sheet.dart';
 
-// Client feedback #19: a user may successfully bid on a given auction at
-// most once, ever -- even after being outbid. These tests cover the pure
-// decision logic extracted from BidActionSheet (bidPlacementErrorMessage,
-// isRepeatBidBlocked) directly, without pumping a widget tree or mocking
-// the network/Riverpod layer -- the smallest practical seam for behavior
-// that is otherwise entirely UI-glue around a real HTTP call.
+// Customer #38: a user cannot place two CONSECUTIVE bids on the same
+// auction -- they may bid again once someone else has bid in between
+// (replacing the old permanent "one bid per user ever" rule from client
+// feedback #19). These tests cover the pure decision logic extracted from
+// BidActionSheet (bidPlacementErrorMessage, isRepeatBidBlocked) directly,
+// without pumping a widget tree or mocking the network/Riverpod layer -- the
+// smallest practical seam for behavior that is otherwise entirely UI-glue
+// around a real HTTP call.
 void main() {
-  group('isRepeatBidBlocked (client feedback #19)', () {
-    test('has_bid = false -> the normal bid action remains available', () {
+  group('isRepeatBidBlocked (Customer #38: has_bid = "currently last bidder")', () {
+    test('has_bid = false -> the bid action is available', () {
       expect(isRepeatBidBlocked(false), isFalse);
     });
 
-    test('has_bid = true -> the repeat-bid action is blocked', () {
+    test('has_bid = true (caller is the current last/highest bidder) -> blocked', () {
       expect(isRepeatBidBlocked(true), isTrue);
     });
 
-    // Existing "highest bidder" state (is_user_highest_bidder /
-    // is_highest_bid) is a DIFFERENT concept from has_bid: an outbid user
-    // is no longer highest but must still be blocked from re-bidding.
-    // isRepeatBidBlocked deliberately takes only hasBid as input -- there is
-    // no code path anywhere that could substitute a "highest bidder" flag
-    // for it, which this test documents explicitly.
-    test('blocking is keyed only on has_bid, never on highest-bidder status', () {
-      // A user who is NOT the current highest bidder but HAS bid before
-      // must still be blocked -- has_bid alone determines this.
-      const hasBidButNotHighest = true;
-      expect(isRepeatBidBlocked(hasBidButNotHighest), isTrue);
+    // has_bid now means "is the caller the CURRENT last/highest bidder"
+    // (server-authoritative, auctions.last_bidder_id), not "has ever bid" --
+    // it flips back to false once someone else outbids the caller, which is
+    // exactly what re-enables the button without any other mobile code
+    // change (see backend AuctionService.GetBidStatus).
+    test('blocking is keyed only on has_bid, which the backend now re-derives per request', () {
+      const isCurrentlyLastBidder = true;
+      expect(isRepeatBidBlocked(isCurrentlyLastBidder), isTrue);
     });
   });
 
-  group('bidPlacementErrorMessage (client feedback #19: bid_already_placed)', () {
+  group('bidPlacementErrorMessage (Customer #38: bid_already_placed)', () {
     test('bid_already_placed (Arabic) maps to the exact friendly message', () {
       final message = bidPlacementErrorMessage('bid_already_placed', 'ar');
       expect(message, kAlreadyBidMessageAr);
-      expect(message, 'لقد قمت بالمزايدة على هذا المزاد مسبقًا');
+      expect(message, 'أنت بالفعل صاحب أعلى مزايدة حالياً، يرجى الانتظار حتى يزايد شخص آخر');
     });
 
     test('bid_already_placed (French) maps to a distinct friendly message', () {
       final message = bidPlacementErrorMessage('bid_already_placed', 'fr');
       expect(message, isNot(kAlreadyBidMessageAr));
-      expect(message, contains('déjà enchéri'));
+      expect(message, contains("l'enchère la plus élevée"));
     });
 
     test('bid_already_placed (English) maps to a distinct friendly message', () {
       final message = bidPlacementErrorMessage('bid_already_placed', 'en');
       expect(message, isNot(kAlreadyBidMessageAr));
-      expect(message, contains('already bid'));
+      expect(message, contains('highest bidder'));
     });
 
     test('a raw error containing the full backend exception text still matches', () {

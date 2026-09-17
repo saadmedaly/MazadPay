@@ -62,6 +62,14 @@ type Auction struct {
 	Views           int              `db:"views"            json:"views"`
 	BidderCount     int              `db:"bidder_count"     json:"bidder_count"`
 	WinnerID        *uuid.UUID       `db:"winner_id"        json:"winner_id"`
+	// LastBidderID (Customer #38): who placed the CURRENT highest/latest
+	// bid. Replaces the old permanent auction_bid_participants "one bid per
+	// user ever" rule with "no two CONSECUTIVE bids from the same user" --
+	// set atomically alongside CurrentPrice in the same optimistic-locked
+	// transaction as every bid (see BidService.PlaceBid /
+	// AuctionRepository.TryClaimBidTurn). Nil for an auction with no bids
+	// yet.
+	LastBidderID    *uuid.UUID       `db:"last_bidder_id"   json:"last_bidder_id,omitempty"`
 	WinningBidID    *uuid.UUID       `db:"winning_bid_id"   json:"winning_bid_id"`
 	PaymentDeadline *time.Time       `db:"payment_deadline" json:"payment_deadline"`
 	IsFeatured      bool             `db:"is_featured"      json:"is_featured"`

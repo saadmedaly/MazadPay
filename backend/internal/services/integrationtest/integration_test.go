@@ -1100,152 +1100,182 @@ func TestPlaceBid_WalletCurrencyMismatch_Rejected(t *testing.T) {
 }
 
 // ==================================================
-// Client feedback #19: one successful bid per user per auction, ever --
-// enforced via the auction_bid_participants guard table (migration 000050),
-// claimed in the SAME transaction as the bid itself. See bid_service.go
-// PlaceBid step 2c and bid_repo.go ClaimParticipation.
+// Customer #38: no two CONSECUTIVE bids from the same user, replacing the
+// old permanent "one bid per user per auction, ever" rule (client feedback
+// #19, formerly enforced via auction_bid_participants / migration 000050,
+// now dropped by migration 000056). Enforced via auctions.last_bidder_id,
+// claimed atomically in the SAME transaction as the bid itself via
+// AuctionRepository.TryClaimBidTurn -- see bid_service.go PlaceBid step 2c.
 // ==================================================
 
-// (19-1/2/3/4) The core business rule end-to-end: A's first bid succeeds, A's
-// second bid is rejected, B can still bid, and A remains rejected even after B.
-func TestPlaceBid_OneSuccessfulBidPerUserPerAuction(t *testing.T) {
+// (1/2/3) A's first bid succeeds; A's immediate second bid is rejected;
+// B can then bid; A can bid again once B has -- immediate re-consecutive
+// bidding by A is rejected again.
+func TestPlaceBid_ConsecutiveSelfBidRejected_ButAllowedAfterAnotherUser(t *testing.T) {
 	env := setupEnv(t)
 	ctx := context.Background()
-	seller := createTestUser(t, env, "TEST ONEBID SELLER")
-	userA := createTestUser(t, env, "TEST ONEBID USER A")
-	userB := createTestUser(t, env, "TEST ONEBID USER B")
+	seller := createTestUser(t, env, "TEST CONSEC SELLER")
+	userA := createTestUser(t, env, "TEST CONSEC USER A")
+	userB := createTestUser(t, env, "TEST CONSEC USER B")
 	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
 	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
 	creditWallet(t, env, userB.ID, decimal.NewFromInt(1000))
 
-	// (19-1) User A's first valid bid succeeds.
-	bidA, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(110))
+	// (1) A's first bid succeeds.
+	bidA1, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(110))
 	if err != nil {
-		t.Fatalf("(19-1) expected User A's first bid to succeed, got: %v", err)
+		t.Fatalf("(1) expected A's first bid to succeed, got: %v", err)
 	}
-	t.Logf("(19-1) User A first bid succeeded: %s", bidA.ID)
+	t.Logf("(1) A's first bid succeeded: %s", bidA1.ID)
 
-	// (19-2) User A's second bid attempt (higher, otherwise fully valid) on the
-	// SAME auction is rejected -- even though it would clear every other rule.
+	// (2) A's immediate second bid (higher, otherwise fully valid) is rejected.
 	_, err = env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(150))
 	if err != apperr.ErrDuplicateBidder {
-		t.Fatalf("(19-2) expected ErrDuplicateBidder for User A's second bid, got: %v", err)
+		t.Fatalf("(2) expected ErrDuplicateBidder for A's consecutive second bid, got: %v", err)
 	}
-	t.Logf("(19-2) User A's second bid correctly rejected: %v", err)
+	t.Logf("(2) A's consecutive second bid correctly rejected: %v", err)
 
-	// (19-3) User B can bid on the same auction.
+	// B can bid.
 	bidB, err := env.bidSvc.PlaceBid(ctx, auction.ID, userB.ID, decimal.NewFromInt(150))
 	if err != nil {
-		t.Fatalf("(19-3) expected User B's first bid to succeed, got: %v", err)
+		t.Fatalf("expected B's bid to succeed, got: %v", err)
 	}
-	t.Logf("(19-3) User B first bid succeeded: %s", bidB.ID)
+	t.Logf("B's bid succeeded: %s", bidB.ID)
 
-	// (19-4) User A remains permanently ineligible, even after being outbid by B.
-	_, err = env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(200))
+	// (3) A may now bid again -- B bid in between, so this is NOT consecutive.
+	bidA2, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(200))
+	if err != nil {
+		t.Fatalf("(3) expected A to be allowed to bid again after B's bid, got: %v", err)
+	}
+	t.Logf("(3) A's re-bid after B's bid correctly allowed: %s", bidA2.ID)
+
+	// A's immediate follow-up bid is rejected again (consecutive with A's own bidA2).
+	_, err = env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(250))
 	if err != apperr.ErrDuplicateBidder {
-		t.Fatalf("(19-4) expected User A to remain rejected after User B's bid, got: %v", err)
+		t.Fatalf("expected ErrDuplicateBidder for A's second consecutive bid after re-entering, got: %v", err)
 	}
-	t.Logf("(19-4) User A still rejected after User B's bid: %v", err)
+	t.Logf("A's immediate follow-up bid after re-entering correctly rejected")
 
-	// (19-10) Exactly one guard row exists for (A, auction) despite the two
-	// attempts by A.
-	var guardCount int
-	if err := env.db.GetContext(ctx, &guardCount,
-		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
-		auction.ID, userA.ID); err != nil {
-		t.Fatalf("failed to count guard rows for User A: %v", err)
-	}
-	if guardCount != 1 {
-		t.Fatalf("(19-10) expected exactly 1 guard row for (User A, auction), got %d", guardCount)
-	}
-
-	// (19-11) Existing bid history is preserved -- both successful bids are
-	// still visible, nothing was deleted or merged.
+	// Bid history preserves every successful bid -- nothing deleted/merged.
 	history, err := env.bidSvc.GetHistory(ctx, auction.ID)
 	if err != nil {
 		t.Fatalf("GetHistory failed: %v", err)
 	}
-	if len(history) != 2 {
-		t.Fatalf("(19-11) expected 2 bids in history (A's successful first bid + B's), got %d", len(history))
+	if len(history) != 3 {
+		t.Fatalf("expected 3 bids in history (A, B, A), got %d", len(history))
 	}
 
-	// (19-12) Winner selection still works: B is the top bid. Queried
-	// directly here to isolate exactly what this test is proving (the
-	// NULL-scan issue this comment used to describe on bidRepo.FindTopBid's
-	// bidder_name/bidder_phone columns is now fixed -- see
-	// TestFindTopBid_NullBidderDetails_Safe and friends below).
+	// Winner selection still works off the real highest bid (A's 200).
 	var topUserID uuid.UUID
 	if err := env.db.GetContext(ctx, &topUserID,
 		`SELECT user_id FROM bids WHERE auction_id = $1 ORDER BY amount DESC LIMIT 1`, auction.ID); err != nil {
 		t.Fatalf("failed to query top bid: %v", err)
 	}
-	if topUserID != userB.ID {
-		t.Fatalf("(19-12) expected User B to be the top bidder, got user %s", topUserID)
+	if topUserID != userA.ID {
+		t.Fatalf("expected User A to be the top bidder, got user %s", topUserID)
 	}
 
-	t.Logf("confirmed: one-successful-bid-per-user-per-auction rule enforced end-to-end, bid history and winner selection unaffected")
+	t.Logf("confirmed: consecutive-self-bid rule enforced end-to-end, bid history and winner selection unaffected")
 }
 
-// (19-5) A too-low, rejected first attempt does NOT consume the user's
-// eligibility -- a subsequent valid bid from the same user must still succeed.
-func TestPlaceBid_TooLowFirstAttempt_DoesNotConsumeEligibility(t *testing.T) {
+// (4) A-B-A-A: the LAST A is rejected (consecutive with the prior A).
+func TestPlaceBid_ABAA_LastBidRejected(t *testing.T) {
 	env := setupEnv(t)
 	ctx := context.Background()
-	seller := createTestUser(t, env, "TEST ONEBID TOOLOW SELLER")
-	bidder := createTestUser(t, env, "TEST ONEBID TOOLOW BIDDER")
+	seller := createTestUser(t, env, "TEST ABAA SELLER")
+	userA := createTestUser(t, env, "TEST ABAA USER A")
+	userB := createTestUser(t, env, "TEST ABAA USER B")
 	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
-	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, userB.ID, decimal.NewFromInt(1000))
 
-	// Too low: current_price=100, min_increment=10 -> 105 < 110 required.
-	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(105))
-	if err != apperr.ErrBidTooLow {
-		t.Fatalf("precondition failed: expected ErrBidTooLow, got: %v", err)
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("A's first bid failed: %v", err)
 	}
-
-	// The same user's valid bid must still succeed -- the failed attempt above
-	// must not have claimed a guard row.
-	bid, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
-	if err != nil {
-		t.Fatalf("(19-5) expected the same user's valid bid to succeed after a too-low failed attempt, got: %v", err)
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userB.ID, decimal.NewFromInt(150)); err != nil {
+		t.Fatalf("B's bid failed: %v", err)
 	}
-	t.Logf("(19-5) too-low failed attempt did not consume eligibility; subsequent valid bid succeeded: %s", bid.ID)
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(200)); err != nil {
+		t.Fatalf("A's second bid (after B) failed: %v", err)
+	}
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(250))
+	if err != apperr.ErrDuplicateBidder {
+		t.Fatalf("(4) expected the last consecutive A bid to be rejected, got: %v", err)
+	}
+	t.Logf("(4) A-B-A-A: last A correctly rejected")
 }
 
-// (19-6) Self-bid (seller bidding on their own auction) does NOT consume
-// eligibility -- it's rejected before the guard claim, and even if the seller
-// were later a legitimate bidder on a DIFFERENT auction, this must not affect
-// anything (this test only proves no guard row was created for the rejected
-// attempt itself).
-func TestPlaceBid_SelfBid_DoesNotConsumeEligibility(t *testing.T) {
+// (5) A-B-A-B-A: every alternating bid is allowed.
+func TestPlaceBid_Alternating_AllAllowed(t *testing.T) {
 	env := setupEnv(t)
 	ctx := context.Background()
-	seller := createTestUser(t, env, "TEST ONEBID SELFBID SELLER")
+	seller := createTestUser(t, env, "TEST ALT SELLER")
+	userA := createTestUser(t, env, "TEST ALT USER A")
+	userB := createTestUser(t, env, "TEST ALT USER B")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, userB.ID, decimal.NewFromInt(1000))
+
+	amounts := []int64{110, 150, 200, 250, 300}
+	bidders := []*models.User{userA, userB, userA, userB, userA}
+	for i, amt := range amounts {
+		if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidders[i].ID, decimal.NewFromInt(amt)); err != nil {
+			t.Fatalf("(5) alternating bid #%d (amount %d) unexpectedly rejected: %v", i+1, amt, err)
+		}
+	}
+	t.Logf("(5) A-B-A-B-A: all 5 alternating bids succeeded")
+}
+
+// (6) Three different users bidding in sequence (no repeats) are all allowed.
+func TestPlaceBid_ThreeDifferentUsersInSequence_AllAllowed(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST THREE SELLER")
+	userA := createTestUser(t, env, "TEST THREE USER A")
+	userB := createTestUser(t, env, "TEST THREE USER B")
+	userC := createTestUser(t, env, "TEST THREE USER C")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, userB.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, userC.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("(6) A's bid failed: %v", err)
+	}
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userB.ID, decimal.NewFromInt(150)); err != nil {
+		t.Fatalf("(6) B's bid failed: %v", err)
+	}
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userC.ID, decimal.NewFromInt(200)); err != nil {
+		t.Fatalf("(6) C's bid failed: %v", err)
+	}
+	// And A may return, since C (not A) placed the last bid.
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(250)); err != nil {
+		t.Fatalf("(6) A's return bid after C failed: %v", err)
+	}
+	t.Logf("(6) three different users in sequence, then A's return: all allowed")
+}
+
+// (7) Auction owner still cannot bid on their own auction -- unaffected by
+// this change (rejected before TryClaimBidTurn is ever reached).
+func TestPlaceBid_OwnerStillCannotBid(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST OWNER SELLER")
 	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
 
 	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, seller.ID, decimal.NewFromInt(110))
 	if err != apperr.ErrSelfBid {
-		t.Fatalf("(19-6) expected ErrSelfBid, got: %v", err)
+		t.Fatalf("(7) expected ErrSelfBid, got: %v", err)
 	}
-
-	var guardCount int
-	if err := env.db.GetContext(ctx, &guardCount,
-		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
-		auction.ID, seller.ID); err != nil {
-		t.Fatalf("failed to count guard rows: %v", err)
-	}
-	if guardCount != 0 {
-		t.Fatalf("(19-6) expected no guard row after a rejected self-bid, got %d", guardCount)
-	}
-	t.Logf("(19-6) self-bid rejection correctly left no guard row")
+	t.Logf("(7) owner still correctly rejected from bidding on their own auction")
 }
 
-// (19-7) A failed attempt on an already-ended auction does NOT consume
-// eligibility.
-func TestPlaceBid_EndedAuction_DoesNotConsumeEligibility(t *testing.T) {
+// (8) An expired/ended auction still rejects bids -- unaffected by this change.
+func TestPlaceBid_ExpiredAuctionStillRejected(t *testing.T) {
 	env := setupEnv(t)
 	ctx := context.Background()
-	seller := createTestUser(t, env, "TEST ONEBID ENDED SELLER")
-	bidder := createTestUser(t, env, "TEST ONEBID ENDED BIDDER")
+	seller := createTestUser(t, env, "TEST EXPIRED SELLER")
+	bidder := createTestUser(t, env, "TEST EXPIRED BIDDER")
 	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
 	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
 
@@ -1255,69 +1285,44 @@ func TestPlaceBid_EndedAuction_DoesNotConsumeEligibility(t *testing.T) {
 
 	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
 	if err != apperr.ErrAuctionNotActive {
-		t.Fatalf("(19-7) expected ErrAuctionNotActive, got: %v", err)
+		t.Fatalf("(8) expected ErrAuctionNotActive, got: %v", err)
 	}
-
-	var guardCount int
-	if err := env.db.GetContext(ctx, &guardCount,
-		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
-		auction.ID, bidder.ID); err != nil {
-		t.Fatalf("failed to count guard rows: %v", err)
-	}
-	if guardCount != 0 {
-		t.Fatalf("(19-7) expected no guard row after a rejected ended-auction bid, got %d", guardCount)
-	}
-	t.Logf("(19-7) ended-auction rejection correctly left no guard row")
+	t.Logf("(8) expired/ended auction still correctly rejects bids")
 }
 
-// (19-8) A failure AFTER the guard claim but before commit (insufficient
-// insurance balance) rolls back the guard row too -- a failed bid must never
-// permanently consume eligibility, proving the claim and the bid are truly
-// atomic within the same transaction.
-func TestPlaceBid_InsuranceFailureAfterClaim_RollsBackEligibility(t *testing.T) {
+// (9) Minimum increment is still enforced -- unaffected by this change.
+func TestPlaceBid_MinIncrementStillEnforced(t *testing.T) {
 	env := setupEnv(t)
 	ctx := context.Background()
-	seller := createTestUser(t, env, "TEST ONEBID INSURANCE SELLER")
-	bidder := createTestUser(t, env, "TEST ONEBID INSURANCE BIDDER")
+	seller := createTestUser(t, env, "TEST MININC SELLER")
+	bidder := createTestUser(t, env, "TEST MININC BIDDER")
 	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
-	// Wallet exists but has a ZERO balance -- insurance_amount=20 (from
-	// createTestAuction) so ErrInsufficientForInsurance fires AFTER the
-	// guard claim (step 2c) but before the transaction commits.
-	creditWallet(t, env, bidder.ID, decimal.Zero)
-
-	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
-	if err != apperr.ErrInsufficientForInsurance {
-		t.Fatalf("(19-8) expected ErrInsufficientForInsurance, got: %v", err)
-	}
-
-	var guardCount int
-	if err := env.db.GetContext(ctx, &guardCount,
-		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
-		auction.ID, bidder.ID); err != nil {
-		t.Fatalf("failed to count guard rows: %v", err)
-	}
-	if guardCount != 0 {
-		t.Fatalf("(19-8) CRITICAL: expected the guard row to be rolled back after insurance failure, got %d rows -- a failed bid must never permanently consume eligibility", guardCount)
-	}
-
-	// The same user's bid must still succeed once they have sufficient balance.
 	creditWallet(t, env, bidder.ID, decimal.NewFromInt(1000))
+
+	// current_price=100, min_increment=10 -> 105 < 110 required.
+	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(105))
+	if err != apperr.ErrBidTooLow {
+		t.Fatalf("(9) expected ErrBidTooLow, got: %v", err)
+	}
+
+	// A valid follow-up from the SAME user must still succeed -- the failed
+	// too-low attempt never reached (let alone claimed) TryClaimBidTurn.
 	bid, err := env.bidSvc.PlaceBid(ctx, auction.ID, bidder.ID, decimal.NewFromInt(110))
 	if err != nil {
-		t.Fatalf("(19-8) expected the retried bid to succeed after crediting the wallet, got: %v", err)
+		t.Fatalf("(9) expected the same user's valid bid to succeed after a too-low failed attempt, got: %v", err)
 	}
-	t.Logf("(19-8) insurance failure correctly rolled back the guard claim; retried bid succeeded: %s", bid.ID)
+	t.Logf("(9) min increment still enforced; valid follow-up bid succeeded: %s", bid.ID)
 }
 
-// (19-9) Two concurrent first-bid attempts by the SAME user cannot both
-// commit -- proves the DB-level UNIQUE constraint, not just the application
-// check, is what actually prevents a race (goroutines racing PlaceBid
-// directly against real Postgres).
-func TestPlaceBid_ConcurrentFirstBids_OnlyOneCommits(t *testing.T) {
+// (10) Concurrent same-user bids cannot both create consecutive duplicate
+// bids -- proves TryClaimBidTurn's atomic UPDATE...WHERE...RETURNING is what
+// actually prevents the race (real Postgres, real goroutines), not just an
+// application-level check.
+func TestPlaceBid_ConcurrentSameUserBids_OnlyOneCommits(t *testing.T) {
 	env := setupEnv(t)
 	ctx := context.Background()
-	seller := createTestUser(t, env, "TEST ONEBID RACE SELLER")
-	bidder := createTestUser(t, env, "TEST ONEBID RACE BIDDER")
+	seller := createTestUser(t, env, "TEST RACE SELLER")
+	bidder := createTestUser(t, env, "TEST RACE BIDDER")
 	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
 	creditWallet(t, env, bidder.ID, decimal.NewFromInt(10000))
 
@@ -1336,112 +1341,108 @@ func TestPlaceBid_ConcurrentFirstBids_OnlyOneCommits(t *testing.T) {
 	close(results)
 
 	successCount := 0
-	duplicateCount := 0
 	for err := range results {
 		if err == nil {
 			successCount++
-		} else if err == apperr.ErrDuplicateBidder || err == apperr.ErrBidConflict {
-			duplicateCount++
-		} else {
-			t.Logf("(19-9) unexpected error from concurrent attempt (acceptable if a transient conflict): %v", err)
-			duplicateCount++
+		} else if err != apperr.ErrDuplicateBidder && err != apperr.ErrBidConflict {
+			t.Logf("(10) unexpected error from concurrent attempt (acceptable if a transient conflict): %v", err)
 		}
 	}
 
 	if successCount != 1 {
-		t.Fatalf("(19-9) CRITICAL: expected exactly 1 of %d concurrent first-bid attempts by the same user to succeed, got %d successes", n, successCount)
+		t.Fatalf("(10) CRITICAL: expected exactly 1 of %d concurrent same-user bid attempts to succeed, got %d successes", n, successCount)
 	}
 
-	var guardCount int
-	if err := env.db.GetContext(ctx, &guardCount,
-		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
-		auction.ID, bidder.ID); err != nil {
-		t.Fatalf("failed to count guard rows: %v", err)
+	var bidCount int
+	if err := env.db.GetContext(ctx, &bidCount, `SELECT COUNT(*) FROM bids WHERE auction_id = $1 AND user_id = $2`, auction.ID, bidder.ID); err != nil {
+		t.Fatalf("failed to count bids: %v", err)
 	}
-	if guardCount != 1 {
-		t.Fatalf("(19-9) CRITICAL: expected exactly 1 guard row after %d concurrent attempts, got %d", n, guardCount)
+	if bidCount != 1 {
+		t.Fatalf("(10) CRITICAL: expected exactly 1 bid row after %d concurrent same-user attempts, got %d -- no duplicate/current-price corruption allowed", n, bidCount)
 	}
-	t.Logf("(19-9) %d concurrent first-bid attempts by the same user: exactly 1 succeeded, exactly 1 guard row exists", n)
+	t.Logf("(10) %d concurrent same-user bid attempts: exactly 1 succeeded, exactly 1 bid row exists (no duplicate/current-price corruption)", n)
 }
 
-// (19-13/14/15) Migration-time safety: historical duplicate bid rows are
-// NEVER deleted or rewritten, and the backfill produces exactly one guard
-// row per distinct (auction_id, user_id) pair -- proven directly against the
-// migration's own SQL logic (not re-running the real migration file, since
-// setupEnv's schema is already migrated; this exercises the identical
-// INSERT ... SELECT DISTINCT ON logic from 000050_auction_bid_participants.up.sql
-// against a fresh fixture to prove it end-to-end).
-func TestAuctionBidParticipants_BackfillPreservesHistoricalDuplicates(t *testing.T) {
+// (11) bidder_count remains semantically correct: it counts every successful
+// bid (never gated on a "new participant" concept -- see UpdatePrice's own
+// bidder_count = bidder_count + 1, unconditional on every successful bid),
+// so it must increment once per successful PlaceBid call regardless of
+// whether the same user returns for a later, valid, non-consecutive bid.
+func TestPlaceBid_BidderCountSemanticsPreserved(t *testing.T) {
 	env := setupEnv(t)
 	ctx := context.Background()
-	seller := createTestUser(t, env, "TEST ONEBID BACKFILL SELLER")
-	userA := createTestUser(t, env, "TEST ONEBID BACKFILL USER A")
+	seller := createTestUser(t, env, "TEST COUNT SELLER")
+	userA := createTestUser(t, env, "TEST COUNT USER A")
+	userB := createTestUser(t, env, "TEST COUNT USER B")
 	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
-
-	// Insert 3 historical bid rows for the SAME (auction, user) pair directly
-	// against bids -- simulating pre-existing duplicate data exactly like the
-	// 18 real duplicate groups found in Staging, bypassing PlaceBid/the guard
-	// entirely (as real historical rows predating this feature would).
-	for i := 0; i < 3; i++ {
-		if _, err := env.db.ExecContext(ctx, `
-			INSERT INTO bids (id, auction_id, user_id, amount, is_winning)
-			VALUES (gen_random_uuid(), $1, $2, $3, false)`,
-			auction.ID, userA.ID, decimal.NewFromInt(int64(110+i*10))); err != nil {
-			t.Fatalf("failed to insert historical duplicate bid %d: %v", i, err)
-		}
-	}
-
-	var bidsBefore int
-	if err := env.db.GetContext(ctx, &bidsBefore, `SELECT COUNT(*) FROM bids WHERE auction_id = $1 AND user_id = $2`, auction.ID, userA.ID); err != nil {
-		t.Fatalf("failed to count bids before backfill: %v", err)
-	}
-	if bidsBefore != 3 {
-		t.Fatalf("precondition failed: expected 3 historical bid rows, got %d", bidsBefore)
-	}
-
-	// Clear any guard row this fixture might already have (none expected --
-	// bidRepo.Create was never called) and run the exact backfill INSERT from
-	// the migration for just this pair, to prove it produces exactly one row.
-	if _, err := env.db.ExecContext(ctx, `DELETE FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`, auction.ID, userA.ID); err != nil {
-		t.Fatalf("failed to clear pre-existing guard rows: %v", err)
-	}
-	if _, err := env.db.ExecContext(ctx, `
-		INSERT INTO auction_bid_participants (auction_id, user_id, first_bid_id, created_at)
-		SELECT DISTINCT ON (b.auction_id, b.user_id)
-		    b.auction_id, b.user_id, b.id, b.created_at
-		FROM bids b
-		WHERE b.auction_id = $1 AND b.user_id = $2
-		ORDER BY b.auction_id, b.user_id, b.created_at ASC, b.id ASC`,
-		auction.ID, userA.ID); err != nil {
-		t.Fatalf("backfill INSERT failed: %v", err)
-	}
-
-	var bidsAfter int
-	if err := env.db.GetContext(ctx, &bidsAfter, `SELECT COUNT(*) FROM bids WHERE auction_id = $1 AND user_id = $2`, auction.ID, userA.ID); err != nil {
-		t.Fatalf("failed to count bids after backfill: %v", err)
-	}
-	if bidsAfter != 3 {
-		t.Fatalf("(19-14) CRITICAL: expected all 3 historical bid rows to survive backfill unchanged, got %d -- no historical bid may EVER be deleted or rewritten", bidsAfter)
-	}
-
-	var guardCount int
-	if err := env.db.GetContext(ctx, &guardCount,
-		`SELECT COUNT(*) FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2`,
-		auction.ID, userA.ID); err != nil {
-		t.Fatalf("failed to count guard rows: %v", err)
-	}
-	if guardCount != 1 {
-		t.Fatalf("(19-15) expected exactly 1 guard row backfilled from 3 historical duplicate bids, got %d", guardCount)
-	}
-
-	// A NEW bid attempt by this same user on this auction must now be blocked.
 	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
-	_, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(500))
-	if err != apperr.ErrDuplicateBidder {
-		t.Fatalf("(19-13) expected a new bid attempt by a user with historical duplicate bids to be blocked, got: %v", err)
+	creditWallet(t, env, userB.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("A's first bid failed: %v", err)
+	}
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userB.ID, decimal.NewFromInt(150)); err != nil {
+		t.Fatalf("B's bid failed: %v", err)
+	}
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(200)); err != nil {
+		t.Fatalf("A's return bid failed: %v", err)
 	}
 
-	t.Logf("confirmed: 3 historical duplicate bid rows preserved unchanged (%d before, %d after), backfill produced exactly 1 guard row, new bid attempt correctly blocked", bidsBefore, bidsAfter)
+	var bidderCount int
+	if err := env.db.GetContext(ctx, &bidderCount, `SELECT bidder_count FROM auctions WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to read bidder_count: %v", err)
+	}
+	// 3 successful bids total (A, B, A) -- bidder_count counts total bids,
+	// not distinct participants (see BIDDER_COUNT_SEMANTICS in the final
+	// report: unconditional +1 per successful bid, always has been).
+	if bidderCount != 3 {
+		t.Fatalf("(11) expected bidder_count=3 (one per successful bid, including A's return), got %d", bidderCount)
+	}
+	t.Logf("(11) bidder_count correctly counts every successful bid (3), including A's non-consecutive return")
+}
+
+// (12) Winner/finalization uses the real highest/latest bid correctly --
+// still reads directly from bids (FindTopBid, ORDER BY amount DESC), never
+// from auction_bid_participants (which no longer exists) or last_bidder_id.
+func TestPlaceBid_FinalizationUsesRealHighestBid(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST FINALIZE SELLER")
+	userA := createTestUser(t, env, "TEST FINALIZE USER A")
+	userB := createTestUser(t, env, "TEST FINALIZE USER B")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, userB.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("A's bid failed: %v", err)
+	}
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userB.ID, decimal.NewFromInt(150)); err != nil {
+		t.Fatalf("B's bid failed: %v", err)
+	}
+	lastBid, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(200))
+	if err != nil {
+		t.Fatalf("A's return (and final, highest) bid failed: %v", err)
+	}
+
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET end_time = $1 WHERE id = $2`, time.Now().Add(-1*time.Minute), auction.ID); err != nil {
+		t.Fatalf("failed to expire auction: %v", err)
+	}
+	if err := env.auctSvc.FinalizeExpiredAuction(ctx, auction.ID); err != nil {
+		t.Fatalf("FinalizeExpiredAuction failed: %v", err)
+	}
+
+	var finalized models.Auction
+	if err := env.db.Get(&finalized, `SELECT * FROM auctions WHERE id = $1`, auction.ID); err != nil {
+		t.Fatalf("failed to read back finalized auction: %v", err)
+	}
+	if finalized.WinnerID == nil || *finalized.WinnerID != userA.ID {
+		t.Fatalf("(12) expected User A (real highest bidder, 200) to win, got %v", finalized.WinnerID)
+	}
+	if finalized.WinningBidID == nil || *finalized.WinningBidID != lastBid.ID {
+		t.Fatalf("(12) expected winning_bid_id to be A's actual highest bid (%s), got %v", lastBid.ID, finalized.WinningBidID)
+	}
+	t.Logf("(12) finalization correctly used the real highest bid (User A, amount 200), unaffected by consecutive-bid guard changes")
 }
 
 // (I) Approving a request preserves/stamps the same market_country_iso/currency_code on
@@ -3991,6 +3992,45 @@ func TestGetBidStatus_AfterFirstBid_ReturnsHasBidTrue(t *testing.T) {
 		t.Fatalf("(19-14) expected has_bid=true after a real first bid, got: %v", status["has_bid"])
 	}
 	t.Logf("(19-14) confirmed: GetBidStatus returns has_bid=true immediately after a real first bid")
+}
+
+// (Customer #38) has_bid must return to false once another user outbids the
+// caller -- this is the exact behavior change from the old permanent
+// "ever bid" semantic, which never had a test proving has_bid could ever
+// flip back to false.
+func TestGetBidStatus_AfterBeingOutbid_ReturnsHasBidFalse(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST BIDSTATUS OUTBID SELLER")
+	userA := createTestUser(t, env, "TEST BIDSTATUS OUTBID USER A")
+	userB := createTestUser(t, env, "TEST BIDSTATUS OUTBID USER B")
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	creditWallet(t, env, userA.ID, decimal.NewFromInt(1000))
+	creditWallet(t, env, userB.ID, decimal.NewFromInt(1000))
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userA.ID, decimal.NewFromInt(110)); err != nil {
+		t.Fatalf("A's bid failed: %v", err)
+	}
+	statusAfterOwnBid, err := env.auctSvc.GetBidStatus(ctx, auction.ID, userA.ID)
+	if err != nil {
+		t.Fatalf("GetBidStatus failed: %v", err)
+	}
+	if statusAfterOwnBid["has_bid"] != true {
+		t.Fatalf("expected has_bid=true immediately after A's own bid, got: %v", statusAfterOwnBid["has_bid"])
+	}
+
+	if _, err := env.bidSvc.PlaceBid(ctx, auction.ID, userB.ID, decimal.NewFromInt(150)); err != nil {
+		t.Fatalf("B's bid failed: %v", err)
+	}
+
+	statusAfterOutbid, err := env.auctSvc.GetBidStatus(ctx, auction.ID, userA.ID)
+	if err != nil {
+		t.Fatalf("GetBidStatus failed: %v", err)
+	}
+	if statusAfterOutbid["has_bid"] != false {
+		t.Fatalf("expected has_bid=false for A after being outbid by B, got: %v", statusAfterOutbid["has_bid"])
+	}
+	t.Logf("confirmed: has_bid correctly returns to false once another user outbids the caller (Customer #38 semantic)")
 }
 
 // FindTopBid shares the same previously-unsafe SELECT * scan path --

@@ -7,11 +7,13 @@ import '../services/auction_api.dart';
 import '../services/bid_api.dart';
 import '../utils/money_formatter.dart';
 
-// Arabic message shown for a repeat-bid rejection, shared between the
+// Arabic message shown when the user is already the current highest bidder
+// (Customer #38: no two consecutive bids from the same user -- replacing
+// the old permanent "one bid per user ever" wording), shared between the
 // proactive UI state (has_bid == true, shown before the user even tries)
 // and the reactive 409 bid_already_placed error path below (defense-in-depth
 // for stale local state) -- see bidPlacementErrorMessage.
-const String kAlreadyBidMessageAr = 'لقد قمت بالمزايدة على هذا المزاد مسبقًا';
+const String kAlreadyBidMessageAr = 'أنت بالفعل صاحب أعلى مزايدة حالياً، يرجى الانتظار حتى يزايد شخص آخر';
 
 /// Pure mapping from PlaceBid's raw error string (backend/internal/handlers/
 /// response.go MapError codes, client feedback #19's bid_already_placed
@@ -45,25 +47,28 @@ String bidPlacementErrorMessage(String raw, String locale) {
         ? 'هذا المزاد لم يعد نشطًا'
         : (locale == 'fr' ? "Cette enchère n'est plus active" : 'This auction is no longer active');
   } else if (raw.contains('bid_already_placed')) {
-    // Client feedback #19: a user may successfully bid on a given auction at
-    // most once, ever. Surfaces the backend's 409 with the same friendly
-    // message shown proactively when local state was stale (e.g. another
-    // device placed this user's first bid concurrently).
+    // Customer #38: a user cannot place two consecutive bids in a row --
+    // they may bid again once someone else has bid in between. Surfaces the
+    // backend's 409 with the same friendly message shown proactively when
+    // local state was stale (e.g. another device placed this user's bid
+    // concurrently).
     return locale == 'ar'
         ? kAlreadyBidMessageAr
-        : (locale == 'fr' ? 'Vous avez déjà enchéri sur cette enchère' : 'You have already bid on this auction');
+        : (locale == 'fr' ? "Vous avez déjà l'enchère la plus élevée, attendez qu'un autre utilisateur enchérisse" : 'You are already the highest bidder, wait for someone else to bid');
   }
   return locale == 'ar'
       ? 'تعذر إتمام المزايدة، حاول مرة أخرى'
       : (locale == 'fr' ? "Impossible de placer l'enchère, réessayez" : 'Could not place bid, please try again');
 }
 
-/// Whether the repeat-bid action should be blocked, per client feedback #19
-/// (one successful bid per user per auction, ever). Deliberately keyed only
-/// on has_bid -- NOT on is_highest_bid/isUserHighestBidder, which reflects
-/// "currently winning" and is a completely different concept: an outbid user
-/// still has has_bid == true and must remain blocked even though they are no
-/// longer the highest bidder.
+/// Whether the bid action should be blocked, per Customer #38 (no two
+/// CONSECUTIVE bids from the same user -- replacing the old permanent
+/// "one bid per user ever" rule from client feedback #19). has_bid now means
+/// "is this user the CURRENT last/highest bidder" (server-authoritative, see
+/// backend AuctionService.GetBidStatus / auctions.last_bidder_id) -- it
+/// returns to false again once someone else outbids this user, re-enabling
+/// the button. The function itself is unchanged (still a direct passthrough)
+/// since only has_bid's server-side meaning changed, not this mapping.
 bool isRepeatBidBlocked(bool hasBid) => hasBid;
 
 class BidActionSheet extends ConsumerStatefulWidget {
@@ -97,12 +102,14 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
   bool _isLoading = false;
   final BidApi _bidApi = BidApi();
   final AuctionApi _auctionApi = AuctionApi();
-  // hasAlreadyBid (client feedback #19): a user may successfully bid on a
-  // given auction at most once, ever -- checked proactively via the
-  // existing GET /auctions/:id/bid-status endpoint so the bid control can
-  // be disabled before the user even tries. The backend's 409
-  // bid_already_placed rejection (handled below) remains authoritative
-  // regardless -- this is purely a UX head start, never the real guard.
+  // hasAlreadyBid (Customer #38): whether this user is the CURRENT
+  // last/highest bidder -- checked proactively via the existing
+  // GET /auctions/:id/bid-status endpoint so the bid control can be
+  // disabled before the user even tries, and automatically re-enabled once
+  // someone else outbids them (realtime/next status check flips has_bid
+  // back to false). The backend's 409 bid_already_placed rejection (handled
+  // below) remains authoritative regardless -- this is purely a UX head
+  // start, never the real guard.
   bool _hasAlreadyBid = false;
   bool _checkingBidStatus = true;
 

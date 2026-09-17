@@ -2,11 +2,9 @@ package repository
 
 import (
 	"context"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 )
 
@@ -19,22 +17,6 @@ type BidRepository interface {
 	SetAllNotWinning(ctx context.Context, tx *sqlx.Tx, auctionID uuid.UUID) error
 	FindUserActiveBids(ctx context.Context, userID uuid.UUID) ([]models.Bid, error)
 	Count(ctx context.Context) (int, error)
-	// ClaimParticipation (client feedback #19): atomically claims this
-	// user's one-and-only bid slot on this auction, in the SAME transaction
-	// as the bid itself -- see BidService.PlaceBid. Called BEFORE the bid
-	// row exists (first_bid_id starts NULL; see AttachFirstBid), so a
-	// repeat bidder fails fast before any wallet/insurance work. Returns
-	// apperr.ErrDuplicateBidder if uq_auction_bid_participants_auction_user
-	// is violated (the user already has a row for this auction); any other
-	// error is returned as-is. This is the sole authoritative,
-	// concurrency-safe enforcement of the one-bid-per-user rule -- a
-	// raced concurrent INSERT from the same user can only ever have one
-	// winner at the database level.
-	ClaimParticipation(ctx context.Context, tx *sqlx.Tx, auctionID, userID uuid.UUID) error
-	// AttachFirstBid records which bid claimed the participation slot, for
-	// traceability only -- called right after bidRepo.Create, same
-	// transaction. Never read by the eligibility check itself.
-	AttachFirstBid(ctx context.Context, tx *sqlx.Tx, auctionID, userID, bidID uuid.UUID) error
 }
 
 type bidRepo struct{ db *sqlx.DB }
@@ -139,31 +121,6 @@ func (r *bidRepo) FindUserBidOnAuction(ctx context.Context, userID, auctionID uu
 func (r *bidRepo) SetAllNotWinning(ctx context.Context, tx *sqlx.Tx, auctionID uuid.UUID) error {
 	_, err := tx.ExecContext(ctx,
 		`UPDATE bids SET is_winning = false WHERE auction_id = $1`, auctionID)
-	return err
-}
-
-func (r *bidRepo) ClaimParticipation(ctx context.Context, tx *sqlx.Tx, auctionID, userID uuid.UUID) error {
-	// first_bid_id starts NULL: the bid row this claim belongs to doesn't
-	// exist yet (the claim intentionally happens before bidRepo.Create, to
-	// fail fast on a repeat bidder before any wallet/insurance work) -- see
-	// AttachFirstBid, called right after the bid itself is inserted, still
-	// inside the same transaction.
-	_, err := tx.ExecContext(ctx,
-		`INSERT INTO auction_bid_participants (auction_id, user_id) VALUES ($1, $2)`,
-		auctionID, userID)
-	if err != nil {
-		if strings.Contains(err.Error(), "uq_auction_bid_participants_auction_user") {
-			return apperr.ErrDuplicateBidder
-		}
-		return err
-	}
-	return nil
-}
-
-func (r *bidRepo) AttachFirstBid(ctx context.Context, tx *sqlx.Tx, auctionID, userID, bidID uuid.UUID) error {
-	_, err := tx.ExecContext(ctx,
-		`UPDATE auction_bid_participants SET first_bid_id = $1 WHERE auction_id = $2 AND user_id = $3`,
-		bidID, auctionID, userID)
 	return err
 }
 

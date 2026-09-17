@@ -786,15 +786,14 @@ func (s *auctionService) GetBidStatus(ctx context.Context, auctionID, userID uui
 		return nil, err
 	}
 
-	// has_bid (client feedback #19): whether this user has already consumed
-	// their one-and-only bid on this auction -- the authoritative source is
-	// auction_bid_participants (the same guard table PlaceBid claims a row
-	// in), not merely "did GetUserHighestBid find a row", so this stays
-	// correct even if bid history read paths ever change independently.
-	var hasBid bool
-	_ = s.db.GetContext(ctx, &hasBid,
-		`SELECT EXISTS(SELECT 1 FROM auction_bid_participants WHERE auction_id = $1 AND user_id = $2)`,
-		auctionID, userID)
+	// has_bid (Customer #38, replacing the old client feedback #19 permanent
+	// "ever bid" meaning): whether this user is currently blocked from
+	// bidding again, i.e. whether they are the CURRENT last bidder
+	// (auctions.last_bidder_id) -- the exact same atomic source of truth
+	// PlaceBid/TryClaimBidTurn uses to accept or reject the next bid, so
+	// this field can never drift from the real enforcement. False again
+	// once someone else outbids them, unlike the old permanent semantic.
+	hasBid := auction.LastBidderID != nil && *auction.LastBidderID == userID
 
 	status := map[string]interface{}{
 		"auction_id":     auctionID,

@@ -66,10 +66,13 @@ var (
 	// toujours dans la devise du marché du compte), mais vérifié explicitement
 	// par sécurité/défense en profondeur avant tout gel de caution.
 	ErrWalletCurrencyMismatch = errors.New("wallet_currency_mismatch")
-	// ErrDuplicateBidder (client feedback #19): a user may successfully bid
-	// on a given auction at most once, ever -- even after being outbid by
-	// someone else. Fires when auction_bid_participants already has a row
-	// for (auction_id, user_id); see BidService.PlaceBid.
+	// ErrDuplicateBidder (Customer #38, replacing the old client feedback #19
+	// permanent rule): a user cannot place two CONSECUTIVE bids on the same
+	// auction -- they may bid again once someone ELSE has bid in between.
+	// Fires when the caller is already auctions.last_bidder_id; see
+	// BidService.PlaceBid / AuctionRepository.TryClaimBidTurn. The wire code
+	// ("bid_already_placed") is unchanged so existing/mobile clients don't
+	// need a new error code to recognize this case, only updated messaging.
 	ErrDuplicateBidder = errors.New("bid_already_placed")
 
 	// Finance
