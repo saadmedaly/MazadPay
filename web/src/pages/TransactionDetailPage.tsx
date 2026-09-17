@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ZoomIn, Check, X, AlertTriangle, User, Calendar, CreditCard, AlertCircle, FileDown } from 'lucide-react'
+import { ArrowLeft, ZoomIn, Check, X, AlertTriangle, User, Calendar, CreditCard, AlertCircle, FileDown, Wallet } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
  import { ImagePreview } from '@/components/shared/ImagePreview'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
-import { useTransaction, useValidateTransaction, useReceiptURL } from '@/hooks/useTransactions'
+import { useTransaction, useValidateTransaction, useReceiptURL, useAddBalance } from '@/hooks/useTransactions'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { GATEWAY_LABELS } from '@/lib/constants'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -18,9 +18,12 @@ export function TransactionDetailPage() {
   const navigate = useNavigate()
   const [notes, setNotes] = useState('')
   const [confirmAction, setConfirmAction] = useState<'approve' | 'reject' | null>(null)
+  const [addBalanceAmount, setAddBalanceAmount] = useState('')
+  const [confirmAddBalance, setConfirmAddBalance] = useState(false)
 
   const { data: txn, isLoading, isError } = useTransaction(id!)
   const validate = useValidateTransaction()
+  const addBalance = useAddBalance()
   const { data: receiptData } = useReceiptURL(id!)
   const receiptRef = useRef<HTMLDivElement>(null)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
@@ -41,6 +44,17 @@ export function TransactionDetailPage() {
     validate.mutate(
       { id: id!, approve, notes },
       { onSuccess: () => navigate('/transactions') }
+    )
+  }
+
+  const addBalanceAmountValue = parseFloat(addBalanceAmount)
+  const isAddBalanceAmountValid = !isNaN(addBalanceAmountValue) && addBalanceAmountValue > 0
+
+  const handleAddBalance = () => {
+    if (!isAddBalanceAmountValid) return
+    addBalance.mutate(
+      { id: id!, amount: addBalanceAmount },
+      { onSuccess: () => { setAddBalanceAmount(''); setConfirmAddBalance(false) } }
     )
   }
 
@@ -189,6 +203,38 @@ export function TransactionDetailPage() {
         </div>
       )}
 
+      {/* Add Balance (Customer #35): admin-only direct credit to this
+          transaction's own user, reusing the wallet/ledger architecture --
+          never a client-side transfer, amount is re-validated server-side. */}
+      <div className="admin-card p-6 mt-6">
+        <h2 className="font-display font-bold text-white text-base mb-6 pb-4 border-b border-surface-border flex items-center gap-2">
+          <Wallet className="w-4 h-4 text-mazad-primary" />
+           إضافة رصيد إلى حساب المستخدم
+        </h2>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={addBalanceAmount}
+            onChange={(e) => setAddBalanceAmount(e.target.value)}
+            placeholder="أدخل مبلغ الرصيد"
+            className="flex-1 bg-surface-base border border-surface-border rounded-xl px-4 py-3
+                       text-sm text-white placeholder:text-surface-muted/30 focus:outline-none
+                       focus:border-mazad-primary transition-all font-medium shadow-inner"
+          />
+          <button
+            onClick={() => setConfirmAddBalance(true)}
+            disabled={!isAddBalanceAmountValid || addBalance.isPending}
+            className="flex items-center justify-center gap-2 rounded-xl bg-mazad-primary hover:bg-mazad-primary/90
+                       text-white font-bold px-6 py-3 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Wallet className="w-4 h-4" />
+            إضافة الرصيد
+          </button>
+        </div>
+      </div>
+
       {/* Confirm Dialogs */}
       <ConfirmDialog
         open={confirmAction === 'approve'}
@@ -209,6 +255,16 @@ export function TransactionDetailPage() {
         variant="danger"
         loading={validate.isPending}
         onConfirm={() => handleValidate(false)}
+      />
+      <ConfirmDialog
+        open={confirmAddBalance}
+        onOpenChange={(v) => !v && setConfirmAddBalance(false)}
+        title={`هل أنت متأكد من إضافة ${isAddBalanceAmountValid ? formatPrice(addBalanceAmountValue, txn.currency_code) : addBalanceAmount} إلى رصيد المستخدم؟`}
+        description="سيتم شحن محفظة المستخدم فوراً ولا يمكن التراجع عن هذا الإجراء."
+        confirmLabel="تأكيد إضافة الرصيد"
+        variant="success"
+        loading={addBalance.isPending}
+        onConfirm={handleAddBalance}
       />
     </div>
   )

@@ -617,6 +617,40 @@ func (h *AdminHandler) RefundWinnerInsurance(c *fiber.Ctx) error {
 	})
 }
 
+// AdminAddBalance (Customer #35): admin adds balance to a user's wallet from
+// a transaction's detail page. :id is the anchor transaction whose user_id
+// the credit targets -- the request body never supplies a user_id directly.
+func (h *AdminHandler) AdminAddBalance(c *fiber.Ctx) error {
+	transactionID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid transaction ID")
+	}
+	type Request struct {
+		Amount float64 `json:"amount"`
+		Notes  string  `json:"notes"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if req.Amount <= 0 {
+		return BadRequest(c, "Amount must be greater than 0")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	ledgerTx, err := h.svc.AdminAddBalance(c.Context(), transactionID, decimal.NewFromFloat(req.Amount), req.Notes, adminID)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, fiber.Map{
+		"message":        "Balance added",
+		"transaction_id": ledgerTx.ID.String(),
+		"amount":         ledgerTx.Amount.String(),
+	})
+}
+
 // Review/Action on report (Admin view)
 func (h *AdminHandler) ReviewReport(c *fiber.Ctx) error {
 	type ReviewRequest struct {

@@ -47,6 +47,12 @@ type AdminService interface {
 	// deliberately never auto-refunds. See its own doc comment for the full
 	// authorization/idempotency/atomicity contract.
 	RefundWinnerInsurance(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) (*models.Transaction, error)
+	// AdminAddBalance (Customer #35): admin-only direct credit to a user's
+	// wallet, reachable from a transaction's detail page. The target user_id
+	// is derived server-side from the anchor transaction (transactionID),
+	// never trusted from the client. See its own doc comment for the full
+	// authorization/idempotency/atomicity contract.
+	AdminAddBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error)
 	ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error)
 	ReviewReport(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
 	DeleteReport(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error
@@ -1003,6 +1009,93 @@ func (s *adminService) RefundWinnerInsurance(ctx context.Context, auctionID uuid
 		); auditErr != nil {
 			if s.logger != nil {
 				s.logger.Error("RefundWinnerInsurance: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return ledgerTx, nil
+}
+
+// AdminAddBalance (Customer #35): admin-only direct credit to a user's
+// wallet from the transaction detail page (client reference). Unlike
+// deposit/withdraw, this creates a ledger row that is already 'completed' in
+// one step -- there is no pending-then-approve transition to guard against
+// re-entry, so a double-click/retry is instead rejected at the DB level by
+// uq_admin_credit_reference (migration 000054): a second attempt against the
+// same anchor transaction fails the INSERT with a unique-violation, caught
+// below and reported as ErrDuplicateAdminCredit rather than a generic error
+// or a silent double-credit. The target user is always the anchor
+// transaction's own user_id, read server-side -- never trusted from the
+// client (which only ever supplies transactionID + amount).
+func (s *adminService) AdminAddBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error) {
+	if amount.LessThanOrEqual(decimal.Zero) {
+		return nil, apperr.ErrBadRequest
+	}
+
+	anchor, err := s.txRepo.GetByID(ctx, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	userID := anchor.UserID
+
+	dbtx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer dbtx.Rollback()
+
+	wallet, err := s.walletRepo.FindForUpdate(ctx, dbtx, userID)
+	if err != nil {
+		return nil, err
+	}
+	currencyCode := wallet.EffectiveCurrencyCode()
+
+	if err := s.walletRepo.CreditBalance(ctx, dbtx, userID, amount); err != nil {
+		return nil, err
+	}
+
+	reference := "admin_credit:" + transactionID.String()
+	var adminNotes *string
+	if notes != "" {
+		adminNotes = &notes
+	}
+	ledgerTx := &models.Transaction{
+		ID:           uuid.New(),
+		UserID:       userID,
+		Type:         "admin_credit",
+		Amount:       amount,
+		Status:       "completed",
+		Reference:    &reference,
+		AdminNotes:   adminNotes,
+		ReviewedBy:   &adminID,
+		CurrencyCode: &currencyCode,
+	}
+	if err := s.txRepo.CreateTx(ctx, dbtx, ledgerTx); err != nil {
+		if strings.Contains(err.Error(), "uq_admin_credit_reference") {
+			return nil, apperr.ErrDuplicateAdminCredit
+		}
+		return nil, err
+	}
+
+	if err := dbtx.Commit(); err != nil {
+		return nil, err
+	}
+
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"user_id":               userID.String(),
+			"anchor_transaction_id": transactionID.String(),
+			"amount":                amount.String(),
+			"currency":              currencyCode,
+			"transaction":           ledgerTx.ID.String(),
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "admin_credited_balance", "user", &userID,
+			fmt.Sprintf("user_id=%s amount=%s", userID, amount.String()),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("AdminAddBalance: failed to write audit log", zap.String("user_id", userID.String()), zap.Error(auditErr))
 			}
 		}
 	}

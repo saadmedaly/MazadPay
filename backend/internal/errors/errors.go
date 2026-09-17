@@ -84,6 +84,14 @@ var (
 	ErrNotAuctionWinner = errors.New("not_auction_winner")  // target user_id != auctions.winner_id
 	ErrNoActiveHold     = errors.New("no_active_hold")      // no active wallet_holds row for (winner, auction) -- already refunded, or never held
 
+	// ErrDuplicateAdminCredit (Customer #35): a second add-balance attempt for
+	// the same anchor transaction was rejected by uq_admin_credit_reference
+	// (migration 000054) -- the DB-level compare-and-set that makes a
+	// double-click/retry safe, since an admin_credit ledger row is created
+	// already 'completed' in one step (no pending-then-approve status
+	// transition to guard against re-entry, unlike deposit/withdraw).
+	ErrDuplicateAdminCredit = errors.New("admin_credit_already_applied")
+
 	// Chat / Messagerie
 	ErrConversationNotFound     = errors.New("conversation_not_found")
 	ErrNotConversationMember    = errors.New("not_conversation_member")

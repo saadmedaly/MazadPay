@@ -328,6 +328,9 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "no_active_hold":
 		logger.Info("Winner insurance refund rejected: no active hold (already refunded or none existed)", logFields...)
 		return Fail(c, 409, "no_active_hold", "تم إرجاع مبلغ التأمين مسبقاً أو لا يوجد مبلغ تأمين محجوز")
+	case "admin_credit_already_applied":
+		logger.Info("Admin add-balance rejected: duplicate request for the same transaction", logFields...)
+		return Fail(c, 409, "admin_credit_already_applied", "تمت إضافة هذا الرصيد مسبقاً لهذه المعاملة")
 	case "receipt_required":
 		logger.Info("Receipt required for transaction", logFields...)
 		return Fail(c, 400, "receipt_required", "Receipt is required for this transaction")

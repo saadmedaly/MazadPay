@@ -35,6 +35,12 @@ type WalletRepository interface {
     CaptureFrozenForWithdraw(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
     ReleaseFrozenForWithdraw(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
     GetPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error)
+    // CreditBalance (Customer #35): admin-initiated direct balance credit,
+    // outside the deposit/withdraw/hold lifecycle entirely -- unlike those
+    // paths, there is no prior frozen amount to move, so this simply adds to
+    // balance. Callers MUST run this inside the same dbtx as the paired
+    // ledger Transaction row (never write balance without one).
+    CreditBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
 }
 
 type walletRepo struct{ db *sqlx.DB }
@@ -294,4 +300,15 @@ func (r *walletRepo) ReleaseFrozenForWithdraw(ctx context.Context, tx *sqlx.Tx, 
         return apperr.ErrInsufficientBalance
     }
     return nil
+}
+
+// CreditBalance (Customer #35): admin-initiated direct wallet credit. No
+// frozen_amount is touched (unlike the withdraw lifecycle) since there is no
+// prior hold/freeze for this path -- just balance += amount.
+func (r *walletRepo) CreditBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error {
+    _, err := tx.ExecContext(ctx,
+        `UPDATE wallets SET balance = balance + $1, version = version + 1
+         WHERE user_id = $2`,
+        amount, userID)
+    return err
 }

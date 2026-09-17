@@ -42,6 +42,22 @@ export async function validateTransaction(payload: {
   })
 }
 
+// addBalance (Customer #35): admin credits a user's wallet directly from a
+// transaction's detail page. Only the anchor transaction id + amount are
+// sent -- the backend derives the target user_id from that transaction's
+// own user_id server-side, never from client input.
+export async function addBalance(payload: {
+  id: string
+  amount: string
+  notes?: string
+}): Promise<{ transaction_id: string; amount: string }> {
+  const { data } = await client.post<APIResponse<{ transaction_id: string; amount: string }>>(
+    `/v1/api/admin/transactions/${payload.id}/add-balance`,
+    { amount: payload.amount, notes: payload.notes }
+  )
+  return data.data
+}
+
 export async function exportTransactions(filters: { status?: string, start_date?: string, end_date?: string }): Promise<void> {
   const { data } = await client.get('/v1/api/admin/reports/transactions/export', {
     params: filters,

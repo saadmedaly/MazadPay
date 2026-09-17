@@ -386,6 +386,7 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	// Customer #31: manual admin release of a WINNER's own insurance hold
 	// (the auto non-winner refund at finalization never covers this).
 	admin.Post("/auctions/:id/refund-winner-insurance", adminHandler.RefundWinnerInsurance)
+	admin.Post("/transactions/:id/add-balance", adminHandler.AdminAddBalance)
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)
 	admin.Delete("/reports/:id", adminHandler.DeleteReport)

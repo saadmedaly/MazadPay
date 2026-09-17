@@ -94,6 +94,7 @@ const explicitTxJoinQuery = `
 		t.reference, t.receipt_url, t.admin_notes, t.reviewed_by, t.reviewed_at,
 		t.wallet_hold_id, t.receipt_image_temp, t.payment_method, t.fee_amount,
 		t.net_amount, t.description, t.failure_reason, t.created_at, t.currency_code,
+		t.beneficiary_account,
 		u.full_name AS user_full_name, u.phone AS user_phone
 	FROM transactions t
 	LEFT JOIN users u ON u.id = t.user_id
@@ -109,6 +110,7 @@ func scanTxJoinRow(row *sqlx.Row) (*models.Transaction, error) {
 		&tx.Reference, &tx.ReceiptURL, &tx.AdminNotes, &tx.ReviewedBy, &tx.ReviewedAt,
 		&tx.WalletHoldID, &tx.ReceiptImageTemp, &tx.PaymentMethod, &tx.FeeAmount,
 		&tx.NetAmount, &tx.Description, &tx.FailureReason, &tx.CreatedAt, &tx.CurrencyCode,
+		&tx.BeneficiaryAccount,
 		&tx.UserFullName, &tx.UserPhone,
 	)
 	return &tx, err

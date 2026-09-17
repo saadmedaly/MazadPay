@@ -53,3 +53,16 @@ export function useValidateTransaction() {
     onError: (err: Error) => toast.error(err.message),
   })
 }
+
+export function useAddBalance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.addBalance,
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: txnKeys.byId(vars.id) })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast.success('تمت إضافة الرصيد إلى حساب المستخدم بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+}
