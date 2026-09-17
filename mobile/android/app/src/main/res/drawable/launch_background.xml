@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Modify this file to customize your launch splash screen -->
+<!-- Customer Request #28: matches the new full-screen splash artwork's
+     background blue (mobile/assets/splash_full.png / splash_page.dart's
+     Scaffold backgroundColor 0xFF0B63D6) instead of plain white, so the
+     brief native launch window (before the Flutter engine draws its first
+     frame) blends into the Flutter splash rather than flashing white. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+    <item android:drawable="#FF0B63D6" />
 
     <!-- You can insert your own image assets here -->
     <!-- <item>

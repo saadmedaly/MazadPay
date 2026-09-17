@@ -125,12 +125,41 @@ class _SplashPageState extends State<SplashPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Customer Request #28: replaces the plain logo-on-background splash
+    // with the client-supplied full-screen artwork (mobile/assets/splash_full.png)
+    // -- a single complete composition (logo, Arabic wordmark, subtitle, flag,
+    // car/electronics/house, background) rendered as one image rather than
+    // rebuilt piece by piece in Flutter.
+    //
+    // BoxFit.contain (not cover): the artwork's 2:3 aspect ratio is
+    // noticeably shorter/wider than a real tall Android screen (e.g.
+    // 1080x2400, ~9:20) -- verified visually by simulating the actual
+    // on-device crop, BoxFit.cover cropped the MazadPay wordmark on both
+    // edges and clipped the Mauritanian flag on the right, which the client
+    // explicitly requires to stay fully visible. BoxFit.contain guarantees
+    // the complete artwork (logo, Arabic text, flag, all three product
+    // objects) is always fully visible and undistorted on any screen; the
+    // Scaffold's own backgroundColor below shows through as letterbox bars
+    // above/below the image, matched to the artwork's own blue so there is
+    // no white-border seam.
+    //
+    // Bootstrap/navigation logic above (_runBootstrap/_navigate) is
+    // completely unchanged by this visual-only edit.
     return Scaffold(
-      backgroundColor: const Color(0xFFFBFBFB),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [const MazadPayLogo(fontSize: 64, arabicFontSize: 32)],
+      backgroundColor: const Color(0xFF0B63D6),
+      body: SizedBox.expand(
+        child: Image.asset(
+          'assets/splash_full.png',
+          fit: BoxFit.contain,
+          // Defensive fallback only: if the artwork ever fails to load
+          // (e.g. a corrupted asset in a future build), fall back to the
+          // pre-existing logo-only splash rather than a blank/crashed screen.
+          errorBuilder: (context, error, stackTrace) => Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [MazadPayLogo(fontSize: 64, arabicFontSize: 32)],
+            ),
+          ),
         ),
       ),
     );
