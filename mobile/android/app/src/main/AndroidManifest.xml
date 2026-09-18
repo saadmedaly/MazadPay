@@ -50,17 +50,17 @@
             <data android:mimeType="text/plain"/>
         </intent>
         <!-- REAL DEVICE BUG (winner payment WhatsApp launch): on Android 11+
-             (targetSdk 30+, package visibility -- see
+             (targetSdk 30+, package visibility, see
              https://developer.android.com/training/package-visibility),
              canLaunchUrl() for an https://wa.me/... URI returns false even
              when WhatsApp IS installed, because this app cannot "see" any
              app capable of handling that intent without an explicit
              `queries` declaration. Scoped to exactly the wa.me host (what
-             every existing WhatsApp launch site in this app --
-             support_page.dart/auction_details_page.dart/my_winnings_page.dart
-             -- actually opens via SupportContactUris) plus the whatsapp://
+             every existing WhatsApp launch site in this app,
+             support_page.dart/auction_details_page.dart/my_winnings_page.dart,
+             actually opens via SupportContactUris) plus the whatsapp://
              native scheme and package names, used as this fix's fallback
-             path -- never a blanket https query, which would over-declare
+             path, never a blanket https query, which would over-declare
              visibility into every https-handling app on the device. -->
         <intent>
             <action android:name="android.intent.action.VIEW"/>
