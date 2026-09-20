@@ -72,4 +72,23 @@ void main() {
       );
     });
   });
+
+  group('bannerLaunchableUri (Note #2: home-page banner tap must open target_url)', () {
+    test('a valid https target_url parses to a launchable Uri', () {
+      final uri = bannerLaunchableUri('https://mazadpay.com/promo');
+      expect(uri, isNotNull);
+      expect(uri!.scheme, 'https');
+      expect(uri.host, 'mazadpay.com');
+    });
+
+    test('an empty target_url (no link configured in admin) returns null', () {
+      expect(bannerLaunchableUri(''), isNull);
+    });
+
+    test('a deep-link-style scheme still parses (not restricted to http/https)', () {
+      final uri = bannerLaunchableUri('mazadpay://auctions/123');
+      expect(uri, isNotNull);
+      expect(uri!.scheme, 'mazadpay');
+    });
+  });
 }

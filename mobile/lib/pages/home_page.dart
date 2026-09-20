@@ -14,7 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-
+import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/side_menu_drawer.dart';
 import '../widgets/live_indicator.dart';
@@ -66,6 +66,16 @@ BannerSlideMode bannerSlideMode({
   if (isLoadingBanners) return BannerSlideMode.loading;
   if (banners.isEmpty) return BannerSlideMode.empty;
   return BannerSlideMode.data;
+}
+
+/// Note #2 (client feedback): pure decision logic for whether a tapped
+/// banner's admin-configured target_url should actually be launched --
+/// extracted from _openBannerTargetUrl so it's directly unit-testable
+/// without mounting HomePage. Returns null for an empty/unparsable URL
+/// (nothing to launch), otherwise the parsed Uri.
+Uri? bannerLaunchableUri(String targetUrl) {
+  if (targetUrl.isEmpty) return null;
+  return Uri.tryParse(targetUrl);
 }
 
 class HomePage extends ConsumerStatefulWidget {
@@ -1735,6 +1745,29 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
   
+  // Note #2 (client feedback): tapping the home-page hero banner must open
+  // its admin-configured target_url. onTap previously only debugPrint'd the
+  // URL and never launched it. Mirrors the existing safe external-launch
+  // pattern (support_page.dart's _launchSafely / auction_details_page.dart's
+  // _openWhatsApp): canLaunchUrl-guarded, external app/browser mode, a
+  // snackbar on failure instead of a crash or silent no-op.
+  Future<void> _openBannerTargetUrl(String targetUrl) async {
+    final uri = bannerLaunchableUri(targetUrl);
+    if (uri == null) return;
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    } catch (_) {
+      // Fall through to the failure snackbar below.
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context)!.text_409)),
+    );
+  }
+
   Widget _buildDynamicBannerCard(Map<String, dynamic> banner, bool isDarkMode) {
     final imageUrl = banner['image_url']?.toString() ?? '';
     
@@ -1763,12 +1796,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     imageUrl.toLowerCase().endsWith('.webm');
     
     return GestureDetector(
-      onTap: () {
-        if (targetUrl.isNotEmpty) {
-          // Ouvrir le lien cible si disponible
-          debugPrint('Navigate to: $targetUrl');
-        }
-      },
+      onTap: () => _openBannerTargetUrl(targetUrl),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Stack(
