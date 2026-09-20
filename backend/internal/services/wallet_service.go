@@ -14,6 +14,20 @@ import (
 	"go.uber.org/zap"
 )
 
+// Client feedback (deposit min/max limits): the generic wallet-top-up
+// deposit path (auctionRequestID == nil) previously only rejected amount <=
+// 0 -- no upper or lower bound existed anywhere in the codebase (confirmed
+// via audit: WalletHandler.Deposit's validator tag was only "gt=0", and
+// this service's own defensive check matched). The auction-subscription
+// path (auctionRequestID != nil) is intentionally NOT bounded by these
+// limits -- its amount is never client-supplied to begin with (replaced by
+// the request's own server-stamped subscription_fee, see below), so a
+// min/max on a value the client can't even influence would be meaningless.
+const (
+	MinDepositAmountMRU = 100
+	MaxDepositAmountMRU = 100000
+)
+
 type WalletService interface {
 	GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error)
 	// InitiateDeposit's auctionRequestID is optional (client feedback #4
@@ -104,6 +118,41 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 		return nil, apperr.ErrBadRequest
 	}
 
+	// currency_code (migration 000046): stamped from the user's own wallet currency --
+	// never from client input, never re-derived from the user's current account market
+	// at read time -- a deposit is a standalone historical financial record and must
+	// stay correctly denominated even if account_country_iso changes later. GetByUserID
+	// auto-creates the wallet (with its own currency stamped from account market) on
+	// first call, so this is always populated for a non-legacy transaction. Fetched
+	// here (moved up from its original position below the auction-request branch,
+	// itself unaffected -- still read-only, no side effects) so the deposit min/max
+	// check right below can be scoped by currency.
+	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	currencyCode := wallet.EffectiveCurrencyCode()
+
+	// Client feedback (deposit min/max limits): checked BEFORE the
+	// auction-subscription branch below substitutes `amount` with the
+	// request's server-stamped subscription_fee -- so this only ever
+	// bounds the generic wallet-top-up path's client-supplied amount,
+	// exactly where the client can actually influence the value. A
+	// subscription_fee is admin/category-configured and trusted
+	// separately; it is never subject to these limits. Scoped to MRU only
+	// (the client's exact reference is MRU 100 / MRU 100,000, Mauritania's
+	// currency) -- applying a raw "100" floor to a different currency
+	// (e.g. MAD, TND) would be meaningless/wrong, and no other market's
+	// limits were specified by this ticket.
+	if auctionRequestID == nil && currencyCode == "MRU" {
+		if amount.LessThan(decimal.NewFromInt(MinDepositAmountMRU)) {
+			return nil, apperr.ErrDepositTooLow
+		}
+		if amount.GreaterThan(decimal.NewFromInt(MaxDepositAmountMRU)) {
+			return nil, apperr.ErrDepositTooHigh
+		}
+	}
+
 	var reference *string
 
 	// Client feedback #4 financial-integrity round: when this deposit is
@@ -141,17 +190,6 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 		reference = &ref
 	}
 
-	// currency_code (migration 000046): stamped from the user's own wallet currency --
-	// never from client input, never re-derived from the user's current account market
-	// at read time -- a deposit is a standalone historical financial record and must
-	// stay correctly denominated even if account_country_iso changes later. GetByUserID
-	// auto-creates the wallet (with its own currency stamped from account market) on
-	// first call, so this is always populated for a non-legacy transaction.
-	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	currencyCode := wallet.EffectiveCurrencyCode()
 	tx := &models.Transaction{
 		ID:                 uuid.New(),
 		UserID:             userID,

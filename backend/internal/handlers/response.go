@@ -266,6 +266,12 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "bid_too_low":
 		logger.Info("Bid too low", logFields...)
 		return Fail(c, 422, "bid_too_low", "Bid amount is too low")
+	case "deposit_too_low":
+		logger.Info("Deposit amount below the minimum", logFields...)
+		return Fail(c, 422, "deposit_too_low", "الحد الأدنى للإيداع هو 100 أوقية")
+	case "deposit_too_high":
+		logger.Info("Deposit amount above the maximum", logFields...)
+		return Fail(c, 422, "deposit_too_high", "الحد الأقصى للإيداع هو 100,000 أوقية")
 	case "insurance_not_set":
 		logger.Warn("Bid rejected: auction has no insurance_amount set", logFields...)
 		return Fail(c, 422, "insurance_not_set", "لا يمكن المزايدة على هذا المزاد لأن مبلغ التأمين غير محدد")

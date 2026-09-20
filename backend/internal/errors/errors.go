@@ -79,6 +79,14 @@ var (
 	ErrInsufficientBalance = errors.New("insufficient_balance")
 	ErrWalletLocked        = errors.New("wallet_locked")
 	ErrReceiptRequired     = errors.New("receipt_required")
+	// Client feedback (deposit min/max limits): distinct codes so the
+	// mobile UI can show the exact right message, same pattern as
+	// ErrBidTooLow -- fires only for the generic wallet-top-up deposit
+	// path (WalletService.InitiateDeposit with auctionRequestID == nil);
+	// the auction-subscription path's amount is server-stamped, never
+	// client-supplied, so it can never trigger either of these.
+	ErrDepositTooLow  = errors.New("deposit_too_low")
+	ErrDepositTooHigh = errors.New("deposit_too_high")
 
 	// Customer #31: admin manual winner-insurance refund. Distinct codes so
 	// the admin UI can show the exact right message rather than a generic

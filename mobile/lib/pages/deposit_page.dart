@@ -18,6 +18,21 @@ const String _officialAccountNumber = '36601175';
 // 500 MRU premium, by category) instead of this constant.
 const double _fallbackDepositAmount = 500.0;
 
+// Client feedback (deposit min/max limits): the exact values the client
+// asked to be shown inside the existing "تعليمات الدفع" box, and the same
+// bounds enforced authoritatively server-side (backend/internal/services/
+// wallet_service.go's MinDepositAmountMRU/MaxDepositAmountMRU) for the
+// generic wallet-top-up deposit path. Display-only here -- there is no
+// user-editable amount field on this page to validate against (the amount
+// shown/sent is always either the fixed generic top-up amount or a
+// request's server-stamped subscription_fee), so these two constants exist
+// purely so the user knows the allowed range before manually transferring
+// money via Bankily/the chosen payment app, matching the client's exact
+// requirement ("the user must know how much they are allowed to transfer
+// before sending money").
+const int _minDepositAmountMRU = 100;
+const int _maxDepositAmountMRU = 100000;
+
 class DepositPage extends StatefulWidget {
   // Customer feedback #4: when set (auction request just submitted for
   // review), the deposit amount and payment reference are derived from the
@@ -307,6 +322,17 @@ class _DepositPageState extends State<DepositPage> {
                     'يرجى تحويل مبلغ الاشتراك إلى الرقم $_officialAccountNumber عبر تطبيق الدفع الذي اخترته، ثم إرفاق لقطة شاشة من عملية التحويل.',
                     textAlign: TextAlign.right,
                     style: const TextStyle(fontSize: 13, height: 1.5),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'المبلغ الحد الأدنى: MRU $_minDepositAmountMRU',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    'المبلغ الأقصى: MRU $_maxDepositAmountMRU',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
                   Container(
