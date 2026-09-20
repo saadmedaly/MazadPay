@@ -1,5 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:mezadpay/utils/whatsapp_launcher.dart';
 
 class ServicesPage extends StatelessWidget {
   const ServicesPage({super.key});
@@ -7,19 +8,17 @@ class ServicesPage extends StatelessWidget {
   // Banner image URL from admin panel (null = use local asset)
   static const String? _bannerImageUrl = null;
 
+  // Note #4 (client feedback): reduced from the prior 12 services to
+  // exactly these 5, per the client's authoritative reference image.
+  // Same visual style/layout (icon + colored background + label) --
+  // nothing else about the grid/card design changed, only the list
+  // contents.
   static const List<_ServiceItem> _services = [
-    _ServiceItem('كورس',           Icons.local_taxi,          Color(0xFFFFF8E1), Colors.orange),
-    _ServiceItem('توصيل',          Icons.delivery_dining,     Color(0xFFE8F5E9), Color(0xFF2E7D32)),
-    _ServiceItem('نقل البضائع',    Icons.local_shipping,      Color(0xFFFFF3E0), Colors.deepOrange),
-    _ServiceItem('كورس عبر المدن', Icons.directions_bus,      Color(0xFFE8F5E9), Colors.green),
-    _ServiceItem('توصيل طعام',     Icons.restaurant,          Color(0xFFFCE4EC), Colors.red),
-    _ServiceItem('توصيل أدوية',    Icons.medical_services,    Color(0xFFE3F2FD), Colors.blue),
-    _ServiceItem('شحن من خارج',   Icons.flight,              Color(0xFFE8EAF6), Color(0xFF3949AB)),
-    _ServiceItem('رافعة سيارة',    Icons.car_repair,          Color(0xFFFFF8E1), Colors.amber),
-    _ServiceItem('شاحنة ماء',      Icons.water,               Color(0xFFE3F2FD), Color(0xFF0277BD)),
-    _ServiceItem('توصيل مجاري',    Icons.plumbing,            Color(0xFFE8F5E9), Color(0xFF558B2F)),
-    _ServiceItem('نقل أثاث',       Icons.chair,               Color(0xFFF3E5F5), Color(0xFF8E24AA)),
-    _ServiceItem('توصيل أسماك ولحوم', Icons.set_meal,         Color(0xFFE0F7FA), Color(0xFF00838F)),
+    _ServiceItem('نقل البضائع', Icons.local_shipping, Color(0xFFFFF3E0), Colors.deepOrange),
+    _ServiceItem('توصيل',       Icons.delivery_dining, Color(0xFFE8F5E9), Color(0xFF2E7D32)),
+    _ServiceItem('رافعة سيارة', Icons.car_repair,     Color(0xFFFFF8E1), Colors.amber),
+    _ServiceItem('نقل أثاث',    Icons.chair,          Color(0xFFF3E5F5), Color(0xFF8E24AA)),
+    _ServiceItem('شحن من خارج', Icons.flight,         Color(0xFFE8EAF6), Color(0xFF3949AB)),
   ];
 
   @override
@@ -75,10 +74,16 @@ class ServicesPage extends StatelessWidget {
                 return _buildServiceCard(
                   context,
                   svc,
-                  // "Delivery Details" page removed from user flow (client
-                  // feedback A5) -- no other flow referenced it, so it was
-                  // safe to delete entirely along with this navigation entry.
-                  onTap: null,
+                  // Note #4: tapping any of the 5 delivery-service cards
+                  // opens MazadPay's own WhatsApp (the same reliable
+                  // wa.me + whatsapp:// fallback strategy already fixed in
+                  // My Winnings), prefilled with a message naming the
+                  // tapped service -- not the per-service navigation this
+                  // grid used to have before client feedback A5 removed it.
+                  onTap: () => launchMazadPayWhatsApp(
+                    context,
+                    'مرحباً، أرغب في الاستفسار عن خدمة "${svc.title}".',
+                  ),
                 );
               },
             ),
