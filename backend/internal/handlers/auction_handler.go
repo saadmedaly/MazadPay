@@ -64,6 +64,21 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 	if catID := c.QueryInt("category_id", 0); catID > 0 {
 		f.CategoryID = catID
 	}
+	// Note #1 (client feedback): the Active Auctions screen's advanced
+	// filter sheet -- confirmed via source inspection that neither this
+	// handler nor AuctionFilters/FindAll previously read or applied these
+	// at all, so the mobile-side price/sort controls had no effect despite
+	// being fully wired there. c.QueryInt returns 0 on a missing/invalid
+	// value, and 0 is never a meaningful min/max price bound here, so it
+	// safely means "not requested" -- matching every other optional filter
+	// field's convention in this handler.
+	if minPrice := c.QueryInt("min_price", 0); minPrice > 0 {
+		f.MinPrice = &minPrice
+	}
+	if maxPrice := c.QueryInt("max_price", 0); maxPrice > 0 {
+		f.MaxPrice = &maxPrice
+	}
+	f.SortBy = c.Query("sort_by", "")
 	// Country-scoped market (migration 000046, V1): the public listing must never
 	// silently expose auctions from another market. Authenticated caller -> their
 	// own account market; anonymous caller -> DefaultAccountCountryISO ('MR'),

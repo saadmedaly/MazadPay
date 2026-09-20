@@ -33,6 +33,20 @@ type AuctionFilters struct {
 	// 0 = valeur non fournie, la couche handler applique les valeurs par défaut/clamp.
 	Page    int
 	PerPage int
+	// Note #1 (client feedback): the Active Auctions screen's advanced-filter
+	// sheet (price range + sort mode) was already fully wired on the mobile
+	// side (all_auctions_page.dart sends min_price/max_price/sort_by), but
+	// GET /auctions never read or applied any of them -- confirmed by
+	// inspecting AuctionHandler.List (no c.Query("min_price"/"max_price"/
+	// "sort_by") at all) and this FindAll (no price WHERE clause, ORDER BY
+	// hardcoded to is_featured DESC, created_at DESC). nil = not requested,
+	// matching every existing filter field's own convention (0/""=unset).
+	MinPrice *int
+	MaxPrice *int
+	// SortBy: "newest" (default, same as the pre-existing hardcoded order),
+	// "price_asc", "price_desc", "ending_soon". Any other/unrecognized value
+	// falls back to "newest" -- never a raw/unvalidated string reaches SQL.
+	SortBy string
 }
 
 type AuctionRepository interface {
@@ -216,6 +230,20 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 	if f.Status != "ended" {
 		where += " AND end_time > NOW()"
 	}
+	// Note #1: advanced-filter price range, applied against current_price
+	// (the live/displayed price, same column the mobile list card already
+	// renders) -- not start_price, so a filter matches what the user
+	// actually sees on each card.
+	if f.MinPrice != nil {
+		where += fmt.Sprintf(" AND current_price >= $%d", i)
+		args = append(args, *f.MinPrice)
+		i++
+	}
+	if f.MaxPrice != nil {
+		where += fmt.Sprintf(" AND current_price <= $%d", i)
+		args = append(args, *f.MaxPrice)
+		i++
+	}
 
 	// Total matching f, ignoring pagination -- computed before LIMIT/OFFSET
 	// are appended to args below (client feedback #12: real Active/Ended tab
@@ -242,6 +270,21 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 	args = append(args, perPage, offset)
 	limitOffset := fmt.Sprintf(" LIMIT $%d OFFSET $%d", i, i+1)
 
+	// Note #1: sort mode, always featured-first (unchanged from the
+	// pre-existing behavior) then the caller's chosen secondary order.
+	// f.SortBy is matched against a fixed allowlist, never interpolated
+	// directly -- an unrecognized/empty value keeps the exact original
+	// "newest" order (created_at DESC), so this is purely additive.
+	secondaryOrder := "a.created_at DESC"
+	switch f.SortBy {
+	case "price_asc":
+		secondaryOrder = "a.current_price ASC"
+	case "price_desc":
+		secondaryOrder = "a.current_price DESC"
+	case "ending_soon":
+		secondaryOrder = "a.end_time ASC"
+	}
+
 	rows, err := r.db.QueryxContext(ctx,
 		fmt.Sprintf(`
             SELECT a.*,
@@ -257,7 +300,7 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
             LEFT JOIN categories c ON a.category_id = c.id
             LEFT JOIN locations l ON a.location_id = l.id
             %s
-            ORDER BY a.is_featured DESC, a.created_at DESC%s`, where, limitOffset),
+            ORDER BY a.is_featured DESC, %s%s`, where, secondaryOrder, limitOffset),
 		args...)
 	if err != nil {
 		return nil, 0, err

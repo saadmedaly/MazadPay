@@ -44,6 +44,61 @@ Color statusTabSelectedColor(String value) {
   return value == 'active' ? const Color(0xFF00C58D) : const Color(0xFFE31B23);
 }
 
+// ── Note #1 (client feedback): Advanced Filter pure logic ──────────────────
+// Extracted so the filter sheet's actual decisions (what query params Apply
+// sends, what Reset restores to, how each sort mode orders a result set,
+// whether a given auction's price is in range) are directly unit-testable
+// without pumping the full AllAuctionsPage widget tree (no DI seam for its
+// live AuctionApi, matching the existing constraint documented on other
+// pages in this app). A pure top-level function set, same pattern as
+// auctionStatusBorderColor/statusTabSelectedColor above.
+
+/// The exact min/max query-param values _loadAuctions sends for a given
+/// committed (post-Apply/Reset) price range -- 0/1000000 (the untouched
+/// default bounds) map to null (no filter), matching AuctionApi.getAuctions'
+/// existing "0 = don't send min_price" / "1000000 = don't send max_price"
+/// convention.
+({int? minPrice, int? maxPrice}) resolveAdvancedFilterPriceParams(RangeValues priceRange) {
+  return (
+    minPrice: priceRange.start > 0 ? priceRange.start.toInt() : null,
+    maxPrice: priceRange.end < 1000000 ? priceRange.end.toInt() : null,
+  );
+}
+
+/// True if an auction's current_price falls within [min, max] (inclusive).
+/// null min/max means "no bound on that side" -- mirrors the backend's own
+/// MinPrice/MaxPrice *int semantics (nil = not requested) added for this
+/// same ticket in auction_repo.go's FindAll.
+bool auctionMatchesPriceRange(num currentPrice, {int? minPrice, int? maxPrice}) {
+  if (minPrice != null && currentPrice < minPrice) return false;
+  if (maxPrice != null && currentPrice > maxPrice) return false;
+  return true;
+}
+
+/// Orders a list of {'id', 'current_price', 'end_time', 'created_at'} maps
+/// the same way the backend's FindAll does for each sort_by value --
+/// mirrored here (not calling the server) so the exact ordering contract
+/// the mobile UI relies on is directly testable. 'newest' (or any
+/// unrecognized value) sorts by created_at descending, matching FindAll's
+/// default/fallback case.
+List<Map<String, dynamic>> sortAuctionsBy(List<Map<String, dynamic>> auctions, String sortBy) {
+  final sorted = List<Map<String, dynamic>>.from(auctions);
+  switch (sortBy) {
+    case 'price_asc':
+      sorted.sort((a, b) => (a['current_price'] as num).compareTo(b['current_price'] as num));
+      break;
+    case 'price_desc':
+      sorted.sort((a, b) => (b['current_price'] as num).compareTo(a['current_price'] as num));
+      break;
+    case 'ending_soon':
+      sorted.sort((a, b) => (a['end_time'] as DateTime).compareTo(b['end_time'] as DateTime));
+      break;
+    default:
+      sorted.sort((a, b) => (b['created_at'] as DateTime).compareTo(a['created_at'] as DateTime));
+  }
+  return sorted;
+}
+
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
 
@@ -281,13 +336,14 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     }
 
     try {
+      final priceParams = resolveAdvancedFilterPriceParams(_priceRange);
       final response = await _auctionApi.getAuctions(
         page: _currentPage,
         limit: 20,
         status: _statusFilter,
         categoryId: _selectedCategoryId,
-        minPrice: _minPrice > 0 ? _minPrice.toInt() : null,
-        maxPrice: _maxPrice < 1000000 ? _maxPrice.toInt() : null,
+        minPrice: priceParams.minPrice,
+        maxPrice: priceParams.maxPrice,
         sortBy: _sortBy,
       );
 
@@ -384,13 +440,19 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
           }
         }
 
-        // Filtre par prix
-        bool matchesPrice = true;
+        // Filtre par prix (belt-and-suspenders client-side re-check -- the
+        // server already applies min_price/max_price, see _loadAuctions;
+        // this only ever narrows the current page further, never widens it,
+        // so it stays correct now that the server-side filter actually
+        // exists).
         final price = (auction['current_price'] ?? auction['current_bid'] ?? auction['price'] ?? 0);
         final priceValue = price is num ? price.toDouble() : double.tryParse(price.toString()) ?? 0;
-        if (priceValue < _minPrice || priceValue > _maxPrice) {
-          matchesPrice = false;
-        }
+        final priceParams = resolveAdvancedFilterPriceParams(_priceRange);
+        final matchesPrice = auctionMatchesPriceRange(
+          priceValue,
+          minPrice: priceParams.minPrice,
+          maxPrice: priceParams.maxPrice,
+        );
 
         // Filtre par date de début/fin
         bool matchesDate = true;
@@ -411,9 +473,26 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     });
   }
 
+  // Note #1 (client feedback): the filter sheet previously mutated the
+  // PARENT State's own _priceRange/_minPrice/_maxPrice/_sortBy fields
+  // directly via the modal's setModalState -- so those fields were already
+  // changed in memory the instant a slider/sort option was touched, even
+  // before Apply was pressed. This meant: (a) closing the sheet with the X
+  // button (not Reset/Apply) after touching a control left stale
+  // half-changed filter values in place for the NEXT time the sheet opened
+  // (the "no stale-filter state after reset/reopen" requirement), and (b)
+  // Reset only reset the sheet's own visual state -- it never closed the
+  // sheet or reloaded the list, so "Reset restores the full/default
+  // active-auctions list" never actually happened. Fixed by having the
+  // sheet operate on its own local draft copies, committing to the real
+  // parent fields (and triggering _loadAuctions) only on Apply or Reset --
+  // never on a bare close/dismiss.
   void _showAdvancedFilterSheet() {
     final locale = Localizations.localeOf(context).languageCode;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    RangeValues draftPriceRange = _priceRange;
+    String draftSortBy = _sortBy;
 
     showModalBottomSheet(
       context: context,
@@ -478,19 +557,17 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           ),
                           const SizedBox(height: 8),
                           RangeSlider(
-                            values: _priceRange,
+                            values: draftPriceRange,
                             min: 0,
                             max: 1000000,
                             divisions: 100,
                             labels: RangeLabels(
-                              MoneyFormatter.formatAmountOnly(_priceRange.start.toInt(), null),
-                              MoneyFormatter.formatAmountOnly(_priceRange.end.toInt(), null),
+                              MoneyFormatter.formatAmountOnly(draftPriceRange.start.toInt(), null),
+                              MoneyFormatter.formatAmountOnly(draftPriceRange.end.toInt(), null),
                             ),
                             onChanged: (values) {
                               setModalState(() {
-                                _priceRange = values;
-                                _minPrice = values.start;
-                                _maxPrice = values.end;
+                                draftPriceRange = values;
                               });
                             },
                           ),
@@ -498,11 +575,11 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                MoneyFormatter.format(_priceRange.start.toInt(), null),
+                                MoneyFormatter.format(draftPriceRange.start.toInt(), null),
                                 style: TextStyle(color: isDarkMode ? Colors.grey.shade400 : Colors.grey),
                               ),
                               Text(
-                                MoneyFormatter.format(_priceRange.end.toInt(), null),
+                                MoneyFormatter.format(draftPriceRange.end.toInt(), null),
                                 style: TextStyle(color: isDarkMode ? Colors.grey.shade400 : Colors.grey),
                               ),
                             ],
@@ -521,24 +598,32 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           const SizedBox(height: 8),
                           _buildSortOption(
                             setModalState,
+                            draftSortBy,
+                            (value) => draftSortBy = value,
                             'newest',
                             locale == 'ar' ? 'الأحدث' : (locale == 'fr' ? 'Plus récent' : 'Newest'),
                             Icons.access_time,
                           ),
                           _buildSortOption(
                             setModalState,
+                            draftSortBy,
+                            (value) => draftSortBy = value,
                             'price_asc',
                             locale == 'ar' ? 'السعر: من الأقل للأعلى' : (locale == 'fr' ? 'Prix: croissant' : 'Price: low to high'),
                             Icons.arrow_upward,
                           ),
                           _buildSortOption(
                             setModalState,
+                            draftSortBy,
+                            (value) => draftSortBy = value,
                             'price_desc',
                             locale == 'ar' ? 'السعر: من الأعلى للأقل' : (locale == 'fr' ? 'Prix: décroissant' : 'Price: high to low'),
                             Icons.arrow_downward,
                           ),
                           _buildSortOption(
                             setModalState,
+                            draftSortBy,
+                            (value) => draftSortBy = value,
                             'ending_soon',
                             locale == 'ar' ? 'تنتهي قريباً' : (locale == 'fr' ? 'Termine bientôt' : 'Ending soon'),
                             Icons.timer,
@@ -562,12 +647,20 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () {
-                              setModalState(() {
+                              // Reset commits the default values to the REAL
+                              // parent state (not just the modal's own
+                              // draft), closes the sheet, and reloads --
+                              // "Reset restores the full/default
+                              // active-auctions list" means the list itself
+                              // must change, not just the sheet's controls.
+                              setState(() {
                                 _priceRange = const RangeValues(0, 1000000);
                                 _minPrice = 0;
                                 _maxPrice = 1000000;
                                 _sortBy = 'newest';
                               });
+                              Navigator.pop(context);
+                              _loadAuctions();
                             },
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -583,6 +676,18 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () {
+                              // Apply commits the sheet's own draft values to
+                              // the real parent state, then reloads -- a
+                              // dismiss without Apply (X button, tap outside,
+                              // back gesture) never reaches this handler, so
+                              // touched-but-uncommitted controls never leak
+                              // into the parent's filter state.
+                              setState(() {
+                                _priceRange = draftPriceRange;
+                                _minPrice = draftPriceRange.start;
+                                _maxPrice = draftPriceRange.end;
+                                _sortBy = draftSortBy;
+                              });
                               Navigator.pop(context);
                               _loadAuctions();
                             },
@@ -608,14 +713,21 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     );
   }
 
-  Widget _buildSortOption(StateSetter setModalState, String value, String label, IconData icon) {
-    final isSelected = _sortBy == value;
+  Widget _buildSortOption(
+    StateSetter setModalState,
+    String currentDraftSortBy,
+    void Function(String) onDraftSortByChanged,
+    String value,
+    String label,
+    IconData icon,
+  ) {
+    final isSelected = currentDraftSortBy == value;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
       onTap: () {
         setModalState(() {
-          _sortBy = value;
+          onDraftSortByChanged(value);
         });
       },
       child: Container(
