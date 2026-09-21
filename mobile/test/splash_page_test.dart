@@ -116,17 +116,23 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('splash image uses BoxFit.contain (full artwork always visible, no distortion/stretch/crop)', (tester) async {
+    testWidgets('splash image uses BoxFit.cover on the extended full-bleed artwork (no letterbox bars, no distortion)', (tester) async {
       await tester.pumpWidget(const MaterialApp(home: SplashPage()));
 
       final image = tester.widget<Image>(find.byWidgetPredicate(
         (widget) => widget is Image && widget.image is AssetImage && (widget.image as AssetImage).assetName == 'assets/splash_full.png',
       ));
-      // BoxFit.contain, not .cover: verified via a real-viewport crop
-      // simulation that .cover crops the MazadPay wordmark and the
-      // Mauritanian flag on a realistic tall Android screen -- .contain
-      // guarantees the complete artwork is always visible.
-      expect(image.fit, BoxFit.contain, reason: 'must show the complete artwork (logo/flag never cropped), never BoxFit.cover or BoxFit.fill');
+      // Final correction (see splash_page.dart's own doc comment): the
+      // original 720x1080 artwork under BoxFit.contain left visible
+      // solid-blue letterbox bars above/below on real tall devices.
+      // splash_full.png was since extended to 720x2340 -- a single
+      // continuous full-screen composition with the original 720x1080
+      // composition centered in it, no synthetic flat-color padding -- so
+      // BoxFit.cover now fills any realistic device viewport edge-to-edge
+      // with no bars and without cropping into the logo/wordmark/flag/
+      // product content band. BoxFit.contain would reintroduce the bars
+      // this fix removed.
+      expect(image.fit, BoxFit.cover, reason: 'must fill the screen edge-to-edge on the extended asset with no letterbox bars');
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 5));
     });
