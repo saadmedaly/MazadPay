@@ -10,6 +10,7 @@ import 'auction_details_page.dart';
 import 'auction_winner_page.dart';
 import 'deposit_page.dart';
 import 'notification_detail_page.dart';
+import 'withdrawal_detail_page.dart';
 
 
 /// Customer #21 hardening round: pure tab-classification decision, extracted
@@ -397,6 +398,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         ?? notification['auctionId']?.toString()
         ?? (notification['data'] is Map ? (notification['data'] as Map)['auctionId']?.toString() : null)
         ?? (notification['data'] is Map ? (notification['data'] as Map)['auction_id']?.toString() : null);
+    final String? transactionId = notification['transaction_id']?.toString()
+        ?? (notification['data'] is Map ? (notification['data'] as Map)['transaction_id']?.toString() : null);
 
     
     // Marquer comme lu
@@ -442,12 +445,31 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       case 'payment_received':
       case 'deposit_confirmed':
       case 'deposit_rejected':
-      case 'withdrawal_processed':
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => const DepositPage(),
           ),
         );
+        break;
+      // MAZADPAY (withdrawal notification routing bug): same fix as
+      // notification_handler.dart's push-tap routing -- withdrawal_processed
+      // must never open DepositPage. Routes to the withdrawal's own detail
+      // screen using the real transaction_id; falls back to the wallet
+      // screen only if that id is unexpectedly missing.
+      case 'withdrawal_processed':
+        if (transactionId != null && transactionId.isNotEmpty) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => WithdrawalDetailPage(transactionId: transactionId),
+            ),
+          );
+        } else {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const DepositPage(),
+            ),
+          );
+        }
         break;
       // Customer #22: admin broadcast notifications (general/new_auction/
       // transaction) have no real entity/target today -- see the audit --

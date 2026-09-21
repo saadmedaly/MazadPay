@@ -10,6 +10,7 @@ import 'package:mezadpay/pages/auction_winner_page.dart';
 import 'package:mezadpay/pages/home_page.dart';
 import 'package:mezadpay/pages/deposit_page.dart';
 import 'package:mezadpay/pages/notification_detail_page.dart';
+import 'package:mezadpay/pages/withdrawal_detail_page.dart';
 import 'package:mezadpay/services/auction_api.dart';
 import 'package:mezadpay/services/fcm_service.dart';
 import 'package:mezadpay/services/notifications_api.dart';
@@ -222,8 +223,21 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
         case 'payment_received':
         case 'deposit_confirmed':
         case 'deposit_rejected':
-        case 'withdrawal_processed':
           _navigateToWallet();
+          break;
+        // MAZADPAY (withdrawal notification routing bug): withdrawal_processed
+        // previously fell into the same case as the deposit types above and
+        // opened DepositPage -- wrong destination for a withdrawal update.
+        // transaction_id is already present in the FCM data payload (see
+        // AdminService.ValidateTransaction's data map), so it routes to the
+        // withdrawal's own detail screen instead.
+        case 'withdrawal_processed':
+          final transactionId = data['transaction_id']?.toString();
+          if (transactionId != null && transactionId.isNotEmpty) {
+            _navigateToWithdrawalDetail(transactionId);
+          } else {
+            _navigateToWallet();
+          }
           break;
         // Customer #22: admin broadcast notifications (general/new_auction/
         // transaction) previously fell into `default: _navigateToHome()` --
@@ -328,6 +342,21 @@ class _NotificationHandlerState extends ConsumerState<NotificationHandler> {
         navigator.push(
           MaterialPageRoute(
             builder: (context) => AuctionWinnerPage(auctionId: auctionId),
+          ),
+        );
+      }
+    } catch (e) {
+      developer.log('Navigation error: $e');
+    }
+  }
+
+  void _navigateToWithdrawalDetail(String transactionId) {
+    try {
+      final navigator = navigatorKey.currentState;
+      if (navigator != null) {
+        navigator.push(
+          MaterialPageRoute(
+            builder: (context) => WithdrawalDetailPage(transactionId: transactionId),
           ),
         );
       }

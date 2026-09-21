@@ -102,6 +102,13 @@ class Transaction {
   /// Additive/nullable -- always display via MoneyFormatter, which falls
   /// back to MRU only when null (legacy transaction).
   final String? currencyCode;
+  /// Customer #34: the phone/account number a withdrawal was sent to.
+  /// Null for non-withdrawal transactions.
+  final String? beneficiaryAccount;
+  /// Customer #36: an optional review-evidence image the admin attaches
+  /// while approving/rejecting a transaction (e.g. the withdrawal transfer
+  /// receipt). Null when the admin didn't attach one.
+  final String? adminAttachmentUrl;
 
   Transaction({
     required this.id,
@@ -125,6 +132,8 @@ class Transaction {
     this.failureReason,
     required this.createdAt,
     this.currencyCode,
+    this.beneficiaryAccount,
+    this.adminAttachmentUrl,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
@@ -158,6 +167,8 @@ class Transaction {
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
       currencyCode: json['currency_code']?.toString(),
+      beneficiaryAccount: json['beneficiary_account']?.toString(),
+      adminAttachmentUrl: json['admin_attachment_url']?.toString(),
     );
   }
 
@@ -184,6 +195,8 @@ class Transaction {
       'failure_reason': failureReason,
       'created_at': createdAt.toIso8601String(),
       'currency_code': currencyCode,
+      'beneficiary_account': beneficiaryAccount,
+      'admin_attachment_url': adminAttachmentUrl,
     };
   }
 
