@@ -41,6 +41,15 @@ type WalletRepository interface {
     // balance. Callers MUST run this inside the same dbtx as the paired
     // ledger Transaction row (never write balance without one).
     CreditBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
+    // DebitBalance (admin wallet controls): admin-initiated direct balance
+    // debit, the mirror of CreditBalance. Same dbtx-pairing requirement.
+    DebitBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
+    // SetWalletDisabled (admin wallet controls): toggles is_disabled
+    // (migration 000058). No dbtx parameter -- unlike Credit/DebitBalance,
+    // this has no paired ledger Transaction row to keep atomic with (it's a
+    // pure status flag, not a money movement), so it runs as its own
+    // single-statement update.
+    SetWalletDisabled(ctx context.Context, userID uuid.UUID, disabled bool, reason string, adminID uuid.UUID) error
 }
 
 type walletRepo struct{ db *sqlx.DB }
@@ -310,5 +319,54 @@ func (r *walletRepo) CreditBalance(ctx context.Context, tx *sqlx.Tx, userID uuid
         `UPDATE wallets SET balance = balance + $1, version = version + 1
          WHERE user_id = $2`,
         amount, userID)
+    return err
+}
+
+// DebitBalance (admin wallet controls): admin-initiated direct wallet debit,
+// the mirror of CreditBalance. The WHERE balance >= $1 guard is the same
+// compare-and-set pattern FreezeForWithdraw/DebitFreezeBalance already use --
+// 0 rows affected means the wallet's CURRENT balance (read inside the same
+// FOR UPDATE-locked dbtx by the caller) was insufficient, mapped to
+// ErrInsufficientBalanceForDebit by the caller. frozen_amount is
+// deliberately untouched: an admin debit only ever reduces spendable
+// balance, never releases or captures a hold that belongs to a specific
+// pending withdrawal/bid.
+func (r *walletRepo) DebitBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error {
+    result, err := tx.ExecContext(ctx,
+        `UPDATE wallets SET balance = balance - $1, version = version + 1
+         WHERE user_id = $2 AND balance >= $1`,
+        amount, userID)
+    if err != nil {
+        return err
+    }
+    rows, err := result.RowsAffected()
+    if err != nil {
+        return err
+    }
+    if rows == 0 {
+        return apperr.ErrInsufficientBalanceForDebit
+    }
+    return nil
+}
+
+// SetWalletDisabled (admin wallet controls): toggles the wallet-level
+// is_disabled status flag (migration 000058). disabledBy/reason are only
+// meaningful when disabled=true; both are cleared (set to NULL) on
+// re-enable so a stale reason never lingers on a wallet that is currently
+// active again.
+func (r *walletRepo) SetWalletDisabled(ctx context.Context, userID uuid.UUID, disabled bool, reason string, adminID uuid.UUID) error {
+    if disabled {
+        _, err := r.db.ExecContext(ctx,
+            `UPDATE wallets
+             SET is_disabled = true, disabled_reason = NULLIF($1, ''), disabled_by = $2, disabled_at = now()
+             WHERE user_id = $3`,
+            reason, adminID, userID)
+        return err
+    }
+    _, err := r.db.ExecContext(ctx,
+        `UPDATE wallets
+         SET is_disabled = false, disabled_reason = NULL, disabled_by = NULL, disabled_at = NULL
+         WHERE user_id = $1`,
+        userID)
     return err
 }

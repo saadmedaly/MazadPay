@@ -356,6 +356,9 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	// User management routes
 	admin.Get("/users", adminHandler.ListUsers)
 	admin.Get("/users/:id", adminHandler.GetUserByID)
+	// MAZADPAY -- admin wallet controls: read-only wallet lookup, shown on
+	// the admin user-detail page before the add/deduct/disable actions.
+	admin.Get("/users/:id/wallet", adminHandler.GetUserWallet)
 	admin.Get("/users/:id/auctions", adminHandler.GetUserAuctions)
 	admin.Get("/users/:id/transactions", adminHandler.GetUserTransactions)
 	// Super Admin only - Créer une invitation admin (Admin Authorization Phase 1B) :
@@ -364,6 +367,10 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	// restreinte au même niveau que DeleteUser ci-dessous.
 	admin.Post("/invitations", middleware.SuperAdminOnly(logger), adminHandler.GenerateInvitation)
 	admin.Put("/users/:id/block", adminHandler.BlockUser)
+	// MAZADPAY -- admin wallet controls: disable/re-enable a user's wallet
+	// (blocks new bidding/withdrawal spend while disabled). Sits next to
+	// /users/:id/block since both are user-anchored admin status toggles.
+	admin.Put("/users/:id/wallet-disabled", adminHandler.AdminSetWalletDisabled)
 
 	// Super Admin only - Delete user
 	admin.Delete("/users/:id", middleware.SuperAdminOnly(logger), adminHandler.DeleteUser)
@@ -390,6 +397,9 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	// (the auto non-winner refund at finalization never covers this).
 	admin.Post("/auctions/:id/refund-winner-insurance", adminHandler.RefundWinnerInsurance)
 	admin.Post("/transactions/:id/add-balance", adminHandler.AdminAddBalance)
+	// MAZADPAY -- admin wallet controls: deduct balance, the mirror of
+	// add-balance immediately above.
+	admin.Post("/transactions/:id/deduct-balance", adminHandler.AdminDeductBalance)
 	// Customer #36: optional admin-side review attachment, unrelated to a
 	// specific transaction ID (returns a URL the client then submits with the
 	// validate call above).

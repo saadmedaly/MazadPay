@@ -75,6 +75,21 @@ export async function addBalance(payload: {
   return data.data
 }
 
+// deductBalance (admin wallet controls): the mirror of addBalance -- admin
+// debits a user's wallet directly from a transaction's detail page. Same
+// anchor-transaction-derives-target-user contract.
+export async function deductBalance(payload: {
+  id: string
+  amount: string
+  notes?: string
+}): Promise<{ transaction_id: string; amount: string }> {
+  const { data } = await client.post<APIResponse<{ transaction_id: string; amount: string }>>(
+    `/v1/api/admin/transactions/${payload.id}/deduct-balance`,
+    { amount: payload.amount, notes: payload.notes }
+  )
+  return data.data
+}
+
 export async function exportTransactions(filters: { status?: string, start_date?: string, end_date?: string }): Promise<void> {
   const { data } = await client.get('/v1/api/admin/reports/transactions/export', {
     params: filters,

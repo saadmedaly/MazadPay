@@ -20,6 +20,18 @@ type Wallet struct {
 	// wallets in this release). Nullable for wallets created before migration
 	// 000046; EffectiveCurrencyCode below is the fallback-aware accessor.
 	CurrencyCode *string `db:"currency_code" json:"currency_code,omitempty"`
+	// IsDisabled (migration 000058, admin wallet controls): admin-set status
+	// flag, orthogonal to FrozenAmount. FrozenAmount tracks a QUANTITY
+	// temporarily earmarked for one specific pending withdrawal/bid-insurance
+	// hold; IsDisabled means the wallet's entire (unfrozen) Balance must also
+	// reject new spend attempts (bidding, withdrawal requests) regardless of
+	// amount, until an admin re-enables it. Admin credit/debit are
+	// deliberately NOT gated by this flag -- an admin must always be able to
+	// correct a disabled wallet's balance.
+	IsDisabled     bool       `db:"is_disabled"     json:"is_disabled"`
+	DisabledReason *string    `db:"disabled_reason" json:"disabled_reason,omitempty"`
+	DisabledBy     *uuid.UUID `db:"disabled_by"     json:"disabled_by,omitempty"`
+	DisabledAt     *time.Time `db:"disabled_at"     json:"disabled_at,omitempty"`
 }
 
 // EffectiveCurrencyCode falls back to DefaultCurrencyCode for wallets

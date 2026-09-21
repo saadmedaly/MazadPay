@@ -103,6 +103,22 @@ var (
 	// transition to guard against re-entry, unlike deposit/withdraw).
 	ErrDuplicateAdminCredit = errors.New("admin_credit_already_applied")
 
+	// MAZADPAY -- admin wallet controls (deduct/disable): same
+	// duplicate-guard shape as ErrDuplicateAdminCredit, mirrored for the new
+	// admin_debit ledger type (uq_admin_debit_reference, migration 000058).
+	ErrDuplicateAdminDebit = errors.New("admin_debit_already_applied")
+	// ErrInsufficientBalanceForDebit: an admin attempted to deduct more than
+	// the wallet's current (unfrozen) balance -- distinct from
+	// ErrInsufficientBalance so the admin UI can show an admin-specific
+	// message rather than reusing the user-facing withdrawal/bid message.
+	ErrInsufficientBalanceForDebit = errors.New("insufficient_balance_for_debit")
+	// ErrWalletDisabled: the target wallet's is_disabled flag (migration
+	// 000058) is set -- blocks new spend attempts (bidding, withdrawal
+	// requests) until an admin re-enables it. Admin credit/debit are
+	// deliberately exempt from this check (see models.Wallet.IsDisabled doc
+	// comment).
+	ErrWalletDisabled = errors.New("wallet_disabled")
+
 	// Chat / Messagerie
 	ErrConversationNotFound     = errors.New("conversation_not_found")
 	ErrNotConversationMember    = errors.New("not_conversation_member")

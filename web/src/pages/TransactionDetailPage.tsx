@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
  import { ImagePreview } from '@/components/shared/ImagePreview'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
-import { useTransaction, useValidateTransaction, useReceiptURL, useAddBalance, useUploadReviewAttachment } from '@/hooks/useTransactions'
+import { useTransaction, useValidateTransaction, useReceiptURL, useAddBalance, useDeductBalance, useUploadReviewAttachment } from '@/hooks/useTransactions'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { GATEWAY_LABELS } from '@/lib/constants'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -20,12 +20,15 @@ export function TransactionDetailPage() {
   const [confirmAction, setConfirmAction] = useState<'approve' | 'reject' | null>(null)
   const [addBalanceAmount, setAddBalanceAmount] = useState('')
   const [confirmAddBalance, setConfirmAddBalance] = useState(false)
+  const [deductBalanceAmount, setDeductBalanceAmount] = useState('')
+  const [confirmDeductBalance, setConfirmDeductBalance] = useState(false)
   const [reviewAttachment, setReviewAttachment] = useState<File | null>(null)
   const [reviewAttachmentPreview, setReviewAttachmentPreview] = useState<string | null>(null)
 
   const { data: txn, isLoading, isError } = useTransaction(id!)
   const validate = useValidateTransaction()
   const addBalance = useAddBalance()
+  const deductBalance = useDeductBalance()
   const uploadAttachment = useUploadReviewAttachment()
   const { data: receiptData } = useReceiptURL(id!)
   const receiptRef = useRef<HTMLDivElement>(null)
@@ -75,6 +78,18 @@ export function TransactionDetailPage() {
     addBalance.mutate(
       { id: id!, amount: addBalanceAmount },
       { onSuccess: () => { setAddBalanceAmount(''); setConfirmAddBalance(false) } }
+    )
+  }
+
+  // MAZADPAY -- admin wallet controls: the mirror of add-balance above.
+  const deductBalanceAmountValue = parseFloat(deductBalanceAmount)
+  const isDeductBalanceAmountValid = !isNaN(deductBalanceAmountValue) && deductBalanceAmountValue > 0
+
+  const handleDeductBalance = () => {
+    if (!isDeductBalanceAmountValid) return
+    deductBalance.mutate(
+      { id: id!, amount: deductBalanceAmount },
+      { onSuccess: () => { setDeductBalanceAmount(''); setConfirmDeductBalance(false) } }
     )
   }
 
@@ -293,6 +308,39 @@ export function TransactionDetailPage() {
         </div>
       </div>
 
+      {/* Deduct Balance (admin wallet controls): the mirror of Add Balance
+          above -- same anchor-transaction-derives-target-user architecture,
+          same wallet/ledger reuse. variant="danger" confirm dialog since
+          deduction is the more destructive direction. */}
+      <div className="admin-card p-6 mt-6">
+        <h2 className="font-display font-bold text-white text-base mb-6 pb-4 border-b border-surface-border flex items-center gap-2">
+          <Wallet className="w-4 h-4 text-red-400" />
+           خصم رصيد من حساب المستخدم
+        </h2>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={deductBalanceAmount}
+            onChange={(e) => setDeductBalanceAmount(e.target.value)}
+            placeholder="أدخل مبلغ الخصم"
+            className="flex-1 bg-surface-base border border-surface-border rounded-xl px-4 py-3
+                       text-sm text-white placeholder:text-surface-muted/30 focus:outline-none
+                       focus:border-red-500 transition-all font-medium shadow-inner"
+          />
+          <button
+            onClick={() => setConfirmDeductBalance(true)}
+            disabled={!isDeductBalanceAmountValid || deductBalance.isPending}
+            className="flex items-center justify-center gap-2 rounded-xl bg-red-500 hover:bg-red-600
+                       text-white font-bold px-6 py-3 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Wallet className="w-4 h-4" />
+            خصم الرصيد
+          </button>
+        </div>
+      </div>
+
       {/* Confirm Dialogs */}
       <ConfirmDialog
         open={confirmAction === 'approve'}
@@ -327,6 +375,16 @@ export function TransactionDetailPage() {
         variant="success"
         loading={addBalance.isPending}
         onConfirm={handleAddBalance}
+      />
+      <ConfirmDialog
+        open={confirmDeductBalance}
+        onOpenChange={(v) => !v && setConfirmDeductBalance(false)}
+        title={`هل أنت متأكد من خصم ${isDeductBalanceAmountValid ? formatPrice(deductBalanceAmountValue, txn.currency_code) : deductBalanceAmount} من رصيد المستخدم؟`}
+        description="سيتم خصم المبلغ من محفظة المستخدم فوراً ولا يمكن التراجع عن هذا الإجراء."
+        confirmLabel="تأكيد خصم الرصيد"
+        variant="danger"
+        loading={deductBalance.isPending}
+        onConfirm={handleDeductBalance}
       />
     </div>
   )

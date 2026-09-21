@@ -338,6 +338,15 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "admin_credit_already_applied":
 		logger.Info("Admin add-balance rejected: duplicate request for the same transaction", logFields...)
 		return Fail(c, 409, "admin_credit_already_applied", "تمت إضافة هذا الرصيد مسبقاً لهذه المعاملة")
+	case "admin_debit_already_applied":
+		logger.Info("Admin deduct-balance rejected: duplicate request for the same transaction", logFields...)
+		return Fail(c, 409, "admin_debit_already_applied", "تم خصم هذا الرصيد مسبقاً لهذه المعاملة")
+	case "insufficient_balance_for_debit":
+		logger.Info("Admin deduct-balance rejected: insufficient balance", logFields...)
+		return Fail(c, 422, "insufficient_balance_for_debit", "رصيد المستخدم غير كافٍ لإجراء هذا الخصم")
+	case "wallet_disabled":
+		logger.Info("Action rejected: wallet is disabled", logFields...)
+		return Fail(c, 403, "wallet_disabled", "تم تعطيل هذه المحفظة مؤقتاً من قبل الإدارة")
 	case "receipt_required":
 		logger.Info("Receipt required for transaction", logFields...)
 		return Fail(c, 400, "receipt_required", "Receipt is required for this transaction")

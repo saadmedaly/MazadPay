@@ -263,6 +263,13 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 	if err != nil {
 		return nil, err
 	}
+	// MAZADPAY -- admin wallet controls: a wallet an admin has disabled
+	// (migration 000058) must reject a new withdrawal request regardless of
+	// balance. An already-frozen amount from a withdrawal requested BEFORE
+	// the wallet was disabled is unaffected -- this only blocks new requests.
+	if wallet.IsDisabled {
+		return nil, apperr.ErrWalletDisabled
+	}
 	currencyCode := wallet.EffectiveCurrencyCode()
 
 	txModel := &models.Transaction{

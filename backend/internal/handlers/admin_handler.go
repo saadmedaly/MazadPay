@@ -179,6 +179,23 @@ func (h *AdminHandler) GetUserByID(c *fiber.Ctx) error {
 	return OK(c, user)
 }
 
+// GetUserWallet (admin wallet controls): read-only wallet lookup (balance,
+// frozen_amount, is_disabled) for the admin user-detail page, shown before
+// offering add/deduct/disable actions.
+func (h *AdminHandler) GetUserWallet(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid user ID")
+	}
+
+	wallet, err := h.svc.GetUserWallet(c.Context(), id)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, wallet)
+}
+
 // Get user auctions
 func (h *AdminHandler) GetUserAuctions(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
@@ -682,6 +699,75 @@ func (h *AdminHandler) AdminAddBalance(c *fiber.Ctx) error {
 		"message":        "Balance added",
 		"transaction_id": ledgerTx.ID.String(),
 		"amount":         ledgerTx.Amount.String(),
+	})
+}
+
+// AdminDeductBalance (admin wallet controls): admin deducts balance from a
+// user's wallet, the mirror of AdminAddBalance immediately above -- same
+// request/response shape.
+func (h *AdminHandler) AdminDeductBalance(c *fiber.Ctx) error {
+	transactionID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid transaction ID")
+	}
+	type Request struct {
+		Amount float64 `json:"amount"`
+		Notes  string  `json:"notes"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if req.Amount <= 0 {
+		return BadRequest(c, "Amount must be greater than 0")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	ledgerTx, err := h.svc.AdminDeductBalance(c.Context(), transactionID, decimal.NewFromFloat(req.Amount), req.Notes, adminID)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, fiber.Map{
+		"message":        "Balance deducted",
+		"transaction_id": ledgerTx.ID.String(),
+		"amount":         ledgerTx.Amount.String(),
+	})
+}
+
+// AdminSetWalletDisabled (admin wallet controls): admin disables/re-enables
+// a user's wallet (blocks new spend -- bidding, withdrawal requests -- while
+// disabled). :id is the target USER id directly (not an anchor transaction),
+// since this is a status toggle, not a money movement.
+func (h *AdminHandler) AdminSetWalletDisabled(c *fiber.Ctx) error {
+	userID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid user ID")
+	}
+	type Request struct {
+		Disabled bool   `json:"disabled"`
+		Reason   string `json:"reason"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.AdminSetWalletDisabled(c.Context(), userID, req.Disabled, req.Reason, adminID); err != nil {
+		return MapError(c, h.logger, err)
+	}
+	message := "Wallet disabled"
+	if !req.Disabled {
+		message = "Wallet re-enabled"
+	}
+	return OK(c, fiber.Map{
+		"message":     message,
+		"user_id":     userID.String(),
+		"is_disabled": req.Disabled,
 	})
 }
 

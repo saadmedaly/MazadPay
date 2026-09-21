@@ -53,6 +53,23 @@ type AdminService interface {
 	// never trusted from the client. See its own doc comment for the full
 	// authorization/idempotency/atomicity contract.
 	AdminAddBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error)
+	// AdminDeductBalance (admin wallet controls): admin-only direct debit
+	// from a user's wallet, the mirror of AdminAddBalance -- same
+	// anchor-transaction-derives-target-user shape, same idempotency/ledger
+	// contract. See its own doc comment for the full contract.
+	AdminDeductBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error)
+	// AdminSetWalletDisabled (admin wallet controls): admin-only toggle of a
+	// user's wallet is_disabled status (migration 000058) -- blocks new
+	// spend attempts (bidding, withdrawal requests) while set. Unlike
+	// AdminAddBalance/AdminDeductBalance, this is user-anchored directly
+	// (userID), not derived from a transaction, since disabling a wallet is
+	// not itself a money movement. See its own doc comment for the full
+	// contract.
+	AdminSetWalletDisabled(ctx context.Context, userID uuid.UUID, disabled bool, reason string, adminID uuid.UUID) error
+	// GetUserWallet (admin wallet controls): read-only lookup of a user's
+	// wallet (balance, frozen_amount, is_disabled, etc), for the admin UI to
+	// display before offering the add/deduct/disable actions above.
+	GetUserWallet(ctx context.Context, userID uuid.UUID) (*models.Wallet, error)
 	// RelistAuction (Customer #37): admin-only relist of an ended auction,
 	// reusing the Bug J atomic relist transition. Original duration is
 	// derived server-side from the auction's own stored start/end time,
@@ -1180,6 +1197,139 @@ func (s *adminService) AdminAddBalance(ctx context.Context, transactionID uuid.U
 	}
 
 	return ledgerTx, nil
+}
+
+// AdminDeductBalance (admin wallet controls): admin-only direct debit from a
+// user's wallet, the mirror of AdminAddBalance immediately above -- same
+// shape throughout: target user derived server-side from the anchor
+// transaction, ledger row created already 'completed' in one step, and the
+// same duplicate-request guard pattern (uq_admin_debit_reference, migration
+// 000058) protecting against a double-click/retry, this time reported as
+// ErrDuplicateAdminDebit. The only behavioral difference from
+// AdminAddBalance is DebitBalance's WHERE balance >= $1 compare-and-set:
+// insufficient funds fails the debit atomically (0 rows updated) rather than
+// ever driving balance negative, surfaced as ErrInsufficientBalanceForDebit.
+// Deliberately NOT gated by the target wallet's IsDisabled flag -- an admin
+// must always be able to correct a disabled wallet's balance (e.g. clawing
+// back an erroneous credit) regardless of its disabled status.
+func (s *adminService) AdminDeductBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error) {
+	if amount.LessThanOrEqual(decimal.Zero) {
+		return nil, apperr.ErrBadRequest
+	}
+
+	anchor, err := s.txRepo.GetByID(ctx, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	userID := anchor.UserID
+
+	dbtx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer dbtx.Rollback()
+
+	wallet, err := s.walletRepo.FindForUpdate(ctx, dbtx, userID)
+	if err != nil {
+		return nil, err
+	}
+	currencyCode := wallet.EffectiveCurrencyCode()
+
+	if err := s.walletRepo.DebitBalance(ctx, dbtx, userID, amount); err != nil {
+		return nil, err
+	}
+
+	reference := "admin_debit:" + transactionID.String()
+	var adminNotes *string
+	if notes != "" {
+		adminNotes = &notes
+	}
+	ledgerTx := &models.Transaction{
+		ID:           uuid.New(),
+		UserID:       userID,
+		Type:         "admin_debit",
+		Amount:       amount,
+		Status:       "completed",
+		Reference:    &reference,
+		AdminNotes:   adminNotes,
+		ReviewedBy:   &adminID,
+		CurrencyCode: &currencyCode,
+	}
+	if err := s.txRepo.CreateTx(ctx, dbtx, ledgerTx); err != nil {
+		if strings.Contains(err.Error(), "uq_admin_debit_reference") {
+			return nil, apperr.ErrDuplicateAdminDebit
+		}
+		return nil, err
+	}
+
+	if err := dbtx.Commit(); err != nil {
+		return nil, err
+	}
+
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"user_id":               userID.String(),
+			"anchor_transaction_id": transactionID.String(),
+			"amount":                amount.String(),
+			"currency":              currencyCode,
+			"transaction":           ledgerTx.ID.String(),
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "admin_deducted_balance", "user", &userID,
+			fmt.Sprintf("user_id=%s amount=%s", userID, amount.String()),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("AdminDeductBalance: failed to write audit log", zap.String("user_id", userID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return ledgerTx, nil
+}
+
+// AdminSetWalletDisabled (admin wallet controls): toggles a user's wallet
+// is_disabled status flag (migration 000058). This is a pure status change,
+// not a money movement -- no ledger Transaction row is created (there is no
+// amount to record), and it runs as a single UPDATE rather than inside a
+// dbtx paired with a ledger insert, unlike AdminAddBalance/AdminDeductBalance
+// above. Re-enabling (disabled=false) clears reason/disabled_by/disabled_at
+// at the repository level (SetWalletDisabled) so a stale reason never
+// lingers once a wallet is active again.
+func (s *adminService) AdminSetWalletDisabled(ctx context.Context, userID uuid.UUID, disabled bool, reason string, adminID uuid.UUID) error {
+	if err := s.walletRepo.SetWalletDisabled(ctx, userID, disabled, reason, adminID); err != nil {
+		return err
+	}
+
+	if s.auditSvc != nil {
+		action := "admin_disabled_wallet"
+		if !disabled {
+			action = "admin_enabled_wallet"
+		}
+		detailsJSON := models.JSONB{
+			"user_id": userID.String(),
+			"reason":  reason,
+		}
+		details := fmt.Sprintf("user_id=%s disabled=%v", userID, disabled)
+		if auditErr := s.auditSvc.Log(ctx, adminID, action, "user", &userID, details,
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("AdminSetWalletDisabled: failed to write audit log", zap.String("user_id", userID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return nil
+}
+
+// GetUserWallet (admin wallet controls): read-only wallet lookup for the
+// admin UI. Reuses the existing WalletRepository.GetByUserID (auto-creates a
+// zero-balance wallet row if the user somehow has none yet, matching every
+// other wallet read path's behavior).
+func (s *adminService) GetUserWallet(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
+	return s.walletRepo.GetByUserID(ctx, userID)
 }
 
 func (s *adminService) ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error) {

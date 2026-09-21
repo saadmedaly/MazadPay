@@ -20,13 +20,15 @@ import {
   CheckCircle,
   Save,
   X,
+  Wallet,
+  WalletCards,
 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { DataTable } from '@/components/shared/DataTable'
-import { useUser, useUserHistory, useBlockUser, useUpdateProfile } from '@/hooks/useUsers'
+import { useUser, useUserHistory, useBlockUser, useUpdateProfile, useUserWallet, useSetWalletDisabled } from '@/hooks/useUsers'
 import { formatDate, formatPrice, formatFullPhone, shortID } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -38,6 +40,8 @@ export function UserDetailPage() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'auctions' | 'transactions'>('auctions')
   const [blockConfirm, setBlockConfirm] = useState(false)
+  const [walletDisableConfirm, setWalletDisableConfirm] = useState(false)
+  const [walletDisableReason, setWalletDisableReason] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [showPin, setShowPin] = useState(false)
   const [showNewPin, setShowNewPin] = useState(false)
@@ -55,8 +59,10 @@ export function UserDetailPage() {
 
   const { data: user, isLoading, isError, refetch } = useUser(id!)
   const { data: history, isLoading: historyLoading } = useUserHistory(id!, activeTab)
+  const { data: wallet } = useUserWallet(id!)
   const blockUser = useBlockUser()
   const updateProfile = useUpdateProfile()
+  const setWalletDisabled = useSetWalletDisabled()
 
   // Initialize edit form when user data loads
   const startEditing = () => {
@@ -128,6 +134,25 @@ export function UserDetailPage() {
     blockUser.mutate(
       { id: user.id, block: user.is_active },
       { onSuccess: () => setBlockConfirm(false) }
+    )
+  }
+
+  // MAZADPAY -- admin wallet controls: re-enable needs no reason/confirm
+  // dialog (a low-risk, easily-reversible action); disable does, since it
+  // blocks the user's spending and should carry an explicit reason.
+  const handleWalletDisableToggle = () => {
+    if (!wallet) return
+    if (wallet.is_disabled) {
+      setWalletDisabled.mutate({ id: user.id, disabled: false })
+      return
+    }
+    setWalletDisableConfirm(true)
+  }
+
+  const confirmWalletDisable = () => {
+    setWalletDisabled.mutate(
+      { id: user.id, disabled: true, reason: walletDisableReason },
+      { onSuccess: () => { setWalletDisableConfirm(false); setWalletDisableReason('') } }
     )
   }
 
@@ -355,6 +380,54 @@ export function UserDetailPage() {
               )}
             </div>
           </div>
+
+          {/* MAZADPAY -- admin wallet controls: read-only balance display +
+              disable/enable toggle. Add/deduct balance itself stays on
+              TransactionDetailPage (anchored to a specific transaction);
+              this card is for the user-anchored disable/enable action and
+              at-a-glance wallet status. */}
+          {wallet && (
+            <div className="admin-card p-6">
+              <h3 className="text-xs font-bold text-surface-muted uppercase tracking-widest mb-4 flex items-center gap-2">
+                <WalletCards className="w-3.5 h-3.5 text-mazad-primary" />
+                المحفظة
+              </h3>
+              <div className="space-y-3 mb-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-surface-muted">الرصيد المتاح</span>
+                  <span className="text-sm font-bold text-white">{formatPrice(wallet.balance, wallet.currency_code)}</span>
+                </div>
+                {parseFloat(wallet.frozen_amount) > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-surface-muted">رصيد مجمد</span>
+                    <span className="text-sm font-bold text-orange-400">{formatPrice(wallet.frozen_amount, wallet.currency_code)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-surface-muted">حالة المحفظة</span>
+                  <StatusBadge status={wallet.is_disabled ? 'blocked' : 'verified'} />
+                </div>
+                {wallet.is_disabled && wallet.disabled_reason && (
+                  <p className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-2 mt-1">
+                    السبب: {wallet.disabled_reason}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={handleWalletDisableToggle}
+                disabled={setWalletDisabled.isPending}
+                className={cn(
+                  "w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all border shadow-lg disabled:opacity-50",
+                  wallet.is_disabled
+                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500 hover:bg-emerald-500 hover:text-white"
+                    : "bg-orange-500/10 border-orange-500/20 text-orange-500 hover:bg-orange-500 hover:text-white"
+                )}
+              >
+                <Wallet className="w-4 h-4" />
+                {wallet.is_disabled ? 'إعادة تفعيل المحفظة' : 'تعطيل/تجميد المحفظة'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* History Tabs */}
@@ -470,6 +543,32 @@ export function UserDetailPage() {
         variant={user.is_active ? 'danger' : 'success'}
         loading={blockUser.isPending}
         onConfirm={handleBlockToggle}
+      />
+
+      {/* MAZADPAY -- admin wallet controls: disable-wallet confirm dialog with
+          an optional reason field, mirroring the PIN Reset Modal's pattern of
+          a ConfirmDialog with a custom input-bearing description. */}
+      <ConfirmDialog
+        open={walletDisableConfirm}
+        onOpenChange={(v) => { setWalletDisableConfirm(v); if (!v) setWalletDisableReason('') }}
+        title={`هل تود تعطيل محفظة ${user.full_name ?? 'هذا المستخدم'}؟`}
+        description={
+          <div className="space-y-3 mt-2">
+            <p>لن يتمكن المستخدم من المزايدة أو طلب سحب رصيد حتى تتم إعادة التفعيل. لا يؤثر هذا على رصيده الحالي.</p>
+            <div>
+              <label className="text-xs font-bold text-surface-muted mb-1 block">السبب (اختياري)</label>
+              <Input
+                value={walletDisableReason}
+                onChange={(e) => setWalletDisableReason(e.target.value)}
+                placeholder="اكتب سبب التعطيل..."
+              />
+            </div>
+          </div>
+        }
+        confirmLabel="تأكيد التعطيل"
+        variant="danger"
+        loading={setWalletDisabled.isPending}
+        onConfirm={confirmWalletDisable}
       />
 
       {/* PIN Reset Modal */}

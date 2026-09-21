@@ -146,6 +146,16 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 				if wallet.EffectiveCurrencyCode() != auction.EffectiveCurrencyCode() {
 					return apperr.ErrWalletCurrencyMismatch
 				}
+				// MAZADPAY -- admin wallet controls: a wallet an admin has
+				// disabled (migration 000058) must reject a new insurance
+				// freeze/bid attempt regardless of its balance. Checked here
+				// (first real spend gate in the bid path) rather than at
+				// PlaceBid's entry, so a bidder with an existing active hold
+				// on THIS auction (existingHold != nil, no new freeze
+				// needed) is unaffected -- disabling only blocks NEW spend.
+				if wallet.IsDisabled {
+					return apperr.ErrWalletDisabled
+				}
 				if wallet.Balance.LessThan(auction.InsuranceAmount) {
 					return apperr.ErrInsufficientForInsurance
 				}

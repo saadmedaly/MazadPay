@@ -73,3 +73,17 @@ export function useAddBalance() {
     onError: (err: Error) => toast.error(err.message),
   })
 }
+
+// MAZADPAY -- admin wallet controls: the mirror of useAddBalance above.
+export function useDeductBalance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.deductBalance,
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: txnKeys.byId(vars.id) })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast.success('تم خصم الرصيد من حساب المستخدم بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+}

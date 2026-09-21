@@ -145,6 +145,46 @@ export function useUserHistory(id: string, type: 'auctions' | 'transactions') {
   })
 }
 
+// MAZADPAY -- admin wallet controls: read-only wallet lookup (balance,
+// frozen_amount, is_disabled) shown on the user detail page before the
+// disable/enable action.
+export interface AdminWallet {
+  user_id: string
+  balance: string
+  frozen_amount: string
+  version: number
+  updated_at: string
+  currency_code: string
+  is_disabled: boolean
+  disabled_reason?: string
+  disabled_by?: string
+  disabled_at?: string
+}
+
+export function useUserWallet(id: string) {
+  return useQuery({
+    queryKey: [...userKeys.byId(id), 'wallet'],
+    queryFn: async () => {
+      const { data } = await client.get<{ data: AdminWallet }>(`/v1/api/admin/users/${id}/wallet`)
+      return data.data
+    },
+    enabled: !!id,
+  })
+}
+
+export function useSetWalletDisabled() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, disabled, reason }: { id: string; disabled: boolean; reason?: string }) =>
+      client.put(`/v1/api/admin/users/${id}/wallet-disabled`, { disabled, reason }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: [...userKeys.byId(vars.id), 'wallet'] })
+      toast.success(vars.disabled ? 'تم تعطيل محفظة المستخدم' : 'تم إعادة تفعيل محفظة المستخدم')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+}
+
 export function useBlockUser() {
   const qc = useQueryClient()
   return useMutation({
