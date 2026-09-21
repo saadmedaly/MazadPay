@@ -77,7 +77,13 @@ export function useToggleCategory() {
 export function useLocations() {
   return useQuery({
     queryKey: ['locations'],
-    queryFn: api.fetchLocations
+    // { signal } forwarded to fetchLocations so a superseded in-flight
+    // request (e.g. a background refetch racing a mutation's own
+    // invalidateQueries refetch) is genuinely aborted on the wire instead
+    // of both resolving and letting whichever lands last win the cache --
+    // see fetchLocations' own comment in api/metadata.ts for the full
+    // mechanism.
+    queryFn: ({ signal }) => api.fetchLocations(signal)
   })
 }
 

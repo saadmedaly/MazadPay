@@ -48,7 +48,23 @@ export async function fetchCategories(): Promise<Category[]> {
   return data.data
 }
 
-export async function fetchLocations(): Promise<Location[]> {
-  const { data } = await client.get<APIResponse<Location[]>>('/v1/api/locations')
+// MAZADPAY locations-list UI staleness bug: this never accepted/forwarded
+// React Query's AbortSignal to axios. useLocations() is observed by
+// multiple pages (LocationsPage, AuctionsPage, AuctionRequestFormPage), so
+// a background refetch (mount/window-focus) can already be in flight when
+// a create/update/delete's invalidateQueries triggers its own refetch for
+// the same ['locations'] key. React Query's invalidateQueries always calls
+// refetchQueries with cancelRefetch:true (queryClient.js), which calls
+// query.cancel() on the stale in-flight fetch -- but with no signal wired
+// through, that cancellation only updates React Query's own bookkeeping;
+// the actual HTTP GET keeps running on the wire. Both requests then
+// resolve independently, and whichever response lands LAST (not
+// necessarily the fresh, invalidation-triggered one) is what the query
+// cache ends up holding -- observed live as a create/update/delete
+// succeeding while the table kept rendering pre-mutation data. Passing
+// signal through lets axios genuinely abort the superseded request instead
+// of letting it race the real one to the cache.
+export async function fetchLocations(signal?: AbortSignal): Promise<Location[]> {
+  const { data } = await client.get<APIResponse<Location[]>>('/v1/api/locations', { signal })
   return data.data
 }
