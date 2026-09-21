@@ -8,6 +8,8 @@ import '../providers/auction_provider_api.dart';
 import '../models/auction.dart';
 import '../utils/money_formatter.dart';
 import '../utils/auction_image.dart';
+import '../utils/whatsapp_launcher.dart';
+import 'my_winnings_page.dart' show buildWinnerPaymentMessage;
 
 class AuctionWinnerPage extends ConsumerWidget {
   final String auctionId;
@@ -89,7 +91,7 @@ class AuctionWinnerPage extends ConsumerWidget {
                     _buildWinnerSummary(context, auction, isDarkMode),
 
                     const SizedBox(height: 40),
-                    _buildFooterAction(context, isDarkMode),
+                    _buildFooterAction(context, auction, isDarkMode),
                   ],
                 ),
               ),
@@ -289,16 +291,29 @@ class AuctionWinnerPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildFooterAction(BuildContext context, bool isDarkMode) {
+  // MAZADPAY -- winner notification payment button bug: this button was a
+  // placeholder ("Future payment gateway integration", never implemented),
+  // so tapping "أكمل عملية الدفع" here did nothing at all. Fixed to behave
+  // EXACTLY like the already-working My Winnings payment button
+  // (my_winnings_page.dart's _openPaymentWhatsApp): same WhatsApp number,
+  // same prefilled message builder (buildWinnerPaymentMessage, imported
+  // from my_winnings_page.dart rather than reimplemented), same wa.me
+  // primary launch / whatsapp:// native fallback / safe error handling
+  // (launchMazadPayWhatsApp, the shared launcher already used elsewhere --
+  // see utils/whatsapp_launcher.dart's own doc comment for why this exists).
+  Widget _buildFooterAction(BuildContext context, Auction auction, bool isDarkMode) {
+    final message = buildWinnerPaymentMessage(
+      auctionTitle: auction.title,
+      lotNumber: auction.lotNumber,
+      formattedAmount: MoneyFormatter.format(auction.currentPrice, auction.currencyCode),
+    );
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: SizedBox(
         width: double.infinity,
         height: 60,
         child: ElevatedButton(
-          onPressed: () {
-            // Future payment gateway integration
-          },
+          onPressed: () => launchMazadPayWhatsApp(context, message),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF4A7DFF),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
