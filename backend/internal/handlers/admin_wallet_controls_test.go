@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -173,6 +174,57 @@ func TestAdminDeductBalance_Admin_Allowed(t *testing.T) {
 	}
 	if !fakeSvc.deductCalls[0].amount.Equal(decimal.NewFromInt(300)) {
 		t.Fatalf("expected amount 300, got %s", fakeSvc.deductCalls[0].amount)
+	}
+}
+
+// MAZADPAY -- live Validation bug (AdminAddBalance side, fixed identically
+// here since AdminDeductBalance shares the exact same Request struct/
+// BodyParser contract): the admin UI previously sent amount as a JSON
+// STRING, which float64 unmarshal rejects outright. Proves the requested
+// exact amounts (100, 200, 500, 1200, 5000) are accepted as real JSON
+// numbers and reach AdminDeductBalance with the exact value.
+func TestAdminDeductBalance_ExactAmounts_AcceptedAsJSONNumbers(t *testing.T) {
+	amounts := []int64{100, 200, 500, 1200, 5000}
+	for _, amt := range amounts {
+		fakeSvc := &fakeAdminServiceForWalletControls{}
+		app := buildWalletControlsTestApp(t, fakeSvc)
+		token := signWalletControlsTestJWT(t, "admin")
+
+		transactionID := uuid.New()
+		body := fmt.Sprintf(`{"amount": %d}`, amt)
+		req := deductBalanceRequest(t, transactionID.String(), token, body)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("app.Test failed for amount %d: %v", amt, err)
+		}
+		if resp.StatusCode != fiber.StatusOK {
+			t.Fatalf("expected 200 for amount %d, got %d", amt, resp.StatusCode)
+		}
+		if len(fakeSvc.deductCalls) != 1 {
+			t.Fatalf("expected exactly 1 AdminDeductBalance call for amount %d, got %d", amt, len(fakeSvc.deductCalls))
+		}
+		if !fakeSvc.deductCalls[0].amount.Equal(decimal.NewFromInt(amt)) {
+			t.Fatalf("expected amount %d to reach AdminDeductBalance exactly, got %s", amt, fakeSvc.deductCalls[0].amount)
+		}
+	}
+}
+
+// MAZADPAY -- live Validation bug regression guard, mirrored for deduct.
+func TestAdminDeductBalance_StringAmount_Rejected(t *testing.T) {
+	fakeSvc := &fakeAdminServiceForWalletControls{}
+	app := buildWalletControlsTestApp(t, fakeSvc)
+	token := signWalletControlsTestJWT(t, "admin")
+
+	req := deductBalanceRequest(t, uuid.New().String(), token, `{"amount": "200"}`)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("expected 400 for a JSON-string amount (the exact live bug), got %d", resp.StatusCode)
+	}
+	if len(fakeSvc.deductCalls) != 0 {
+		t.Fatalf("expected AdminDeductBalance to never be called for a malformed string amount, got %d calls", len(fakeSvc.deductCalls))
 	}
 }
 

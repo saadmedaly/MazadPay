@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -165,6 +166,65 @@ func TestAdminAddBalance_SuperAdmin_Allowed(t *testing.T) {
 	}
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("expected 200 for super_admin, got %d", resp.StatusCode)
+	}
+}
+
+// MAZADPAY -- live Validation bug: the admin UI previously sent amount as a
+// JSON STRING (e.g. {"amount":"200"}), the raw <input> value never converted
+// to a number. Request.Amount is `float64`, and Go's encoding/json does NOT
+// coerce a JSON string into a float64 field -- BodyParser failed the
+// unmarshal outright, surfaced to the admin as a generic "Invalid request
+// body" 400 regardless of what value was entered. Fixed on the frontend
+// (web/src/api/transactions.ts: Number(payload.amount)) so the wire format
+// always carries a genuine JSON number. This test proves the backend
+// contract those exact requested amounts must satisfy: a real JSON number
+// is accepted and reaches AdminAddBalance with the exact value, for every
+// amount explicitly requested (100, 200, 500, 1200, 5000).
+func TestAdminAddBalance_ExactAmounts_AcceptedAsJSONNumbers(t *testing.T) {
+	amounts := []int64{100, 200, 500, 1200, 5000}
+	for _, amt := range amounts {
+		fakeSvc := &fakeAdminServiceForAddBalance{}
+		app := buildAddBalanceTestApp(t, fakeSvc)
+		token := signAddBalanceTestJWT(t, "admin")
+
+		transactionID := uuid.New()
+		body := fmt.Sprintf(`{"amount": %d}`, amt)
+		req := addBalanceRequest(t, transactionID.String(), token, body)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("app.Test failed for amount %d: %v", amt, err)
+		}
+		if resp.StatusCode != fiber.StatusOK {
+			t.Fatalf("expected 200 for amount %d, got %d", amt, resp.StatusCode)
+		}
+		if len(fakeSvc.calls) != 1 {
+			t.Fatalf("expected exactly 1 AdminAddBalance call for amount %d, got %d", amt, len(fakeSvc.calls))
+		}
+		if !fakeSvc.calls[0].amount.Equal(decimal.NewFromInt(amt)) {
+			t.Fatalf("expected amount %d to reach AdminAddBalance exactly, got %s", amt, fakeSvc.calls[0].amount)
+		}
+	}
+}
+
+// MAZADPAY -- live Validation bug regression guard: a JSON STRING amount
+// (e.g. {"amount":"200"}, exactly what the admin UI sent before the fix)
+// must be rejected at the body-parse stage, proving the exact live failure
+// mode is caught by this test suite rather than silently reappearing.
+func TestAdminAddBalance_StringAmount_Rejected(t *testing.T) {
+	fakeSvc := &fakeAdminServiceForAddBalance{}
+	app := buildAddBalanceTestApp(t, fakeSvc)
+	token := signAddBalanceTestJWT(t, "admin")
+
+	req := addBalanceRequest(t, uuid.New().String(), token, `{"amount": "200"}`)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("expected 400 for a JSON-string amount (the exact live bug), got %d", resp.StatusCode)
+	}
+	if len(fakeSvc.calls) != 0 {
+		t.Fatalf("expected AdminAddBalance to never be called for a malformed string amount, got %d calls", len(fakeSvc.calls))
 	}
 }
 

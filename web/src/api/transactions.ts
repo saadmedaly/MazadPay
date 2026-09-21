@@ -63,6 +63,15 @@ export async function uploadReviewAttachment(file: File): Promise<{ url: string 
 // transaction's detail page. Only the anchor transaction id + amount are
 // sent -- the backend derives the target user_id from that transaction's
 // own user_id server-side, never from client input.
+//
+// BUG FIX (live Validation): payload.amount is the raw <input type="number">
+// string value (e.g. "200"). The backend's Request struct declares
+// `Amount float64 \`json:"amount"\`` -- Go's encoding/json does NOT coerce a
+// JSON string into a float64 field, it fails the unmarshal outright, which
+// Fiber's BodyParser surfaces as the generic "Invalid request body" 400 seen
+// live. Explicitly converting to Number here makes the JSON body carry a
+// numeric literal ({"amount":200}, not {"amount":"200"}), matching the
+// backend's actual contract.
 export async function addBalance(payload: {
   id: string
   amount: string
@@ -70,14 +79,16 @@ export async function addBalance(payload: {
 }): Promise<{ transaction_id: string; amount: string }> {
   const { data } = await client.post<APIResponse<{ transaction_id: string; amount: string }>>(
     `/v1/api/admin/transactions/${payload.id}/add-balance`,
-    { amount: payload.amount, notes: payload.notes }
+    { amount: Number(payload.amount), notes: payload.notes }
   )
   return data.data
 }
 
 // deductBalance (admin wallet controls): the mirror of addBalance -- admin
 // debits a user's wallet directly from a transaction's detail page. Same
-// anchor-transaction-derives-target-user contract.
+// anchor-transaction-derives-target-user contract, same amount-must-be-a-
+// JSON-number fix as addBalance above (this endpoint has the identical bug,
+// not yet hit live only because it wasn't tested there yet).
 export async function deductBalance(payload: {
   id: string
   amount: string
@@ -85,7 +96,7 @@ export async function deductBalance(payload: {
 }): Promise<{ transaction_id: string; amount: string }> {
   const { data } = await client.post<APIResponse<{ transaction_id: string; amount: string }>>(
     `/v1/api/admin/transactions/${payload.id}/deduct-balance`,
-    { amount: payload.amount, notes: payload.notes }
+    { amount: Number(payload.amount), notes: payload.notes }
   )
   return data.data
 }
