@@ -270,12 +270,20 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 	args = append(args, perPage, offset)
 	limitOffset := fmt.Sprintf(" LIMIT $%d OFFSET $%d", i, i+1)
 
-	// Note #1: sort mode, always featured-first (unchanged from the
-	// pre-existing behavior) then the caller's chosen secondary order.
-	// f.SortBy is matched against a fixed allowlist, never interpolated
-	// directly -- an unrecognized/empty value keeps the exact original
-	// "newest" order (created_at DESC), so this is purely additive.
+	// Note #1: sort mode, featured-first then the caller's chosen secondary
+	// order -- EXCEPT "ending_soon", whose entire point is a strict
+	// nearest-expiry-first order (client requirement: an auction ending in 5
+	// minutes must be shown before one ending in 30 minutes, full stop). A
+	// featured-but-not-soon-to-end auction sorting above a non-featured
+	// about-to-expire one would silently break that promise, so
+	// "ending_soon" alone drops the is_featured DESC prefix entirely. Every
+	// other sort mode (including the "newest" default) keeps the original
+	// featured-first behavior unchanged. f.SortBy is matched against a fixed
+	// allowlist, never interpolated directly -- an unrecognized/empty value
+	// keeps the exact original "newest" order (created_at DESC), so this is
+	// purely additive.
 	secondaryOrder := "a.created_at DESC"
+	orderBy := "a.is_featured DESC, %s"
 	switch f.SortBy {
 	case "price_asc":
 		secondaryOrder = "a.current_price ASC"
@@ -283,6 +291,7 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
 		secondaryOrder = "a.current_price DESC"
 	case "ending_soon":
 		secondaryOrder = "a.end_time ASC"
+		orderBy = "%s"
 	}
 
 	rows, err := r.db.QueryxContext(ctx,
@@ -300,7 +309,7 @@ func (r *auctionRepo) FindAll(ctx context.Context, f AuctionFilters) ([]models.A
             LEFT JOIN categories c ON a.category_id = c.id
             LEFT JOIN locations l ON a.location_id = l.id
             %s
-            ORDER BY a.is_featured DESC, %s%s`, where, secondaryOrder, limitOffset),
+            ORDER BY `+orderBy+`%s`, where, secondaryOrder, limitOffset),
 		args...)
 	if err != nil {
 		return nil, 0, err

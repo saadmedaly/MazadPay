@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 )
 
@@ -35,6 +36,21 @@ func setAuctionEndTime(t *testing.T, env *testEnv, auctionID uuid.UUID, endTime 
 	ctx := context.Background()
 	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET end_time = $1 WHERE id = $2`, endTime, auctionID); err != nil {
 		t.Fatalf("failed to set fixture auction end_time: %v", err)
+	}
+}
+
+// MAZADPAY -- "تنتهي قريباً" (ending soon) filter bug: FindAll's ORDER BY was
+// unconditionally prefixed with "a.is_featured DESC" for EVERY sort mode,
+// including ending_soon -- so a featured auction ending in 2 hours would
+// sort above a non-featured auction ending in 5 minutes, silently breaking
+// the client's explicit "nearest end_time first, full stop" requirement.
+// None of TestFindAll_SortModes' existing fixtures were featured, which is
+// exactly why that pre-existing test never caught this.
+func setAuctionFeatured(t *testing.T, env *testEnv, auctionID uuid.UUID, featured bool) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := env.db.ExecContext(ctx, `UPDATE auctions SET is_featured = $1 WHERE id = $2`, featured, auctionID); err != nil {
+		t.Fatalf("failed to set fixture auction is_featured: %v", err)
 	}
 }
 
@@ -186,6 +202,149 @@ func TestFindAll_SortModes(t *testing.T) {
 			t.Fatalf("expected results even with an unrecognized SortBy")
 		}
 	})
+}
+
+// MAZADPAY -- ending_soon must order by end_time ASC ALONE, never letting a
+// featured auction override the nearest-expiry ordering. This is the exact
+// client-reported scenario: a featured auction ending later must NOT jump
+// ahead of a non-featured auction ending sooner.
+func TestFindAll_EndingSoon_IgnoresFeaturedFlag(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ENDING SOON FEATURED SELLER")
+
+	// Featured, but ends LATER -- must not sort first under ending_soon.
+	featuredLate := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	setAuctionEndTime(t, env, featuredLate.ID, time.Now().Add(2*time.Hour))
+	setAuctionFeatured(t, env, featuredLate.ID, true)
+
+	// Not featured, ends SOON -- must sort first under ending_soon despite
+	// not being featured.
+	soonNotFeatured := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	setAuctionEndTime(t, env, soonNotFeatured.ID, time.Now().Add(5*time.Minute))
+
+	// Not featured, ends last.
+	laterNotFeatured := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	setAuctionEndTime(t, env, laterNotFeatured.ID, time.Now().Add(30*time.Minute))
+
+	results, _, err := env.auctionRepo.FindAll(ctx, repository.AuctionFilters{
+		Status: "active", SortBy: "ending_soon", PerPage: 100,
+	})
+	if err != nil {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+	pos := map[string]int{}
+	for i, a := range results {
+		pos[a.ID.String()] = i
+	}
+
+	// Expected order: soonNotFeatured (5min) < laterNotFeatured (30min) < featuredLate (2h)
+	// -- strict end_time ASC, is_featured completely ignored.
+	if pos[soonNotFeatured.ID.String()] >= pos[laterNotFeatured.ID.String()] {
+		t.Fatalf("expected the 5-min auction before the 30-min auction under ending_soon, got positions soon=%d later=%d",
+			pos[soonNotFeatured.ID.String()], pos[laterNotFeatured.ID.String()])
+	}
+	if pos[laterNotFeatured.ID.String()] >= pos[featuredLate.ID.String()] {
+		t.Fatalf("REGRESSION: featured auction (ends in 2h) sorted before a non-featured auction ending sooner (30min) -- is_featured must not override ending_soon, got positions later=%d featuredLate=%d",
+			pos[laterNotFeatured.ID.String()], pos[featuredLate.ID.String()])
+	}
+}
+
+// Pagination must not destroy the ending_soon order: page 2 must continue
+// exactly where page 1 left off, still strictly end_time ASC across the
+// page boundary.
+func TestFindAll_EndingSoon_OrderPreservedAcrossPagination(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ENDING SOON PAGINATION SELLER")
+
+	var auctionIDs []uuid.UUID
+	for i := 0; i < 5; i++ {
+		a := createTestAuction(t, env, seller.ID, "MR", "MRU")
+		// Ends sooner as i increases is wrong -- make i=0 the SOONEST so the
+		// expected order is auctionIDs[0..4] in that exact sequence.
+		setAuctionEndTime(t, env, a.ID, time.Now().Add(time.Duration(i+1)*time.Hour))
+		auctionIDs = append(auctionIDs, a.ID)
+	}
+
+	page1, _, err := env.auctionRepo.FindAll(ctx, repository.AuctionFilters{
+		Status: "active", SortBy: "ending_soon", Page: 1, PerPage: 3,
+	})
+	if err != nil {
+		t.Fatalf("FindAll page 1 failed: %v", err)
+	}
+	page2, _, err := env.auctionRepo.FindAll(ctx, repository.AuctionFilters{
+		Status: "active", SortBy: "ending_soon", Page: 2, PerPage: 3,
+	})
+	if err != nil {
+		t.Fatalf("FindAll page 2 failed: %v", err)
+	}
+
+	if len(page1) != 3 {
+		t.Fatalf("expected 3 results on page 1, got %d", len(page1))
+	}
+	// The 5 fixtures must appear across page1+page2 in strict end_time ASC
+	// order relative to each other (other pre-existing auctions from earlier
+	// tests may interleave, so only relative order among these 5 is checked).
+	combined := append(append([]uuid.UUID{}, idsOf(page1)...), idsOf(page2)...)
+	var relativeOrder []int
+	for _, id := range combined {
+		for idx, fixtureID := range auctionIDs {
+			if id == fixtureID {
+				relativeOrder = append(relativeOrder, idx)
+			}
+		}
+	}
+	for i := 1; i < len(relativeOrder); i++ {
+		if relativeOrder[i] < relativeOrder[i-1] {
+			t.Fatalf("REGRESSION: ending_soon order broken across pagination, fixture indices appeared out of order: %v", relativeOrder)
+		}
+	}
+}
+
+func idsOf(auctions []models.Auction) []uuid.UUID {
+	ids := make([]uuid.UUID, len(auctions))
+	for i, a := range auctions {
+		ids[i] = a.ID
+	}
+	return ids
+}
+
+// Expired auctions must never appear in the active/ending_soon list, even
+// though an expired auction's end_time would otherwise sort it first.
+func TestFindAll_EndingSoon_ExcludesExpiredAuctions(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	seller := createTestUser(t, env, "TEST ENDING SOON EXPIRED SELLER")
+
+	active := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	setAuctionEndTime(t, env, active.ID, time.Now().Add(1*time.Hour))
+
+	expired := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	setAuctionEndTime(t, env, expired.ID, time.Now().Add(-1*time.Hour))
+
+	results, _, err := env.auctionRepo.FindAll(ctx, repository.AuctionFilters{
+		Status: "active", SortBy: "ending_soon", PerPage: 100,
+	})
+	if err != nil {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+
+	foundActive, foundExpired := false, false
+	for _, a := range results {
+		if a.ID == active.ID {
+			foundActive = true
+		}
+		if a.ID == expired.ID {
+			foundExpired = true
+		}
+	}
+	if !foundActive {
+		t.Fatalf("expected the still-active auction to appear in the ending_soon active list")
+	}
+	if foundExpired {
+		t.Fatalf("REGRESSION: an expired auction (end_time in the past) appeared in the active ending_soon list")
+	}
 }
 
 func TestFindAll_CombinedPriceFilterAndSort(t *testing.T) {

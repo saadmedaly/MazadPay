@@ -15,6 +15,7 @@ import 'package:mezadpay/pages/privacy_policy_page.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
 import 'package:mezadpay/services/user_api.dart';
 import 'package:mezadpay/pages/account_shell_page.dart';
+import 'package:mezadpay/pages/account_profile_page.dart';
 import 'package:mezadpay/pages/requests_page.dart';
 import 'package:mezadpay/pages/settings_page.dart';
 
@@ -489,8 +490,22 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
           } else if (title == AppLocalizations.of(context)!.text_32) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ServicesShellPage()));
-          } else if (title == AppLocalizations.of(context)!.text_19 || title == AppLocalizations.of(context)!.text_381) {
+          } else if (title == AppLocalizations.of(context)!.text_19) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => AccountShellPage()));
+          } else if (title == AppLocalizations.of(context)!.text_381) {
+            // MAZADPAY -- "المعلومات الشخصية" navigation bug: this item was
+            // bundled into the same branch as "حسابي" (text_19), landing on
+            // AccountShellPage's account-tab menu (wallet balance, favorites,
+            // etc.) instead of the actual personal-information page the
+            // client expects. AccountProfilePage ("معلومات الحساب", text_35)
+            // is that existing page -- avatar/name/phone/email/city/save +
+            // password/settings section -- already reachable one extra tap
+            // deep from AccountPage (account_page.dart's text_30 row). Routed
+            // directly here instead, via push (not pushReplacement) so its
+            // own back arrow (Navigator.pop) returns correctly to wherever
+            // the drawer was opened from, matching every other push-based
+            // drawer destination below.
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const AccountProfilePage()));
           } else if (title == AppLocalizations.of(context)!.text_23) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => AccountShellPage()));
           } else if (title == AppLocalizations.of(context)!.text_27) {
