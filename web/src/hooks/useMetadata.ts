@@ -121,6 +121,20 @@ export function useDeleteLocation() {
     // axios interceptor (api/client.ts) already extracts the backend's
     // real error.message into err.message before this handler runs, so
     // surfacing it here is enough; no backend/delete-semantics change.
-    onError: (err: Error) => toast.error(err.message || 'فشل حذف الموقع')
+    //
+    // A 404 specifically means the row is already gone server-side (proven
+    // live: DELETE on a valid ID always returns 200, only a stale/
+    // already-deleted ID returns 404) -- this is a client cache being out of
+    // sync with the server, not a destructive failure, so it self-heals by
+    // refetching the list (which will correctly drop the row) instead of
+    // showing an alarming error.
+    onError: (err: Error & { status?: number }) => {
+      if (err.status === 404) {
+        qc.invalidateQueries({ queryKey: ['locations'] })
+        toast.info('الموقع غير موجود أو تم حذفه مسبقًا')
+        return
+      }
+      toast.error(err.message || 'فشل حذف الموقع')
+    }
   })
 }
