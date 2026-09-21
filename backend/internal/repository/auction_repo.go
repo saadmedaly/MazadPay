@@ -719,18 +719,25 @@ func (r *auctionRepo) DeleteCategory(ctx context.Context, id int) error {
 }
 
 func (r *auctionRepo) GetLocations(ctx context.Context) ([]models.Location, error) {
+	// MAZADPAY locations-list bug: DISTINCT ON (city_name_ar) collapsed every
+	// location down to one row per unique city_name_ar, silently discarding
+	// every other location sharing that city name (e.g. multiple Nouakchott
+	// zones) -- these are distinct rows with distinct ids that must all be
+	// returned. Ordering is still fully deterministic without it.
 	var locs []models.Location
 	err := r.db.SelectContext(ctx, &locs, `
-		SELECT DISTINCT ON (city_name_ar) *
+		SELECT *
 		FROM locations
 		ORDER BY city_name_ar, area_name_ar`)
 	return locs, err
 }
 
 func (r *auctionRepo) GetLocationsByCountry(ctx context.Context, countryID int) ([]models.Location, error) {
+	// Same fix as GetLocations above -- DISTINCT ON (city_name_ar) dropped
+	// every location beyond the first per unique city_name_ar.
 	var locs []models.Location
 	err := r.db.SelectContext(ctx, &locs, `
-		SELECT DISTINCT ON (city_name_ar) *
+		SELECT *
 		FROM locations
 		WHERE country_id = $1
 		ORDER BY city_name_ar, area_name_ar`, countryID)

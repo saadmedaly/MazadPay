@@ -1544,6 +1544,7 @@ func (s *adminService) CreateLocation(ctx context.Context, l *models.Location, a
 	if err := s.auctionRepo.CreateLocation(ctx, l); err != nil {
 		return err
 	}
+	s.invalidateLocationsCache(ctx)
 	if s.auditSvc != nil {
 		detailsJSON := models.JSONB{
 			"location_id":  l.ID,
@@ -1571,6 +1572,7 @@ func (s *adminService) UpdateLocation(ctx context.Context, l *models.Location, a
 	if err := s.auctionRepo.UpdateLocation(ctx, l); err != nil {
 		return err
 	}
+	s.invalidateLocationsCache(ctx)
 	if s.auditSvc != nil {
 		detailsJSON := models.JSONB{
 			"location_id":  l.ID,
@@ -1598,6 +1600,7 @@ func (s *adminService) DeleteLocation(ctx context.Context, id int, adminID uuid.
 	if err := s.auctionRepo.DeleteLocation(ctx, id); err != nil {
 		return err
 	}
+	s.invalidateLocationsCache(ctx)
 	if s.auditSvc != nil {
 		if auditErr := s.auditSvc.Log(ctx, adminID, "location_deleted", "location", nil,
 			fmt.Sprintf("location_id=%d", id),
@@ -1611,6 +1614,26 @@ func (s *adminService) DeleteLocation(ctx context.Context, id int, adminID uuid.
 		}
 	}
 	return nil
+}
+
+// invalidateLocationsCache deletes the "locations" Redis key that
+// auctionService.GetLocations populates with a 1-hour TTL (internal/services/
+// auction_service.go). Without this, a location create/update/delete
+// committed to Postgres was invisible through GET /v1/api/locations for up
+// to an hour -- the admin panel's success toast was real, but the list kept
+// serving the stale cached snapshot from before the mutation (MAZADPAY
+// locations-list refresh bug). Called after the DB mutation succeeds, never
+// before, and its own failure is logged but never fails the mutation --
+// worst case is one stale read, self-healing after the cache's 1-hour TTL,
+// which is strictly better than blocking a successful admin action on
+// Redis availability.
+func (s *adminService) invalidateLocationsCache(ctx context.Context) {
+	if s.rdb == nil {
+		return
+	}
+	if err := s.rdb.Del(ctx, "locations").Err(); err != nil && s.logger != nil {
+		s.logger.Warn("Failed to invalidate locations cache", zap.Error(err))
+	}
 }
 
 // normalizePhoneForInvitation applique une normalisation simple et sûre, dédiée aux
