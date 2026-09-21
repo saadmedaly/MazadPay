@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mezadpay/pages/splash_page.dart';
@@ -116,25 +119,51 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('splash image uses BoxFit.cover on the extended full-bleed artwork (no letterbox bars, no distortion)', (tester) async {
+    testWidgets('splash image uses BoxFit.cover on the recomposed full-bleed artwork (no blue bands, no distortion)', (tester) async {
       await tester.pumpWidget(const MaterialApp(home: SplashPage()));
 
       final image = tester.widget<Image>(find.byWidgetPredicate(
         (widget) => widget is Image && widget.image is AssetImage && (widget.image as AssetImage).assetName == 'assets/splash_full.png',
       ));
-      // Final correction (see splash_page.dart's own doc comment): the
-      // original 720x1080 artwork under BoxFit.contain left visible
-      // solid-blue letterbox bars above/below on real tall devices.
-      // splash_full.png was since extended to 720x2340 -- a single
-      // continuous full-screen composition with the original 720x1080
-      // composition centered in it, no synthetic flat-color padding -- so
-      // BoxFit.cover now fills any realistic device viewport edge-to-edge
-      // with no bars and without cropping into the logo/wordmark/flag/
-      // product content band. BoxFit.contain would reintroduce the bars
-      // this fix removed.
-      expect(image.fit, BoxFit.cover, reason: 'must fill the screen edge-to-edge on the extended asset with no letterbox bars');
+      // Client-rejected intermediate fix (see splash_page.dart's own doc
+      // comment): a 720x2340 asset PADDED with large added blue gradient
+      // margins still left visibly flat, content-free blue bands at the
+      // very top/bottom edges under BoxFit.cover -- padding the canvas
+      // doesn't remove a band, it just moves it inside the image. Final fix
+      // RECOMPOSED the canvas instead: splash_full.png is now a tight
+      // 720x1600 (9:20) crop centered on the real content band, no
+      // artificial padding. BoxFit.cover on this asset fills any realistic
+      // device viewport (9:19.5-9:20) edge-to-edge with no bands and
+      // without cropping the logo/wordmark/flag/product content band.
+      // BoxFit.contain would reintroduce bars; a padded asset would
+      // reintroduce bands even under BoxFit.cover.
+      expect(image.fit, BoxFit.cover, reason: 'must fill the screen edge-to-edge on the recomposed asset with no blue bands');
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 5));
+    });
+
+    // Regression guard for the client-rejected intermediate fix: a padded
+    // canvas (e.g. 720x2340 with the real content confined to a narrow
+    // middle band) can satisfy "taller than any phone ratio" while still
+    // producing visible blue bands under BoxFit.cover, because the padding
+    // itself is visible content-free margin. Asserting the actual asset
+    // dimensions here catches a future regression back to a padded asset,
+    // which the fit-mode test above cannot detect on its own (BoxFit.cover
+    // would still read as correct even on a badly padded asset).
+    test('splash_full.png is the recomposed tight-crop asset, not a padded canvas', () {
+      final bytes = File('assets/splash_full.png').readAsBytesSync();
+      expect(bytes.length, greaterThan(8), reason: 'asset must be readable');
+      expect(
+        bytes.sublist(0, 8),
+        Uint8List.fromList(const [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+        reason: 'splash_full.png must be a genuine PNG',
+      );
+      // IHDR chunk: width/height are the first two 4-byte big-endian ints
+      // starting at byte 16.
+      final width = ByteData.sublistView(bytes, 16, 20).getUint32(0);
+      final height = ByteData.sublistView(bytes, 20, 24).getUint32(0);
+      expect(width, 720);
+      expect(height, 1600, reason: 'must be the tight 9:20 recomposed crop, not the rejected 720x2340 padded canvas');
     });
 
     testWidgets('splash fills the full screen (no unsized/cropped container)', (tester) async {

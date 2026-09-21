@@ -132,19 +132,19 @@ class _SplashPageState extends State<SplashPage> {
     // background) rendered as one image rather than rebuilt piece by piece
     // in Flutter.
     //
-    // Final correction: the original artwork was authored at 720x1080
-    // (2:3), far shorter than a real tall phone. BoxFit.contain against
-    // that ratio left visible solid-blue letterbox bars above/below on real
-    // devices; BoxFit.cover cropped the wordmark/flag. Fixed at the asset
-    // level instead of the fit level: splash_full.png was extended to
-    // 720x2340 by continuing the artwork's own top/bottom edge
-    // texture/gradient upward and downward (the original 720x1080
-    // composition sits untouched, centered, in the middle), so the image
-    // itself is now a single continuous full-screen composition with no
-    // synthetic flat-color padding. BoxFit.cover on this taller asset fills
-    // any realistic device viewport edge-to-edge with no visible bars and,
-    // per the safety-margin check done when this asset was built, without
-    // cropping into the logo/Arabic text/flag/product content band.
+    // Final correction (client rejected the intermediate 720x2340 fix): that
+    // version extended the canvas with large added blue gradient margins
+    // top/bottom to reach a tall aspect ratio -- BoxFit.cover on that asset
+    // still left visibly flat, content-free blue regions at the very top and
+    // bottom edges of the screen, which the client correctly flagged as
+    // empty/wrong. Fixed by RECOMPOSING the canvas instead of padding it:
+    // splash_full.png is now a tight 720x1600 (9:20) crop centered on the
+    // real content band (swoosh -> logo/wordmark -> flag/products ->
+    // reflection), with only the artwork's own natural gradient as margin --
+    // no artificial padding added. BoxFit.cover on this asset fills any
+    // realistic device viewport (9:19.5-9:20) edge-to-edge with no visible
+    // bands, and without cropping into the logo/Arabic text/flag/product
+    // content band (verified at 1080x2400, 1080x2340, and 720x1600).
     //
     // Bootstrap/navigation logic above (_runBootstrap/_navigate) is
     // completely unchanged by this visual-only edit.
