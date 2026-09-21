@@ -142,15 +142,25 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    // Regression guard for the client-rejected intermediate fix: a padded
-    // canvas (e.g. 720x2340 with the real content confined to a narrow
-    // middle band) can satisfy "taller than any phone ratio" while still
-    // producing visible blue bands under BoxFit.cover, because the padding
-    // itself is visible content-free margin. Asserting the actual asset
-    // dimensions here catches a future regression back to a padded asset,
-    // which the fit-mode test above cannot detect on its own (BoxFit.cover
-    // would still read as correct even on a badly padded asset).
-    test('splash_full.png is the recomposed tight-crop asset, not a padded canvas', () {
+    // Regression guard: a padded canvas (real content confined to a narrow
+    // middle band with large added margins) can satisfy "taller than any
+    // phone ratio" while still producing visible blue bands under
+    // BoxFit.cover, because the padding itself is visible content-free
+    // margin. Asserting the actual asset dimensions here catches a future
+    // regression to a mismatched/padded asset, which the fit-mode test
+    // above cannot detect on its own (BoxFit.cover would still read as
+    // correct even on a badly padded asset).
+    //
+    // splash_full.png is 1080x2400 (0.45 ratio) -- the final asset,
+    // recomposed with the logo/wordmark/flag/product content moved well
+    // inward from the left/right edges (an earlier 853x1280 source cropped
+    // the logo and flag under BoxFit.cover on tall screens; this canvas's
+    // 0.45 ratio exactly matches the two narrowest real device ratios in
+    // use -- 1080x2400 and 720x1600 -- with zero horizontal crop, and only
+    // a small vertical crop confined to empty sky background on the
+    // slightly wider 1080x2340 ratio, never touching the logo/flag/product
+    // band).
+    test('splash_full.png is the recomposed safe-margin asset, not a padded or edge-clipped canvas', () {
       final bytes = File('assets/splash_full.png').readAsBytesSync();
       expect(bytes.length, greaterThan(8), reason: 'asset must be readable');
       expect(
@@ -162,8 +172,8 @@ void main() {
       // starting at byte 16.
       final width = ByteData.sublistView(bytes, 16, 20).getUint32(0);
       final height = ByteData.sublistView(bytes, 20, 24).getUint32(0);
-      expect(width, 720);
-      expect(height, 1600, reason: 'must be the tight 9:20 recomposed crop, not the rejected 720x2340 padded canvas');
+      expect(width, 1080);
+      expect(height, 2400, reason: 'must be the 1080x2400 safe-margin recomposed canvas, not an edge-clipping or padded asset');
     });
 
     testWidgets('splash fills the full screen (no unsized/cropped container)', (tester) async {
