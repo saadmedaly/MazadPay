@@ -89,7 +89,7 @@ export function useCreateLocation() {
       qc.invalidateQueries({ queryKey: ['locations'] })
       toast.success('تمت إضافة الموقع بنجاح')
     },
-    onError: () => toast.error('فشل إضافة الموقع')
+    onError: (err: Error) => toast.error(err.message || 'فشل إضافة الموقع')
   })
 }
 
@@ -101,7 +101,7 @@ export function useUpdateLocation() {
       qc.invalidateQueries({ queryKey: ['locations'] })
       toast.success('تم تحديث الموقع بنجاح')
     },
-    onError: () => toast.error('فشل تحديث الموقع')
+    onError: (err: Error) => toast.error(err.message || 'فشل تحديث الموقع')
   })
 }
 
@@ -113,6 +113,14 @@ export function useDeleteLocation() {
       qc.invalidateQueries({ queryKey: ['locations'] })
       toast.success('تم حذف الموقع بنجاح')
     },
-    onError: () => toast.error('فشل حذف الموقع')
+    // MAZADPAY location-delete UI bug: this previously discarded the real
+    // error entirely and always showed the same generic "فشل حذف الموقع"
+    // toast, regardless of whether the backend rejected with 403
+    // (permission), 404 (stale/already-deleted ID), 409 (conflict), or a
+    // genuine 500/network failure -- indistinguishable to the admin. The
+    // axios interceptor (api/client.ts) already extracts the backend's
+    // real error.message into err.message before this handler runs, so
+    // surfacing it here is enough; no backend/delete-semantics change.
+    onError: (err: Error) => toast.error(err.message || 'فشل حذف الموقع')
   })
 }
