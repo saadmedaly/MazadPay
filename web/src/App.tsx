@@ -12,6 +12,7 @@ import { ReportsPage } from './pages/ReportsPage'
 import { BannersPage } from './pages/BannersPage'
 import { KYCPage } from './pages/KYCPage'
 import { AuctionRequestFormPage } from './pages/AuctionRequestFormPage'
+import { AuctionRequestDetailPage } from './pages/AuctionRequestDetailPage'
 import { FAQPage } from './pages/FAQPage'
 import { TutorialsPage } from './pages/TutorialsPage'
 import { NotificationsPage } from './pages/NotificationsPage'
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="requests" element={<KYCPage />} />
         <Route path="requests/auctions/new" element={<AuctionRequestFormPage />} />
         <Route path="requests/auctions/:id/edit" element={<AuctionRequestFormPage />} />
+        <Route path="requests/auctions/:id" element={<AuctionRequestDetailPage />} />
         <Route path="faq" element={<FAQPage />} />
         <Route path="tutorials" element={<TutorialsPage />} />
         <Route path="categories" element={<CategoriesPage />} />

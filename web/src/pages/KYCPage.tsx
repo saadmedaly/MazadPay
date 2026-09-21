@@ -137,8 +137,14 @@ export function KYCPage() {
       cell: ({ row }) => {
         return (
           <div className="flex items-center gap-2">
+            {/* Client feedback Note #8: auction requests now open the
+                dedicated details page (AuctionRequestDetailPage) instead of
+                the crowded RequestDetailModal -- matches the established
+                admin routing pattern (AuctionDetailPage's own /auctions/:id
+                route). Banner requests are unaffected, still use the modal
+                below. */}
             <button
-              onClick={() => openDetailModal(row.original.id)}
+              onClick={() => navigate(`/requests/auctions/${row.original.id}`)}
               className="p-2 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-colors"
               title="عرض التفاصيل"
             >
