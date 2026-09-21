@@ -708,7 +708,11 @@ func (h *AdminHandler) UploadTransactionReviewAttachment(c *fiber.Ctx) error {
 	if file.Size > 10*1024*1024 {
 		return BadRequest(c, "File too large (max 10MB)")
 	}
-	ext := filepath.Ext(file.Filename)
+	// Case-insensitive: Windows screenshot tools/exports commonly produce
+	// uppercase extensions (e.g. "Screenshot.PNG"), which a case-sensitive
+	// check here would wrongly reject before the file even reaches
+	// MediaService's own (correct) magic-byte validation.
+	ext := strings.ToLower(filepath.Ext(file.Filename))
 	allowedExts := map[string]bool{
 		".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true,
 	}

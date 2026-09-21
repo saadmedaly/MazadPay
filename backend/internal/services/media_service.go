@@ -26,19 +26,56 @@ import (
 // n'avaient historiquement aucune validation propre). Ceci est un dernier filet de
 // sécurité ; les handlers peuvent en plus appliquer des règles plus strictes.
 var allowedUploadExtensions = map[string]bool{
-	".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".pdf": true, ".mp4": true,
+	".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true, ".pdf": true, ".mp4": true,
 }
 
-// allowedUploadMimeTypes associe chaque extension autorisée aux magic bytes / types MIME
-// réels qu'elle doit avoir (détectés via http.DetectContentType sur le contenu, pas le
-// header Content-Type envoyé par le client qui est falsifiable).
+// imageUploadMimeTypes is the set of real (magic-byte-detected) content types accepted
+// for ANY image extension, regardless of which one the client's filename claims.
+//
+// Bug fix: genuine screenshots from messaging apps (WhatsApp, Telegram) and some
+// OS/browser upload flows routinely re-encode or rename an image without updating its
+// extension (e.g. a re-encoded JPEG saved with a ".png" name, or vice versa) -- these
+// are real, safe images, not spoofed files. The previous 1:1 extension->MIME mapping
+// (".png" must detect as EXACTLY "image/png") rejected these with "file content does
+// not match a valid .png file" even though the actual bytes were a completely valid
+// image. Any of jpg/jpeg/png/webp/gif is now accepted for any of those extensions --
+// this still fully blocks the real threat (a non-image file, e.g. an .exe or script,
+// renamed to .png), which is what magic-byte detection exists to prevent.
+var imageUploadMimeTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/webp": true,
+	"image/gif":  true,
+}
+
+// imageExtensionForMimeType is the canonical stored extension for a detected image
+// content type -- used instead of the client-supplied (possibly mismatched) filename
+// extension, so the stored file's extension always matches its real bytes.
+var imageExtensionForMimeType = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/webp": ".webp",
+	"image/gif":  ".gif",
+}
+
+func isImageExtension(ext string) bool {
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".webp", ".gif":
+		return true
+	default:
+		return false
+	}
+}
+
+// allowedUploadMimeTypes associe chaque extension NON-image autorisée aux magic bytes /
+// types MIME réels qu'elle doit avoir (détectés via http.DetectContentType sur le
+// contenu, pas le header Content-Type envoyé par le client qui est falsifiable). Les
+// extensions d'image sont validées séparément via imageUploadMimeTypes (voir
+// isImageExtension), qui accepte n'importe quel type d'image réel pour n'importe quelle
+// extension d'image déclarée.
 var allowedUploadMimeTypes = map[string]map[string]bool{
-	".jpg":  {"image/jpeg": true},
-	".jpeg": {"image/jpeg": true},
-	".png":  {"image/png": true},
-	".webp": {"image/webp": true},
-	".pdf":  {"application/pdf": true},
-	".mp4":  {"video/mp4": true, "application/octet-stream": true}, // certains encodeurs mp4 sont détectés comme octet-stream
+	".pdf": {"application/pdf": true},
+	".mp4": {"video/mp4": true, "application/octet-stream": true}, // certains encodeurs mp4 sont détectés comme octet-stream
 }
 
 // maxUploadSizeBytes est un plafond de dernier recours (dernier filet de sécurité) pour
@@ -202,7 +239,21 @@ func (s *mediaService) validateUpload(file multipart.File, header *multipart.Fil
 	if idx := strings.Index(detectedType, ";"); idx != -1 {
 		detectedType = detectedType[:idx]
 	}
-	if !allowedUploadMimeTypes[ext][detectedType] {
+
+	storedExt := ext
+	if isImageExtension(ext) {
+		if !imageUploadMimeTypes[detectedType] {
+			s.logger.Warn("[Upload] Rejected: content is not a real image",
+				zap.String("filename", header.Filename),
+				zap.String("extension", ext),
+				zap.String("detected_type", detectedType))
+			return nil, fmt.Errorf("file content does not match a valid image file")
+		}
+		// Store under the extension that matches the REAL detected bytes, not
+		// necessarily the client's filename extension (see imageUploadMimeTypes
+		// doc comment above for why these can legitimately differ).
+		storedExt = imageExtensionForMimeType[detectedType]
+	} else if !allowedUploadMimeTypes[ext][detectedType] {
 		s.logger.Warn("[Upload] Rejected: content does not match declared extension",
 			zap.String("filename", header.Filename),
 			zap.String("extension", ext),
@@ -211,7 +262,7 @@ func (s *mediaService) validateUpload(file multipart.File, header *multipart.Fil
 	}
 
 	return &validatedUpload{
-		filename:    uuid.New().String() + ext,
+		filename:    uuid.New().String() + storedExt,
 		content:     content,
 		contentType: detectedType,
 	}, nil
