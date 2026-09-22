@@ -461,9 +461,20 @@ class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
   @override
   void initState() {
     super.initState();
+    // MAZADPAY tutorial video orientation bug: this previously allowed only
+    // landscapeLeft/landscapeRight, which actively locks OUT portraitUp --
+    // rotating the phone back to portrait while still on this fullscreen
+    // page had no effect (the OS refuses to rotate to a disallowed
+    // orientation), so exiting fullscreen was only possible via the explicit
+    // exit button, never by physically rotating back. Including portraitUp
+    // here lets the OS rotate the display freely in either direction while
+    // still inside fullscreen; the page's own layout (a centered AspectRatio
+    // video) already adapts correctly to either orientation without any
+    // further change, so this is a pure orientation-allowlist fix.
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
+      DeviceOrientation.portraitUp,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     if (!widget.controller.value.isPlaying) {
