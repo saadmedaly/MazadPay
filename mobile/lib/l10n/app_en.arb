@@ -522,5 +522,9 @@
   "text_419": "Free",
   "text_420": "The amount will be sent directly to the beneficiary number via Bankily service.",
   "text_421": "Send amount",
-  "text_422": "Please enter the beneficiary number"
+  "text_422": "Please enter the beneficiary number",
+  "text_423": "Insufficient balance to bid",
+  "text_424": "Please top up your balance first, then try again.",
+  "text_425": "Top up balance",
+  "text_426": "Cancel"
 }

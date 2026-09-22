@@ -1623,4 +1623,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_422 => 'يرجى إدخال رقم المستفيد';
+
+  @override
+  String get text_423 => 'رصيدك غير كافٍ للمزايدة';
+
+  @override
+  String get text_424 => 'يرجى شحن رصيدك أولًا ثم إعادة المحاولة.';
+
+  @override
+  String get text_425 => 'شحن الرصيد';
+
+  @override
+  String get text_426 => 'إلغاء';
 }

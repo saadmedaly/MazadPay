@@ -6,6 +6,7 @@ import '../providers/auction_provider_api.dart';
 import '../services/auction_api.dart';
 import '../services/bid_api.dart';
 import '../utils/money_formatter.dart';
+import '../pages/deposit_page.dart';
 
 // Arabic message shown when the user is already the current highest bidder
 // (Customer #38: no two consecutive bids from the same user -- replacing
@@ -22,7 +23,18 @@ const String kAlreadyBidMessageAr = 'أنت بالفعل صاحب أعلى مز�
 /// can be tested directly without pumping a widget tree or mocking the
 /// network layer (see test/bid_action_sheet_logic_test.dart).
 String bidPlacementErrorMessage(String raw, String locale) {
-  if (raw.contains('insufficient_funds') || raw.contains('insufficient_balance')) {
+  // MAZADPAY insufficient-balance bid UX: "insufficient_for_insurance" is
+  // the actual code BidService.PlaceBid returns when the wallet balance is
+  // below the auction's required insurance amount (see backend's MapError
+  // case) -- distinct from the generic "insufficient_balance"/
+  // "insufficient_funds" codes, which PlaceBid never actually returns
+  // (those belong to deposit/withdrawal flows). Checked before the generic
+  // branch below so it isn't shadowed by it.
+  if (raw.contains('insufficient_for_insurance')) {
+    return locale == 'ar'
+        ? 'رصيدك غير كافٍ للمزايدة. يرجى شحن رصيدك أولًا.'
+        : (locale == 'fr' ? "Solde insuffisant pour enchérir. Veuillez d'abord recharger votre solde." : 'Insufficient balance to bid. Please top up your balance first.');
+  } else if (raw.contains('insufficient_funds') || raw.contains('insufficient_balance')) {
     return locale == 'ar'
         ? 'رصيدك غير كافٍ لإتمام هذه المزايدة'
         : (locale == 'fr' ? 'Solde insuffisant pour placer cette enchère' : 'Insufficient balance to place this bid');
@@ -60,6 +72,12 @@ String bidPlacementErrorMessage(String raw, String locale) {
       ? 'تعذر إتمام المزايدة، حاول مرة أخرى'
       : (locale == 'fr' ? "Impossible de placer l'enchère, réessayez" : 'Could not place bid, please try again');
 }
+
+/// MAZADPAY insufficient-balance bid UX: pure predicate, separated from
+/// bidPlacementErrorMessage so the widget can decide whether to show the
+/// dedicated insufficient-balance dialog (with a "شحن الرصيد" deposit CTA)
+/// instead of the plain error snackbar every other bid failure gets.
+bool isInsufficientBalanceBidError(String raw) => raw.contains('insufficient_for_insurance');
 
 /// Whether the bid action should be blocked, per Customer #38 (no two
 /// CONSECUTIVE bids from the same user -- replacing the old permanent
@@ -285,18 +303,38 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
                 // never surface the raw internal error string to the user.
                 final raw = e.toString();
                 final locale = Localizations.localeOf(context).languageCode;
-                final errorMessage = bidPlacementErrorMessage(raw, locale);
                 if (raw.contains('bid_already_placed')) {
                   setState(() => _hasAlreadyBid = true);
                 }
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(errorMessage),
-                    backgroundColor: Colors.red,
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
+                // MAZADPAY insufficient-balance bid UX: only the genuine
+                // insufficient_for_insurance case gets the dedicated
+                // dialog + deposit CTA -- every other bid failure (auction
+                // ended, bid too low, wallet disabled, owner cannot bid,
+                // etc.) keeps its existing plain snackbar behavior
+                // unchanged, via bidPlacementErrorMessage.
+                if (isInsufficientBalanceBidError(raw)) {
+                  showDialog(
+                    context: context,
+                    builder: (dialogContext) => _InsufficientBalanceDialog(
+                      onDeposit: () {
+                        Navigator.of(dialogContext).pop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const DepositPage()),
+                        );
+                      },
+                    ),
+                  );
+                } else {
+                  final errorMessage = bidPlacementErrorMessage(raw, locale);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(errorMessage),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                }
               }
             }
           }
@@ -347,6 +385,96 @@ class _BidActionSheetState extends ConsumerState<BidActionSheet> {
           ],
         ),
         child: Icon(icon, color: const Color(0xFF0081FF)),
+      ),
+    );
+  }
+}
+
+/// MAZADPAY insufficient-balance bid UX: shown only for the genuine
+/// insufficient_for_insurance case (see isInsufficientBalanceBidError),
+/// styled to match the app's existing SuccessDialog conventions (rounded
+/// Dialog, transparent barrier background, circular icon badge) but with
+/// two actions instead of one -- "شحن الرصيد" pushes the existing
+/// DepositPage (no auction-specific params, matching the plain top-up
+/// entry points already used elsewhere: account_page.dart, notifications_page.dart),
+/// "إلغاء" just dismisses. No bid is auto-resubmitted after depositing --
+/// the user returns to the auction page and can tap bid again themselves.
+class _InsufficientBalanceDialog extends StatelessWidget {
+  final VoidCallback onDeposit;
+
+  const _InsufficientBalanceDialog({required this.onDeposit});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.red.withValues(alpha: 0.1),
+              ),
+              child: const Center(
+                child: Icon(Icons.account_balance_wallet_outlined, color: Colors.red, size: 40),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              AppLocalizations.of(context)!.text_423,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+              textAlign: TextAlign.center,
+              textDirection: TextDirection.rtl,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              AppLocalizations.of(context)!.text_424,
+              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              textAlign: TextAlign.center,
+              textDirection: TextDirection.rtl,
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: onDeposit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0081FF),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: Text(
+                  AppLocalizations.of(context)!.text_425,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  AppLocalizations.of(context)!.text_426,
+                  style: const TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

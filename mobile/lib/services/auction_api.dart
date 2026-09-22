@@ -246,10 +246,18 @@ class AuctionApi {
           'amount': amount,
         },
       );
-      
+
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      // MAZADPAY insufficient-balance bid UX: ApiException.toString() only
+      // returns .message, never .code, so the backend's structured error
+      // code (e.g. "insufficient_for_insurance") was silently discarded
+      // here -- ApiResponse.error() then defaulted code to the generic
+      // 'error' string, leaving bidPlacementErrorMessage() (bid_action_sheet.dart)
+      // nothing to match on but the Arabic message text. Passing the real
+      // code through when available lets that matching happen reliably.
+      final code = e is ApiException ? e.code : null;
+      return ApiResponse.error(e.toString(), code: code);
     }
   }
   

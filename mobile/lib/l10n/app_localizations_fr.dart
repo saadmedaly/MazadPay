@@ -1618,4 +1618,17 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get text_422 => 'Veuillez entrer le numéro du bénéficiaire';
+
+  @override
+  String get text_423 => 'Solde insuffisant pour enchérir';
+
+  @override
+  String get text_424 =>
+      'Veuillez d\'abord recharger votre solde, puis réessayer.';
+
+  @override
+  String get text_425 => 'Recharger le solde';
+
+  @override
+  String get text_426 => 'Annuler';
 }

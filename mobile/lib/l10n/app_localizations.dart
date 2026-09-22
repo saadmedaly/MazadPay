@@ -3237,6 +3237,30 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'يرجى إدخال رقم المستفيد'**
   String get text_422;
+
+  /// No description provided for @text_423.
+  ///
+  /// In ar, this message translates to:
+  /// **'رصيدك غير كافٍ للمزايدة'**
+  String get text_423;
+
+  /// No description provided for @text_424.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى شحن رصيدك أولًا ثم إعادة المحاولة.'**
+  String get text_424;
+
+  /// No description provided for @text_425.
+  ///
+  /// In ar, this message translates to:
+  /// **'شحن الرصيد'**
+  String get text_425;
+
+  /// No description provided for @text_426.
+  ///
+  /// In ar, this message translates to:
+  /// **'إلغاء'**
+  String get text_426;
 }
 
 class _AppLocalizationsDelegate

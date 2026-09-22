@@ -149,7 +149,19 @@ class AuctionNotifierApi extends _$AuctionNotifierApi {
       if (!response.success) {
         // 3. Revenir en arrière si erreur
         state = previousState;
-        throw Exception(response.message ?? 'Failed to place bid');
+        // MAZADPAY insufficient-balance bid UX: previously threw only
+        // response.message (the human-readable Arabic text), discarding
+        // response.error?.code entirely. bidPlacementErrorMessage
+        // (bid_action_sheet.dart) matches on substrings of the thrown
+        // exception's toString(), so the machine code (e.g.
+        // "insufficient_for_insurance") must be present in that string for
+        // matching to work reliably -- prepending it here (falling back to
+        // the message alone if no code is available) preserves the
+        // existing display text (still included) while making the code
+        // matchable.
+        final code = response.error?.code;
+        final message = response.message ?? 'Failed to place bid';
+        throw Exception(code != null ? '$code: $message' : message);
       }
       
       // 4. Mettre à jour le cache

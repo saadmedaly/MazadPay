@@ -514,5 +514,9 @@
   "text_419": "Gratuit",
   "text_420": "Le montant sera envoyé directement au numéro du bénéficiaire via le service Bankily.",
   "text_421": "Envoyer le montant",
-  "text_422": "Veuillez entrer le numéro du bénéficiaire"
+  "text_422": "Veuillez entrer le numéro du bénéficiaire",
+  "text_423": "Solde insuffisant pour enchérir",
+  "text_424": "Veuillez d'abord recharger votre solde, puis réessayer.",
+  "text_425": "Recharger le solde",
+  "text_426": "Annuler"
 }

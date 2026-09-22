@@ -1593,4 +1593,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get text_422 => 'Please enter the beneficiary number';
+
+  @override
+  String get text_423 => 'Insufficient balance to bid';
+
+  @override
+  String get text_424 => 'Please top up your balance first, then try again.';
+
+  @override
+  String get text_425 => 'Top up balance';
+
+  @override
+  String get text_426 => 'Cancel';
 }
