@@ -1795,12 +1795,35 @@ class _HomePageState extends ConsumerState<HomePage> {
                     imageUrl.toLowerCase().endsWith('.avi') ||
                     imageUrl.toLowerCase().endsWith('.webm');
     
+    // Client request: the hero banner blended into the page background with
+    // no visible edge, making it look like part of the page rather than a
+    // distinct promotional card (e.g. the DevFence banner). A visible
+    // rounded border + soft shadow makes it read as its own element without
+    // touching size/content/position -- same ClipRRect radius as before, now
+    // applied to the bordered Container so the image's rounded corners and
+    // the border's rounded corners stay perfectly aligned.
+    const bannerBorderRadius = 16.0;
     return GestureDetector(
       onTap: () => _openBannerTargetUrl(targetUrl),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(bannerBorderRadius),
+          border: Border.all(
+            color: isDarkMode ? Colors.white24 : const Color(0xFFD8DEE9),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDarkMode ? 0.4 : 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(bannerBorderRadius),
+          child: Stack(
+            children: [
             // Image ou vidéo
             if (isVideo && imageUrl.isNotEmpty)
               Container(
@@ -1881,7 +1904,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
