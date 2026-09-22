@@ -12,6 +12,7 @@ import 'package:mezadpay/pages/my_auctions_shell_page.dart';
 import 'package:mezadpay/pages/favorites_page.dart';
 import 'package:mezadpay/pages/all_auctions_page.dart';
 import 'package:mezadpay/pages/privacy_policy_page.dart';
+import 'package:mezadpay/pages/terms_page.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
 import 'package:mezadpay/services/user_api.dart';
 import 'package:mezadpay/pages/account_shell_page.dart';
@@ -520,6 +521,16 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
           } else if (title == AppLocalizations.of(context)!.text_284) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const PrivacyPolicyPage()));
+          } else if (title == AppLocalizations.of(context)!.text_385) {
+            // MAZADPAY -- "الشروط والأحكام" drawer item had no matching
+            // onTap branch at all, so tapping it silently did nothing. The
+            // existing TermsPage (already used elsewhere, e.g. the
+            // registration flow via create_profile_page.dart) is reused
+            // here rather than duplicated -- pushed (not pushReplacement)
+            // so its own back arrow/Navigator.pop returns correctly to
+            // wherever the drawer was opened from, matching every other
+            // push-based drawer destination.
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const TermsPage()));
           } else if (title == AppLocalizations.of(context)!.text_28) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const FavoritesPage()));
           } else if (title == AppLocalizations.of(context)!.text_386) {
