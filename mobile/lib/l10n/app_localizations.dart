@@ -157,7 +157,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_9.
   ///
   /// In ar, this message translates to:
-  /// **'خدمات التوصيل: توصيل الطعام، المياه، خدمات المجاري، نقل الأشخاص، شحن البضائع، الشحن من الخارج إلى موريتانيا، ونقل السيارات والشاحنات.'**
+  /// **''**
   String get text_9;
 
   /// No description provided for @text_10.
