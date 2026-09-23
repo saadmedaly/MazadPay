@@ -110,7 +110,33 @@ func main() {
 
 	// En-têtes de sécurité HTTP standards (X-Content-Type-Options, X-Frame-Options,
 	// Referrer-Policy, etc.) — n'affecte pas les réponses JSON de l'API ni CORS.
-	app.Use(helmet.New())
+	//
+	// Security hardening (Security Gate item 4): HSTSMaxAge was previously unset
+	// (helmet's default is 0, meaning no Strict-Transport-Security header was ever
+	// sent). helmet only emits HSTS when c.Protocol() == "https" (see
+	// middleware/helmet/helmet.go), so local HTTP development is unaffected by
+	// this change -- no explicit env-based gating is needed. 180 days
+	// (15552000s) is a conservative, reversible max-age; includeSubDomains is
+	// safe here because every first-party domain this API is ever served from
+	// (mazadpay.com, www.mazadpay.com, admin.mazadpay.com) is fully owned by
+	// this project -- Render's own *.onrender.com host is NOT a subdomain of
+	// any of those, so this never silently forces HTTPS on unrelated Render
+	// infrastructure. Preload is intentionally NOT enabled: submission to
+	// browsers' HSTS preload list is a separate, effectively irreversible
+	// action requiring explicit sign-off from whoever owns the mazadpay.com
+	// domain, not something to opt into from this config alone.
+	// PermissionPolicy was also previously unset (helmet's default is ""), so no
+	// Permissions-Policy header was ever sent. This API is JSON-only and never
+	// itself uses camera/microphone/geolocation/payment browser APIs -- denying
+	// all three via empty allowlists is a safe, purely-restrictive addition with
+	// no functional effect on any real client (mobile app, Admin panel) that
+	// doesn't invoke those APIs against this origin.
+	app.Use(helmet.New(helmet.Config{
+		HSTSMaxAge:            15552000,
+		HSTSExcludeSubdomains: false,
+		HSTSPreloadEnabled:    false,
+		PermissionPolicy:      "geolocation=(), camera=(), microphone=()",
+	}))
 
 	// CORS (CORS_ALLOWED_ORIGINS Phase 1) : CORS_ALLOWED_ORIGINS, si définie, prime
 	// pour TOUT environnement (ex: un déploiement Staging comme
