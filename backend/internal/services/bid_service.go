@@ -133,8 +133,28 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 				return err
 			}
 			if existingHold == nil {
+				// Security Gate follow-up: a bidder with no wallets row at all
+				// (never funded/deposited) previously fell straight into
+				// FindForUpdate's generic ErrNotFound -- which MapError renders
+				// as a misleading "Resource not found" 404 for what is really
+				// an insufficient-funds case (having zero rows is
+				// indistinguishable, financially, from having a 0 balance).
+				// Live-reproduced on Validation: an eligible, correctly
+				// market-matched, non-owner bidder with no wallet row got 404
+				// on a real active auction they could GET fine, instead of the
+				// same 422 insufficient_for_insurance a funded-but-empty
+				// wallet correctly gets two branches below. Translating
+				// ErrNotFound to ErrInsufficientForInsurance here fixes only
+				// this specific bid-time wallet lookup -- it does not touch
+				// MapError's generic resource_not_found/auction_not_found
+				// mapping (used by many unrelated endpoints), does not alter
+				// any anti-enumeration 404 elsewhere, and does not change
+				// FindForUpdate's contract for any other caller.
 				wallet, err := s.walletRepo.FindForUpdate(ctx, tx, userID)
 				if err != nil {
+					if err == apperr.ErrNotFound {
+						return apperr.ErrInsufficientForInsurance
+					}
 					return err
 				}
 				// Defense-in-depth (migration 000046): the wallet's currency must
