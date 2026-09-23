@@ -53,6 +53,17 @@ func (h *AuctionBoostHandler) CreateBoost(c *fiber.Ctx) error {
 		return NotFound(c, "Auction")
 	}
 
+	// Security fix (SEC-03): CreateBoost previously checked only market
+	// isolation, never ownership -- any authenticated user in the same
+	// market could boost (and be charged/attributed a promotional slot on)
+	// an auction they don't own. Only the auction's own seller may boost
+	// it. 404, not 403, matching this handler's existing anti-enumeration
+	// convention (a cross-market auction is also reported as 404 above,
+	// never revealing that a differently-scoped auction exists).
+	if auction.SellerID != userID {
+		return NotFound(c, "Auction")
+	}
+
 	type Request struct {
 		BoostType string  `json:"boost_type" validate:"required,oneof=featured urgent top"`
 		StartAt   string  `json:"start_at" validate:"required"`
@@ -137,6 +148,34 @@ func (h *AuctionBoostHandler) CancelBoost(c *fiber.Ctx) error {
 	boostID, err := uuid.Parse(c.Params("boost_id"))
 	if err != nil {
 		return BadRequest(c, "Invalid boost ID")
+	}
+
+	// Security fix (SEC-03): this handler previously had NO ownership check
+	// at all -- any authenticated user who knew (or guessed/enumerated) a
+	// boost_id could cancel any other user's boost. Only the boost's own
+	// auction's seller may cancel it. A separate, already-documented admin
+	// path exists for admin cancellation (DELETE /admin/auction-boosts/:id,
+	// adminHandler.DeleteAuctionBoost, routes.go:483) -- this customer-facing
+	// route is never meant to double as an admin bypass. 404 (not 403) for
+	// both "boost doesn't exist" and "exists but isn't yours", matching this
+	// handler file's established anti-enumeration convention.
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+
+	boost, err := h.svc.GetByID(c.Context(), boostID)
+	if err != nil {
+		return NotFound(c, "Boost")
+	}
+
+	auction, err := h.auctionRepo.FindByID(c.Context(), boost.AuctionID)
+	if err != nil {
+		return NotFound(c, "Boost")
+	}
+
+	if auction.SellerID != userID {
+		return NotFound(c, "Boost")
 	}
 
 	if err := h.svc.Cancel(c.Context(), boostID); err != nil {

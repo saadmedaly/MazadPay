@@ -136,6 +136,14 @@ func setupEnv(t *testing.T) *testEnv {
 	app.Get("/auctions/:id/seller-contact/as/:userID", fakeAuthFromParam(), auctHandler.GetSellerContact)
 	app.Get("/auctions/:id/boosts/as/:userID", fakeAuthFromParam(), boostHandler.GetAuctionBoosts)
 	app.Post("/auctions/:id/boost/as/:userID", fakeAuthFromParam(), boostHandler.CreateBoost)
+	// SEC-03 fix verification: CancelBoost's route param is named :boost_id
+	// (not :id -- the auction ID is intentionally not part of this route,
+	// see auction_boost_handler.go's CancelBoost, which derives the owning
+	// auction from the boost itself), matching the real production route
+	// DELETE /auctions/:id/boosts/:boost_id (routes.go:677) exactly enough
+	// for fakeAuthFromParam()'s :userID param to still work the same way.
+	app.Delete("/auctions/:id/boosts/:boost_id/as/:userID", fakeAuthFromParam(), boostHandler.CancelBoost)
+	app.Delete("/auctions/:id/boosts/:boost_id", fakeAuth(nil), boostHandler.CancelBoost)
 	app.Post("/auctions/:id/auto-bid/as/:userID", fakeAuthFromParam(), autoBidHandler.CreateAutoBid)
 	// Bug I fix verification: exercises UserHandler.ListFavorites at the full
 	// HTTP-handler level (not just favoriteRepo.ListByUserID) so the test
@@ -2437,23 +2445,48 @@ func TestCreateBoost_CrossMarket_Denied(t *testing.T) {
 	t.Logf("(write-1) TN -> MR CreateBoost correctly denied, no row created: %d", status)
 }
 
-// (write-2) MR user CAN create a boost for an MR auction (same-market action still works).
+// (write-2) MR user CAN create a boost for an MR auction THEY OWN
+// (same-market action still works). Security fix SEC-03: this test
+// previously used a DIFFERENT user (buyer != seller) and asserted 200,
+// which was itself proof of the IDOR -- any same-market user could boost
+// an auction they didn't own. Now exercises the actual intended case: the
+// auction's own seller boosting their own auction.
 func TestCreateBoost_SameMarket_Succeeds(t *testing.T) {
 	env := setupEnv(t)
 	seller := createTestUser(t, env, "TEST CREATEBOOST SELLER 2")
-	buyer := createTestUser(t, env, "TEST CREATEBOOST BUYER 2") // MR
 	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
 
-	status := httpCreateBoost(t, env, auction.ID, buyer.ID)
+	status := httpCreateBoost(t, env, auction.ID, seller.ID)
 	if status != 200 {
-		t.Fatalf("(write-2) expected 200 for MR user creating a boost on an MR auction, got %d", status)
+		t.Fatalf("(write-2) expected 200 for the auction's own seller creating a boost on their own auction, got %d", status)
 	}
 
 	count := countBoostsForAuction(t, env, auction.ID)
 	if count != 1 {
 		t.Fatalf("(write-2) expected exactly 1 boost row to be created, found %d", count)
 	}
-	t.Logf("(write-2) MR -> MR CreateBoost correctly succeeded, 1 row created: %d", status)
+	t.Logf("(write-2) owner CreateBoost correctly succeeded, 1 row created: %d", status)
+}
+
+// (write-2b) Security fix SEC-03: a DIFFERENT same-market user (not the
+// auction's seller) must be denied -- this is the exact case the old code
+// incorrectly allowed (see this test's sibling above, before the fix).
+func TestCreateBoost_NonOwnerSameMarket_Denied(t *testing.T) {
+	env := setupEnv(t)
+	seller := createTestUser(t, env, "TEST CREATEBOOST SELLER 2B")
+	otherUser := createTestUser(t, env, "TEST CREATEBOOST NONOWNER 2B") // same market (MR), NOT the seller
+	auction := createTestAuction(t, env, seller.ID, "MR", "MRU")
+
+	status := httpCreateBoost(t, env, auction.ID, otherUser.ID)
+	if status != 404 {
+		t.Fatalf("(write-2b) SEC-03 REGRESSION: expected 404 for a non-owner same-market user creating a boost, got %d", status)
+	}
+
+	count := countBoostsForAuction(t, env, auction.ID)
+	if count != 0 {
+		t.Fatalf("(write-2b) SEC-03 REGRESSION: expected no boost row to be created for a non-owner, found %d", count)
+	}
+	t.Logf("(write-2b) non-owner CreateBoost correctly denied, no row created: %d", status)
 }
 
 // (write-3) TN user cannot create an auto-bid for an MR auction.
@@ -3577,6 +3610,46 @@ func httpCreateBoost(t *testing.T, env *testEnv, auctionID, callerID uuid.UUID) 
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode
+}
+
+// httpCancelBoost performs a real HTTP-level DELETE against env.app's
+// DELETE /auctions/:id/boosts/:boost_id/as/:userID test route (backed by
+// the real boostHandler.CancelBoost), as a specific authenticated caller.
+func httpCancelBoost(t *testing.T, env *testEnv, auctionID, boostID, callerID uuid.UUID) int {
+	t.Helper()
+	path := fmt.Sprintf("/auctions/%s/boosts/%s/as/%s", auctionID, boostID, callerID)
+	req := httptest.NewRequest("DELETE", path, nil)
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+// httpCancelBoostUnauthenticated performs the same DELETE with no caller
+// identity at all (backed by fakeAuth(nil) on the no-:userID route variant).
+func httpCancelBoostUnauthenticated(t *testing.T, env *testEnv, auctionID, boostID uuid.UUID) int {
+	t.Helper()
+	path := fmt.Sprintf("/auctions/%s/boosts/%s", auctionID, boostID)
+	req := httptest.NewRequest("DELETE", path, nil)
+	resp, err := env.app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+// getBoostStatus reads a boost's current status directly from the DB, for
+// asserting a denied cancel attempt truly left the row untouched.
+func getBoostStatus(t *testing.T, env *testEnv, boostID uuid.UUID) string {
+	t.Helper()
+	var status string
+	if err := env.db.GetContext(context.Background(), &status, `SELECT status FROM auction_boosts WHERE id = $1`, boostID); err != nil {
+		t.Fatalf("failed to read boost status: %v", err)
+	}
+	return status
 }
 
 // httpCreateAutoBid performs a real HTTP-level POST against env.app's
