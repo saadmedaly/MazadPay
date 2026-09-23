@@ -368,3 +368,114 @@ func TestAdminAddBalance_ConcurrentAgainstSamePendingDeposit_ExactlyOneCredit(t 
 		t.Fatalf("CRITICAL: expected exactly one 3000 credit from the concurrent race, got balance %s", wallet.Balance)
 	}
 }
+
+// TestAdminAddBalance_ThenRejectAnchor_CannotCorruptState covers rejecting a
+// deposit AFTER it was already closed by an admin_credit against it. Since
+// LockAndCloseIfOpenDepositOrWithdraw already marked the anchor
+// 'completed', a later reject attempt must be a safe no-op (UpdateStatus's
+// own status!='completed' guard for the credit path, and its
+// status!='completed' && status!='rejected' guard for any release logic)
+// -- it must NOT flip a real, already-settled deposit to 'rejected' out
+// from under the money that's already in the user's wallet, and must not
+// change the wallet balance.
+func TestAdminAddBalance_ThenRejectAnchor_CannotCorruptState(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST REJECT AFTER CREDIT USER")
+	admin := createTestAdmin(t, env, "TEST REJECT AFTER CREDIT ADMIN")
+
+	walletSvc := newWalletSvc(env)
+	adminSvc := newTestAdminService(t, env)
+	txRepo := newTestTxRepo(env)
+
+	deposit, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(1500), "bankily", "", "", nil)
+	if err != nil {
+		t.Fatalf("InitiateDeposit failed: %v", err)
+	}
+
+	if _, err := adminSvc.AdminAddBalance(ctx, deposit.ID, decimal.NewFromInt(1500), "", admin.ID); err != nil {
+		t.Fatalf("AdminAddBalance failed: %v", err)
+	}
+
+	beforeReject, err := env.walletRepo.GetByUserID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to read wallet: %v", err)
+	}
+
+	// Reject requires a note (Customer #36 server-side guard) -- supply one.
+	if err := adminSvc.ValidateTransaction(ctx, deposit.ID, false, "attempted reject after admin_credit already closed this anchor", admin.ID, ""); err != nil {
+		t.Fatalf("ValidateTransaction (reject) on an already-completed anchor should be a safe no-op, not an error: %v", err)
+	}
+
+	afterReject, err := env.walletRepo.GetByUserID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to read wallet: %v", err)
+	}
+	if !afterReject.Balance.Equal(beforeReject.Balance) {
+		t.Fatalf("CRITICAL: wallet balance changed (%s -> %s) from rejecting an already-admin_credit'd, already-completed deposit -- money must not be clawed back by a stale reject attempt", beforeReject.Balance, afterReject.Balance)
+	}
+
+	fetched, err := txRepo.GetByID(ctx, deposit.ID)
+	if err != nil {
+		t.Fatalf("failed to fetch deposit: %v", err)
+	}
+	if fetched.Status != "completed" {
+		t.Fatalf("expected the already-completed deposit to remain 'completed' after a stale reject attempt, got %q -- a real settled transaction must not be flipped to 'rejected' after the fact", fetched.Status)
+	}
+}
+
+// TestAdminAddBalance_AgainstRejectedDeposit_StillSafeStandaloneCredit
+// covers the reverse: a deposit that was legitimately rejected first, then
+// an admin issues an unrelated admin_credit using that rejected
+// transaction's id purely as an audit-trail anchor (same standalone-credit
+// use case as an already-completed anchor). The reject must remain final
+// (LockAndCloseIfOpenDepositOrWithdraw's no-op branch covers status ==
+// "rejected" the same as "completed"), and the admin_credit's own amount
+// must land exactly once.
+func TestAdminAddBalance_AgainstRejectedDeposit_StillSafeStandaloneCredit(t *testing.T) {
+	env := setupEnv(t)
+	ctx := context.Background()
+	user := createTestUser(t, env, "TEST CREDIT AFTER REJECT USER")
+	admin := createTestAdmin(t, env, "TEST CREDIT AFTER REJECT ADMIN")
+
+	walletSvc := newWalletSvc(env)
+	adminSvc := newTestAdminService(t, env)
+	txRepo := newTestTxRepo(env)
+
+	deposit, err := walletSvc.InitiateDeposit(ctx, user.ID, decimal.NewFromInt(4000), "bankily", "", "", nil)
+	if err != nil {
+		t.Fatalf("InitiateDeposit failed: %v", err)
+	}
+
+	if err := adminSvc.ValidateTransaction(ctx, deposit.ID, false, "invalid receipt", admin.ID, ""); err != nil {
+		t.Fatalf("ValidateTransaction (reject) failed: %v", err)
+	}
+
+	afterReject, err := env.walletRepo.GetByUserID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to read wallet: %v", err)
+	}
+	if !afterReject.Balance.IsZero() {
+		t.Fatalf("expected 0 balance after a rejected deposit, got %s", afterReject.Balance)
+	}
+
+	if _, err := adminSvc.AdminAddBalance(ctx, deposit.ID, decimal.NewFromInt(250), "unrelated goodwill credit, deposit was rejected", admin.ID); err != nil {
+		t.Fatalf("AdminAddBalance against a rejected anchor should still succeed as a standalone credit: %v", err)
+	}
+
+	final, err := env.walletRepo.GetByUserID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to read final wallet: %v", err)
+	}
+	if !final.Balance.Equal(decimal.NewFromInt(250)) {
+		t.Fatalf("expected exactly 250 (the standalone admin_credit only, NOT the rejected 4000 deposit), got %s", final.Balance)
+	}
+
+	fetched, err := txRepo.GetByID(ctx, deposit.ID)
+	if err != nil {
+		t.Fatalf("failed to fetch deposit: %v", err)
+	}
+	if fetched.Status != "rejected" {
+		t.Fatalf("expected the deposit to remain 'rejected' (never resurrected to 'completed' by an unrelated admin_credit), got %q", fetched.Status)
+	}
+}
