@@ -1140,6 +1140,19 @@ func (s *adminService) AdminAddBalance(ctx context.Context, transactionID uuid.U
 	}
 	defer dbtx.Rollback()
 
+	// Financial Audit fix: lock and close the anchor transaction BEFORE
+	// locking the wallet -- matches TransactionRepository.UpdateStatus's own
+	// lock order (transaction row, then wallet), so this and a concurrent
+	// deposit-approval request can never deadlock on the opposite ordering.
+	// If the anchor is a still-open deposit/withdraw, this atomically marks
+	// it 'completed' in the SAME dbtx as the wallet credit below -- closing
+	// the double-credit gap where an admin_credit against a pending deposit
+	// left that deposit independently approvable afterward. A no-op for any
+	// other anchor type/status (standalone manual credits are unaffected).
+	if err := s.txRepo.LockAndCloseIfOpenDepositOrWithdraw(ctx, dbtx, transactionID, adminID); err != nil {
+		return nil, err
+	}
+
 	wallet, err := s.walletRepo.FindForUpdate(ctx, dbtx, userID)
 	if err != nil {
 		return nil, err
@@ -1228,6 +1241,17 @@ func (s *adminService) AdminDeductBalance(ctx context.Context, transactionID uui
 		return nil, err
 	}
 	defer dbtx.Rollback()
+
+	// Financial Audit fix: same reasoning as AdminAddBalance above -- lock
+	// and close the anchor transaction (if it's a still-open deposit/
+	// withdraw) before locking the wallet, in the same dbtx as the debit.
+	// Prevents an anchor withdraw request from remaining independently
+	// approvable/rejectable after an unrelated admin_debit already moved
+	// money against the same referenced transaction, which would otherwise
+	// leave frozen_amount and balance inconsistent with each other.
+	if err := s.txRepo.LockAndCloseIfOpenDepositOrWithdraw(ctx, dbtx, transactionID, adminID); err != nil {
+		return nil, err
+	}
 
 	wallet, err := s.walletRepo.FindForUpdate(ctx, dbtx, userID)
 	if err != nil {

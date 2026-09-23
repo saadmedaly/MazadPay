@@ -26,6 +26,22 @@ type TransactionRepository interface {
 	CreateTx(ctx context.Context, dbtx *sqlx.Tx, tx *models.Transaction) error
 	UpdateReceipt(ctx context.Context, id uuid.UUID, userID uuid.UUID, url string, status string) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID, attachmentURL string) error
+	// LockAndCloseIfOpenDepositOrWithdraw (Financial Audit fix: admin_credit/
+	// admin_debit double-credit): if the given transaction is a deposit or
+	// withdraw still in a non-terminal status (pending/pending_review), locks
+	// its row (FOR UPDATE, within the caller's own dbtx -- must be called
+	// inside the SAME transaction that performs the admin_credit/admin_debit
+	// wallet mutation) and marks it 'completed', reviewed_by=adminID, so the
+	// normal approval endpoint (UpdateStatus) can never independently credit/
+	// debit the wallet a second time for the same transaction afterward --
+	// UpdateStatus's own tx.Status != "completed" guard then blocks it. If
+	// the transaction is any other type, or already terminal
+	// (completed/rejected), this is a no-op: standalone manual admin_credit/
+	// admin_debit against a non-deposit/non-withdraw anchor (or a deposit/
+	// withdraw the admin is intentionally leaving open, e.g. crediting a
+	// bonus unrelated to any pending request) is left completely untouched,
+	// preserving that as a legitimate independent mechanism.
+	LockAndCloseIfOpenDepositOrWithdraw(ctx context.Context, dbtx *sqlx.Tx, id uuid.UUID, adminID uuid.UUID) error
 	GetStats(ctx context.Context) (float64, float64, error) // Total, Today
 	GetPendingCount(ctx context.Context) (int, error)
 	GetWeeklySum(ctx context.Context) (float64, error)
@@ -272,6 +288,23 @@ func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status
 	}
 
 	return dbtx.Commit()
+}
+
+func (r *transactionRepo) LockAndCloseIfOpenDepositOrWithdraw(ctx context.Context, dbtx *sqlx.Tx, id uuid.UUID, adminID uuid.UUID) error {
+	var tx models.Transaction
+	if err := dbtx.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1 FOR UPDATE", id); err != nil {
+		return err
+	}
+
+	if (tx.Type != "deposit" && tx.Type != "withdraw") || tx.Status == "completed" || tx.Status == "rejected" {
+		return nil
+	}
+
+	_, err := dbtx.ExecContext(ctx, `
+		UPDATE transactions
+		SET status = 'completed', reviewed_by = $1, reviewed_at = now()
+		WHERE id = $2`, adminID, id)
+	return err
 }
 
 func (r *transactionRepo) GetStats(ctx context.Context) (float64, float64, error) {
