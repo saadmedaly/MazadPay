@@ -30,11 +30,27 @@ import { ComplaintsPage } from './pages/ComplaintsPage'
 import { useAuthStore } from './stores/authStore'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user } = useAuthStore()
-  
+  // Regression (post-login redirect loop): `isAuthenticated` here was the
+  // STORE FUNCTION itself (destructured, never called), not a boolean --
+  // always truthy, so the `!isAuthenticated` check below never actually
+  // fired. Calling it (isAuthenticated()) makes this guard match the
+  // store's real authStore.ts contract (token presence + expiry), which is
+  // the same logic the separate, correctly-behaving ProtectedRoute.tsx
+  // component already relies on.
+  //
+  // The `role !== 'admin'` check duplicated the exact bug already fixed in
+  // api/auth.ts's loginAdmin() -- it rejected a legitimately higher-privileged
+  // role === 'super_admin' account AFTER a successful login/setAuth(),
+  // silently bouncing back to /login with no visible error. Reusing
+  // authStore's own isAuthenticated() (which already correctly allows both
+  // 'admin' and 'super_admin', authStore.ts:38) instead of re-deriving an
+  // incomplete role check here keeps this guard's authorization contract in
+  // sync with the store's single source of truth, rather than maintaining
+  // two independent role-string checks that can drift apart again.
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated())
+
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (user?.role !== 'admin') return <Navigate to="/login" replace />
-  
+
   return <>{children}</>
 }
 
