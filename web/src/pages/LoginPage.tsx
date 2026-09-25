@@ -8,9 +8,20 @@ import { Hammer, Phone, Lock, Loader2, Gavel, TrendingUp, Users, ShieldCheck } f
 import { loginAdmin } from '@/api/auth'
 import { useAuthStore } from '@/stores/authStore'
 
+// Backend contract (auth_handler.go LoginRequest.Pin / auth_service.go Login):
+// the PIN/password is compared via bcrypt.CompareHashAndPassword against the
+// raw bytes sent, with NO length or character-class constraint at all --
+// `validate:"required"` is the ONLY server-side rule. This form previously
+// hardcoded `length(4).regex(/^\d+$/)`, matching only the legacy 4-digit PIN
+// format and silently blocking submission of any longer/non-numeric
+// credential (e.g. a super_admin password rotated via
+// cmd/bootstrap_super_admin, which generates a longer, non-legacy PIN) --
+// min(4) is the correct, backend-matching floor (mirrors the same 4-char
+// legacy minimum enforced server-side elsewhere for 4-digit accounts),
+// with no upper bound or digits-only restriction invented here.
 const schema = z.object({
   phone: z.string().min(8, 'رقم الهاتف غير صالح'),
-  pin:   z.string().length(4, 'الرمز السري يجب أن يكون 4 أرقام').regex(/^\d+$/, 'أرقام فقط'),
+  pin:   z.string().min(4, 'الرمز السري يجب أن يكون 4 أحرف على الأقل'),
 })
 type Form = z.infer<typeof schema>
 
@@ -231,7 +242,7 @@ export function LoginPage() {
               {/* PIN */}
               <div>
                 <label className="text-[11px] font-bold block mb-1.5" style={{ color: '#4A6080' }}>
-                  الرمز السري (4 أرقام)
+                  الرمز السري
                 </label>
                 <div className="relative">
                   <Lock
@@ -241,7 +252,6 @@ export function LoginPage() {
                   <input
                     {...register('pin')}
                     type="password"
-                    maxLength={4}
                     placeholder="••••"
                     className="input-base pr-9 tracking-widest"
                   />
