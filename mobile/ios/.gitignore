@@ -32,3 +32,21 @@ Runner/GeneratedPluginRegistrant.*
 !default.mode2v3
 !default.pbxuser
 !default.perspectivev3
+
+# Apple signing material and fastlane secrets -- these are generated locally
+# during the Mac/Xcode signing phase and must never be committed. Added
+# proactively before that phase (chore(ios): App Store readiness prep) since
+# fastlane match/App Store Connect API key usage will produce files of these
+# exact types.
+*.p12
+*.cer
+*.mobileprovision
+*.certSigningRequest
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+fastlane/*.env
+fastlane/.env
+AuthKey_*.p8
+ExportOptions.plist
