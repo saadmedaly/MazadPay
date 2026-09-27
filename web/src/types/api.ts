@@ -17,6 +17,12 @@ export interface PaginatedResponse<T> {
 export interface AdminUser {
   id: string
   phone: string
+  // phone_e164 (migration 000044, client feedback #17): canonical
+  // "+<country code><number>" format, already correctly computed
+  // server-side for international accounts -- null for legacy accounts never
+  // backfilled (only the raw `phone` column is available for those; never
+  // guess/prepend a country code for them).
+  phone_e164: string | null
   full_name: string | null
   email: string | null
   profile_pic_url: string | null
@@ -71,6 +77,10 @@ export interface Auction {
   // Auction.EffectiveCurrencyCode()/EffectiveMarketCountryISO().
   currency_code?: string | null
   market_country_iso?: string | null
+  // insurance_policy (migration 000048): 'required' | 'not_required'. May be
+  // absent on very old cached responses -- treat missing as 'required',
+  // never as 'not_required' (matches backend Auction.InsuranceRequired()).
+  insurance_policy?: 'required' | 'not_required'
 }
 
 export interface Transaction {
@@ -96,6 +106,15 @@ export interface Transaction {
   // legacy rows -- treat absence as DEFAULT_CURRENCY_CODE ('MRU'), mirroring
   // backend Transaction.EffectiveCurrencyCode().
   currency_code?: string | null
+  // beneficiary_account (Customer #34, migration 000053): the phone/account
+  // a withdrawal is sent to. Absent/null for deposits and any withdrawal
+  // predating that migration.
+  beneficiary_account?: string | null
+  // admin_attachment_url (Customer #36, migration 000055): an optional
+  // review-evidence image the ADMIN attached while approving/rejecting --
+  // distinct from the user's own receipt (never returned directly, see
+  // useReceiptURL above).
+  admin_attachment_url?: string | null
 }
 
 export interface Bid {
@@ -179,6 +198,10 @@ export interface Category {
   is_active: boolean
   image_url: string | null
   has_subcategories: boolean
+  // fee_tier (client feedback #4): admin-controlled subscription fee tier --
+  // 'standard' (100 MRU) or 'premium' (500 MRU) for auction requests filed
+  // under this category. Never derived from name/id/icon_name.
+  fee_tier: 'standard' | 'premium'
   children?: Category[]
 }
 

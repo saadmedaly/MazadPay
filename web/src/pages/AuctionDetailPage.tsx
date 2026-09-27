@@ -18,13 +18,14 @@ import {
   User,
   Send,
   TrendingUp,
+  Wallet,
 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ImagePreview } from '@/components/shared/ImagePreview'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
-import { useAuction, useValidateAuction } from '@/hooks/useAuctions'
+import { useAuction, useValidateAuction, useRefundWinnerInsurance } from '@/hooks/useAuctions'
 import { useBidHistory } from '@/hooks/useBids'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
@@ -58,6 +59,14 @@ export function AuctionDetailPage() {
   const { data: auction, isLoading, isError } = useAuction(id!)
   const { data: bidHistoryData = [] } = useBidHistory(id!)
   const validate = useValidateAuction()
+  const refundWinnerInsurance = useRefundWinnerInsurance()
+  // Customer #31: tracks a refund that just succeeded THIS session so the
+  // action can be hidden/disabled immediately without a new backend field
+  // on the shared public auction response -- a fresh page load where the
+  // hold was already released earlier (by this or another admin) is still
+  // safely caught by the backend's own idempotent no_active_hold rejection
+  // on click, surfaced as a toast, not a silent failure.
+  const [winnerInsuranceRefunded, setWinnerInsuranceRefunded] = useState(false)
   const [selectedImg, setSelectedImg] = useState<string | null>(null)
   const thumbScrollRef = useRef<HTMLDivElement>(null)
   const [activeLang, setActiveLang] = useState<'ar' | 'fr' | 'en'>('ar')
@@ -108,6 +117,12 @@ export function AuctionDetailPage() {
       setCurrentPrice(parseFloat(auction.current_price))
     }
   }, [auction])
+
+  // Customer #31: reset the local "just refunded" flag when navigating to a
+  // different auction, so it never leaks across auctions.
+  useEffect(() => {
+    setWinnerInsuranceRefunded(false)
+  }, [id])
 
    const images = (() => {
     if (!auction) return []
@@ -605,6 +620,51 @@ export function AuctionDetailPage() {
                   <Check className="w-5 h-5" />
                    الموافقة وتفعيل المزاد
                 </button>
+              </div>
+            )}
+
+            {/* Customer #31: admin manual refund of the WINNER's own
+                insurance hold -- the auto non-winner refund at auction
+                finalization deliberately never covers this. Only shown for
+                an ended auction that actually has a winner; the backend
+                derives the winner/amount authoritatively regardless. */}
+            {auction.status === 'ended' && auction.winner_id && (
+              <div className="mt-8 pt-8 border-t border-surface-border space-y-3">
+                {winnerInsuranceRefunded ? (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <p className="text-sm text-emerald-400 font-bold">تم إرجاع مبلغ التأمين للفائز</p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      refundWinnerInsurance.mutate(auction.id, {
+                        onSuccess: () => setWinnerInsuranceRefunded(true),
+                        onError: (err: Error) => {
+                          // client.ts's response interceptor rejects with a
+                          // plain Error whose message is the backend's
+                          // error.message (Arabic, human-readable) -- it
+                          // never forwards error.code, so "already
+                          // refunded" (no_active_hold, backend
+                          // response.go) can only be recognized here by
+                          // matching that exact message text, not a code.
+                          if (err?.message === 'تم إرجاع مبلغ التأمين مسبقاً أو لا يوجد مبلغ تأمين محجوز') {
+                            setWinnerInsuranceRefunded(true)
+                          }
+                        },
+                      })
+                    }}
+                    disabled={refundWinnerInsurance.isPending}
+                    className="w-full py-3.5 bg-mazad-primary hover:bg-mazad-primary/90 text-white font-bold rounded-xl shadow-lg shadow-mazad-primary/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                  >
+                    {refundWinnerInsurance.isPending ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Wallet className="w-5 h-5" />
+                    )}
+                    إرجاع مبلغ التأمين للفائز
+                  </button>
+                )}
               </div>
             )}
           </div>

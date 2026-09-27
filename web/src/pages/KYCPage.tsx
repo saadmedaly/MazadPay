@@ -14,6 +14,7 @@ import {
   useBulkReviewBannerRequests, useBulkDeleteBannerRequests
 } from '@/hooks/useRequests'
 import { formatDate, formatPrice, shortID } from '@/lib/formatters'
+import { requestIsApprovableForInsurance } from '@/lib/insurancePolicy'
 import type { AuctionRequest, BannerRequest } from '@/hooks/useRequests'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -136,8 +137,14 @@ export function KYCPage() {
       cell: ({ row }) => {
         return (
           <div className="flex items-center gap-2">
+            {/* Client feedback Note #8: auction requests now open the
+                dedicated details page (AuctionRequestDetailPage) instead of
+                the crowded RequestDetailModal -- matches the established
+                admin routing pattern (AuctionDetailPage's own /auctions/:id
+                route). Banner requests are unaffected, still use the modal
+                below. */}
             <button
-              onClick={() => openDetailModal(row.original.id)}
+              onClick={() => navigate(`/requests/auctions/${row.original.id}`)}
               className="p-2 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-colors"
               title="عرض التفاصيل"
             >
@@ -145,13 +152,32 @@ export function KYCPage() {
             </button>
             {row.original.status === 'pending' && (
               <>
-                <button
-                  onClick={() => setReviewTarget({ id: row.original.id, name: row.original.title_ar, type: 'auction', status: 'approved' })}
-                  className="p-2 rounded-lg text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                  title="قبول الطلب"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                </button>
+                {/* Client feedback: this row-icon Approve used to have NO
+                    insurance awareness at all, unlike RequestDetailModal's
+                    Actions tab -- an admin could attempt approval blind and
+                    hit a correct-but-unexplained backend rejection. Now uses
+                    the same shared requestIsApprovableForInsurance helper so
+                    the two entry points can never disagree: if not
+                    approvable, route to Edit (where the insurance_policy
+                    toggle + amount field live) instead of attempting
+                    approval. */}
+                {requestIsApprovableForInsurance(row.original) ? (
+                  <button
+                    onClick={() => setReviewTarget({ id: row.original.id, name: row.original.title_ar, type: 'auction', status: 'approved' })}
+                    className="p-2 rounded-lg text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                    title="قبول الطلب"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => navigate(`/requests/auctions/${row.original.id}/edit`)}
+                    className="p-2 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-colors"
+                    title="تحديد سياسة التأمين قبل الموافقة"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={() => setReviewTarget({ id: row.original.id, name: row.original.title_ar, type: 'auction', status: 'rejected' })}
                   className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"

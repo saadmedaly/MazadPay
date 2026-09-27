@@ -2,9 +2,10 @@ import React, { useState, useMemo } from 'react'
 import {
   Plus, Search, Pencil, Trash2,
   AlertCircle, Loader2, ChevronRight, Folder,
-  Image as ImageIcon, Link, X, Eye, Upload
+  Image as ImageIcon, Link, X, Eye, Upload,
+  ToggleLeft, ToggleRight
 } from 'lucide-react'
-import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '@/hooks/useMetadata'
+import { useAdminCategories, useCreateCategory, useUpdateCategory, useDeleteCategory, useToggleCategory } from '@/hooks/useMetadata'
 import { type ColumnDef } from '@tanstack/react-table'
 import { type Category } from '@/types/api'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -14,10 +15,14 @@ import client from '@/api/client'
 import { toast } from 'sonner'
 
 export function CategoriesPage() {
-  const { data: categories, isLoading, isError } = useCategories()
+  // Customer #27: the admin page must keep seeing hidden categories, so it
+  // reads from the admin-only listing (unfiltered) rather than the public
+  // useCategories() that now excludes is_active=false rows.
+  const { data: categories, isLoading, isError } = useAdminCategories()
   const createMut = useCreateCategory()
   const updateMut = useUpdateCategory()
   const deleteMut = useDeleteCategory()
+  const toggleMut = useToggleCategory()
 
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -29,7 +34,11 @@ export function CategoriesPage() {
     icon_name: '',
     display_order: 0,
     parent_id: null as number | null,
-    image_url: '' as string
+    image_url: '' as string,
+    // fee_tier (client feedback #4): admin-controlled subscription fee tier.
+    // New categories default to 'standard' -- never auto-classified as
+    // premium from name/id/icon_name, only an explicit admin choice here.
+    fee_tier: 'standard' as 'standard' | 'premium'
   })
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [uploadingFile, setUploadingFile] = useState(false)
@@ -79,7 +88,7 @@ export function CategoriesPage() {
 
   const openAdd = () => {
     setEditingCategory(null)
-    setForm({ name_ar: '', name_fr: '', name_en: '', icon_name: '', display_order: 0, parent_id: null, image_url: '' })
+    setForm({ name_ar: '', name_fr: '', name_en: '', icon_name: '', display_order: 0, parent_id: null, image_url: '', fee_tier: 'standard' })
     setIsModalOpen(true)
   }
 
@@ -92,7 +101,11 @@ export function CategoriesPage() {
       icon_name: cat.icon_name || '',
       display_order: cat.display_order,
       parent_id: cat.parent_id,
-      image_url: cat.image_url || ''
+      image_url: cat.image_url || '',
+      // fee_tier may be missing on categories fetched before this field
+      // existed in a cached response -- fall back to 'standard', matching
+      // the backend's own DB DEFAULT and UpdateCategory's empty-value fallback.
+      fee_tier: cat.fee_tier || 'standard'
     })
     setIsModalOpen(true)
   }
@@ -212,6 +225,20 @@ export function CategoriesPage() {
       )
     },
     {
+      header: 'رسوم النشر',
+      accessorKey: 'fee_tier',
+      cell: ({ row }) => {
+        const isPremium = row.original.fee_tier === 'premium'
+        return (
+          <span className={`text-xs px-2 py-1 rounded-full ${
+            isPremium ? 'bg-amber-500/20 text-amber-400' : 'bg-surface-border/40 text-surface-muted'
+          }`}>
+            {isPremium ? 'مميز — 500 أوقية' : 'عادي — 100 أوقية'}
+          </span>
+        )
+      }
+    },
+    {
       header: 'الصورة',
       id: 'image',
       cell: ({ row }) => {
@@ -245,6 +272,19 @@ export function CategoriesPage() {
       )
     },
     {
+      header: 'الحالة',
+      accessorKey: 'is_active',
+      cell: ({ row }) => (
+        <span className={`text-xs px-2 py-1 rounded-full border ${
+          row.original.is_active
+            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+            : 'bg-red-500/20 text-red-400 border-red-500/30'
+        }`}>
+          {row.original.is_active ? 'نشطة' : 'مخفية'}
+        </span>
+      )
+    },
+    {
       header: 'الإجراءات',
       id: 'actions',
       cell: ({ row }) => (
@@ -252,13 +292,25 @@ export function CategoriesPage() {
           <button
             onClick={() => openEdit(row.original)}
             className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-all"
+            title="تعديل"
           >
             <Pencil className="w-4 h-4" />
           </button>
           <button
+            onClick={() => toggleMut.mutate({ id: row.original.id, isActive: !row.original.is_active })}
+            className={`p-1.5 rounded-lg transition-all ${
+              row.original.is_active
+                ? 'text-emerald-400 hover:bg-emerald-500/10'
+                : 'text-surface-muted hover:bg-surface-border'
+            }`}
+            title={row.original.is_active ? 'إخفاء الفئة' : 'إظهار الفئة'}
+          >
+            {row.original.is_active ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+          </button>
+          <button
             onClick={() => {
               const hasChildren = (row.original as any).children?.length > 0
-              const msg = hasChildren 
+              const msg = hasChildren
                 ? 'هذه الفئة تحتوي على فئات فرعية. حذفها سيحذف جميع الفئات الفرعية أيضاً. هل أنت متأكد؟'
                 : 'هل أنت متأكد من حذف هذه الفئة؟'
               if (confirm(msg)) {
@@ -266,6 +318,7 @@ export function CategoriesPage() {
               }
             }}
             className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-all"
+            title="حذف"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -395,6 +448,21 @@ export function CategoriesPage() {
                     onChange={e => setForm(f => ({ ...f, icon_name: e.target.value }))}
                     placeholder="car, home, tech..."
                   />
+                </div>
+                <div className="space-y-2">
+                  {/* fee_tier (client feedback #4): admin explicitly chooses
+                      the subscription fee tier for auction requests filed
+                      under this category -- never inferred from the name/
+                      icon above. */}
+                  <label className="text-xs text-surface-muted font-bold block">فئة رسوم النشر</label>
+                  <select
+                    value={form.fee_tier}
+                    onChange={e => setForm(f => ({ ...f, fee_tier: e.target.value as 'standard' | 'premium' }))}
+                    className="w-full bg-surface-base border border-surface-border rounded-xl p-3 text-sm text-white focus:border-mazad-primary/60 outline-none appearance-none"
+                  >
+                    <option value="standard">عادي — 100 أوقية</option>
+                    <option value="premium">مميز — 500 أوقية</option>
+                  </select>
                 </div>
               </div>
 

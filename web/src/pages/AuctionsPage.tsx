@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { toast } from 'sonner'
-import { 
+import {
   Tag, ImageIcon, MinusCircle, Plus, Search,
   Calendar, Eye, Check, X, Loader2, AlertCircle, Save, Pencil, Trash2,
-  MapPin, List
+  MapPin, List, RotateCcw
 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -11,10 +11,11 @@ import { Input } from '@/components/ui/input'
 import { ImageUpload } from '@/components/shared/ImageUpload'
 import {
   useAuctions, useValidateAuction, useCreateAuction,
-  useUpdateAuction, useDeleteAuction
+  useUpdateAuction, useDeleteAuction, useRelistAuction
 } from '@/hooks/useAuctions'
 import { useCategories, useLocations } from '@/hooks/useMetadata'
 import { formatPrice, formatDate, shortID } from '@/lib/formatters'
+import { requestIsApprovableForInsurance } from '@/lib/insurancePolicy'
 import type { Auction } from '@/types/api'
 import type { AuctionPayload } from '@/api/auctions'
 import { fetchAuction, uploadAuctionImages } from '@/api/auctions'
@@ -51,6 +52,7 @@ export function AuctionsPage() {
   const [rejectDialog, setRejectDialog] = useState<{ id: string; reason: string } | null>(null)
   const [approveId, setApproveId]       = useState<string | null>(null)
   const [deleteId, setDeleteId]         = useState<string | null>(null)
+  const [relistId, setRelistId]         = useState<string | null>(null)
   const [q, setQ]                       = useState('')
   const [now, setNow]                   = useState(Date.now())
 
@@ -75,6 +77,7 @@ export function AuctionsPage() {
   const createMut   = useCreateAuction()
   const updateMut   = useUpdateAuction()
   const deleteMut   = useDeleteAuction()
+  const relistMut   = useRelistAuction()
 
   const { data: categories } = useCategories()
   const { data: locations }  = useLocations()
@@ -166,8 +169,27 @@ export function AuctionsPage() {
       }
     }
 
-    // end_time is always start_time + 24h (enforced here regardless of form value)
-    const end_time = new Date(effectiveStart.getTime() + 24 * 60 * 60 * 1000).toISOString()
+    // end_time (client feedback #15): now the admin's own selection --
+    // previously always force-recomputed as start_time + 24h here regardless
+    // of what the form showed, which was the actual root cause preventing
+    // any multi-day auction duration end-to-end. The backend's own 24h
+    // maximum was already removed (client feedback Phase B item 15,
+    // auction_handler.go); it enforces only end_time > start_time, which is
+    // validated below to match.
+    if (!form.end_time) {
+      toast.error('وقت وتاريخ الإغلاق مطلوب')
+      return null
+    }
+    const et = new Date(form.end_time)
+    if (isNaN(et.getTime())) {
+      toast.error('تاريخ الإغلاق غير صالح')
+      return null
+    }
+    if (et.getTime() <= effectiveStart.getTime()) {
+      toast.error('وقت الإغلاق يجب أن يكون بعد وقت البدء')
+      return null
+    }
+    const end_time = et.toISOString()
 
     // Category validation
     if (!form.category_id || form.category_id === 0) {
@@ -629,12 +651,15 @@ export function AuctionsPage() {
             {auction.status === 'pending' && (<>
               <button
                 onClick={() => {
-                  // Le backend refuse désormais toute activation sans caution définie
-                  // (voir bid_service.go / admin_service.go — audit de sécurité V03).
-                  // On vérifie ici pour un retour immédiat, la vraie protection reste
-                  // côté serveur.
-                  if (!auction.insurance_amount || parseFloat(String(auction.insurance_amount)) <= 0) {
-                    toast.error('لا يمكن الموافقة على هذا المزاد لأن مبلغ التأمين غير محدد. عدّل المزاد أولاً وأدخل مبلغ تأمين أكبر من صفر.')
+                  // Le backend refuse désormais toute activation sans caution définie,
+                  // SAUF si insurance_policy a été explicitement mis à "not_required"
+                  // (voir bid_service.go / admin_service.go ValidateAuction — audit de
+                  // sécurité V03, affiné par la conception insurance_policy). On vérifie
+                  // ici pour un retour immédiat via le même helper partagé que
+                  // RequestDetailModal.tsx/KYCPage.tsx, la vraie protection reste côté
+                  // serveur.
+                  if (!requestIsApprovableForInsurance(auction)) {
+                    toast.error('لا يمكن الموافقة على هذا المزاد لأن مبلغ التأمين غير محدد. عدّل المزاد أولاً وأدخل مبلغ تأمين أكبر من صفر، أو حدد "بدون تأمين".')
                     return
                   }
                   setApproveId(auction.id)
@@ -648,6 +673,24 @@ export function AuctionsPage() {
                 title="رفض"
               ><X className="w-4 h-4" /></button>
             </>)}
+
+            {/* Customer #37: relist, ended auctions only. Reuses the Bug J
+                relist primitive server-side -- the original duration is
+                derived authoritatively on the backend, never computed here. */}
+            {auction.status === 'ended' && (
+              <button
+                onClick={() => setRelistId(auction.id)}
+                disabled={relistMut.isPending && relistMut.variables === auction.id}
+                className="p-1.5 rounded-lg text-mazad-primary hover:bg-mazad-primary/10 transition-all disabled:opacity-50"
+                title="إعادة النشر"
+              >
+                {relistMut.isPending && relistMut.variables === auction.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4" />
+                )}
+              </button>
+            )}
 
             <button
               onClick={() => setDeleteId(auction.id)}
@@ -821,17 +864,29 @@ export function AuctionsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ البدء</label>
+                {/* Client feedback #15: only suggests a default end time (start
+                    + 24h) when end_time is still empty -- never overwrites a
+                    value the admin already chose, so adjusting the start time
+                    after picking a multi-day end time doesn't silently reset it. */}
                 <Input type="datetime-local" value={form.start_time} onChange={e => {
                   const st = e.target.value
-                  const endAuto = st
-                    ? new Date(new Date(st).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
-                    : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
-                  setForm(f => ({...f, start_time: st, end_time: endAuto}))
+                  setForm(f => {
+                    if (f.end_time) return {...f, start_time: st}
+                    const endAuto = st
+                      ? new Date(new Date(st).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
+                      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
+                    return {...f, start_time: st, end_time: endAuto}
+                  })
                 }} />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ الإغلاق <span className="text-red-500">*</span> <span className="text-surface-muted text-xs">(24 ساعة تلقائياً)</span></label>
-                <Input type="datetime-local" value={form.end_time} readOnly className="opacity-70 cursor-not-allowed" onChange={() => {}} />
+                {/* Client feedback #15: the admin can now select any end
+                    date/time (days, not just 24h) -- previously this field
+                    was read-only and force-recomputed as start_time + 24h on
+                    every submit regardless of what was shown here. */}
+                <label className="text-xs text-surface-muted font-bold block">وقت وتاريخ الإغلاق <span className="text-red-500">*</span></label>
+                <Input type="datetime-local" value={form.end_time} onChange={e => setForm(f => ({...f, end_time: e.target.value}))} />
+                <p className="text-[10px] text-surface-muted">يمكن تحديد مدة المزاد حسب الحاجة (يوم أو يومين أو أكثر)</p>
               </div>
               </div>
             </div>
@@ -1094,6 +1149,20 @@ export function AuctionsPage() {
                     setDeleteId(null)
                     refetch()
           } })
+        }}
+      />
+
+      {/* Relist Dialog (Customer #37) */}
+      <ConfirmDialog
+        open={!!relistId}
+        onOpenChange={v => !v && setRelistId(null)}
+        title="إعادة نشر هذا المزاد؟"
+        description="سيتم نشر المزاد من جديد بنفس معلومات المزاد ونفس مدته، مع إعادة تعيين الفائز ومهلة الدفع."
+        confirmLabel="إعادة النشر"
+        variant="success"
+        loading={relistMut.isPending}
+        onConfirm={() => {
+          if (relistId) relistMut.mutate(relistId, { onSuccess: () => setRelistId(null) })
         }}
       />
 

@@ -97,13 +97,25 @@ export const useSendNotification = () => {
       type?: string;
       data?: Record<string, string>;
       broadcast?: boolean;
+      // Customer #22: optional broadcast image URL, set via
+      // POST /admin/notifications/upload before this mutation fires.
+      image_url?: string;
     }) => {
       const response = await api.post('/v1/api/admin/notifications/send', data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       qc.invalidateQueries({ queryKey: ['admin-notifications'] });
-      toast.success('Notification envoyée avec succès');
+      // Client feedback item 16: broadcast now reports a real outcome
+      // (target_users/sent/failed) instead of a bare success message --
+      // only present for broadcast sends, so fall back to the generic
+      // message for a single-user/admin-targeted send.
+      const data = response?.data
+      if (data && typeof data.target_users === 'number') {
+        toast.success(`تم الإرسال: ${data.sent}/${data.target_users} نجح${data.failed ? `، ${data.failed} فشل` : ''}`)
+      } else {
+        toast.success('Notification envoyée avec succès');
+      }
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Erreur lors de l\'envoi de la notification');

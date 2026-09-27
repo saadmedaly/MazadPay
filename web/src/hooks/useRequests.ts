@@ -29,6 +29,11 @@ export interface AuctionRequest {
   start_price: string
   min_increment: string
   insurance_amount: string
+  // insurance_policy (migration 000048): 'required' | 'not_required'. May be
+  // absent on very old cached responses -- treat missing as 'required',
+  // never as 'not_required' (matches the backend's InsuranceRequired()
+  // fallback and DB DEFAULT 'required').
+  insurance_policy?: 'required' | 'not_required'
   reserve_price?: string
   buy_now_price?: string
   start_date: string

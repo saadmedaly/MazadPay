@@ -6,7 +6,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
 import { Input } from '@/components/ui/input'
-import { formatDate, maskPhone, shortID } from '@/lib/formatters'
+import { formatDate, formatFullPhone, shortID } from '@/lib/formatters'
 import type { AdminUser } from '@/types/api'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useUsers, useBlockUser, useGenerateInvitation, useDeleteUser } from '@/hooks/useUsers'
@@ -85,7 +85,10 @@ export function UsersPage() {
     {
       header: 'الهاتف',
       accessorKey: 'phone',
-      cell: ({ getValue }) => <span className="font-mono text-xs text-surface-muted font-bold">{maskPhone(getValue<string>())}</span>
+      // Client feedback #17: authorized Admin sees the complete, readable
+      // phone number (never masked here) so they can contact the user
+      // directly -- public/mobile-facing surfaces are unaffected.
+      cell: ({ row }) => <span dir="ltr" className="font-mono text-xs text-surface-muted font-bold">{formatFullPhone(row.original.phone, row.original.phone_e164)}</span>
     },
     {
       header: 'الدور',

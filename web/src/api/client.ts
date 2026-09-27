@@ -52,7 +52,14 @@ client.interceptors.response.use(
         window.location.href = '/login'
       }
     }
-    return Promise.reject(new Error(message))
+    // status is attached (not just message) so a caller can special-case a
+    // specific HTTP status -- e.g. LocationsPage's delete mutation treating
+    // 404 (row already deleted server-side) as a stale-cache self-heal
+    // rather than a destructive failure. Existing callers that only read
+    // .message are unaffected.
+    const apiError = new Error(message) as Error & { status?: number }
+    apiError.status = err.response?.status
+    return Promise.reject(apiError)
   }
 )
 

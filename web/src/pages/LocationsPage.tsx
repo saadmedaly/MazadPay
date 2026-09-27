@@ -618,7 +618,14 @@ export function LocationsPage() {
               <button
                 onClick={() => {
                   deleteMut.mutate(deleteId, {
-                    onSuccess: () => setDeleteId(null)
+                    onSuccess: () => setDeleteId(null),
+                    // A 404 means the row is already gone server-side (see
+                    // useDeleteLocation's onError) -- close the confirmation
+                    // dialog here too, otherwise it stays open pointing at a
+                    // row the list refetch is about to remove underneath it.
+                    onError: (err: Error & { status?: number }) => {
+                      if (err.status === 404) setDeleteId(null)
+                    }
                   })
                 }}
                 disabled={deleteMut.isPending}

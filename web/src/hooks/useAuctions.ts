@@ -36,6 +36,31 @@ export function useValidateAuction() {
   })
 }
 
+export function useRefundWinnerInsurance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.refundWinnerInsurance,
+    onSuccess: (_, auctionId) => {
+      qc.invalidateQueries({ queryKey: [...auctionKeys.all, auctionId] })
+      toast.success('تم إرجاع مبلغ التأمين للفائز بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message || 'فشل إرجاع مبلغ التأمين'),
+  })
+}
+
+export function useRelistAuction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.relistAuction,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: auctionKeys.all })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast.success('تمت إعادة نشر المزاد بنجاح')
+    },
+    onError: (err: Error) => toast.error(err.message || 'فشل في إعادة نشر المزاد'),
+  })
+}
+
 export function useCreateAuction() {
   const qc = useQueryClient()
   return useMutation({

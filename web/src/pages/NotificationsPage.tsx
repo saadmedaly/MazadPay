@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Bell,
   AlertTriangle,
@@ -9,14 +9,19 @@ import {
   SearchX,
   Clock,
   CheckCircle,
-  Trash2
+  Trash2,
+  Upload,
+  Loader2,
+  X
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import client from '@/api/client';
 import { useSendNotification, useFetchAdminNotifications, useDeleteNotification, useMarkNotificationAsRead, useMarkAllAsReadAdmin } from '@/hooks/useNotifications';
 
 export const NotificationsPage = () => {
@@ -29,19 +34,74 @@ export const NotificationsPage = () => {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [showSendModal, setShowSendModal] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [newNotif, setNewNotif] = useState({ title: '', body: '', type: 'general', user_id: '', broadcast: true })
+  const [newNotif, setNewNotif] = useState({ title: '', body: '', type: 'general', user_id: '', broadcast: true, image_url: '' })
+  // Customer #22: optional broadcast image -- same upload-first-then-
+  // reference pattern already used by BannersPage.tsx (handleFileUpload
+  // below mirrors it), not a redesign of this modal.
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+
+  const resetNewNotif = () => {
+    setNewNotif({ title: '', body: '', type: 'general', user_id: '', broadcast: true, image_url: '' })
+  }
 
   const handleSendNotification = async () => {
     try {
       await sendNotification.mutateAsync(newNotif);
       setShowSendModal(false);
-      setNewNotif({ title: '', body: '', type: 'general', user_id: '', broadcast: true });
+      resetNewNotif();
       refetch();
     } catch (err) {
       // Error handling is done in the hook
       console.log(err, 'send notification error');
     }
   };
+
+  // Customer #22: one optional image, uploaded via POST
+  // /admin/notifications/upload (reuses MediaService/R2 exactly like
+  // banners). Client-side validation mirrors BannersPage.tsx's
+  // handleFileUpload, adjusted to this feature's stricter jpg/jpeg/png/webp
+  // (no gif) + 10MB limits.
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('يرجى اختيار ملف صورة فقط (jpg, png, webp)')
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('حجم الصورة كبير جداً (الحد الأقصى 10 ميجابايت)')
+      return
+    }
+
+    setUploadingImage(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await client.post('/v1/api/admin/notifications/upload', formData, {
+        timeout: 30_000,
+        headers: { 'Content-Type': undefined },
+      })
+
+      const uploadedUrl = res.data.data.url
+      setNewNotif((prev) => ({ ...prev, image_url: uploadedUrl }))
+      toast.success('تم رفع الصورة بنجاح')
+    } catch (err: any) {
+      // Client feedback #22, item 11: a failed upload must never submit a
+      // broken image_url -- image_url in state is only ever set on a
+      // successful upload above, so a failure here simply leaves it as-is
+      // (empty, or the previously-uploaded URL if the admin is replacing).
+      const message = err.response?.data?.message || err.message || 'فشل رفع الصورة'
+      toast.error(message)
+    } finally {
+      setUploadingImage(false)
+      if (imageInputRef.current) imageInputRef.current.value = ''
+    }
+  }
 
   const handleDeleteNotification = async (id: string) => {
     try {
@@ -246,11 +306,25 @@ export const NotificationsPage = () => {
 
       <ConfirmDialog
         open={showSendModal}
-        onOpenChange={setShowSendModal}
+        onOpenChange={(v) => {
+          setShowSendModal(v)
+          // Client feedback #22, item 11: clear local image URL/preview
+          // state on modal close/cancel -- an uploaded-then-cancelled image
+          // stays orphaned in R2 (same accepted pattern as banners/FAQ), but
+          // the form itself must not resurrect a stale preview/URL next
+          // time the modal opens.
+          if (!v) resetNewNotif()
+        }}
         title="إرسال إشعار"
         description="Remplissez le formulaire ci-dessous pour envoyer une notification"
         confirmLabel="إرسال"
         loading={sendNotification.isPending}
+        // Customer #22, hardening item 9: the send button must not be
+        // usable while an image upload is still in flight -- otherwise a
+        // send could fire before image_url is populated, silently sending
+        // a text-only notification despite the admin having picked an
+        // image.
+        confirmDisabled={uploadingImage}
         onConfirm={handleSendNotification}
       >
         <div className="space-y-4 pt-4 text-right" dir="rtl">
@@ -282,6 +356,45 @@ export const NotificationsPage = () => {
               <option value="new_auction">مزاد جديد</option>
               <option value="transaction">معاملة</option>
             </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs text-surface-muted font-bold block">صورة الإشعار (اختياري)</label>
+
+            {newNotif.image_url && (
+              <div className="relative mb-3 rounded-xl overflow-hidden border border-surface-border">
+                <img src={newNotif.image_url} alt="Preview" className="w-full h-40 object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setNewNotif({ ...newNotif, image_url: '' })}
+                  className="absolute top-2 left-2 p-1.5 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={uploadingImage}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-surface-border/50 hover:bg-surface-border border border-surface-border text-white transition-all disabled:opacity-50"
+            >
+              {uploadingImage ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> جاري الرفع...</>
+              ) : newNotif.image_url ? (
+                <><Upload className="w-5 h-5" /> تغيير الصورة</>
+              ) : (
+                <><Upload className="w-5 h-5" /> إضافة صورة</>
+              )}
+            </button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <p className="text-xs text-surface-muted mt-1">JPG, PNG, WebP (الحد الأقصى 10MB) — اختياري</p>
           </div>
         </div>
       </ConfirmDialog>
