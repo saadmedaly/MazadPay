@@ -110,6 +110,11 @@ dev_dependencies:
 flutter:
   generate: true
 
+  # Keep all iOS plugins on CocoaPods: file_picker via SwiftPM pulls in its own
+  # SDWebImage, duplicating the one flutter_image_compress_common gets from Pods.
+  config:
+    enable-swift-package-manager: false
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
