@@ -334,6 +334,16 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		return BadRequest(c, "Invalid request body")
 	}
 
+	// Client feedback Phase B item 6: ChangePasswordRequest.NewPin carries
+	// validate:"required,min=8,max=72" (see struct doc above) but this call
+	// was missing, so that tag was dead code -- ValidatePINStrength below only
+	// enforces len>=4 plus the repeating/sequential checks, so a 4-7 character
+	// new password could otherwise pass. Register already runs this same
+	// struct validation first; this mirrors that.
+	if err := h.validate.Struct(req); err != nil {
+		return BadRequest(c, err.Error())
+	}
+
 	// Validate new PIN strength
 	if err := services.ValidatePINStrength(req.NewPin); err != nil {
 		return BadRequest(c, "New PIN is too weak. Avoid repeating digits (1111) or sequences (1234)")

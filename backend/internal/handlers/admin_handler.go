@@ -179,6 +179,23 @@ func (h *AdminHandler) GetUserByID(c *fiber.Ctx) error {
 	return OK(c, user)
 }
 
+// GetUserWallet (admin wallet controls): read-only wallet lookup (balance,
+// frozen_amount, is_disabled) for the admin user-detail page, shown before
+// offering add/deduct/disable actions.
+func (h *AdminHandler) GetUserWallet(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid user ID")
+	}
+
+	wallet, err := h.svc.GetUserWallet(c.Context(), id)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+
+	return OK(c, wallet)
+}
+
 // Get user auctions
 func (h *AdminHandler) GetUserAuctions(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
@@ -501,6 +518,32 @@ func (h *AdminHandler) DeleteAuction(c *fiber.Ctx) error {
 	return OK(c, fiber.Map{"message": "Auction deleted", "id": id.String()})
 }
 
+// RelistAuction (Customer #37): admin-only relist of an ended auction (client
+// reference: relist icon in the admin auctions list, ended auctions only).
+// Takes ONLY the auction ID -- the original duration is derived
+// authoritatively inside AdminService.RelistAuction, never trusted from the
+// client.
+func (h *AdminHandler) RelistAuction(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	auction, err := h.svc.RelistAuction(c.Context(), id, adminID)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, fiber.Map{
+		"message":  "Auction relisted",
+		"id":       auction.ID.String(),
+		"status":   auction.Status,
+		"end_time": auction.EndTime,
+	})
+}
+
 // List all transactions (Admin view)
 func (h *AdminHandler) ListTransactions(c *fiber.Ctx) error {
 	status := c.Query("status")
@@ -556,13 +599,21 @@ func (h *AdminHandler) GetTransaction(c *fiber.Ctx) error {
 // Validate/Approve transaction (Admin view)
 func (h *AdminHandler) ValidateTransaction(c *fiber.Ctx) error {
 	type ValidateRequest struct {
-		Approve bool   `json:"approve"`
-		Notes   string `json:"notes"`
+		Approve       bool   `json:"approve"`
+		Notes         string `json:"notes"`
+		AttachmentURL string `json:"attachment_url"`
 	}
 
 	var req ValidateRequest
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
+	}
+
+	// Customer #36: rejection always requires a note -- the mobile/admin UI
+	// already enforces this, but the server must too (defense in depth,
+	// matching every other financial-integrity guard in this codebase).
+	if !req.Approve && strings.TrimSpace(req.Notes) == "" {
+		return BadRequest(c, "Notes are required when rejecting a transaction")
 	}
 
 	id, err := uuid.Parse(c.Params("id"))
@@ -574,7 +625,7 @@ func (h *AdminHandler) ValidateTransaction(c *fiber.Ctx) error {
 	if err != nil {
 		return Unauthorized(c)
 	}
-	if err := h.svc.ValidateTransaction(c.Context(), id, req.Approve, req.Notes, adminID); err != nil {
+	if err := h.svc.ValidateTransaction(c.Context(), id, req.Approve, req.Notes, adminID, req.AttachmentURL); err != nil {
 		return InternalError(c, "Failed to validate transaction")
 	}
 
@@ -587,6 +638,189 @@ func (h *AdminHandler) ValidateTransaction(c *fiber.Ctx) error {
 		"message":        "Transaction " + status,
 		"transaction_id": id.String(),
 		"status":         status,
+	})
+}
+
+// RefundWinnerInsurance (Customer #31): admin-only manual release of the
+// auction winner's own insurance hold -- the one case the automatic
+// non-winner refund (ReleaseHoldsForNonWinners, run at auction finalization)
+// deliberately never covers. Takes ONLY the auction ID from the request;
+// the winner's identity and the refunded amount are both derived
+// authoritatively inside AdminService.RefundWinnerInsurance, never trusted
+// from the client.
+func (h *AdminHandler) RefundWinnerInsurance(c *fiber.Ctx) error {
+	auctionID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid auction ID")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	ledgerTx, err := h.svc.RefundWinnerInsurance(c.Context(), auctionID, adminID)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, fiber.Map{
+		"message":        "Winner insurance refunded",
+		"transaction_id": ledgerTx.ID.String(),
+		"amount":         ledgerTx.Amount.String(),
+	})
+}
+
+// AdminAddBalance (Customer #35): admin adds balance to a user's wallet from
+// a transaction's detail page. :id is the anchor transaction whose user_id
+// the credit targets -- the request body never supplies a user_id directly.
+func (h *AdminHandler) AdminAddBalance(c *fiber.Ctx) error {
+	transactionID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid transaction ID")
+	}
+	type Request struct {
+		Amount float64 `json:"amount"`
+		Notes  string  `json:"notes"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if req.Amount <= 0 {
+		return BadRequest(c, "Amount must be greater than 0")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	ledgerTx, err := h.svc.AdminAddBalance(c.Context(), transactionID, decimal.NewFromFloat(req.Amount), req.Notes, adminID)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, fiber.Map{
+		"message":        "Balance added",
+		"transaction_id": ledgerTx.ID.String(),
+		"amount":         ledgerTx.Amount.String(),
+	})
+}
+
+// AdminDeductBalance (admin wallet controls): admin deducts balance from a
+// user's wallet, the mirror of AdminAddBalance immediately above -- same
+// request/response shape.
+func (h *AdminHandler) AdminDeductBalance(c *fiber.Ctx) error {
+	transactionID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid transaction ID")
+	}
+	type Request struct {
+		Amount float64 `json:"amount"`
+		Notes  string  `json:"notes"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if req.Amount <= 0 {
+		return BadRequest(c, "Amount must be greater than 0")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	ledgerTx, err := h.svc.AdminDeductBalance(c.Context(), transactionID, decimal.NewFromFloat(req.Amount), req.Notes, adminID)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, fiber.Map{
+		"message":        "Balance deducted",
+		"transaction_id": ledgerTx.ID.String(),
+		"amount":         ledgerTx.Amount.String(),
+	})
+}
+
+// AdminSetWalletDisabled (admin wallet controls): admin disables/re-enables
+// a user's wallet (blocks new spend -- bidding, withdrawal requests -- while
+// disabled). :id is the target USER id directly (not an anchor transaction),
+// since this is a status toggle, not a money movement.
+func (h *AdminHandler) AdminSetWalletDisabled(c *fiber.Ctx) error {
+	userID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid user ID")
+	}
+	type Request struct {
+		Disabled bool   `json:"disabled"`
+		Reason   string `json:"reason"`
+	}
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.AdminSetWalletDisabled(c.Context(), userID, req.Disabled, req.Reason, adminID); err != nil {
+		return MapError(c, h.logger, err)
+	}
+	message := "Wallet disabled"
+	if !req.Disabled {
+		message = "Wallet re-enabled"
+	}
+	return OK(c, fiber.Map{
+		"message":     message,
+		"user_id":     userID.String(),
+		"is_disabled": req.Disabled,
+	})
+}
+
+// UploadTransactionReviewAttachment (Customer #36): an optional image the
+// ADMIN attaches while approving/rejecting a transaction (client reference
+// UI: attachment slot next to the notes textarea). Distinct from
+// wallet_handler.go's UploadReceipt, which is USER-scoped and 404s for any
+// transaction the caller doesn't own -- this endpoint isn't coupled to a
+// specific transaction at all (admin-only middleware is the only guard),
+// mirroring UploadBannerImage/UploadCategoryImage's public-R2-upload
+// pattern. The returned URL is submitted alongside notes/approve in the
+// next ValidateTransaction call, never persisted by this endpoint itself.
+func (h *AdminHandler) UploadTransactionReviewAttachment(c *fiber.Ctx) error {
+	mediaSvc, ok := c.Locals("mediaService").(services.MediaService)
+	if !ok {
+		h.logger.Error("[UploadTransactionReviewAttachment] Media service not available")
+		return InternalError(c, "Media service not available")
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		return BadRequest(c, "No file provided")
+	}
+	if file.Size > 10*1024*1024 {
+		return BadRequest(c, "File too large (max 10MB)")
+	}
+	// Case-insensitive: Windows screenshot tools/exports commonly produce
+	// uppercase extensions (e.g. "Screenshot.PNG"), which a case-sensitive
+	// check here would wrongly reject before the file even reaches
+	// MediaService's own (correct) magic-byte validation.
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	allowedExts := map[string]bool{
+		".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true,
+	}
+	if !allowedExts[ext] {
+		return BadRequest(c, "Invalid file type (only jpg, jpeg, png, webp, gif allowed)")
+	}
+
+	fileReader, err := file.Open()
+	if err != nil {
+		return InternalError(c, "Failed to open file")
+	}
+	defer fileReader.Close()
+
+	url, err := mediaSvc.UploadFile(c.Context(), fileReader, file, "transaction-review")
+	if err != nil {
+		h.logger.Error("[UploadTransactionReviewAttachment] R2 upload failed", zap.Error(err))
+		return InternalError(c, "Failed to upload attachment: "+err.Error())
+	}
+
+	return OK(c, fiber.Map{
+		"message": "Attachment uploaded successfully",
+		"url":     url,
 	})
 }
 
@@ -687,7 +921,7 @@ func (h *AdminHandler) CreateCategory(c *fiber.Ctx) error {
 		return Unauthorized(c, "User not authenticated")
 	}
 	if err := h.svc.CreateCategory(c.Context(), &cat, adminID); err != nil {
-		return InternalError(c, "Failed to create category: "+err.Error())
+		return MapError(c, h.logger, err)
 	}
 	h.invalidateCategoriesCache(c.Context())
 	return Created(c, cat)
@@ -705,10 +939,47 @@ func (h *AdminHandler) UpdateCategory(c *fiber.Ctx) error {
 		return Unauthorized(c, "User not authenticated")
 	}
 	if err := h.svc.UpdateCategory(c.Context(), &cat, adminID); err != nil {
-		return InternalError(c, "Failed to update category: "+err.Error())
+		return MapError(c, h.logger, err)
 	}
 	h.invalidateCategoriesCache(c.Context())
 	return OK(c, cat)
+}
+
+// ToggleCategory (Customer #27): hide/show, mirroring BannerHandler.Toggle's
+// exact request/response shape -- parses only { is_active }, never the full
+// category body, so an admin client cannot accidentally clear other fields
+// through this endpoint even if it sent a stale payload.
+func (h *AdminHandler) ToggleCategory(c *fiber.Ctx) error {
+	type ToggleRequest struct {
+		IsActive bool `json:"is_active"`
+	}
+	var req ToggleRequest
+	if err := c.BodyParser(&req); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return BadRequest(c, "Invalid category ID")
+	}
+	adminID, err := middleware.GetUserID(c)
+	if err != nil {
+		return Unauthorized(c, "User not authenticated")
+	}
+	if err := h.svc.ToggleCategory(c.Context(), id, req.IsActive, adminID); err != nil {
+		return MapError(c, h.logger, err)
+	}
+	h.invalidateCategoriesCache(c.Context())
+	return OK(c, fiber.Map{"message": "Category status updated"})
+}
+
+// AdminListCategories (Customer #27): the Admin panel's own category list,
+// unfiltered by is_active so a hidden category remains manageable/re-showable.
+func (h *AdminHandler) AdminListCategories(c *fiber.Ctx) error {
+	categories, err := h.svc.AdminListCategories(c.Context())
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	return OK(c, categories)
 }
 
 func (h *AdminHandler) DeleteCategory(c *fiber.Ctx) error {

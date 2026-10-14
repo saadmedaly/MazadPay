@@ -7,8 +7,40 @@ import '../services/fcm_service.dart';
 import '../services/notification_api.dart';
 import '../services/notifications_api.dart';
 import 'auction_details_page.dart';
+import 'auction_winner_page.dart';
 import 'deposit_page.dart';
+import 'notification_detail_page.dart';
+import 'withdrawal_detail_page.dart';
 
+
+/// Customer #21 hardening round: pure tab-classification decision, extracted
+/// from _filteredNotifications for direct unit testing. The 'auctions' and
+/// 'payments' tabs are closed whitelists (an unrecognized type matches
+/// neither -- it still renders correctly under 'all', just isn't picked up
+/// by a specific tab); 'all' (or any other filter key) matches everything.
+///
+/// 'payments' additionally covers deposit_submitted/withdrawal_submitted
+/// (Customer #21's new submission-acknowledgment types) alongside the
+/// existing deposit_confirmed/deposit_rejected/withdrawal_processed outcome
+/// types -- both are wallet/payment notifications and belong on the same
+/// tab, even though only the outcome types were originally listed here.
+bool matchesNotificationTabFilter(String type, String filterKey) {
+  switch (filterKey) {
+    case 'auctions':
+      return const ['auction_pending', 'auction_approved', 'auction_rejected', 'auction_ended', 'auction_won'].contains(type);
+    case 'payments':
+      return const [
+        'payment_received',
+        'deposit_submitted',
+        'deposit_confirmed',
+        'deposit_rejected',
+        'withdrawal_submitted',
+        'withdrawal_processed',
+      ].contains(type);
+    default:
+      return true;
+  }
+}
 
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
@@ -42,16 +74,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
       setState(() {
         _isLoading = false;
+        // NotificationsApi.getNotifications() now returns ApiResponse<List<dynamic>>
+        // directly (see notifications_api.dart) -- the backend's "data" field is
+        // always a bare array, never a nested Map, so no runtime type branching
+        // is needed here anymore.
         if (response.success && response.data != null) {
-          final dynamic responseData = response.data!;
-          List<dynamic> notificationList = [];
-          // La réponse peut être directement une liste ou un objet avec 'data' ou 'notifications'
-          if (responseData is List) {
-            notificationList = responseData;
-          } else if (responseData is Map<String, dynamic>) {
-            notificationList = (responseData['notifications'] ?? responseData['data'] ?? []) as List<dynamic>;
-          }
-          _notifications = notificationList.map((item) => item as Map<String, dynamic>).toList();
+          _notifications = response.data!.map((item) => item as Map<String, dynamic>).toList();
         }
       });
     } catch (e) {
@@ -86,15 +114,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     if (_selectedFilter == 'all') return _notifications;
     return _notifications.where((n) {
       final type = n['type']?.toString() ?? 'system';
-      switch (_selectedFilter) {
-        case 'auctions':
-          return ['auction_pending', 'auction_approved', 'auction_rejected', 'auction_ended', 'auction_won'].contains(type);
-
-        case 'payments':
-          return ['payment_received', 'deposit_confirmed', 'deposit_rejected', 'withdrawal_processed'].contains(type);
-        default:
-          return true;
-      }
+      return matchesNotificationTabFilter(type, _selectedFilter);
     }).toList();
   }
 
@@ -378,17 +398,39 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         ?? notification['auctionId']?.toString()
         ?? (notification['data'] is Map ? (notification['data'] as Map)['auctionId']?.toString() : null)
         ?? (notification['data'] is Map ? (notification['data'] as Map)['auction_id']?.toString() : null);
+    final String? transactionId = notification['transaction_id']?.toString()
+        ?? (notification['data'] is Map ? (notification['data'] as Map)['transaction_id']?.toString() : null);
 
     
     // Marquer comme lu
     _markAsRead(notification['id']?.toString());
 
     switch (type) {
+      // Customer feedback #11: same authoritative-win reasoning as
+      // notification_handler.dart's _navigateFromNotification -- auction_won
+      // routes to the congratulations page here too, so tapping it from the
+      // in-app notification list behaves the same as tapping the push itself.
+      case 'auction_won':
+        if (auctionId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => AuctionWinnerPage(auctionId: auctionId),
+            ),
+          );
+        } else {
+          // Customer #22: this exact type already has a meaningful,
+          // specialized destination -- only fall back to the generic detail
+          // screen when the specific reference (auctionId) this case needs
+          // is actually missing, never degrade a normally-working
+          // auction_won notification just because it happens to share a
+          // switch arm with the new fallback logic below.
+          _openGenericDetail(notification);
+        }
+        break;
       case 'auction_pending':
       case 'auction_approved':
       case 'auction_rejected':
       case 'auction_ended':
-      case 'auction_won':
       case 'bid_outbid':
         if (auctionId != null) {
           Navigator.of(context).push(
@@ -396,21 +438,85 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
               builder: (context) => AuctionDetailsPage(auctionId: auctionId),
             ),
           );
+        } else {
+          _openGenericDetail(notification);
         }
         break;
       case 'payment_received':
       case 'deposit_confirmed':
       case 'deposit_rejected':
-      case 'withdrawal_processed':
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => const DepositPage(),
           ),
         );
         break;
+      // MAZADPAY (withdrawal notification routing bug): same fix as
+      // notification_handler.dart's push-tap routing -- withdrawal_processed
+      // must never open DepositPage. Routes to the withdrawal's own detail
+      // screen using the real transaction_id; falls back to the wallet
+      // screen only if that id is unexpectedly missing.
+      case 'withdrawal_processed':
+        if (transactionId != null && transactionId.isNotEmpty) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => WithdrawalDetailPage(transactionId: transactionId),
+            ),
+          );
+        } else {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const DepositPage(),
+            ),
+          );
+        }
+        break;
+      // Customer #22: admin broadcast notifications (general/new_auction/
+      // transaction) have no real entity/target today -- see the audit --
+      // so they open the generic Notification Detail page instead of
+      // falling through to a silent no-op. If a future admin-sent
+      // new_auction ever DOES carry a real auctionId, prefer that
+      // specialized navigation over the generic page (routing precedence:
+      // specialized > reference > generic fallback).
+      case 'general':
+      case 'transaction':
+      case 'new_auction':
+        if (auctionId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => AuctionDetailsPage(auctionId: auctionId),
+            ),
+          );
+        } else {
+          _openGenericDetail(notification);
+        }
+        break;
       default:
+        // Customer #22: any other/unrecognized type with real content
+        // (title+body) still deserves to be openable rather than silently
+        // doing nothing -- this is strictly additive: every type this repo
+        // already knew how to navigate for is handled by a case above and
+        // never reaches this branch.
+        _openGenericDetail(notification);
         break;
     }
+  }
+
+  void _openGenericDetail(Map<String, dynamic> notification) {
+    final createdAtRaw = notification['created_at']?.toString();
+    final createdAt = createdAtRaw != null
+        ? (DateTime.tryParse(createdAtRaw) ?? DateTime.now())
+        : DateTime.now();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => NotificationDetailPage(
+          title: notification['title']?.toString() ?? '',
+          body: notification['body']?.toString(),
+          imageUrl: notification['image_url']?.toString(),
+          createdAt: createdAt,
+        ),
+      ),
+    );
   }
 
   Future<void> _markAsRead(String? notificationId) async {

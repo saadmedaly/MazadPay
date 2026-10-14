@@ -62,6 +62,14 @@ type Auction struct {
 	Views           int              `db:"views"            json:"views"`
 	BidderCount     int              `db:"bidder_count"     json:"bidder_count"`
 	WinnerID        *uuid.UUID       `db:"winner_id"        json:"winner_id"`
+	// LastBidderID (Customer #38): who placed the CURRENT highest/latest
+	// bid. Replaces the old permanent auction_bid_participants "one bid per
+	// user ever" rule with "no two CONSECUTIVE bids from the same user" --
+	// set atomically alongside CurrentPrice in the same optimistic-locked
+	// transaction as every bid (see BidService.PlaceBid /
+	// AuctionRepository.TryClaimBidTurn). Nil for an auction with no bids
+	// yet.
+	LastBidderID    *uuid.UUID       `db:"last_bidder_id"   json:"last_bidder_id,omitempty"`
 	WinningBidID    *uuid.UUID       `db:"winning_bid_id"   json:"winning_bid_id"`
 	PaymentDeadline *time.Time       `db:"payment_deadline" json:"payment_deadline"`
 	IsFeatured      bool             `db:"is_featured"      json:"is_featured"`
@@ -88,6 +96,13 @@ type Auction struct {
 	MarketCountryISO *string `db:"market_country_iso" json:"market_country_iso,omitempty"`
 	CurrencyCode     *string `db:"currency_code"      json:"currency_code,omitempty"`
 
+	// InsurancePolicy (migration 000048): see models.AuctionRequest's
+	// InsurancePolicy doc comment -- carried forward verbatim from the
+	// approved request (ReviewAuctionRequest) at auction-creation time, same
+	// pattern as InsuranceAmount itself. DB DEFAULT 'required', two states
+	// only. Use InsuranceRequired(), never this raw field.
+	InsurancePolicy string `db:"insurance_policy" json:"insurance_policy"`
+
 	// Joined Fields (Metadata)
 	CategoryNameAr *string `db:"category_name_ar" json:"category"`
 	CityNameAr     *string `db:"city_name_ar"     json:"city"`
@@ -112,6 +127,15 @@ func (a *Auction) EffectiveMarketCountryISO() string {
 		return *a.MarketCountryISO
 	}
 	return DefaultAccountCountryISO
+}
+
+// InsuranceRequired reports whether this auction currently requires a
+// positive insurance_amount to accept bids. Defaults safely to true
+// (required) for any empty/unexpected value, matching the DB column's
+// DEFAULT 'required' -- see models.AuctionRequest.InsuranceRequired for the
+// full rationale (V03 incident, this is the bid-time counterpart).
+func (a *Auction) InsuranceRequired() bool {
+	return a.InsurancePolicy != InsurancePolicyNotRequired
 }
 
 func (a *Auction) EffectiveCurrencyCode() string {
@@ -167,6 +191,43 @@ type Category struct {
 	AuctionCount int `db:"auction_count" json:"auction_count"`
 	// Count of direct subcategories for this category
 	SubcategoriesCount int `db:"subcategories_count" json:"subcategories_count"`
+
+	// FeeTier (migration 000049, client feedback #4): explicit admin decision
+	// distinguishing the 100 MRU "standard" subscription fee from the 500 MRU
+	// "premium" fee (cars, real estate, or any other category an admin
+	// chooses to flag). DEFAULT 'standard' -- never derive the fee from
+	// NameAr/NameFr/NameEn/ID/IconName, none of which are stable or
+	// guaranteed to mean the same thing across environments. Use
+	// SubscriptionFee(), never this raw field, to get the actual amount.
+	FeeTier string `db:"fee_tier" json:"fee_tier" validate:"omitempty,oneof=standard premium"`
+}
+
+// FeeTierStandard/FeeTierPremium are the only two valid values of
+// Category.FeeTier (also enforced by the DB CHECK constraint, migration
+// 000049).
+const (
+	FeeTierStandard = "standard"
+	FeeTierPremium  = "premium"
+)
+
+// StandardSubscriptionFee/PremiumSubscriptionFee (client feedback #4): the
+// two fixed subscription amounts, in MRU. Not user-selectable -- derived
+// solely from the category's admin-set FeeTier.
+var (
+	StandardSubscriptionFee = decimal.NewFromInt(100)
+	PremiumSubscriptionFee  = decimal.NewFromInt(500)
+)
+
+// SubscriptionFee returns this category's subscription fee. Defaults safely
+// to the standard (cheaper) fee only for the recognized default state
+// ("standard" or empty/legacy rows) -- any unrecognized value is treated as
+// standard too, matching FeeTier's DB DEFAULT, since a category is only ever
+// charged the premium fee via an explicit admin action.
+func (c *Category) SubscriptionFee() decimal.Decimal {
+	if c.FeeTier == FeeTierPremium {
+		return PremiumSubscriptionFee
+	}
+	return StandardSubscriptionFee
 }
 
 type Location struct {
@@ -208,9 +269,9 @@ type Country struct {
 // the conventional number of decimal places for the currency (e.g. TND=3,
 // MRU=0, MAD=2) -- required for correct rounding/formatting.
 type Currency struct {
-	Code        string    `db:"code"         json:"code"`
-	MinorUnits  int16     `db:"minor_units"  json:"minor_units"`
-	CreatedAt   time.Time `db:"created_at"   json:"created_at"`
+	Code       string    `db:"code"         json:"code"`
+	MinorUnits int16     `db:"minor_units"  json:"minor_units"`
+	CreatedAt  time.Time `db:"created_at"   json:"created_at"`
 }
 
 // New models from migration 000031

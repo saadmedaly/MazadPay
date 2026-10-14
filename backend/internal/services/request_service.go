@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/microcosm-cc/bluemonday"
@@ -62,7 +63,15 @@ type RequestService interface {
 	// (draft ou rejected uniquement). isAdmin=true (via AdminUpdateAuctionRequest)
 	// contourne la vérification de propriété et la restriction de statut.
 	UpdateAuctionRequest(ctx context.Context, id uuid.UUID, userID uuid.UUID, updates *models.AuctionRequest) error
-	AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest) error
+	// AdminUpdateAuctionRequest applies an admin edit. insurancePolicy is a
+	// pointer specifically so "omitted from the request body" (nil) can be
+	// distinguished from "explicitly set to a value" -- a plain string field
+	// on updates can't express that distinction (client feedback: omitting
+	// insurance_policy from an update payload must PRESERVE the existing
+	// value, never silently reset a "not_required" request back to
+	// "required"). nil => leave the existing policy untouched; non-nil =>
+	// must be "required" or "not_required" (validated by the handler).
+	AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest, insurancePolicy *string) error
 	DeleteAuctionRequest(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error
 	BulkReviewAuctionRequests(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error
 	BulkDeleteAuctionRequests(ctx context.Context, ids []uuid.UUID, deletedBy uuid.UUID) error
@@ -86,9 +95,10 @@ type requestService struct {
 	auditSvc            AuditService
 	notificationService NotificationService
 	logger              *zap.Logger
+	globalHub           GlobalHub
 }
 
-func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, userRepo repository.UserRepository, auditSvc AuditService, notificationService NotificationService, logger *zap.Logger) RequestService {
+func NewRequestService(repo repository.RequestRepository, auctionRepo repository.AuctionRepository, contentRepo repository.ContentRepository, userRepo repository.UserRepository, auditSvc AuditService, notificationService NotificationService, logger *zap.Logger, globalHub GlobalHub) RequestService {
 	return &requestService{
 		repo:                repo,
 		auctionRepo:         auctionRepo,
@@ -97,7 +107,32 @@ func NewRequestService(repo repository.RequestRepository, auctionRepo repository
 		auditSvc:            auditSvc,
 		notificationService: notificationService,
 		logger:              logger,
+		globalHub:           globalHub,
 	}
+}
+
+// emitRequestUpdated broadcasts a Customer #20 hardening-round private event
+// (request.updated) to ONLY the request's owner, over the same GlobalHub
+// used for auction/content events -- BroadcastToUser, never Broadcast or
+// BroadcastAuctionEvent, since a request's review outcome must never be
+// visible to any user other than its owner (unlike FAQ/banner/category,
+// which are public, or auction events, which are market-scoped but still
+// visible to every user in that market). Called only after the triggering
+// review's transaction has already committed. Coexists with, and does not
+// replace, the existing SendLocalizedPush notification: FCM tells the user
+// "something happened" even if the app is closed; this WS event tells an
+// already-OPEN Requests page to refetch right now, without the user having
+// to act on the notification at all.
+func (s *requestService) emitRequestUpdated(ownerID uuid.UUID, requestID uuid.UUID) {
+	if s.globalHub == nil {
+		return
+	}
+	s.globalHub.BroadcastToUser(ownerID.String(), models.GlobalWSEvent{
+		Type:       models.EventRequestUpdated,
+		EntityType: "request",
+		EntityID:   requestID.String(),
+		UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 // Auction Requests
@@ -127,6 +162,42 @@ func (s *requestService) CreateAuctionRequest(ctx context.Context, req *models.A
 	// injectées par erreur par un appelant) sont écrasées ici sans exception.
 	if err := s.stampRequestMarket(ctx, req); err != nil {
 		return err
+	}
+
+	// Client feedback A7 : insurance_amount n'est plus un champ du formulaire
+	// utilisateur (seul le staff/admin le définit pendant la revue, via
+	// AdminUpdateAuctionRequest). Écrasé à zéro ici, sans exception, pour qu'un
+	// appelant qui enverrait tout de même insurance_amount dans le corps JSON
+	// (intentionnellement ou via un client obsolète) ne puisse jamais le fixer de
+	// façon autoritaire -- même politique que MarketCountryISO/CurrencyCode
+	// ci-dessus. ReviewAuctionRequest refuse ensuite toute approbation tant qu'un
+	// admin n'a pas explicitement défini une valeur > 0.
+	req.InsuranceAmount = decimal.Zero
+	// Insurance policy (migration 000048) : même politique de confiance --
+	// seul l'admin peut choisir "not_required" via AdminUpdateAuctionRequest,
+	// jamais l'utilisateur à la création. Écrasé explicitement à "required"
+	// ici (plutôt que de compter uniquement sur le DEFAULT 'required' de la
+	// colonne) pour que req.InsurancePolicy reflète la vraie valeur persistée
+	// immédiatement, y compris pour tout appelant qui inspecterait req après
+	// la création.
+	req.InsurancePolicy = models.InsurancePolicyRequired
+
+	// SubscriptionFee (migration 000049, client feedback #4): stamped
+	// server-side from the request's category, same trust policy as
+	// InsuranceAmount/MarketCountryISO/CurrencyCode above -- never accepted
+	// from the client, and never derived from category name/id/icon_name
+	// (none of which are stable). Falls back to the standard fee if the
+	// category lookup fails, since CategoryID's own existence was already
+	// validated by the DB foreign key on insert below -- a lookup error here
+	// would be transient (e.g. DB hiccup), not a sign of premium pricing, so
+	// failing open to the cheaper fee is safe: it never overcharges, and an
+	// admin reviewing the request can still see/correct it before approval.
+	category, err := s.auctionRepo.GetCategoryByID(ctx, req.CategoryID)
+	if err != nil {
+		s.logger.Warn("CreateAuctionRequest: failed to load category for subscription fee, defaulting to standard", zap.Int("category_id", req.CategoryID), zap.Error(err))
+		req.SubscriptionFee = models.StandardSubscriptionFee
+	} else {
+		req.SubscriptionFee = category.SubscriptionFee()
 	}
 
 	sanitizeDescriptions(req)
@@ -209,6 +280,29 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 		return ErrRequestAlreadyReviewed
 	}
 
+	// Client feedback A7 follow-up, refined by the insurance_policy design
+	// (migration 000048) : le formulaire utilisateur ne collecte plus
+	// insurance_amount (l'utilisateur ne doit jamais le définir de façon
+	// autoritaire -- seul le staff/admin le fait pendant la revue, via
+	// AdminUpdateAuctionRequest). Sans cette garde, approuver une demande dont
+	// insurance_amount est resté à sa valeur zéro par défaut créerait un
+	// auction "active" sur lequel bid_service.go (ErrInsuranceNotSet, audit
+	// V03) bloquerait ensuite TOUS les enchérisseurs -- un auction publié mais
+	// structurellement inutilisable. Vérifié ici, indépendamment de toute
+	// validation frontend admin, avant de créer l'auction.
+	//
+	// req.InsuranceRequired() défaut à true (politique "required") pour toute
+	// valeur vide/inattendue -- donc CETTE garde reste pleinement active pour
+	// toute demande legacy ou n'ayant jamais eu de politique explicite. Elle ne
+	// s'efface QUE si un admin a explicitement mis insurance_policy =
+	// "not_required" via AdminUpdateAuctionRequest (lequel force aussi
+	// insurance_amount à zéro dans ce cas -- voir sa canonicalisation) :
+	// c'est le seul chemin légitime pour créer un auction "active" sans
+	// assurance, jamais un état par défaut ou accidentel.
+	if status == "approved" && req.InsuranceRequired() && !req.InsuranceAmount.GreaterThan(decimal.Zero) {
+		return apperr.ErrRequestInsuranceNotSet
+	}
+
 	// Begin transaction
 	tx, err := s.repo.BeginTx(ctx)
 	if err != nil {
@@ -246,6 +340,11 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 			CurrentPrice:    req.StartPrice,
 			MinIncrement:    req.MinIncrement,
 			InsuranceAmount: req.InsuranceAmount,
+			// InsurancePolicy (migration 000048): carried forward verbatim from
+			// the approved request, same pattern as InsuranceAmount itself --
+			// the policy decided during admin review is the one the live
+			// auction (and therefore PlaceBid) must honor.
+			InsurancePolicy: req.InsurancePolicy,
 			ReservePrice:    reservePrice,
 			BuyNowPrice:     req.BuyNowPrice,
 			StartTime:       req.StartDate,
@@ -275,6 +374,8 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+
+	s.emitRequestUpdated(req.UserID, id)
 
 	// Log audit
 	if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_request_reviewed_%s", status), "auction_request", &id,
@@ -324,6 +425,13 @@ func (s *requestService) ReviewAuctionRequest(ctx context.Context, id uuid.UUID,
 // utilisé par UpdateAuctionRequest et AdminUpdateAuctionRequest pour ne jamais laisser
 // l'appelant écraser des champs de gouvernance (user_id, id, timestamps, review fields)
 // directement.
+// applyAuctionRequestUpdates deliberately does NOT copy InsuranceAmount --
+// client feedback A7: the user must never be able to authoritatively set
+// insurance (whether creating or editing/resubmitting a request), only the
+// admin can, via AdminUpdateAuctionRequest, which applies it separately below
+// after this shared helper runs. This keeps UpdateAuctionRequest (the
+// owner-only edit/resubmit path) safe from a malicious/stale payload
+// regardless of what insurance_amount value it contains.
 func applyAuctionRequestUpdates(existing, updates *models.AuctionRequest) {
 	existing.CategoryID = updates.CategoryID
 	existing.LocationID = updates.LocationID
@@ -335,7 +443,6 @@ func applyAuctionRequestUpdates(existing, updates *models.AuctionRequest) {
 	existing.DescriptionEn = updates.DescriptionEn
 	existing.StartPrice = updates.StartPrice
 	existing.MinIncrement = updates.MinIncrement
-	existing.InsuranceAmount = updates.InsuranceAmount
 	existing.ReservePrice = updates.ReservePrice
 	existing.BuyNowPrice = updates.BuyNowPrice
 	existing.StartDate = updates.StartDate
@@ -363,9 +470,25 @@ func (s *requestService) UpdateAuctionRequest(ctx context.Context, id uuid.UUID,
 	}
 
 	wasRejected := existing.Status == "rejected"
+	categoryChanged := existing.CategoryID != updates.CategoryID
 
 	applyAuctionRequestUpdates(existing, updates)
 	sanitizeDescriptions(existing)
+
+	// SubscriptionFee (client feedback #4): re-stamped only when the category
+	// actually changed -- an edit to price/description/dates must not
+	// silently recompute (and potentially change) an already-correct fee,
+	// but a category change (e.g. "phones" -> "cars") must not leave a stale
+	// fee from the old category on the request.
+	if categoryChanged {
+		category, catErr := s.auctionRepo.GetCategoryByID(ctx, existing.CategoryID)
+		if catErr != nil {
+			s.logger.Warn("UpdateAuctionRequest: failed to load new category for subscription fee, defaulting to standard", zap.Int("category_id", existing.CategoryID), zap.Error(catErr))
+			existing.SubscriptionFee = models.StandardSubscriptionFee
+		} else {
+			existing.SubscriptionFee = category.SubscriptionFee()
+		}
+	}
 
 	if wasRejected {
 		// Resoumission après rejet : retour forcé à "pending", on efface l'ancienne
@@ -396,7 +519,7 @@ func (s *requestService) UpdateAuctionRequest(ctx context.Context, id uuid.UUID,
 	return nil
 }
 
-func (s *requestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest) error {
+func (s *requestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.UUID, updates *models.AuctionRequest, insurancePolicy *string) error {
 	existing, err := s.repo.GetAuctionRequestByID(ctx, id)
 	if err != nil {
 		return err
@@ -407,6 +530,32 @@ func (s *requestService) AdminUpdateAuctionRequest(ctx context.Context, id uuid.
 	// UpdateAuctionRequest. Le statut lui-même n'est pas modifié ici : ReviewAuctionRequest
 	// reste le seul chemin pour approuver/rejeter.
 	applyAuctionRequestUpdates(existing, updates)
+	// Client feedback A7 : contrairement à applyAuctionRequestUpdates (partagée avec le
+	// chemin utilisateur, qui ne touche jamais insurance_amount), l'admin EST autorisé à
+	// définir le montant de l'assurance ici -- c'est le seul chemin légitime pour le
+	// faire avant que ReviewAuctionRequest n'exige une valeur > 0 pour approuver.
+	existing.InsuranceAmount = updates.InsuranceAmount
+
+	// Insurance policy (migration 000048) : insurancePolicy est un pointeur
+	// pour distinguer "absent du payload" (nil -> ne pas toucher existing.
+	// InsurancePolicy, qui vient d'être relu depuis la DB par GetAuctionRequestByID
+	// ci-dessus et porte donc déjà la valeur actuelle) de "explicitement fourni".
+	// Sans cette distinction, un appel qui omettrait insurance_policy remettrait
+	// silencieusement une demande "not_required" à "required" -- exigence client
+	// explicite : "omitted must preserve".
+	if insurancePolicy != nil {
+		existing.InsurancePolicy = *insurancePolicy
+	}
+
+	// Canonicalisation (client feedback, exigence #3) : un état "not_required +
+	// montant positif" ne doit jamais pouvoir être persisté -- si la politique
+	// est (ou devient) "not_required", le montant est forcé à zéro ici, sans
+	// exception, indépendamment de ce que l'admin a pu saisir dans le champ
+	// montant (ex. un montant laissé d'un ancien état "required").
+	if !existing.InsuranceRequired() {
+		existing.InsuranceAmount = decimal.Zero
+	}
+
 	sanitizeDescriptions(existing)
 
 	return s.repo.UpdateAuctionRequest(ctx, existing)
@@ -427,16 +576,52 @@ func (s *requestService) DeleteAuctionRequest(ctx context.Context, id uuid.UUID,
 	return nil
 }
 
+// BulkReviewAuctionRequests reviews multiple auction requests in one call.
+//
+// Client feedback #10 (bulk review notifications) audit found a much larger
+// pre-existing gap than missing notifications: this method used to call ONLY
+// BulkUpdateAuctionRequestStatus, a single blind UPDATE with no pending-status
+// guard and no auction creation -- unlike ReviewAuctionRequest (the
+// single-review path), which creates the actual Auction row inside a
+// transaction when status="approved". That meant bulk-approving a request
+// flipped its DB status to "approved" but the item never went live as an
+// auction, and re-approving an already-reviewed request was silently
+// possible (no ErrRequestAlreadyReviewed guard). Sending an "approved!" push
+// notification on top of that gap would have actively misled sellers about
+// an item that was never actually published.
+//
+// Fixed by delegating each id to the existing, already-correct
+// ReviewAuctionRequest -- reusing its transaction safety, pending-status
+// guard, insurance guard, real Auction creation, audit log, and
+// SendLocalizedPush call verbatim, rather than duplicating that logic here.
+// This also automatically prevents duplicate auction creation and duplicate
+// notifications: ReviewAuctionRequest's own req.Status != "pending" guard
+// means retrying the same bulk call, or passing a duplicate id twice in one
+// call, only ever processes (and notifies for) each request once -- the
+// second attempt hits ErrRequestAlreadyReviewed and is skipped, not retried
+// or re-notified. One request's failure (already reviewed, insurance not
+// set, not found, DB error) does not stop the rest of the batch from being
+// processed, matching this method's pre-existing "continue on per-item audit
+// failure" tolerance.
 func (s *requestService) BulkReviewAuctionRequests(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error {
 	if status != "approved" && status != "rejected" {
 		return ErrInvalidStatus
 	}
-	if err := s.repo.BulkUpdateAuctionRequestStatus(ctx, ids, status, notes, reviewedBy); err != nil {
-		return err
-	}
 
-	// Log audit for each request
+	seen := make(map[uuid.UUID]bool, len(ids))
 	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+
+		if err := s.ReviewAuctionRequest(ctx, id, status, notes, reviewedBy); err != nil {
+			if s.logger != nil {
+				s.logger.Warn("BulkReviewAuctionRequests: skipping request that could not be reviewed", zap.String("request_id", id.String()), zap.Error(err))
+			}
+			continue
+		}
+
 		if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("auction_requests_bulk_reviewed_%s", status), "auction_request", &id,
 			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes)); auditErr != nil {
 			if s.logger != nil {
@@ -467,9 +652,14 @@ func (s *requestService) BulkDeleteAuctionRequests(ctx context.Context, ids []uu
 
 // Banner Requests
 func (s *requestService) CreateBannerRequest(ctx context.Context, req *models.BannerRequest) error {
-	// Business validation
-	if req.EndsAt.Before(req.StartsAt) {
-		return errors.New("ends_at must be after starts_at")
+	// Business validation (client feedback: Bug A.1) -- ends_at must be
+	// strictly after starts_at (a zero-length window is not a valid ad
+	// display period), returning apperr.ErrBadRequest (an existing,
+	// reusable "generic bad request" domain error -- see MapError's
+	// "bad_request" case) so this surfaces as HTTP 400, not an unmapped
+	// plain error falling through to a 500.
+	if !req.EndsAt.After(req.StartsAt) {
+		return apperr.ErrBadRequest
 	}
 
 	req.Status = "pending"
@@ -511,6 +701,19 @@ func (s *requestService) ReviewBannerRequest(ctx context.Context, id uuid.UUID, 
 	req, err := s.repo.GetBannerRequestByID(ctx, id)
 	if err != nil {
 		return err
+	}
+
+	// Client feedback #10 (bulk review notifications) audit: unlike
+	// ReviewAuctionRequest, this method had no pending-status guard --
+	// re-reviewing an already-approved request would create a SECOND Banner
+	// row and send a second "approved" notification every time it was
+	// called. Now that BulkReviewBannerRequests delegates each id here (same
+	// fix as BulkReviewAuctionRequests), this guard is what makes both the
+	// single and bulk paths idempotent: retrying the same review, or passing
+	// a duplicate id twice in one bulk call, is a no-op on the second
+	// attempt rather than a duplicate creation/notification.
+	if req.Status != "pending" {
+		return ErrRequestAlreadyReviewed
 	}
 
 	// Begin transaction
@@ -563,6 +766,8 @@ func (s *requestService) ReviewBannerRequest(ctx context.Context, id uuid.UUID, 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+
+	s.emitRequestUpdated(req.UserID, id)
 
 	// Log audit
 	if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_request_reviewed_%s", status), "banner_request", &id,
@@ -619,16 +824,36 @@ func (s *requestService) DeleteBannerRequest(ctx context.Context, id uuid.UUID, 
 	return nil
 }
 
+// BulkReviewBannerRequests reviews multiple banner requests in one call.
+//
+// Same client feedback #10 fix as BulkReviewAuctionRequests above -- this
+// used to call ONLY BulkUpdateBannerRequestStatus (a blind UPDATE, no
+// pending-status guard, no Banner creation), unlike ReviewBannerRequest
+// (single-review), which creates the actual Banner row on approval. Fixed by
+// delegating each id to ReviewBannerRequest, for the identical reasons: real
+// banner creation, the pending-status guard (preventing duplicate
+// creation/notification on retry or a duplicate id in the same call), and
+// correct SendLocalizedPush usage, all reused verbatim rather than
+// duplicated here.
 func (s *requestService) BulkReviewBannerRequests(ctx context.Context, ids []uuid.UUID, status, notes string, reviewedBy uuid.UUID) error {
 	if status != "approved" && status != "rejected" {
 		return ErrInvalidStatus
 	}
-	if err := s.repo.BulkUpdateBannerRequestStatus(ctx, ids, status, notes, reviewedBy); err != nil {
-		return err
-	}
 
-	// Log audit for each request
+	seen := make(map[uuid.UUID]bool, len(ids))
 	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+
+		if err := s.ReviewBannerRequest(ctx, id, status, notes, reviewedBy); err != nil {
+			if s.logger != nil {
+				s.logger.Warn("BulkReviewBannerRequests: skipping request that could not be reviewed", zap.String("request_id", id.String()), zap.Error(err))
+			}
+			continue
+		}
+
 		if auditErr := s.auditSvc.Log(ctx, reviewedBy, fmt.Sprintf("banner_requests_bulk_reviewed_%s", status), "banner_request", &id,
 			fmt.Sprintf("Bulk status changed to %s. Notes: %s", status, notes)); auditErr != nil {
 			if s.logger != nil {

@@ -116,6 +116,24 @@ func (h *WSHandler) AuthorizeSubscription(ctx context.Context, auctionID uuid.UU
 	if err != nil {
 		return false
 	}
+
+	// WebSocket legacy owner fix (client feedback, round 4): mirrors the same
+	// owner exemption already applied to the REST detail endpoint
+	// (auction_handler.go GetByID, see its isOwner/isAdmin exemption). A
+	// legacy auction predating migration 000046 has market_country_iso/
+	// currency_code = NULL, so EffectiveMarketCountryISO() falls back to
+	// DefaultAccountCountryISO ("MR") -- a TN owner's own callerMarket ("TN")
+	// then mismatches that fallback and was rejected here even though they
+	// are the auction's own seller, confirmed live against Staging DB data
+	// (owner=true, market_country_iso=NULL). The owner of the auction may
+	// always subscribe to their own auction's WebSocket regardless of legacy
+	// NULL market metadata; every other caller (non-owner, cross-market, or
+	// an invalid/missing JWT already rejected earlier in HandleAuction)
+	// remains governed by the unchanged country-equality check.
+	if auction.SellerID == uid {
+		return true
+	}
+
 	return user.EffectiveAccountCountryISO() == auction.EffectiveMarketCountryISO()
 }
 

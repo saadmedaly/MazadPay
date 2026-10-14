@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,7 +40,42 @@ type AdminService interface {
 	DeleteAuction(ctx context.Context, id uuid.UUID) error
 	ListTransactions(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error)
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error)
-	ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error
+	ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID, attachmentURL string) error
+	// RefundWinnerInsurance (Customer #31): admin-only manual release of the
+	// WINNER's own insurance hold for an ended auction -- the one case
+	// AuctionService.FinalizeExpiredAuction/ReleaseHoldsForNonWinners
+	// deliberately never auto-refunds. See its own doc comment for the full
+	// authorization/idempotency/atomicity contract.
+	RefundWinnerInsurance(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) (*models.Transaction, error)
+	// AdminAddBalance (Customer #35): admin-only direct credit to a user's
+	// wallet, reachable from a transaction's detail page. The target user_id
+	// is derived server-side from the anchor transaction (transactionID),
+	// never trusted from the client. See its own doc comment for the full
+	// authorization/idempotency/atomicity contract.
+	AdminAddBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error)
+	// AdminDeductBalance (admin wallet controls): admin-only direct debit
+	// from a user's wallet, the mirror of AdminAddBalance -- same
+	// anchor-transaction-derives-target-user shape, same idempotency/ledger
+	// contract. See its own doc comment for the full contract.
+	AdminDeductBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error)
+	// AdminSetWalletDisabled (admin wallet controls): admin-only toggle of a
+	// user's wallet is_disabled status (migration 000058) -- blocks new
+	// spend attempts (bidding, withdrawal requests) while set. Unlike
+	// AdminAddBalance/AdminDeductBalance, this is user-anchored directly
+	// (userID), not derived from a transaction, since disabling a wallet is
+	// not itself a money movement. See its own doc comment for the full
+	// contract.
+	AdminSetWalletDisabled(ctx context.Context, userID uuid.UUID, disabled bool, reason string, adminID uuid.UUID) error
+	// GetUserWallet (admin wallet controls): read-only lookup of a user's
+	// wallet (balance, frozen_amount, is_disabled, etc), for the admin UI to
+	// display before offering the add/deduct/disable actions above.
+	GetUserWallet(ctx context.Context, userID uuid.UUID) (*models.Wallet, error)
+	// RelistAuction (Customer #37): admin-only relist of an ended auction,
+	// reusing the Bug J atomic relist transition. Original duration is
+	// derived server-side from the auction's own stored start/end time,
+	// never trusted from the client. See its own doc comment for the full
+	// contract.
+	RelistAuction(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) (*models.Auction, error)
 	ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error)
 	ReviewReport(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
 	DeleteReport(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error
@@ -55,6 +91,18 @@ type AdminService interface {
 	CreateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error
 	UpdateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error
 	DeleteCategory(ctx context.Context, id int, adminID uuid.UUID) error
+	// ToggleCategory (Customer #27): hide/show for a category or subcategory
+	// (same table). Mirrors contentService.ToggleBanner's shape exactly --
+	// minimal targeted write, audit log, then the same category.updated
+	// realtime broadcast UpdateCategory already emits.
+	ToggleCategory(ctx context.Context, id int, isActive bool, adminID uuid.UUID) error
+	// AdminListCategories (Customer #27): unfiltered category list for the
+	// Admin panel -- includes hidden (is_active = false) rows, unlike the
+	// public GetCategories path, so a hidden category remains reachable to
+	// be shown again. Reuses the exact same underlying data as
+	// GetCategories (no separate cache/SQL duplicated), just without any
+	// public-visibility filtering applied afterward.
+	AdminListCategories(ctx context.Context) ([]models.Category, error)
 	CreateLocation(ctx context.Context, l *models.Location, adminID uuid.UUID) error
 	UpdateLocation(ctx context.Context, l *models.Location, adminID uuid.UUID) error
 	DeleteLocation(ctx context.Context, id int, adminID uuid.UUID) error
@@ -144,6 +192,7 @@ type adminService struct {
 	auctionRepo  repository.AuctionRepository
 	bidRepo      repository.BidRepository
 	txRepo       repository.TransactionRepository
+	walletRepo   repository.WalletRepository
 	reportRepo   repository.ReportRepository
 	kycRepo      repository.KYCRepository
 	contentRepo  repository.ContentRepository
@@ -156,6 +205,7 @@ type adminService struct {
 	rdb          *redis.Client
 	logger       *zap.Logger
 	jwtExpiry    int
+	globalHub    GlobalHub
 }
 
 func NewAdminService(
@@ -176,6 +226,8 @@ func NewAdminService(
 	rdb *redis.Client,
 	logger *zap.Logger,
 	jwtExpiry int,
+	globalHub GlobalHub,
+	walletRepo repository.WalletRepository,
 ) AdminService {
 	return &adminService{
 		db:           db,
@@ -195,10 +247,31 @@ func NewAdminService(
 		rdb:          rdb,
 		logger:       logger,
 		jwtExpiry:    jwtExpiry,
+		globalHub:    globalHub,
+		walletRepo:   walletRepo,
 	}
 }
 
 var _ AdminService = (*adminService)(nil)
+
+// emitAuctionEvent mirrors auctionService.emitAuctionEvent -- see its doc
+// comment for the full contract (called only after commit, best-effort,
+// market-scoped). Duplicated rather than shared because adminService and
+// auctionService are separate structs with no common embedding; the
+// duplication is 6 lines and keeps each service's zero-value/test behavior
+// independent (a nil globalHub in one service's tests never affects the
+// other's).
+func (s *adminService) emitAuctionEvent(auction *models.Auction, eventType string) {
+	if s.globalHub == nil || auction == nil {
+		return
+	}
+	s.globalHub.BroadcastAuctionEvent(auction.EffectiveMarketCountryISO(), models.GlobalWSEvent{
+		Type:       eventType,
+		EntityType: "auction",
+		EntityID:   auction.ID.String(),
+		UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+	})
+}
 
 func (s *adminService) GetDashboardStats(ctx context.Context) (map[string]interface{}, error) {
 	totalUsers, _, err := s.userRepo.GetStats(ctx)
@@ -418,16 +491,35 @@ func (s *adminService) ValidateAuction(ctx context.Context, id uuid.UUID, approv
 		status = "active"
 		// Un auction ne peut jamais devenir "active" sans caution définie (audit V03) :
 		// c'est cette valeur qui protège les enchérisseurs contre les mises sans fonds.
+		//
+		// Insurance policy audit (client feedback, verification round): this is a SECOND,
+		// separate admin approval surface from ReviewAuctionRequest (request_service.go)
+		// -- ValidateAuction transitions an `auctions` row already sitting at status
+		// 'pending' directly to 'active' (PUT /admin/auctions/:id/validate, used by
+		// AuctionsPage.tsx/AuctionDetailPage.tsx), a genuinely separate admin screen. It
+		// had the exact same insurance_amount > 0 check with no InsuranceRequired()
+		// exemption -- found only by an explicit repo-wide search for every remaining
+		// direct insurance_amount comparison, since this path is entirely independent of
+		// the auction_requests flow fixed elsewhere. Same fix, same rule.
 		existing, err := s.auctionRepo.FindByID(ctx, id)
 		if err != nil {
 			return apperr.ErrNotFound
 		}
-		if !existing.InsuranceAmount.GreaterThan(decimal.Zero) {
+		if existing.InsuranceRequired() && !existing.InsuranceAmount.GreaterThan(decimal.Zero) {
 			return apperr.ErrInsuranceNotSet
 		}
 	}
 	if err := s.auctionRepo.UpdateStatus(ctx, id, status); err != nil {
 		return err
+	}
+
+	// Customer #20: this is the exact moment a "pending" auction becomes
+	// visible on mobile's Home/Active lists (approve) or is confirmed as
+	// never appearing there (reject) -- emit right after the status write
+	// commits, using the freshly updated auction so the market/ID are
+	// correct even if the later re-fetch below fails.
+	if updated, findErr2 := s.auctionRepo.FindByID(ctx, id); findErr2 == nil {
+		s.emitAuctionEvent(updated, models.EventAuctionStatusChanged)
 	}
 
 	if findErr == nil && s.auditSvc != nil {
@@ -574,23 +666,41 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 		return err
 	}
 
-	// Only sync images if explicitly provided in the request
-	var existingImages []models.AuctionImage
-	hasNewImages := false
+	// Only sync images if the submitted URL set actually differs from what's
+	// already stored (client feedback: Bug G). The admin web's edit/save
+	// form always re-sends the auction's current image URLs in input.Images,
+	// even when the admin changed nothing about images (e.g. editing only
+	// the title or price) -- treating "images present in the request" as
+	// "images changed" caused every such save to delete-then-recreate the
+	// image rows and, worse, permanently delete the real R2 objects, even
+	// though the exact same URLs were being written straight back into the
+	// DB. The DB then pointed at URLs whose backing files no longer
+	// existed. Comparing the incoming, ordered, non-empty URL list against
+	// the existing rows (also ordered by display_order) makes a same-images
+	// save a true no-op: no DB churn, no R2 deletion.
+	var incomingURLs []string
 	for _, url := range input.Images {
 		if url != "" {
-			hasNewImages = true
-			break
+			incomingURLs = append(incomingURLs, url)
 		}
 	}
 
-	if hasNewImages {
-		// Get existing images before deleting (for R2 cleanup)
-		var imgErr error
-		existingImages, imgErr = s.auctionRepo.GetImages(ctx, id)
-		if imgErr != nil {
-			return fmt.Errorf("failed to get existing images: %w", imgErr)
-		}
+	existingImagesForCompare, imgErr := s.auctionRepo.GetImages(ctx, id)
+	if imgErr != nil {
+		return fmt.Errorf("failed to get existing images: %w", imgErr)
+	}
+	var existingURLs []string
+	for _, img := range existingImagesForCompare {
+		existingURLs = append(existingURLs, img.URL)
+	}
+
+	imagesChanged := len(incomingURLs) > 0 && !slices.Equal(incomingURLs, existingURLs)
+
+	var existingImages []models.AuctionImage
+	if imagesChanged {
+		// Existing images already fetched above for comparison -- reuse
+		// them for R2 cleanup instead of re-querying.
+		existingImages = existingImagesForCompare
 
 		// Replace images
 		if err := s.auctionRepo.DeleteImagesTx(ctx, tx, id); err != nil {
@@ -626,10 +736,17 @@ func (s *adminService) UpdateAuction(ctx context.Context, id uuid.UUID, input Up
 		}
 	}
 
+	s.emitAuctionEvent(auction, models.EventAuctionUpdated)
+
 	return nil
 }
 
 func (s *adminService) DeleteAuction(ctx context.Context, id uuid.UUID) error {
+	// Fetched before deletion for both R2 image cleanup (existing behavior)
+	// and the Customer #20 event below (need the auction's market/ID after
+	// its row is already gone).
+	auctionBeforeDelete, _ := s.auctionRepo.FindByID(ctx, id)
+
 	// Get existing images before deleting (for R2 cleanup)
 	existingImages, err := s.auctionRepo.GetImages(ctx, id)
 	if err != nil {
@@ -651,6 +768,8 @@ func (s *adminService) DeleteAuction(ctx context.Context, id uuid.UUID) error {
 		}
 	}
 
+	s.emitAuctionEvent(auctionBeforeDelete, models.EventAuctionDeleted)
+
 	return nil
 }
 
@@ -662,7 +781,43 @@ func (s *adminService) GetTransactionByID(ctx context.Context, id uuid.UUID) (*m
 	return s.txRepo.FindByID(ctx, id, nil)
 }
 
-func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID) error {
+// withdrawalStatusWord returns the localized word substituted into the
+// withdrawal_processed {status} placeholder (notification_localizations.go).
+// Kept as a small lookup rather than extending GetLocalizedNotification with
+// conditional templating, since deposit_confirmed/deposit_rejected already
+// establish the pattern of one placeholder per fact, not per-branch bodies.
+func withdrawalStatusWord(approve bool, language string) string {
+	words := map[string]map[bool]string{
+		"ar": {true: "تمت الموافقة عليه", false: "مرفوض"},
+		"fr": {true: "approuvée", false: "refusée"},
+		"en": {true: "approved", false: "rejected"},
+	}
+	byLang, ok := words[language]
+	if !ok {
+		byLang = words["en"]
+	}
+	return byLang[approve]
+}
+
+// withdrawalReasonSuffix builds the trailing "{reason}" clause for a rejected
+// withdrawal, adjacent to {status} in the withdrawal_processed template. Empty
+// notes (an admin rejected without typing a reason) omit the clause entirely
+// rather than printing a dangling separator.
+func withdrawalReasonSuffix(notes, language string) string {
+	if notes == "" {
+		return ""
+	}
+	switch language {
+	case "ar":
+		return ". السبب: " + notes
+	case "fr":
+		return ". Raison : " + notes
+	default:
+		return ". Reason: " + notes
+	}
+}
+
+func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, approve bool, notes string, adminID uuid.UUID, attachmentURL string) error {
 	status := "rejected"
 	if approve {
 		status = "completed"
@@ -672,7 +827,7 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	// financier — Financial audit logs, ne bloque jamais l'opération si l'audit échoue).
 	txBefore, findErr := s.txRepo.FindByID(ctx, id, nil)
 
-	if err := s.txRepo.UpdateStatus(ctx, id, status, notes, adminID); err != nil {
+	if err := s.txRepo.UpdateStatus(ctx, id, status, notes, adminID, attachmentURL); err != nil {
 		return err
 	}
 
@@ -713,6 +868,17 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 		}
 	}
 
+	// Client feedback #10 (withdrawal notifications) idempotency: UpdateStatus
+	// above always rewrites status/admin_notes/reviewed_at even when the
+	// transaction was already terminal (money movement itself is guarded by
+	// tx.Status checks inside UpdateStatus, but the status row write and this
+	// notification send were not). A retried or double-clicked admin
+	// approve/reject on an already-completed/rejected transaction must not
+	// resend a duplicate push.
+	if findErr == nil && (txBefore.Status == "completed" || txBefore.Status == "rejected") {
+		return nil
+	}
+
 	// Send notification to user
 	tx, err := s.txRepo.FindByID(ctx, id, nil)
 	if err != nil {
@@ -726,15 +892,40 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	if user.LanguagePref != "" {
 		language = user.LanguagePref
 	}
+	// Client feedback #10 (withdrawal notifications): ValidateTransaction is the
+	// shared admin approve/reject endpoint for BOTH deposit and withdraw
+	// transactions (see PUT /admin/transactions/:id/validate), but the
+	// notification type below was hardcoded to deposit_confirmed/deposit_rejected
+	// regardless of tx.Type -- a withdrawal being approved or rejected silently
+	// reused deposit wording and never used the withdrawal_processed type the
+	// mobile app already defines (NotificationType.withdrawalProcessed,
+	// fcm_service.dart channel routing + /wallet tap navigation). No new
+	// notification type is introduced here: withdrawal_processed already exists
+	// on the mobile side for both outcomes, distinguished by the approved/reason
+	// params exactly like deposit_confirmed/deposit_rejected are today.
 	notifType := "deposit_confirmed"
 	if !approve {
 		notifType = "deposit_rejected"
+	}
+	if tx.Type == "withdraw" {
+		notifType = "withdrawal_processed"
 	}
 	params := map[string]string{
 		"amount":   tx.Amount.String(),
 		"currency": tx.EffectiveCurrencyCode(),
 	}
-	if !approve {
+	if tx.Type == "withdraw" {
+		params["status"] = withdrawalStatusWord(approve, language)
+		// {status}{reason} are adjacent in the withdrawal_processed template
+		// (notification_localizations.go), so "reason" must itself carry any
+		// leading punctuation/wording -- left empty for an approved withdrawal
+		// (mirrors deposit_confirmed, which has no reason clause at all).
+		if !approve {
+			params["reason"] = withdrawalReasonSuffix(notes, language)
+		} else {
+			params["reason"] = ""
+		}
+	} else if !approve {
 		params["reason"] = notes
 	}
 	data := map[string]string{
@@ -743,6 +934,426 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	}
 	_ = s.notifSvc.SendLocalizedPush(ctx, tx.UserID, notifType, language, params, data)
 	return nil
+}
+
+// RefundWinnerInsurance (Customer #31): the one case
+// AuctionService.FinalizeExpiredAuction/ReleaseHoldsForNonWinners
+// deliberately never auto-refunds -- the WINNER's own insurance hold stays
+// 'active' after auction close, by design (see ReleaseHoldsForNonWinners'
+// own doc comment), pending exactly this manual admin action.
+//
+// Every authoritative value (winner identity, hold amount, hold id) is
+// derived from the DB inside this one method -- the caller supplies only
+// auctionID and adminID, never an amount or target user, so an Admin UI can
+// never influence how much money moves or to whom (requirement #10).
+//
+// Atomicity (#6): auction/winner lookup, the hold's atomic active->released
+// transition, and the ledger row are all read/written inside ONE database
+// transaction; any failure at any step rolls back everything, so a ledger
+// row is never created without the hold actually having moved money (#9),
+// and the hold is never released without a ledger row existing for it (#8).
+//
+// Idempotency / double-refund protection (#7): TryReleaseHoldForRefund uses
+// the exact same atomic "UPDATE ... WHERE status = 'active' RETURNING ..."
+// guard already proven safe under concurrency by
+// TrySetWinnerAtomically/TryEndAuctionAtomically (Bug J) -- a hold can only
+// ever leave 'active' once. A second call (or two concurrent admin clicks)
+// for the same auction finds released=false and is rejected with
+// ErrNoActiveHold, never a silent success and never a second payout.
+func (s *adminService) RefundWinnerInsurance(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) (*models.Transaction, error) {
+	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+	if err != nil {
+		return nil, err
+	}
+	if auction.Status != "ended" {
+		return nil, apperr.ErrAuctionNotEnded
+	}
+	if auction.WinnerID == nil {
+		return nil, apperr.ErrNotAuctionWinner
+	}
+	winnerID := *auction.WinnerID
+
+	dbtx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer dbtx.Rollback()
+
+	hold, err := s.walletRepo.FindActiveHold(ctx, dbtx, winnerID, auctionID)
+	if err != nil {
+		return nil, apperr.ErrNoActiveHold
+	}
+
+	released, amount, releasedUserID, err := s.walletRepo.TryReleaseHoldForRefund(ctx, dbtx, hold.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !released {
+		// Lost the race (another admin request already refunded this exact
+		// hold between the FindActiveHold read above and this atomic
+		// UPDATE) -- reject cleanly rather than pretending success or
+		// double-crediting the wallet.
+		return nil, apperr.ErrNoActiveHold
+	}
+
+	currencyCode := auction.EffectiveCurrencyCode()
+	ledgerTx := &models.Transaction{
+		ID:           uuid.New(),
+		UserID:       releasedUserID,
+		AuctionID:    &auctionID,
+		Type:         "insurance_refund",
+		Amount:       amount,
+		Status:       "completed",
+		ReviewedBy:   &adminID,
+		WalletHoldID: &hold.ID,
+		CurrencyCode: &currencyCode,
+	}
+	if err := s.txRepo.CreateTx(ctx, dbtx, ledgerTx); err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(); err != nil {
+		return nil, err
+	}
+
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"auction_id":  auctionID.String(),
+			"winner_id":   releasedUserID.String(),
+			"hold_id":     hold.ID.String(),
+			"amount":      amount.String(),
+			"currency":    currencyCode,
+			"transaction": ledgerTx.ID.String(),
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "winner_insurance_refunded", "auction", &auctionID,
+			fmt.Sprintf("winner_id=%s amount=%s", releasedUserID, amount.String()),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("RefundWinnerInsurance: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return ledgerTx, nil
+}
+
+// RelistAuction (Customer #37): admin-only relist of an ENDED auction,
+// reusing the exact same Bug J atomic transition (TryRelistAuctionAtomically)
+// already proven for the seller-facing relist flow -- same preserved data,
+// same winner/payment-state reset, same untouched bid history. Two
+// deliberate differences from the seller-facing auctionService.RelistAuction:
+//  1. No seller-ownership check -- an admin may relist any user's ended
+//     auction, which is the entire point of this admin action.
+//  2. The new end_time is derived authoritatively HERE from the auction's
+//     own stored (start_time, end_time) -- never trusted from client input,
+//     unlike the seller-facing flow where the caller supplies end_time
+//     directly. This guarantees the "preserve original duration" requirement
+//     always holds regardless of what an admin UI might send.
+func (s *adminService) RelistAuction(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) (*models.Auction, error) {
+	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+	if err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	if auction.Status != "ended" {
+		return nil, apperr.ErrConflict
+	}
+
+	originalDuration := auction.EndTime.Sub(auction.StartTime)
+	newEndTime := time.Now().Add(originalDuration)
+
+	dbtx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer dbtx.Rollback()
+
+	won, err := s.auctionRepo.TryRelistAuctionAtomically(ctx, dbtx, auctionID, newEndTime, auction.StartPrice)
+	if err != nil {
+		return nil, err
+	}
+	if !won {
+		// Lost the race (status changed between FindByID and this atomic
+		// UPDATE) -- reject cleanly rather than pretending success.
+		return nil, apperr.ErrConflict
+	}
+	if err := dbtx.Commit(); err != nil {
+		return nil, err
+	}
+
+	oldStatus := auction.Status
+	auction.Status = "pending"
+	auction.EndTime = newEndTime
+	auction.WinnerID = nil
+	auction.WinningBidID = nil
+	auction.PaymentDeadline = nil
+	auction.CurrentPrice = auction.StartPrice
+
+	if s.auditSvc != nil {
+		details := fmt.Sprintf("old_status=%s new_status=pending new_end_time=%s duration_preserved=%s", oldStatus, newEndTime.Format(time.RFC3339), originalDuration.String())
+		detailsJSON := models.JSONB{
+			"auction_id":   auctionID.String(),
+			"old_status":   oldStatus,
+			"new_status":   "pending",
+			"new_end_time": newEndTime.Format(time.RFC3339),
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "auction_relisted_by_admin", "auction", &auctionID, details,
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("RelistAuction: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+	s.emitAuctionEvent(auction, models.EventAuctionStatusChanged)
+
+	return auction, nil
+}
+
+// AdminAddBalance (Customer #35): admin-only direct credit to a user's
+// wallet from the transaction detail page (client reference). Unlike
+// deposit/withdraw, this creates a ledger row that is already 'completed' in
+// one step -- there is no pending-then-approve transition to guard against
+// re-entry, so a double-click/retry is instead rejected at the DB level by
+// uq_admin_credit_reference (migration 000054): a second attempt against the
+// same anchor transaction fails the INSERT with a unique-violation, caught
+// below and reported as ErrDuplicateAdminCredit rather than a generic error
+// or a silent double-credit. The target user is always the anchor
+// transaction's own user_id, read server-side -- never trusted from the
+// client (which only ever supplies transactionID + amount).
+func (s *adminService) AdminAddBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error) {
+	if amount.LessThanOrEqual(decimal.Zero) {
+		return nil, apperr.ErrBadRequest
+	}
+
+	anchor, err := s.txRepo.GetByID(ctx, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	userID := anchor.UserID
+
+	dbtx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer dbtx.Rollback()
+
+	// Financial Audit fix: lock and close the anchor transaction BEFORE
+	// locking the wallet -- matches TransactionRepository.UpdateStatus's own
+	// lock order (transaction row, then wallet), so this and a concurrent
+	// deposit-approval request can never deadlock on the opposite ordering.
+	// If the anchor is a still-open deposit/withdraw, this atomically marks
+	// it 'completed' in the SAME dbtx as the wallet credit below -- closing
+	// the double-credit gap where an admin_credit against a pending deposit
+	// left that deposit independently approvable afterward. A no-op for any
+	// other anchor type/status (standalone manual credits are unaffected).
+	if err := s.txRepo.LockAndCloseIfOpenDepositOrWithdraw(ctx, dbtx, transactionID, adminID); err != nil {
+		return nil, err
+	}
+
+	wallet, err := s.walletRepo.FindForUpdate(ctx, dbtx, userID)
+	if err != nil {
+		return nil, err
+	}
+	currencyCode := wallet.EffectiveCurrencyCode()
+
+	if err := s.walletRepo.CreditBalance(ctx, dbtx, userID, amount); err != nil {
+		return nil, err
+	}
+
+	reference := "admin_credit:" + transactionID.String()
+	var adminNotes *string
+	if notes != "" {
+		adminNotes = &notes
+	}
+	ledgerTx := &models.Transaction{
+		ID:           uuid.New(),
+		UserID:       userID,
+		Type:         "admin_credit",
+		Amount:       amount,
+		Status:       "completed",
+		Reference:    &reference,
+		AdminNotes:   adminNotes,
+		ReviewedBy:   &adminID,
+		CurrencyCode: &currencyCode,
+	}
+	if err := s.txRepo.CreateTx(ctx, dbtx, ledgerTx); err != nil {
+		if strings.Contains(err.Error(), "uq_admin_credit_reference") {
+			return nil, apperr.ErrDuplicateAdminCredit
+		}
+		return nil, err
+	}
+
+	if err := dbtx.Commit(); err != nil {
+		return nil, err
+	}
+
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"user_id":               userID.String(),
+			"anchor_transaction_id": transactionID.String(),
+			"amount":                amount.String(),
+			"currency":              currencyCode,
+			"transaction":           ledgerTx.ID.String(),
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "admin_credited_balance", "user", &userID,
+			fmt.Sprintf("user_id=%s amount=%s", userID, amount.String()),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("AdminAddBalance: failed to write audit log", zap.String("user_id", userID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return ledgerTx, nil
+}
+
+// AdminDeductBalance (admin wallet controls): admin-only direct debit from a
+// user's wallet, the mirror of AdminAddBalance immediately above -- same
+// shape throughout: target user derived server-side from the anchor
+// transaction, ledger row created already 'completed' in one step, and the
+// same duplicate-request guard pattern (uq_admin_debit_reference, migration
+// 000058) protecting against a double-click/retry, this time reported as
+// ErrDuplicateAdminDebit. The only behavioral difference from
+// AdminAddBalance is DebitBalance's WHERE balance >= $1 compare-and-set:
+// insufficient funds fails the debit atomically (0 rows updated) rather than
+// ever driving balance negative, surfaced as ErrInsufficientBalanceForDebit.
+// Deliberately NOT gated by the target wallet's IsDisabled flag -- an admin
+// must always be able to correct a disabled wallet's balance (e.g. clawing
+// back an erroneous credit) regardless of its disabled status.
+func (s *adminService) AdminDeductBalance(ctx context.Context, transactionID uuid.UUID, amount decimal.Decimal, notes string, adminID uuid.UUID) (*models.Transaction, error) {
+	if amount.LessThanOrEqual(decimal.Zero) {
+		return nil, apperr.ErrBadRequest
+	}
+
+	anchor, err := s.txRepo.GetByID(ctx, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	userID := anchor.UserID
+
+	dbtx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer dbtx.Rollback()
+
+	// Financial Audit fix: same reasoning as AdminAddBalance above -- lock
+	// and close the anchor transaction (if it's a still-open deposit/
+	// withdraw) before locking the wallet, in the same dbtx as the debit.
+	// Prevents an anchor withdraw request from remaining independently
+	// approvable/rejectable after an unrelated admin_debit already moved
+	// money against the same referenced transaction, which would otherwise
+	// leave frozen_amount and balance inconsistent with each other.
+	if err := s.txRepo.LockAndCloseIfOpenDepositOrWithdraw(ctx, dbtx, transactionID, adminID); err != nil {
+		return nil, err
+	}
+
+	wallet, err := s.walletRepo.FindForUpdate(ctx, dbtx, userID)
+	if err != nil {
+		return nil, err
+	}
+	currencyCode := wallet.EffectiveCurrencyCode()
+
+	if err := s.walletRepo.DebitBalance(ctx, dbtx, userID, amount); err != nil {
+		return nil, err
+	}
+
+	reference := "admin_debit:" + transactionID.String()
+	var adminNotes *string
+	if notes != "" {
+		adminNotes = &notes
+	}
+	ledgerTx := &models.Transaction{
+		ID:           uuid.New(),
+		UserID:       userID,
+		Type:         "admin_debit",
+		Amount:       amount,
+		Status:       "completed",
+		Reference:    &reference,
+		AdminNotes:   adminNotes,
+		ReviewedBy:   &adminID,
+		CurrencyCode: &currencyCode,
+	}
+	if err := s.txRepo.CreateTx(ctx, dbtx, ledgerTx); err != nil {
+		if strings.Contains(err.Error(), "uq_admin_debit_reference") {
+			return nil, apperr.ErrDuplicateAdminDebit
+		}
+		return nil, err
+	}
+
+	if err := dbtx.Commit(); err != nil {
+		return nil, err
+	}
+
+	if s.auditSvc != nil {
+		detailsJSON := models.JSONB{
+			"user_id":               userID.String(),
+			"anchor_transaction_id": transactionID.String(),
+			"amount":                amount.String(),
+			"currency":              currencyCode,
+			"transaction":           ledgerTx.ID.String(),
+		}
+		if auditErr := s.auditSvc.Log(ctx, adminID, "admin_deducted_balance", "user", &userID,
+			fmt.Sprintf("user_id=%s amount=%s", userID, amount.String()),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("AdminDeductBalance: failed to write audit log", zap.String("user_id", userID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return ledgerTx, nil
+}
+
+// AdminSetWalletDisabled (admin wallet controls): toggles a user's wallet
+// is_disabled status flag (migration 000058). This is a pure status change,
+// not a money movement -- no ledger Transaction row is created (there is no
+// amount to record), and it runs as a single UPDATE rather than inside a
+// dbtx paired with a ledger insert, unlike AdminAddBalance/AdminDeductBalance
+// above. Re-enabling (disabled=false) clears reason/disabled_by/disabled_at
+// at the repository level (SetWalletDisabled) so a stale reason never
+// lingers once a wallet is active again.
+func (s *adminService) AdminSetWalletDisabled(ctx context.Context, userID uuid.UUID, disabled bool, reason string, adminID uuid.UUID) error {
+	if err := s.walletRepo.SetWalletDisabled(ctx, userID, disabled, reason, adminID); err != nil {
+		return err
+	}
+
+	if s.auditSvc != nil {
+		action := "admin_disabled_wallet"
+		if !disabled {
+			action = "admin_enabled_wallet"
+		}
+		detailsJSON := models.JSONB{
+			"user_id": userID.String(),
+			"reason":  reason,
+		}
+		details := fmt.Sprintf("user_id=%s disabled=%v", userID, disabled)
+		if auditErr := s.auditSvc.Log(ctx, adminID, action, "user", &userID, details,
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("AdminSetWalletDisabled: failed to write audit log", zap.String("user_id", userID.String()), zap.Error(auditErr))
+			}
+		}
+	}
+
+	return nil
+}
+
+// GetUserWallet (admin wallet controls): read-only wallet lookup for the
+// admin UI. Reuses the existing WalletRepository.GetByUserID (auto-creates a
+// zero-balance wallet row if the user somehow has none yet, matching every
+// other wallet read path's behavior).
+func (s *adminService) GetUserWallet(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
+	return s.walletRepo.GetByUserID(ctx, userID)
 }
 
 func (s *adminService) ListReports(ctx context.Context, page, perPage int, status string, reportType string) ([]models.Report, int, error) {
@@ -825,7 +1436,26 @@ func (s *adminService) ReviewKYC(ctx context.Context, userID uuid.UUID, status, 
 	return nil
 }
 
+// validateFeeTierInput (client feedback #4): shared by CreateCategory and
+// UpdateCategory so both accept exactly the same values with exactly the
+// same semantics. BodyParser doesn't run Go struct validate tags (same gap
+// already documented for WalletHandler.Deposit), so an invalid value would
+// otherwise only be caught by the DB CHECK constraint as a raw SQL error --
+// checked explicitly here for a clear, intentional rejection instead. Empty
+// stays allowed -- both repository methods default an empty FeeTier to
+// 'standard' rather than rejecting it, so an existing/legacy caller unaware
+// of this field keeps working on both create and update.
+func validateFeeTierInput(feeTier string) error {
+	if feeTier != "" && feeTier != models.FeeTierStandard && feeTier != models.FeeTierPremium {
+		return apperr.ErrBadRequest
+	}
+	return nil
+}
+
 func (s *adminService) CreateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error {
+	if err := validateFeeTierInput(c.FeeTier); err != nil {
+		return err
+	}
 	if err := s.auctionRepo.CreateCategory(ctx, c); err != nil {
 		return err
 	}
@@ -834,11 +1464,70 @@ func (s *adminService) CreateCategory(ctx context.Context, c *models.Category, a
 }
 
 func (s *adminService) UpdateCategory(ctx context.Context, c *models.Category, adminID uuid.UUID) error {
+	if err := validateFeeTierInput(c.FeeTier); err != nil {
+		return err
+	}
 	if err := s.auctionRepo.UpdateCategory(ctx, c); err != nil {
 		return err
 	}
 	s.logCategoryAudit(ctx, adminID, "category_updated", c.ID, c.NameAr)
+	if s.globalHub != nil {
+		s.globalHub.Broadcast(models.GlobalWSEvent{
+			Type:       models.EventCategoryUpdated,
+			EntityType: "category",
+			EntityID:   strconv.Itoa(c.ID),
+			UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+		})
+	}
 	return nil
+}
+
+// ToggleCategory (Customer #27): hide/show for a category or subcategory.
+// Uses UpdateCategoryStatus's targeted single-column write (never the
+// full-entity UpdateCategory path), so this can never accidentally
+// overwrite name/image/parent_id/fee_tier/display_order. Emits the exact
+// same category.updated broadcast UpdateCategory already sends -- mobile's
+// existing categoriesProvider (Customer #20) picks this up with no new
+// wiring, matching the audit's finding that this event already exists and
+// mobile already listens for it.
+func (s *adminService) ToggleCategory(ctx context.Context, id int, isActive bool, adminID uuid.UUID) error {
+	if err := s.auctionRepo.UpdateCategoryStatus(ctx, id, isActive); err != nil {
+		return err
+	}
+	if s.auditSvc != nil {
+		action := "category_hidden"
+		if isActive {
+			action = "category_shown"
+		}
+		detailsJSON := models.JSONB{"category_id": id, "is_active": isActive}
+		if auditErr := s.auditSvc.Log(ctx, adminID, action, "category", nil, fmt.Sprintf("category_id=%d is_active=%v", id, isActive),
+			WithActorType("admin"),
+			WithDetailsJSON(detailsJSON),
+			WithEntityKey(strconv.Itoa(id)),
+		); auditErr != nil {
+			if s.logger != nil {
+				s.logger.Error("ToggleCategory: failed to write audit log", zap.Int("category_id", id), zap.Error(auditErr))
+			}
+		}
+	}
+	if s.globalHub != nil {
+		s.globalHub.Broadcast(models.GlobalWSEvent{
+			Type:       models.EventCategoryUpdated,
+			EntityType: "category",
+			EntityID:   strconv.Itoa(id),
+			UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+	return nil
+}
+
+// AdminListCategories (Customer #27): the Admin panel's own listing,
+// deliberately NOT filtered by is_active -- a hidden category must remain
+// visible/manageable in Admin so it can be shown again. Reuses the exact
+// same GetCategories query (no duplicated SQL); the public-facing filter is
+// applied separately, only in the public HTTP handler path.
+func (s *adminService) AdminListCategories(ctx context.Context) ([]models.Category, error) {
+	return s.auctionRepo.GetCategories(ctx)
 }
 
 func (s *adminService) DeleteCategory(ctx context.Context, id int, adminID uuid.UUID) error {
@@ -879,6 +1568,7 @@ func (s *adminService) CreateLocation(ctx context.Context, l *models.Location, a
 	if err := s.auctionRepo.CreateLocation(ctx, l); err != nil {
 		return err
 	}
+	s.invalidateLocationsCache(ctx)
 	if s.auditSvc != nil {
 		detailsJSON := models.JSONB{
 			"location_id":  l.ID,
@@ -906,6 +1596,7 @@ func (s *adminService) UpdateLocation(ctx context.Context, l *models.Location, a
 	if err := s.auctionRepo.UpdateLocation(ctx, l); err != nil {
 		return err
 	}
+	s.invalidateLocationsCache(ctx)
 	if s.auditSvc != nil {
 		detailsJSON := models.JSONB{
 			"location_id":  l.ID,
@@ -933,6 +1624,7 @@ func (s *adminService) DeleteLocation(ctx context.Context, id int, adminID uuid.
 	if err := s.auctionRepo.DeleteLocation(ctx, id); err != nil {
 		return err
 	}
+	s.invalidateLocationsCache(ctx)
 	if s.auditSvc != nil {
 		if auditErr := s.auditSvc.Log(ctx, adminID, "location_deleted", "location", nil,
 			fmt.Sprintf("location_id=%d", id),
@@ -946,6 +1638,26 @@ func (s *adminService) DeleteLocation(ctx context.Context, id int, adminID uuid.
 		}
 	}
 	return nil
+}
+
+// invalidateLocationsCache deletes the "locations" Redis key that
+// auctionService.GetLocations populates with a 1-hour TTL (internal/services/
+// auction_service.go). Without this, a location create/update/delete
+// committed to Postgres was invisible through GET /v1/api/locations for up
+// to an hour -- the admin panel's success toast was real, but the list kept
+// serving the stale cached snapshot from before the mutation (MAZADPAY
+// locations-list refresh bug). Called after the DB mutation succeeds, never
+// before, and its own failure is logged but never fails the mutation --
+// worst case is one stale read, self-healing after the cache's 1-hour TTL,
+// which is strictly better than blocking a successful admin action on
+// Redis availability.
+func (s *adminService) invalidateLocationsCache(ctx context.Context) {
+	if s.rdb == nil {
+		return
+	}
+	if err := s.rdb.Del(ctx, "locations").Err(); err != nil && s.logger != nil {
+		s.logger.Warn("Failed to invalidate locations cache", zap.Error(err))
+	}
 }
 
 // normalizePhoneForInvitation applique une normalisation simple et sûre, dédiée aux
@@ -1853,5 +2565,12 @@ func (s *adminService) AdminAddAuctionImages(ctx context.Context, auctionID uuid
 			return fmt.Errorf("failed to save image: %w", err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	if auction, findErr := s.auctionRepo.FindByID(ctx, auctionID); findErr == nil {
+		s.emitAuctionEvent(auction, models.EventAuctionUpdated)
+	}
+	return nil
 }

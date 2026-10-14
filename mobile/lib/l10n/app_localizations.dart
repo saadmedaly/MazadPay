@@ -100,6 +100,12 @@ abstract class AppLocalizations {
     Locale('fr'),
   ];
 
+  /// No description provided for @register_submit_button.
+  ///
+  /// In ar, this message translates to:
+  /// **'إنشاء الحساب'**
+  String get register_submit_button;
+
   /// No description provided for @text_1.
   ///
   /// In ar, this message translates to:
@@ -151,7 +157,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_9.
   ///
   /// In ar, this message translates to:
-  /// **'خدمات التوصيل: توصيل الطعام، المياه، خدمات المجاري، نقل الأشخاص، شحن البضائع، الشحن من الخارج إلى موريتانيا، ونقل السيارات والشاحنات.'**
+  /// **''**
   String get text_9;
 
   /// No description provided for @text_10.
@@ -3129,6 +3135,132 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'محاولات كثيرة جدا. يرجى المحاولة مرة أخرى في وقت لاحق.'**
   String get error_too_many_requests;
+
+  /// No description provided for @text_406.
+  ///
+  /// In ar, this message translates to:
+  /// **'مبروك، ربحت المزاد'**
+  String get text_406;
+
+  /// No description provided for @text_407.
+  ///
+  /// In ar, this message translates to:
+  /// **'لقد فزت بالمزاد «{title}» على MazadPay بسعر {amount}.'**
+  String text_407(Object amount, Object title);
+
+  /// No description provided for @text_408.
+  ///
+  /// In ar, this message translates to:
+  /// **'الموقع الإلكتروني'**
+  String get text_408;
+
+  /// No description provided for @text_409.
+  ///
+  /// In ar, this message translates to:
+  /// **'تعذّر فتح الرابط'**
+  String get text_409;
+
+  /// No description provided for @text_410.
+  ///
+  /// In ar, this message translates to:
+  /// **'مزايدة'**
+  String get text_410;
+
+  /// No description provided for @text_411.
+  ///
+  /// In ar, this message translates to:
+  /// **'مزايدات'**
+  String get text_411;
+
+  /// No description provided for @text_412.
+  ///
+  /// In ar, this message translates to:
+  /// **'خدمة بنكية'**
+  String get text_412;
+
+  /// No description provided for @text_413.
+  ///
+  /// In ar, this message translates to:
+  /// **'أدخل رقم الشخص الذي تريد إرسال مبلغ السحب إليه عبر خدمة بنكية'**
+  String get text_413;
+
+  /// No description provided for @text_414.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم المستفيد'**
+  String get text_414;
+
+  /// No description provided for @text_415.
+  ///
+  /// In ar, this message translates to:
+  /// **'أدخل رقم الهاتف أو الحساب البنكي'**
+  String get text_415;
+
+  /// No description provided for @text_416.
+  ///
+  /// In ar, this message translates to:
+  /// **'معلومات السحب'**
+  String get text_416;
+
+  /// No description provided for @text_417.
+  ///
+  /// In ar, this message translates to:
+  /// **'المبلغ المطلوب سحبه'**
+  String get text_417;
+
+  /// No description provided for @text_418.
+  ///
+  /// In ar, this message translates to:
+  /// **'الرسوم'**
+  String get text_418;
+
+  /// No description provided for @text_419.
+  ///
+  /// In ar, this message translates to:
+  /// **'مجانية'**
+  String get text_419;
+
+  /// No description provided for @text_420.
+  ///
+  /// In ar, this message translates to:
+  /// **'سيتم إرسال المبلغ مباشرة إلى رقم المستفيد عبر خدمة بنكية.'**
+  String get text_420;
+
+  /// No description provided for @text_421.
+  ///
+  /// In ar, this message translates to:
+  /// **'إرسال المبلغ'**
+  String get text_421;
+
+  /// No description provided for @text_422.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى إدخال رقم المستفيد'**
+  String get text_422;
+
+  /// No description provided for @text_423.
+  ///
+  /// In ar, this message translates to:
+  /// **'رصيدك غير كافٍ للمزايدة'**
+  String get text_423;
+
+  /// No description provided for @text_424.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى شحن رصيدك أولًا ثم إعادة المحاولة.'**
+  String get text_424;
+
+  /// No description provided for @text_425.
+  ///
+  /// In ar, this message translates to:
+  /// **'شحن الرصيد'**
+  String get text_425;
+
+  /// No description provided for @text_426.
+  ///
+  /// In ar, this message translates to:
+  /// **'إلغاء'**
+  String get text_426;
 }
 
 class _AppLocalizationsDelegate

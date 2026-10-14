@@ -34,24 +34,42 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
     _loadCountries();
   }
 
+  bool _countriesLoadFailed = false;
+
   Future<void> _loadCountries() async {
     final response = await _categoryApi.getCountries();
-    if (response.success && response.data != null) {
-      if (mounted) {
-        setState(() {
-          _countries = response.data!;
-          // Select default country (+222 Mauritania) or first available
-          try {
-            _selectedCountry = _countries.firstWhere(
-              (c) => c['country_code'] == '+222' || c['code'] == 'MR',
-            );
-          } catch (e) {
-            if (_countries.isNotEmpty) {
-              _selectedCountry = _countries.first;
-            }
-          }
-        });
-      }
+
+    // A successful-but-empty response (`success: true, data: []`) must be
+    // treated the same as a failure -- see login_page.dart for the full
+    // explanation.
+    final hasUsableData = response.success && response.data != null && response.data!.isNotEmpty;
+
+    if (hasUsableData) {
+      if (!mounted) return;
+      setState(() {
+        _countriesLoadFailed = false;
+        _countries = response.data!;
+        // Only (re)compute the default on first load or when recovering from
+        // the temporary MR fallback -- never overwrite a real user selection
+        // on a retry.
+        if (_selectedCountry == null || identical(_selectedCountry, kFallbackMauritania)) {
+          _selectedCountry = selectDefaultCountry(_countries);
+        }
+      });
+    } else {
+      // Network/parse failure OR a successful-but-empty response -- never
+      // leave the form permanently locked.
+      if (!mounted) return;
+      setState(() {
+        _countriesLoadFailed = true;
+        _selectedCountry ??= kFallbackMauritania;
+        // Seed the picker with at least the fallback so it never shows the
+        // "no data" empty state -- a successful retry always replaces this
+        // with the real, full international list.
+        if (_countries.isEmpty) {
+          _countries = [kFallbackMauritania];
+        }
+      });
     }
   }
 
@@ -336,6 +354,34 @@ class _PhoneRegistrationPageState extends ConsumerState<PhoneRegistrationPage> {
                   ),
                 ),
               ),
+              // Countries list failed to load -- form still usable via the
+              // local MR fallback, but surface a retry so the user isn't
+              // silently stuck on a possibly-wrong country/length forever.
+              if (_countriesLoadFailed)
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'تعذر تحميل قائمة الدول',
+                        style: TextStyle(color: Colors.orange, fontSize: 12),
+                      ),
+                      TextButton(
+                        onPressed: _loadCountries,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'إعادة المحاولة',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,

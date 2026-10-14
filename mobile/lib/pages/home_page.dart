@@ -1,5 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:mezadpay/pages/create_ad_start_page.dart';
@@ -12,10 +14,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-
+import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/side_menu_drawer.dart';
 import '../widgets/live_indicator.dart';
+import '../utils/auction_image.dart';
+import '../services/realtime_sync_service.dart';
+import '../providers/unread_notifications_provider.dart';
 
 import 'all_auctions_page.dart';
 
@@ -44,6 +49,34 @@ import 'package:mezadpay/utils/time_utils.dart';
 import 'package:mezadpay/utils/money_formatter.dart';
 
 
+
+/// Which content the Hero Banner carousel should render for a given
+/// (loading, banners) state -- extracted as pure logic so it's directly
+/// testable without pumping the full HomePage widget tree (client
+/// feedback: Bug F). `loading` and `empty` both resolve to the neutral
+/// placeholder (never assets/announcement.png, the old commercial ad that
+/// used to flash on cold start during the `loading` window); only `data`
+/// renders real server banners.
+enum BannerSlideMode { loading, empty, data }
+
+BannerSlideMode bannerSlideMode({
+  required bool isLoadingBanners,
+  required List<Map<String, dynamic>> banners,
+}) {
+  if (isLoadingBanners) return BannerSlideMode.loading;
+  if (banners.isEmpty) return BannerSlideMode.empty;
+  return BannerSlideMode.data;
+}
+
+/// Note #2 (client feedback): pure decision logic for whether a tapped
+/// banner's admin-configured target_url should actually be launched --
+/// extracted from _openBannerTargetUrl so it's directly unit-testable
+/// without mounting HomePage. Returns null for an empty/unparsable URL
+/// (nothing to launch), otherwise the parsed Uri.
+Uri? bannerLaunchableUri(String targetUrl) {
+  if (targetUrl.isEmpty) return null;
+  return Uri.tryParse(targetUrl);
+}
 
 class HomePage extends ConsumerStatefulWidget {
 
@@ -84,6 +117,33 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   bool _isLoadingBanners = true;
 
+  // ── Banner carousel (client feedback A2): auto-advance every 5s, loop
+  // back to the first slide, while still allowing manual swipe via the
+  // existing PageView. Timer is created/cancelled alongside the banner
+  // list so it never fires with a stale slide count, and is always
+  // cancelled in dispose() to avoid leaking (and calling setState after
+  // unmount).
+  final PageController _bannerPageController = PageController();
+  Timer? _bannerTimer;
+  int _bannerPage = 0;
+
+  void _startBannerAutoScroll(int slideCount) {
+    _bannerTimer?.cancel();
+    if (slideCount <= 1) return;
+    _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted || !_bannerPageController.hasClients) {
+        timer.cancel();
+        return;
+      }
+      final nextPage = (_bannerPage + 1) % slideCount;
+      _bannerPageController.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
   final SponsorApi _sponsorApi = SponsorApi();
 
   List<Map<String, dynamic>> _sponsors = [];
@@ -95,6 +155,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   bool _isLoading = true;
 
 
+
+  StreamSubscription? _realtimeEventSub;
+  StreamSubscription? _realtimeCatchUpSub;
 
   @override
 
@@ -118,6 +181,36 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     _checkFirstTimeLocation();
 
+    // Customer #20: this page previously only refreshed via manual
+    // pull-to-refresh (see the RefreshIndicator further below). Auctions
+    // list refetches for any auction event (created/updated/status
+    // changed/deleted all mean the Home/Active list may now be wrong);
+    // banners refetch only for banner.updated (Phase 7: targeted
+    // invalidation, not a full-page reload for every event type).
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.isAuctionEvent) {
+        _loadCitiesWithAuctions();
+      } else if (event.type == RealtimeEventType.bannerUpdated) {
+        _loadBanners();
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      _loadCitiesWithAuctions();
+      _loadBanners();
+    });
+
+  }
+
+  @override
+  void dispose() {
+    _bannerTimer?.cancel();
+    _bannerTimer = null;
+    _bannerPageController.dispose();
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
+    super.dispose();
   }
 
 
@@ -581,41 +674,54 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   }
 
+  // Customer #20 hardening (out-of-order response guard): _loadBanners can
+  // now be triggered concurrently from multiple sources (manual
+  // pull-to-refresh, a realtime banner.updated event, app-resume catch-up).
+  // If an OLDER call's network response arrives after a NEWER call's
+  // (e.g. reordered on a flaky connection), the older one must not
+  // overwrite the newer, more current server state. Each call captures its
+  // own generation number; only the call still holding the latest
+  // generation when its response arrives is allowed to setState.
+  int _bannersRequestGeneration = 0;
+
   Future<void> _loadBanners() async {
+    final myGeneration = ++_bannersRequestGeneration;
     try {
       debugPrint('=== LOADING BANNERS ===');
-      
+
       final cachedBanners = await CacheService.instance.getCachedBanners();
       final isCacheValid = await CacheService.instance.isBannersCacheValid();
-      
+
       if (cachedBanners != null && cachedBanners.isNotEmpty && isCacheValid) {
-        if (!mounted) return;
+        if (!mounted || myGeneration != _bannersRequestGeneration) return;
         setState(() {
           _banners = cachedBanners;
           _isLoadingBanners = false;
         });
+        _startBannerAutoScroll(_banners.isEmpty ? 1 : _banners.length);
       }
-      
+
       final response = await _bannerApi.getBanners();
-      
+
       if (response.success && response.data != null) {
         final List<dynamic> bannerList = response.data!;
         debugPrint('Loaded ${bannerList.length} banners');
-        
+
         final activeBanners = bannerList
             .map((item) => item as Map<String, dynamic>)
             .where((banner) => banner['is_active'] == true)
             .toList();
-            
+
         await CacheService.instance.cacheBanners(activeBanners);
-        
+
         debugPrint('Active banners: ${activeBanners.length}');
-        
-        if (!mounted) return;
+
+        if (!mounted || myGeneration != _bannersRequestGeneration) return;
         setState(() {
           _banners = activeBanners;
           _isLoadingBanners = false;
         });
+        _startBannerAutoScroll(_banners.isEmpty ? 1 : _banners.length);
       } else {
         debugPrint('Failed to load banners: ${response.message}');
         if (_banners.isEmpty && mounted) {
@@ -720,7 +826,16 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
+  // Customer #20 hardening (out-of-order response guard): the realtime
+  // auction-event handler in initState above can call
+  // _loadCitiesWithAuctions() (which itself calls this) concurrently with a
+  // user-triggered city switch or manual pull-to-refresh. Captures the
+  // generation at call time so an older, reordered network response can
+  // never overwrite a newer one's result.
+  int _auctionsRequestGeneration = 0;
+
   Future<void> _loadAuctions({String? locationId}) async {
+    final myGeneration = ++_auctionsRequestGeneration;
 
     try {
 
@@ -738,7 +853,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
-      if (!mounted) return;
+      if (!mounted || myGeneration != _auctionsRequestGeneration) return;
       setState(() {
 
         _isLoading = false;
@@ -763,7 +878,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     } catch (e) {
 
-      if (!mounted) return;
+      if (!mounted || myGeneration != _auctionsRequestGeneration) return;
       setState(() => _isLoading = false);
 
       if (mounted) {
@@ -1027,15 +1142,56 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
 
               // Notifications
-              IconButton(
-                icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 28),
-                onPressed: () {
-                   Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsPage()),
-                  );
-                },
-              ),
+              // Customer Request #30: numeric unread badge, sourced from
+              // unreadNotificationsCountProvider (real GET /notifications
+              // data, refreshed on app start and on every FCM push via
+              // NotificationHandler -- see that provider's own doc comment
+              // for why this reuses the existing NotificationsApi rather
+              // than building a second notification system). Refreshed
+              // again here on return from NotificationsPage so marking
+              // notifications read updates the badge immediately.
+              Builder(builder: (context) {
+                final unreadCount = ref.watch(unreadNotificationsCountProvider);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.notifications_outlined, color: isDarkMode ? Colors.white : Colors.black, size: 28),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const NotificationsPage()),
+                        ).then((_) {
+                          ref.read(unreadNotificationsCountProvider.notifier).refresh();
+                        });
+                      },
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 4,
+                        top: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            unreadCount > 99 ? '99+' : '$unreadCount',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              }),
 
             ],
 
@@ -1177,17 +1333,32 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
-              // Hero Banner (Announcement Carousel)
+              // Hero Banner (Announcement Carousel) — auto-advances every 5s
+              // and loops back to slide 0, while manual swipe still works via
+              // the same PageController (client feedback A2).
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: AspectRatio(
                   aspectRatio: 16 / 7,
-                  child: PageView(
-                    children: _isLoadingBanners
-                        ? [_buildBannerCard(isDarkMode)]
-                        : _banners.isEmpty
-                            ? [_buildBannerCard(isDarkMode)]
-                            : _banners.map((banner) => _buildDynamicBannerCard(banner, isDarkMode)).toList(),
+                  child: Builder(
+                    builder: (context) {
+                      final mode = bannerSlideMode(
+                        isLoadingBanners: _isLoadingBanners,
+                        banners: _banners,
+                      );
+                      final slides = switch (mode) {
+                        BannerSlideMode.loading => [_buildBannerPlaceholder(isDarkMode, showSpinner: true)],
+                        BannerSlideMode.empty => [_buildBannerPlaceholder(isDarkMode)],
+                        BannerSlideMode.data => _banners
+                            .map((banner) => _buildDynamicBannerCard(banner, isDarkMode))
+                            .toList(),
+                      };
+                      return PageView(
+                        controller: _bannerPageController,
+                        onPageChanged: (index) => _bannerPage = index,
+                        children: slides,
+                      );
+                    },
                   ),
                 ),
               ),
@@ -1553,23 +1724,50 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 
 
-  Widget _buildBannerCard(bool isDarkMode) {
+  // Neutral banner placeholder (client feedback: Bug F). Used while the
+  // banner API request is still pending (cold start, before cache or
+  // network data exists) AND for the empty/error/no-active-banners case --
+  // NEVER the old assets/announcement.png commercial ad, which used to
+  // render in exactly this loading window and flash briefly on every cold
+  // start before the real server banner replaced it. [showSpinner]
+  // distinguishes the two: true only while a request is genuinely pending,
+  // so a real empty/failed result doesn't spin forever.
+  Widget _buildBannerPlaceholder(bool isDarkMode, {bool showSpinner = false}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: Image.asset(
-        'assets/announcement.png',
+      child: Container(
         width: double.infinity,
-        fit: BoxFit.contain,
-        errorBuilder: (c, e, s) => Container(
-          color: Colors.grey[300],
-          child: const Center(
-            child: Icon(Icons.broken_image, size: 48, color: Colors.grey),
-          ),
-        ),
+        color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.grey[200],
+        child: showSpinner
+            ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            : null,
       ),
     );
   }
   
+  // Note #2 (client feedback): tapping the home-page hero banner must open
+  // its admin-configured target_url. onTap previously only debugPrint'd the
+  // URL and never launched it. Mirrors the existing safe external-launch
+  // pattern (support_page.dart's _launchSafely / auction_details_page.dart's
+  // _openWhatsApp): canLaunchUrl-guarded, external app/browser mode, a
+  // snackbar on failure instead of a crash or silent no-op.
+  Future<void> _openBannerTargetUrl(String targetUrl) async {
+    final uri = bannerLaunchableUri(targetUrl);
+    if (uri == null) return;
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    } catch (_) {
+      // Fall through to the failure snackbar below.
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context)!.text_409)),
+    );
+  }
+
   Widget _buildDynamicBannerCard(Map<String, dynamic> banner, bool isDarkMode) {
     final imageUrl = banner['image_url']?.toString() ?? '';
     
@@ -1597,17 +1795,35 @@ class _HomePageState extends ConsumerState<HomePage> {
                     imageUrl.toLowerCase().endsWith('.avi') ||
                     imageUrl.toLowerCase().endsWith('.webm');
     
+    // Client request: the hero banner blended into the page background with
+    // no visible edge, making it look like part of the page rather than a
+    // distinct promotional card (e.g. the DevFence banner). A visible
+    // rounded border + soft shadow makes it read as its own element without
+    // touching size/content/position -- same ClipRRect radius as before, now
+    // applied to the bordered Container so the image's rounded corners and
+    // the border's rounded corners stay perfectly aligned.
+    const bannerBorderRadius = 16.0;
     return GestureDetector(
-      onTap: () {
-        if (targetUrl.isNotEmpty) {
-          // Ouvrir le lien cible si disponible
-          debugPrint('Navigate to: $targetUrl');
-        }
-      },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
+      onTap: () => _openBannerTargetUrl(targetUrl),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(bannerBorderRadius),
+          border: Border.all(
+            color: isDarkMode ? Colors.white24 : const Color(0xFFD8DEE9),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDarkMode ? 0.4 : 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(bannerBorderRadius),
+          child: Stack(
+            children: [
             // Image ou vidéo
             if (isVideo && imageUrl.isNotEmpty)
               Container(
@@ -1688,7 +1904,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1814,7 +2031,14 @@ class _HomePageState extends ConsumerState<HomePage> {
     final price = MoneyFormatter.format(auction.currentPrice, auction.currencyCode);
     final bidCount = auction.bidderCount;
     final time = TimeUtils.formatDuration(context, auction.endTime.difference(DateTime.now()));
-    final imageUrl = auction.imageUrls.isNotEmpty ? auction.imageUrls[0] : 'assets/corolla.png';
+    // Client feedback: Bug H -- no generic/default product image (e.g. a car
+    // photo) may ever stand in for an auction's real image.
+    // resolveAuctionImageUrl is the single tested decision for "is there a
+    // real image?"; both the no-image and broken-image cases route to the
+    // neutral placeholder below, never to a fake stock asset.
+    final resolvedImageUrl = resolveAuctionImageUrl(auction.imageUrls);
+    final hasRealImage = resolvedImageUrl != null;
+    final imageUrl = resolvedImageUrl ?? '';
     final isNetworkImage = imageUrl.startsWith('http');
 
 
@@ -1885,7 +2109,11 @@ class _HomePageState extends ConsumerState<HomePage> {
 
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
 
-                  child: isNetworkImage
+                  child: !hasRealImage
+
+                    ? Container(height: 110, color: Colors.grey[200], child: const Icon(Icons.image, color: Colors.grey))
+
+                    : isNetworkImage
 
                     ? CachedNetworkImage(
 
@@ -1907,17 +2135,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
                         ),
 
-                        errorWidget: (c, e, s) => Image.asset(
-
-                          'assets/corolla.png',
-
-                          height: 110,
-
-                          width: double.infinity,
-
-                          fit: BoxFit.cover,
-
-                        ),
+                        errorWidget: (c, e, s) => Container(height: 110, color: Colors.grey[200], child: const Icon(Icons.image, color: Colors.grey)),
 
                       )
 

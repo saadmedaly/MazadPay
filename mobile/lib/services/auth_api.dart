@@ -1,6 +1,17 @@
+import 'dart:async';
 import 'package:mezadpay/models/api_response.dart';
 import 'package:mezadpay/services/api_service.dart';
 import 'package:mezadpay/services/auth_service.dart';
+import 'package:mezadpay/services/realtime_sync_service.dart';
+
+/// Total-call timeout for every verified-public, pre-login auth endpoint
+/// (register/login/otp/reset-password -- see backend routes.go: no
+/// jwtMiddleware on any of these). Mirrors the same bound applied to
+/// CategoryApi.getCountries: Dio's own 30s connect/send/receive timeouts do
+/// not cover time spent in AuthInterceptor.onRequest before handler.next(),
+/// so without an outer bound the whole call could otherwise hang
+/// indefinitely with no exception ever reaching the caller's try/catch.
+const Duration kPublicAuthCallTimeout = Duration(seconds: 35);
 
 /// Construit l'URL absolue /v2/api/auth/... à partir d'une base API (API Versioning
 /// Phase 1). Fonction pure et top-level (pas une méthode de classe) exprès, pour rester
@@ -38,10 +49,13 @@ class AuthApi {
     String? countryIso,
   }) async {
     try {
-      final response = await _apiService.post<Map<String, dynamic>>(
-        '/auth/login',
-        data: {'phone': phone, 'pin': pin, 'country_iso': ?countryIso},
-      );
+      final response = await _apiService
+          .post<Map<String, dynamic>>(
+            '/auth/login',
+            data: {'phone': phone, 'pin': pin, 'country_iso': ?countryIso},
+            skipAuth: true,
+          )
+          .timeout(kPublicAuthCallTimeout);
 
       final apiResponse = ApiResponse<Map<String, dynamic>>.fromJson(response);
 
@@ -53,9 +67,24 @@ class AuthApi {
         if (user != null && user['id'] != null) {
           await _authService.saveUserId(user['id'].toString());
         }
+        // Customer #20 hardening: restart realtime for the NEWLY
+        // authenticated identity right away, rather than waiting for the
+        // next app-resume to open the global channel for the first time.
+        // RealtimeSyncService().start() -> GlobalWebsocketService().connect()
+        // always reads AuthService().getToken() fresh at call time, so this
+        // is never a stale/previous-user token; restart() (rather than a
+        // bare start()) additionally guarantees any prior connection -- e.g.
+        // a leftover one from a user who logged out via a path that didn't
+        // go through AuthService.logout(), or a stale reconnect timer from
+        // this same login flow retried -- is torn down first, so a user
+        // switch can never end up with two overlapping physical
+        // connections or a previous user's socket still attached.
+        await RealtimeSyncService().restart();
       }
 
       return apiResponse;
+    } on TimeoutException {
+      return ApiResponse.error('Login request timed out', code: 'totalCallTimeout');
     } catch (e) {
       if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
       return ApiResponse.error(e.toString(), code: 'connection_error');
@@ -76,20 +105,25 @@ class AuthApi {
       // v2 (voir _v2Url) : country_iso est requis par le Backend et jamais optionnel
       // côté client — un appel qui l'omettrait serait rejeté par le contrat v2, pas
       // silencieusement dégradé vers le comportement legacy.
-      final response = await _apiService.post<Map<String, dynamic>>(
-        _v2Url('/auth/register'),
-        data: {
-          'phone': phone,
-          'pin': pin,
-          'full_name': fullName,
-          'country_iso': countryIso,
-          'email': ?email,
-          'city': ?city,
-          'country_code': ?countryCode,
-        },
-      );
+      final response = await _apiService
+          .post<Map<String, dynamic>>(
+            _v2Url('/auth/register'),
+            data: {
+              'phone': phone,
+              'pin': pin,
+              'full_name': fullName,
+              'country_iso': countryIso,
+              'email': ?email,
+              'city': ?city,
+              'country_code': ?countryCode,
+            },
+            skipAuth: true,
+          )
+          .timeout(kPublicAuthCallTimeout);
 
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
+    } on TimeoutException {
+      return ApiResponse.error('Register request timed out', code: 'totalCallTimeout');
     } catch (e) {
       if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
       return ApiResponse.error(e.toString(), code: 'connection_error');
@@ -102,12 +136,17 @@ class AuthApi {
     required String purpose, // 'register' ou 'reset_password'
   }) async {
     try {
-      final response = await _apiService.post<Map<String, dynamic>>(
-        '/auth/otp/send',
-        data: {'phone': phone, 'purpose': purpose},
-      );
+      final response = await _apiService
+          .post<Map<String, dynamic>>(
+            '/auth/otp/send',
+            data: {'phone': phone, 'purpose': purpose},
+            skipAuth: true,
+          )
+          .timeout(kPublicAuthCallTimeout);
 
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
+    } on TimeoutException {
+      return ApiResponse.error('OTP send request timed out', code: 'totalCallTimeout');
     } catch (e) {
       if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
       return ApiResponse.error(e.toString(), code: 'connection_error');
@@ -121,12 +160,17 @@ class AuthApi {
     required String purpose,
   }) async {
     try {
-      final response = await _apiService.post<Map<String, dynamic>>(
-        '/auth/otp/verify',
-        data: {'phone': phone, 'code': code, 'purpose': purpose},
-      );
+      final response = await _apiService
+          .post<Map<String, dynamic>>(
+            '/auth/otp/verify',
+            data: {'phone': phone, 'code': code, 'purpose': purpose},
+            skipAuth: true,
+          )
+          .timeout(kPublicAuthCallTimeout);
 
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
+    } on TimeoutException {
+      return ApiResponse.error('OTP verify request timed out', code: 'totalCallTimeout');
     } catch (e) {
       if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
       return ApiResponse.error(e.toString(), code: 'connection_error');
@@ -144,12 +188,17 @@ class AuthApi {
       // par le Backend sur ce contrat — voir set_password_page/phone_password_page/
       // new_password_page pour la validation côté UI qui empêche déjà d'arriver ici
       // avec un mot de passe trop court.
-      final response = await _apiService.post<Map<String, dynamic>>(
-        _v2Url('/auth/reset-password'),
-        data: {'phone': phone, 'new_pin': newPin, 'code': otpCode},
-      );
+      final response = await _apiService
+          .post<Map<String, dynamic>>(
+            _v2Url('/auth/reset-password'),
+            data: {'phone': phone, 'new_pin': newPin, 'code': otpCode},
+            skipAuth: true,
+          )
+          .timeout(kPublicAuthCallTimeout);
 
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
+    } on TimeoutException {
+      return ApiResponse.error('Reset password request timed out', code: 'totalCallTimeout');
     } catch (e) {
       if (e is ApiException) return ApiResponse.error(e.message, code: e.code);
       return ApiResponse.error(e.toString(), code: 'connection_error');

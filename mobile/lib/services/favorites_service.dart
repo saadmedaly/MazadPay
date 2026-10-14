@@ -2,8 +2,33 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mezadpay/services/auth_service.dart';
-import 'package:mezadpay/services/auction_api.dart';
 import 'favorites_api.dart';
+
+// data is the raw array GET /users/me/favorites returns: a list of full
+// auction objects already JOINed server-side (see favorite_repo.go
+// ListByUserID), never a {"favorites": [...]} wrapper. Client feedback:
+// Bug C -- the previous version expected that non-existent wrapper key and
+// read it off what was actually a List (not a Map), which crashed with a
+// type error on every call, silently caught and treated as a network
+// failure by callers, dropping back to local-only favorite IDs with no
+// cached auction data (the "مزاد #<UUID> / data not available offline"
+// placeholder was not a real connectivity issue).
+List<String> extractFavoriteAuctionIds(List<dynamic> data) {
+  return data.map((f) {
+    if (f is Map<String, dynamic>) {
+      return f['id']?.toString() ?? f['auction_id']?.toString() ?? '';
+    }
+    return f.toString();
+  }).where((id) => id.isNotEmpty).toList();
+}
+
+// Same raw array, kept alongside the plain IDs so getFavoriteAuctions can
+// use the embedded full auction data directly instead of re-fetching each
+// one individually (client feedback: Bug C -- also removes the previous
+// N+1 per-favorite AuctionApi.getAuctionById round trip).
+List<Map<String, dynamic>> extractFavoriteAuctions(List<dynamic> data) {
+  return data.whereType<Map<String, dynamic>>().toList();
+}
 
 /// Service hybride pour les favoris
 /// Stocke localement quand hors ligne, synchronise avec le backend quand connecté
@@ -45,7 +70,7 @@ class FavoritesService {
       try {
         final response = await _favoritesApi.getFavorites();
         if (response.success && response.data != null) {
-          final serverFavorites = _extractAuctionIds(response.data!);
+          final serverFavorites = extractFavoriteAuctionIds(response.data!);
           
           // Fusionner (serveur + local non encore synchronisé)
           final allFavorites = {...serverFavorites, ...localFavorites}.toList();
@@ -64,53 +89,52 @@ class FavoritesService {
     return localFavorites;
   }
   
-  /// Récupérer les données complètes des enchères favorites
-  /// Fetch depuis l'API pour chaque ID, avec fallback sur le cache local
+  /// Récupérer les données complètes des enchères favorites.
+  ///
+  /// GET /users/me/favorites renvoie déjà chaque mazad complet (JOIN côté
+  /// backend) -- inutile de refaire un appel par favori. Fallback sur le
+  /// cache local uniquement pour les favoris ajoutés hors ligne (pas encore
+  /// synchronisés, donc absents de la réponse serveur) ou si le réseau
+  /// échoue réellement (client feedback: Bug C -- l'ancienne version
+  /// ignorait ces données déjà reçues et refaisait un appel par ID vers un
+  /// endpoint différent, ce qui échouait silencieusement).
   Future<List<Map<String, dynamic>>> getFavoriteAuctions() async {
     await _initPrefs();
-    final ids = await getFavorites();
-    if (ids.isEmpty) return [];
-
-    final auctionApi = AuctionApi();
-    final results = <Map<String, dynamic>>[];
     final cachedMap = _getLocalFavoriteAuctionsMap();
 
-    for (final id in ids) {
+    if (await _isAuthenticated()) {
       try {
-        final response = await auctionApi.getAuctionById(id);
+        final response = await _favoritesApi.getFavorites();
         if (response.success && response.data != null) {
-          // Backend returns: { "data": { "auction": {...}, "images": [...] } }
-          final auction = response.data!['auction'] as Map<String, dynamic>?;
-          final imagesList = response.data!['images'] as List<dynamic>?;
-          if (auction != null) {
-            // Extract image URLs into a simple list
-            final imageUrls = imagesList
-                ?.map((img) => img is Map ? img['url']?.toString() : null)
-                .where((u) => u != null)
-                .cast<String>()
-                .toList() ?? [];
-            final merged = Map<String, dynamic>.from(auction);
-            merged['images'] = imageUrls;
-            debugPrint('[Favorites] id=$id title=${merged["title_ar"]} images=${imageUrls.length}');
-            cachedMap[id] = merged;
-            results.add(merged);
-          } else if (cachedMap.containsKey(id)) {
-            results.add(cachedMap[id]!);
+          final auctions = extractFavoriteAuctions(response.data!);
+          for (final auction in auctions) {
+            final id = auction['id']?.toString();
+            if (id != null && id.isNotEmpty) cachedMap[id] = auction;
           }
-        } else if (cachedMap.containsKey(id)) {
-          results.add(cachedMap[id]!);
+          await _saveLocalFavoriteAuctions(cachedMap);
+
+          // Les favoris ajoutés hors ligne (pas encore synchronisés) n'ont
+          // pas encore d'entrée serveur -- on les complète depuis le cache
+          // local s'il en existe une, sans jamais afficher le placeholder
+          // "offline" pour des données qui viennent d'arriver avec succès.
+          final localOnlyIds = _getLocalFavorites().where(
+            (id) => !auctions.any((a) => a['id']?.toString() == id),
+          );
+          final localOnlyAuctions = localOnlyIds
+              .where((id) => cachedMap.containsKey(id))
+              .map((id) => cachedMap[id]!);
+
+          return [...auctions, ...localOnlyAuctions];
         }
       } catch (e) {
-        debugPrint('[Favorites] error fetching $id: $e');
-        if (cachedMap.containsKey(id)) {
-          results.add(cachedMap[id]!);
-        }
+        debugPrint('[Favorites] error fetching favorite auctions: $e');
       }
     }
 
-    // Mettre à jour le cache avec les nouvelles données
-    await _saveLocalFavoriteAuctions(cachedMap);
-    return results;
+    // Hors ligne, ou l'appel serveur a échoué : ne montrer que ce qui est
+    // réellement en cache local (jamais un placeholder factice).
+    final ids = _getLocalFavorites();
+    return ids.where((id) => cachedMap.containsKey(id)).map((id) => cachedMap[id]!).toList();
   }
   
   /// Sauvegarder les données d'une enchère favorite en cache
@@ -221,7 +245,7 @@ class FavoritesService {
     try {
       final response = await _favoritesApi.getFavorites();
       if (response.success && response.data != null) {
-        final serverFavorites = _extractAuctionIds(response.data!);
+        final serverFavorites = extractFavoriteAuctionIds(response.data!);
         await _saveLocalFavorites(serverFavorites);
       }
     } catch (e) {
@@ -243,7 +267,7 @@ class FavoritesService {
     try {
       final response = await _favoritesApi.getFavorites();
       if (response.success && response.data != null) {
-        serverFavorites = _extractAuctionIds(response.data!);
+        serverFavorites = extractFavoriteAuctionIds(response.data!);
       }
     } catch (e) {
       debugPrint('Erreur récupération favoris serveur: $e');
@@ -318,16 +342,6 @@ class FavoritesService {
   
   Future<void> _clearPendingSync() async {
     await _prefs!.remove(_pendingSyncKey);
-  }
-  
-  List<String> _extractAuctionIds(Map<String, dynamic> data) {
-    final List<dynamic> favorites = data['favorites'] ?? [];
-    return favorites.map((f) {
-      if (f is Map<String, dynamic>) {
-        return f['auction_id']?.toString() ?? f['id']?.toString() ?? '';
-      }
-      return f.toString();
-    }).where((id) => id.isNotEmpty).toList();
   }
   
   Future<void> _syncFavorites(List<String> serverFavorites, List<String> localFavorites) async {

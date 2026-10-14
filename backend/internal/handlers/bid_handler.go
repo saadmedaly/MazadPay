@@ -80,13 +80,25 @@ func (h *BidHandler) History(c *fiber.Ctx) error {
     if err != nil {
         return NotFound(c, "Auction")
     }
+    var callerID uuid.UUID
     callerMarket := models.DefaultAccountCountryISO
     if userID, err := middleware.GetUserID(c); err == nil {
+        callerID = userID
         if user, err := h.userRepo.FindByID(c.Context(), userID); err == nil {
             callerMarket = user.EffectiveAccountCountryISO()
         }
     }
-    if callerMarket != auction.EffectiveMarketCountryISO() {
+    // Legacy owner fix (client feedback, round 5): mirrors the same owner
+    // exemption already applied to GET /auctions/:id (auction_handler.go) and
+    // the WebSocket subscription (ws_handler.go AuthorizeSubscription). A
+    // legacy auction predating migration 000046 has market_country_iso/
+    // currency_code = NULL, falling back to "MR" -- so the auction's own
+    // owner (e.g. a TN seller) was 404'd out of their own bid history,
+    // confirmed live against Staging (auction detail + WebSocket already
+    // fixed for this exact case, this endpoint was the remaining gap). Every
+    // other caller (non-owner, cross-market, anonymous) is unaffected.
+    isOwner := callerID != uuid.Nil && auction.SellerID == callerID
+    if callerMarket != auction.EffectiveMarketCountryISO() && !isOwner {
         return NotFound(c, "Auction")
     }
 

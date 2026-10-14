@@ -31,7 +31,10 @@ func (h *UserHandler) GetMe(c *fiber.Ctx) error {
 	if err != nil {
 		return MapError(c, h.logger, err)
 	}
-	return OK(c, MaskUserPhone(user))
+	// Client feedback Phase B item 17: a user viewing their own profile must
+	// see their own full phone number -- MaskUserPhone was fixed to actually
+	// mask (see its doc comment), so GetMe now uses SelfResponseUser instead.
+	return OK(c, SelfResponseUser(user))
 }
 
 func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
@@ -218,7 +221,67 @@ func (h *UserHandler) ListFavorites(c *fiber.Ctx) error {
 	if err != nil {
 		return InternalError(c, "Failed to get favorites")
 	}
-	return OK(c, auctions)
+
+	// Bug I fix (client feedback, Favorites/Home image consistency audit):
+	// this used to return OK(c, auctions) directly -- the raw models.Auction
+	// slice, whose only image field (ImageURLs) serializes as
+	// "image_urls": "url1,url2" (a comma-separated STRING). Mobile's
+	// favorites_page.dart (like Auction.fromJson used by Home) only ever
+	// looks for an "images" LIST field, so the image was never picked up
+	// even after favorite_repo.go's ListByUserID was fixed to actually
+	// populate ImageURLs. Response.data must stay a plain List (Bug C: the
+	// favorites parser expects exactly that shape, not a wrapper key) --
+	// only each element's shape changes here, mirroring the SAME
+	// "images": auction.GetImagesArray() convention AuctionHandler.List
+	// already uses for Home, so the identical mobile parsing code that
+	// already works for Home now also works for Favorites unchanged.
+	response := make([]fiber.Map, 0, len(auctions))
+	for _, auction := range auctions {
+		response = append(response, fiber.Map{
+			"id":               auction.ID,
+			"seller_id":        auction.SellerID,
+			"category_id":      auction.CategoryID,
+			"sub_category_id":  auction.SubCategoryID,
+			"location_id":      auction.LocationID,
+			"title_ar":         auction.TitleAr,
+			"title_fr":         auction.TitleFr,
+			"title_en":         auction.TitleEn,
+			"description_ar":   auction.DescriptionAr,
+			"description_fr":   auction.DescriptionFr,
+			"description_en":   auction.DescriptionEn,
+			"start_price":      auction.StartPrice,
+			"current_price":    auction.CurrentPrice,
+			"min_increment":    auction.MinIncrement,
+			"insurance_amount": auction.InsuranceAmount,
+			"reserve_price":    auction.ReservePrice,
+			"start_time":       auction.StartTime,
+			"end_time":         auction.EndTime,
+			"status":           auction.Status,
+			"lot_number":       auction.LotNumber,
+			"views":            auction.Views,
+			"bidder_count":     auction.BidderCount,
+			"winner_id":        auction.WinnerID,
+			"winning_bid_id":   auction.WinningBidID,
+			"payment_deadline": auction.PaymentDeadline,
+			"is_featured":      auction.IsFeatured,
+			"featured_until":   auction.FeaturedUntil,
+			"rejection_reason": auction.RejectionReason,
+			"item_details":     auction.ItemDetails,
+			"buy_now_price":    auction.BuyNowPrice,
+			"condition":        auction.Condition,
+			"brand":            auction.Brand,
+			"is_verified":      auction.IsVerified,
+			"video_url":        auction.VideoURL,
+			"quantity":         auction.Quantity,
+			"category":         auction.CategoryNameAr,
+			"city":             auction.CityNameAr,
+			"images":           auction.GetImagesArray(),
+			"created_at":       auction.CreatedAt,
+			"currency_code":      auction.EffectiveCurrencyCode(),
+			"market_country_iso": auction.EffectiveMarketCountryISO(),
+		})
+	}
+	return OK(c, response)
 }
 
 func (h *UserHandler) MyAuctions(c *fiber.Ctx) error {
@@ -373,18 +436,30 @@ func (h *UserHandler) GetUserSettings(c *fiber.Ctx) error {
 }
 
 func (h *UserHandler) UpdateUserSettings(c *fiber.Ctx) error {
-	type Request struct {
-		Currency           string `json:"currency"`
-		Theme              string `json:"theme"`
-		Language           string `json:"language"`
-		NotificationsEmail bool   `json:"notifications_email"`
-		NotificationsPush  bool   `json:"notifications_push"`
-		NotificationsSMS   bool   `json:"notifications_sms"`
-		TwoFactorEnabled   bool   `json:"two_factor_enabled"`
-	}
-	var req Request
+	// PUT is a genuine partial update: mobile's real caller
+	// (SettingsPage._updateSetting) sends exactly one field per call. Fields
+	// left out of the JSON body simply stay nil pointers here -- BodyParser
+	// never touches them -- and userRepo.UpdateUserSettings's SQL-level
+	// COALESCE merges each nil with the existing stored value (or the
+	// canonical default if no row exists yet), never Go zero values
+	// (client feedback: Bug D hardening).
+	var req models.UserSettingsUpdate
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
+	}
+
+	// Reject an unsupported theme before it ever reaches the DB (client
+	// feedback: Bug D.1) -- user_settings.theme has a Postgres CHECK
+	// constraint (chk_theme: light/dark/auto), and previously an invalid
+	// value reached that constraint and surfaced as an unmapped HTTP 500.
+	// A nil Theme (field omitted -- this is a partial update) is valid and
+	// skips this check entirely.
+	if req.Theme != nil {
+		switch *req.Theme {
+		case "light", "dark", "auto":
+		default:
+			return BadRequest(c, "Invalid theme")
+		}
 	}
 
 	userID, err := middleware.GetUserID(c)
@@ -498,4 +573,3 @@ func (h *UserHandler) Search(c *fiber.Ctx) error {
 
 	return OK(c, maskedUsers)
 }
-

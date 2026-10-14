@@ -14,11 +14,34 @@ import (
 	"go.uber.org/zap"
 )
 
+// Client feedback (deposit min/max limits): the generic wallet-top-up
+// deposit path (auctionRequestID == nil) previously only rejected amount <=
+// 0 -- no upper or lower bound existed anywhere in the codebase (confirmed
+// via audit: WalletHandler.Deposit's validator tag was only "gt=0", and
+// this service's own defensive check matched). The auction-subscription
+// path (auctionRequestID != nil) is intentionally NOT bounded by these
+// limits -- its amount is never client-supplied to begin with (replaced by
+// the request's own server-stamped subscription_fee, see below), so a
+// min/max on a value the client can't even influence would be meaningless.
+const (
+	MinDepositAmountMRU = 100
+	MaxDepositAmountMRU = 100000
+)
+
 type WalletService interface {
 	GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error)
-	InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string) (*models.Transaction, error)
+	// InitiateDeposit's auctionRequestID is optional (client feedback #4
+	// financial-integrity round): empty preserves the original generic
+	// wallet-top-up behavior exactly (client-supplied amount trusted, as
+	// intended for a voluntary top-up). When non-empty, the deposit is an
+	// auction-subscription payment: the caller must own that AuctionRequest,
+	// and the authoritative amount becomes that request's server-stamped
+	// subscription_fee -- the client-supplied amount is IGNORED, never just
+	// validated against it, so a tampered client cannot underpay by sending
+	// a lower amount alongside a valid auction_request_id.
+	InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string, auctionRequestID *uuid.UUID) (*models.Transaction, error)
 	UploadReceipt(ctx context.Context, txID uuid.UUID, userID uuid.UUID, receiptURL string) error
-	RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error)
+	RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string, beneficiaryAccount string) (*models.Transaction, error)
 	GetTransactions(ctx context.Context, userID uuid.UUID, page, perPage int) ([]models.Transaction, int, error)
 	GetTransaction(ctx context.Context, userID uuid.UUID, txID uuid.UUID) (*models.Transaction, error)
 	// GetTransactionAny récupère une transaction sans filtrer par user_id — réservé aux
@@ -32,13 +55,52 @@ type walletService struct {
 	db         *sqlx.DB
 	walletRepo repository.WalletRepository
 	txRepo     repository.TransactionRepository
-	notifSvc   NotificationService
-	auditSvc   AuditService
-	logger     *zap.Logger
+	// reqRepo (client feedback #4 financial-integrity round): looked up only
+	// when InitiateDeposit is called with a non-nil auctionRequestID, to load
+	// the authoritative subscription_fee and verify ownership. Never used by
+	// the generic wallet-top-up path.
+	reqRepo  repository.RequestRepository
+	// userRepo (Customer #21): looked up only to resolve the caller's
+	// LanguagePref for the deposit/withdrawal submission-acknowledgment
+	// notification -- mirrors the same lookup adminService.ValidateTransaction
+	// already does for the outcome notification. May be nil in tests that
+	// don't exercise the notification path (see notifSvc nil-guard below).
+	userRepo repository.UserRepository
+	notifSvc NotificationService
+	auditSvc AuditService
+	logger   *zap.Logger
 }
 
-func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, notifSvc NotificationService, auditSvc AuditService, logger *zap.Logger) WalletService {
-	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, notifSvc: notifSvc, auditSvc: auditSvc, logger: logger}
+func NewWalletService(db *sqlx.DB, walletRepo repository.WalletRepository, txRepo repository.TransactionRepository, reqRepo repository.RequestRepository, userRepo repository.UserRepository, notifSvc NotificationService, auditSvc AuditService, logger *zap.Logger) WalletService {
+	return &walletService{db: db, walletRepo: walletRepo, txRepo: txRepo, reqRepo: reqRepo, userRepo: userRepo, notifSvc: notifSvc, auditSvc: auditSvc, logger: logger}
+}
+
+// notifySubmissionAcknowledgment sends the Customer #21 deposit_submitted/
+// withdrawal_submitted notification AFTER tx has already been persisted
+// successfully (every call site below is placed after s.txRepo.Create
+// returns nil) -- never before, and never on a failed creation. Best-effort
+// exactly like every other SendLocalizedPush call in this codebase: a
+// notification/FCM failure must never fail the underlying financial
+// operation, so its error is deliberately discarded, matching
+// adminService.ValidateTransaction's identical `_ = s.notifSvc...` pattern.
+// A nil notifSvc/userRepo (some test wiring) makes this a safe no-op.
+func (s *walletService) notifySubmissionAcknowledgment(ctx context.Context, tx *models.Transaction, notifType string) {
+	if s.notifSvc == nil || s.userRepo == nil {
+		return
+	}
+	language := "ar"
+	if user, err := s.userRepo.FindByID(ctx, tx.UserID); err == nil && user.LanguagePref != "" {
+		language = user.LanguagePref
+	}
+	params := map[string]string{
+		"amount":   tx.Amount.String(),
+		"currency": tx.EffectiveCurrencyCode(),
+	}
+	data := map[string]string{
+		"type":           notifType,
+		"transaction_id": tx.ID.String(),
+	}
+	_ = s.notifSvc.SendLocalizedPush(ctx, tx.UserID, notifType, language, params, data)
 }
 
 func (s *walletService) GetBalance(ctx context.Context, userID uuid.UUID) (*models.Wallet, error) {
@@ -49,23 +111,85 @@ func (s *walletService) GetPaymentMethods(ctx context.Context) ([]models.Payment
 	return s.walletRepo.GetPaymentMethods(ctx)
 }
 
-func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string) (*models.Transaction, error) {
+func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway, paymentMethod, receiptImageTemp string, auctionRequestID *uuid.UUID) (*models.Transaction, error) {
 	// Vérification défensive indépendante du handler (audit de sécurité V05-bis) :
 	// ce service ne doit jamais faire confiance uniquement à la validation côté handler/mobile.
 	if amount.LessThanOrEqual(decimal.Zero) {
 		return nil, apperr.ErrBadRequest
 	}
+
 	// currency_code (migration 000046): stamped from the user's own wallet currency --
 	// never from client input, never re-derived from the user's current account market
 	// at read time -- a deposit is a standalone historical financial record and must
 	// stay correctly denominated even if account_country_iso changes later. GetByUserID
 	// auto-creates the wallet (with its own currency stamped from account market) on
-	// first call, so this is always populated for a non-legacy transaction.
+	// first call, so this is always populated for a non-legacy transaction. Fetched
+	// here (moved up from its original position below the auction-request branch,
+	// itself unaffected -- still read-only, no side effects) so the deposit min/max
+	// check right below can be scoped by currency.
 	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	currencyCode := wallet.EffectiveCurrencyCode()
+
+	// Client feedback (deposit min/max limits): checked BEFORE the
+	// auction-subscription branch below substitutes `amount` with the
+	// request's server-stamped subscription_fee -- so this only ever
+	// bounds the generic wallet-top-up path's client-supplied amount,
+	// exactly where the client can actually influence the value. A
+	// subscription_fee is admin/category-configured and trusted
+	// separately; it is never subject to these limits. Scoped to MRU only
+	// (the client's exact reference is MRU 100 / MRU 100,000, Mauritania's
+	// currency) -- applying a raw "100" floor to a different currency
+	// (e.g. MAD, TND) would be meaningless/wrong, and no other market's
+	// limits were specified by this ticket.
+	if auctionRequestID == nil && currencyCode == "MRU" {
+		if amount.LessThan(decimal.NewFromInt(MinDepositAmountMRU)) {
+			return nil, apperr.ErrDepositTooLow
+		}
+		if amount.GreaterThan(decimal.NewFromInt(MaxDepositAmountMRU)) {
+			return nil, apperr.ErrDepositTooHigh
+		}
+	}
+
+	var reference *string
+
+	// Client feedback #4 financial-integrity round: when this deposit is
+	// explicitly linked to an auction request, the client-supplied amount is
+	// IGNORED and replaced with that request's own server-stamped
+	// subscription_fee -- never merely validated against it, so a tampered
+	// client sending a lower amount alongside a valid auction_request_id
+	// cannot underpay. Ownership is verified (a user cannot pay for/tag
+	// someone else's request), a missing/invalid request id is rejected, and
+	// a duplicate non-rejected deposit for the same request is rejected too
+	// (API-retry protection, not a ban on ever paying twice -- a rejected
+	// deposit can still be resubmitted). The generic wallet-top-up path
+	// (auctionRequestID == nil) is completely unaffected: the client-supplied
+	// amount is trusted exactly as before.
+	if auctionRequestID != nil {
+		if s.reqRepo == nil {
+			return nil, apperr.ErrBadRequest
+		}
+		req, err := s.reqRepo.GetAuctionRequestByID(ctx, *auctionRequestID)
+		if err != nil {
+			return nil, apperr.ErrNotFound
+		}
+		if req.UserID != userID {
+			return nil, apperr.ErrForbidden
+		}
+		amount = req.SubscriptionFee
+		ref := "auction_request_id:" + auctionRequestID.String()
+		exists, err := s.txRepo.ExistsActiveDepositForReference(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, apperr.ErrConflict
+		}
+		reference = &ref
+	}
+
 	tx := &models.Transaction{
 		ID:                 uuid.New(),
 		UserID:             userID,
@@ -73,6 +197,7 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 		Amount:             amount,
 		Gateway:            &gateway,
 		Status:             "pending",
+		Reference:          reference,
 		PaymentMethod:      &paymentMethod,
 		ReceiptImageTemp:   &receiptImageTemp,
 		CurrencyCode:       &currencyCode,
@@ -80,6 +205,10 @@ func (s *walletService) InitiateDeposit(ctx context.Context, userID uuid.UUID, a
 	if err := s.txRepo.Create(ctx, tx); err != nil {
 		return nil, err
 	}
+	// Customer #21: submission acknowledgment only -- the transaction is still
+	// "pending" here, never "deposit_confirmed" (that type is reserved for an
+	// actual admin approval in adminService.ValidateTransaction).
+	s.notifySubmissionAcknowledgment(ctx, tx, "deposit_submitted")
 	return tx, nil
 }
 
@@ -116,7 +245,7 @@ func (s *walletService) UploadReceipt(ctx context.Context, txID uuid.UUID, userI
 // FreezeForWithdraw (compare-and-set atomique). Ceci empêche qu'un utilisateur ne
 // soumette plusieurs demandes de retrait concurrentes dont la somme dépasse son
 // solde réel (audit de sécurité V09).
-func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string) (*models.Transaction, error) {
+func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, amount decimal.Decimal, gateway string, beneficiaryAccount string) (*models.Transaction, error) {
 	// Vérification défensive indépendante du handler (audit de sécurité V08) : un montant
 	// négatif ou nul contournait le contrôle de solde (balance >= montant négatif est
 	// toujours vrai) et pouvait, une fois approuvé côté admin, augmenter le solde au lieu
@@ -134,6 +263,13 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 	if err != nil {
 		return nil, err
 	}
+	// MAZADPAY -- admin wallet controls: a wallet an admin has disabled
+	// (migration 000058) must reject a new withdrawal request regardless of
+	// balance. An already-frozen amount from a withdrawal requested BEFORE
+	// the wallet was disabled is unaffected -- this only blocks new requests.
+	if wallet.IsDisabled {
+		return nil, apperr.ErrWalletDisabled
+	}
 	currencyCode := wallet.EffectiveCurrencyCode()
 
 	txModel := &models.Transaction{
@@ -144,6 +280,9 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 		Gateway:      &gateway,
 		Status:       "pending_review",
 		CurrencyCode: &currencyCode,
+	}
+	if beneficiaryAccount != "" {
+		txModel.BeneficiaryAccount = &beneficiaryAccount
 	}
 
 	err = database.WithTransaction(s.db, func(tx *sqlx.Tx) error {
@@ -160,6 +299,11 @@ func (s *walletService) RequestWithdraw(ctx context.Context, userID uuid.UUID, a
 	if err != nil {
 		return nil, err
 	}
+	// Customer #21: submission acknowledgment only -- the withdrawal is still
+	// "pending_review" here, never "withdrawal_processed" (that type is
+	// reserved for an actual admin approval/rejection in
+	// adminService.ValidateTransaction).
+	s.notifySubmissionAcknowledgment(ctx, txModel, "withdrawal_submitted")
 	if s.auditSvc != nil {
 		details := fmt.Sprintf("user_id=%s amount=%s status=%s (balance frozen)", userID, amount.String(), txModel.Status)
 		detailsJSON := models.JSONB{

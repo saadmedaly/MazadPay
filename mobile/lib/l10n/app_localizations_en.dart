@@ -9,6 +9,9 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get register_submit_button => 'Create Account';
+
+  @override
   String get text_1 => 'Home';
 
   @override
@@ -1535,4 +1538,71 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get error_too_many_requests =>
       'Too many attempts. Please try again later.';
+
+  @override
+  String get text_406 => 'Congratulations, you won the auction';
+
+  @override
+  String text_407(Object amount, Object title) {
+    return 'I won the auction \"$title\" on MazadPay for $amount.';
+  }
+
+  @override
+  String get text_408 => 'Website';
+
+  @override
+  String get text_409 => 'Couldn\'t open the link';
+
+  @override
+  String get text_410 => 'bid';
+
+  @override
+  String get text_411 => 'bids';
+
+  @override
+  String get text_412 => 'Bankily Service';
+
+  @override
+  String get text_413 =>
+      'Enter the number of the person you want to send the withdrawal amount to via Bankily service';
+
+  @override
+  String get text_414 => 'Beneficiary number';
+
+  @override
+  String get text_415 => 'Enter the phone number or bank account';
+
+  @override
+  String get text_416 => 'Withdrawal details';
+
+  @override
+  String get text_417 => 'Amount to withdraw';
+
+  @override
+  String get text_418 => 'Fees';
+
+  @override
+  String get text_419 => 'Free';
+
+  @override
+  String get text_420 =>
+      'The amount will be sent directly to the beneficiary number via Bankily service.';
+
+  @override
+  String get text_421 => 'Send amount';
+
+  @override
+  String get text_422 => 'Please enter the beneficiary number';
+
+  @override
+  String get text_423 => 'Insufficient balance to bid';
+
+  @override
+  String get text_424 => 'Please top up your balance first, then try again.';
+
+  @override
+  String get text_425 => 'Top up balance';
+
+  @override
+  String get text_426 => 'Cancel';
 }

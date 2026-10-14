@@ -9,9 +9,9 @@ import '../models/bid.dart';
 import '../widgets/bid_action_sheet.dart';
 import '../widgets/auction_description_section.dart';
 import '../pages/auction_history_page.dart';
+import 'all_auctions_page.dart';
 import '../providers/favorites_provider.dart';
 import '../services/auction_api.dart';
-import 'home_page.dart';
 import '../services/bid_api.dart';
 import '../services/cache_service.dart';
 import '../services/auth_service.dart';
@@ -24,6 +24,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../utils/time_utils.dart';
 import '../utils/money_formatter.dart';
+import '../utils/auction_image.dart';
+import '../services/realtime_sync_service.dart';
 
 class AuctionDetailsPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -43,6 +45,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   // Timer state
   Duration _timeLeft = Duration.zero;
   Timer? _timer;
+  CountdownParts get _countdownParts => CountdownParts.fromDuration(_timeLeft);
 
   // UI State
   int _currentPage = 0;
@@ -54,6 +57,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   // Temporary bid history (could be refactored to provider later)
   List<model_bid.Bid>? _bidHistory;
   bool _isDisposed = false;
+  StreamSubscription? _realtimeEventSub;
+  StreamSubscription? _realtimeCatchUpSub;
 
   @override
   void initState() {
@@ -66,6 +71,28 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
 
     // Incrémenter les vues une seule fois à l'ouverture
     _auctionApi.incrementViews(widget.auctionId);
+
+    // Customer #20, Phase 9: when an auction.updated/status_changed/deleted
+    // event arrives for THIS open auction, invalidate
+    // auctionNotifierApiProvider(widget.auctionId) rather than trying to
+    // merge title/end_time/images/status fields in manually -- Riverpod
+    // then refetches via the provider's existing REST call
+    // (auctionNotifierApiProvider's build()), so title/countdown/gallery/
+    // status all update together from one canonical source. bid_placed
+    // handling (current price/bidder count) is untouched -- that already
+    // works via the per-auction /ws/auction/:id socket this page already
+    // listens to (see AuctionNotifierApi._listenToWebsocket), a completely
+    // separate code path from this global-channel subscription.
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.isAuctionEvent && event.entityId == widget.auctionId) {
+        ref.invalidate(auctionNotifierApiProvider(widget.auctionId));
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      ref.invalidate(auctionNotifierApiProvider(widget.auctionId));
+    });
   }
 
   Future<void> _loadUserId() async {
@@ -209,25 +236,27 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
 
   void _startTimer(Auction auction) {
     final endTime = auction.endTime;
-    _timeLeft = endTime.difference(DateTime.now());
+    _updateTimeLeft(endTime);
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_isDisposed || !mounted) {
         timer.cancel();
         return;
       }
-      if (_timeLeft.inSeconds > 0) {
-        try {
-          if (mounted && !_isDisposed) {
-            setState(() {
-              _timeLeft = Duration(seconds: _timeLeft.inSeconds - 1);
-            });
-          }
-        } catch (e) {
+      try {
+        // Recompute from endTime - DateTime.now() on every tick, rather than
+        // decrementing the previous value by one second -- the latter drifts
+        // away from wall-clock time under dropped frames, GC pauses, or the
+        // app being backgrounded/resumed, since it never re-anchors to the
+        // real end time.
+        setState(() {
+          _updateTimeLeft(endTime);
+        });
+        if (_timeLeft == Duration.zero) {
           timer.cancel();
+          _checkWinner();
         }
-      } else {
-        _timer?.cancel();
-        _checkWinner();
+      } catch (e) {
+        timer.cancel();
       }
     });
   }
@@ -242,6 +271,8 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     _timer = null;
     _isDisposed = true;
     _pageController.dispose();
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
     super.dispose();
   }
 
@@ -689,17 +720,29 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
+                    // Client feedback (countdown correction): the label/value
+                    // pairing here was previously shifted by one unit
+                    // (text_59 "Sec" shown under the days value, text_60
+                    // "Min" under hours, text_61 "Hour" under minutes) with
+                    // no seconds displayed at all despite _timeLeft already
+                    // being second-accurate. Fixed to the correct labels and
+                    // a real seconds column, recomputed every tick via
+                    // CountdownParts.fromDuration (see _startTimer).
                     _buildTimerUnit(
-                      AppLocalizations.of(context)!.text_59,
-                      _timeLeft.inDays.toString().padLeft(2, '0'),
-                    ),
-                    _buildTimerUnit(
-                      AppLocalizations.of(context)!.text_60,
-                      (_timeLeft.inHours % 24).toString().padLeft(2, '0'),
+                      AppLocalizations.of(context)!.day,
+                      _countdownParts.days.toString().padLeft(2, '0'),
                     ),
                     _buildTimerUnit(
                       AppLocalizations.of(context)!.text_61,
-                      (_timeLeft.inMinutes % 60).toString().padLeft(2, '0'),
+                      _countdownParts.hours.toString().padLeft(2, '0'),
+                    ),
+                    _buildTimerUnit(
+                      AppLocalizations.of(context)!.text_60,
+                      _countdownParts.minutes.toString().padLeft(2, '0'),
+                    ),
+                    _buildTimerUnit(
+                      AppLocalizations.of(context)!.text_59,
+                      _countdownParts.seconds.toString().padLeft(2, '0'),
                     ),
                   ],
                 ),
@@ -707,7 +750,17 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
 
               const SizedBox(height: 24),
 
-              // Stats Section - Encheres et Visites
+              // Stats Section - Bid Count et Visites
+              // Customer Request #29: the product-description box that used
+              // to occupy this half of the row (client feedback A9,
+              // Icons.description_outlined + auction.description) is
+              // replaced with a gavel icon + the real, dynamic bid count
+              // (auction.bidderCount -- the same field already used
+              // elsewhere on this page, e.g. _buildBidHistorySection below
+              // and the countdown/stats header), per the client's reference
+              // screenshot. Unlike the description box it replaces, this is
+              // always shown (never conditionally hidden), matching the
+              // screenshot's "1 مزايدة" example even at zero bids.
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -717,68 +770,50 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 ),
                 child: Row(
                   children: [
-                    // Nombre d'enchères
+                    // Bid count (replaces the product-description box)
                     Expanded(
-                      child: GestureDetector(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => AuctionHistoryPage(
-                              auctionId: auction.id,
-                              auctionData: auction,
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF0081FF,
+                              ).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.gavel_outlined,
+                              color: Color(0xFF0081FF),
+                              size: 20,
                             ),
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF0081FF,
-                                ).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.gavel,
-                                color: Color(0xFF0081FF),
-                                size: 20,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              '${auction.bidderCount} ${auction.bidderCount == 1 ? AppLocalizations.of(context)!.text_410 : AppLocalizations.of(context)!.text_411}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: 'Plus Jakarta Sans',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDarkMode
+                                    ? Colors.white
+                                    : Colors.black87,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${auction.bidderCount}',
-                                    style: const TextStyle(
-                                      fontFamily: 'Plus Jakarta Sans',
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0081FF),
-                                    ),
-                                  ),
-                                  Text(
-                                    AppLocalizations.of(context)!.text_78,
-                                    style: TextStyle(
-                                      fontFamily: 'Plus Jakarta Sans',
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
 
-                    // Separator
+                    // Separator -- both sides always have content now that
+                    // the bid-count item is unconditional.
                     Container(
                       width: 1,
                       height: 40,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
                       color: Colors.grey.withValues(alpha: 0.3),
                     ),
 
@@ -1538,6 +1573,20 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
     // صاحب المزاد لا يمكنه المزايدة
     final isOwner = _userId != null && _userId == auction.sellerId;
 
+    // Bug K fix: the bid CTA must never remain active once the auction has
+    // actually expired. Two independent guards, either one is sufficient to
+    // disable bidding -- the client must never wait for a server status
+    // update to arrive before disabling itself once its own countdown hits
+    // zero, but it also must not rely on the countdown alone (server is the
+    // source of truth once a status update does arrive, e.g. via
+    // auction.status_changed realtime or a fresh fetch). serverStatusActive
+    // defaults to true when status is absent (old cached response / field
+    // not yet loaded) so this is purely additive and never disables bidding
+    // for a case that worked before this fix existed.
+    final serverStatusActive = auction.status == null || auction.status == 'active';
+    final countdownExpired = _timeLeft <= Duration.zero;
+    final canBid = serverStatusActive && !countdownExpired;
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1581,7 +1630,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                 )
               // ── مستخدم عادي: زر المزايدة ──
               : ElevatedButton(
-                  onPressed: auction.isUserHighestBidder
+                  onPressed: (auction.isUserHighestBidder || !canBid)
                       ? null
                       : () {
                           showModalBottomSheet(
@@ -1601,11 +1650,12 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: auction.isUserHighestBidder
                         ? const Color(0xFF00C58D)
-                        : const Color(0xFF0081FF),
+                        : (!canBid ? Colors.grey : const Color(0xFF0081FF)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    disabledBackgroundColor: const Color(0xFF00C58D),
+                    disabledBackgroundColor:
+                        auction.isUserHighestBidder ? const Color(0xFF00C58D) : Colors.grey,
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1619,6 +1669,21 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                         Flexible(
                           child: Text(
                             AppLocalizations.of(context)!.text_71,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Plus Jakarta Sans',
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ] else if (!canBid) ...[
+                        const Icon(Icons.block, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            AppLocalizations.of(context)!.text_364,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -1672,10 +1737,14 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
               ),
               GestureDetector(
                 onTap: () {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (context) => const HomePage()),
-                    (route) => false,
+                  // "View All" (عرض الكل) next to "Similar Auctions" now opens
+                  // the real Active Auctions listing page (with category
+                  // filters + search), instead of bouncing back to Home
+                  // (client feedback A8).
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AllAuctionsPage(),
+                    ),
                   );
                 },
                 child: Container(
@@ -1772,9 +1841,13 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
   ) {
     final favoritesAsync = ref.watch(favoritesProvider);
     final isFavorite = favoritesAsync.value?.contains(auction.id) ?? false;
-    final imagePath = auction.imageUrls.isNotEmpty
-        ? auction.imageUrls[0]
-        : 'assets/corolla.png';
+    // Client feedback: Bug H -- no generic/default product image (e.g. a
+    // car photo) may ever stand in for an auction's real image. Empty
+    // imagePath (no real image) and a failed load both route to the same
+    // neutral placeholder below, never to a fake stock asset.
+    final resolvedImagePath = resolveAuctionImageUrl(auction.imageUrls);
+    final hasRealImage = resolvedImagePath != null;
+    final imagePath = resolvedImagePath ?? '';
 
     return GestureDetector(
       onTap: () {
@@ -1815,7 +1888,13 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(16),
                   ),
-                  child: imagePath.startsWith('http')
+                  child: !hasRealImage
+                      ? Container(
+                          height: 120,
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                        )
+                      : imagePath.startsWith('http')
                       ? CachedNetworkImage(
                           imageUrl: imagePath,
                           height: 120,
@@ -1826,11 +1905,10 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                             highlightColor: Colors.grey[100]!,
                             child: Container(color: Colors.white),
                           ),
-                          errorWidget: (c, e, s) => Image.asset(
-                            'assets/corolla.png',
+                          errorWidget: (c, e, s) => Container(
                             height: 120,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.image_not_supported, color: Colors.grey),
                           ),
                         )
                       : Image.asset(
@@ -1838,8 +1916,11 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
                           height: 120,
                           width: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) =>
-                              Container(height: 120, color: Colors.grey[300]),
+                          errorBuilder: (c, e, s) => Container(
+                            height: 120,
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                          ),
                         ),
                 ),
                 Positioned(

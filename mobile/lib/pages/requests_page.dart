@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:mezadpay/pages/create_ad_form_page.dart';
 import 'package:mezadpay/pages/create_banner_request_page.dart';
 import 'package:mezadpay/services/request_api.dart';
+import 'package:mezadpay/services/realtime_sync_service.dart';
 import 'package:mezadpay/utils/money_formatter.dart';
 
 class RequestsPage extends StatefulWidget {
@@ -53,11 +55,34 @@ class _RequestsPageState extends State<RequestsPage>
   List<dynamic> _auctionRequests = [];
   List<dynamic> _bannerRequests = [];
 
+  StreamSubscription? _realtimeEventSub;
+  StreamSubscription? _realtimeCatchUpSub;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadRequests();
+    // Customer #20 hardening (Gap 1): request.updated is a PRIVATE,
+    // owner-targeted event (see backend request_service.go
+    // emitRequestUpdated / GlobalHub.BroadcastToUser) -- if this event
+    // reached this client at all, it is necessarily about one of THIS
+    // user's own requests, so no further ownership filtering is needed
+    // client-side; refetch unconditionally. This closes the actual gap the
+    // FCM-only claim in the prior report didn't cover: an open Requests
+    // page previously only ever refreshed via its own manual
+    // RefreshIndicator (see the pull-to-refresh already wired further
+    // below) or by leaving and re-entering the page.
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.type == RealtimeEventType.requestUpdated) {
+        _loadRequests();
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      _loadRequests();
+    });
   }
 
   Future<void> _loadRequests() async {
@@ -85,6 +110,8 @@ class _RequestsPageState extends State<RequestsPage>
   @override
   void dispose() {
     _tabController.dispose();
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
     super.dispose();
   }
 

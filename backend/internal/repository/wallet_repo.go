@@ -20,10 +20,36 @@ type WalletRepository interface {
     ReleaseHold(ctx context.Context, tx *sqlx.Tx, holdID uuid.UUID) error
     ReleaseHoldsForAuction(ctx context.Context, tx *sqlx.Tx, auctionID uuid.UUID) error
     ReleaseHoldsForNonWinners(ctx context.Context, tx *sqlx.Tx, auctionID uuid.UUID, winnerID *uuid.UUID) error
+    // TryReleaseHoldForRefund (Customer #31): atomic active->released
+    // transition for exactly one hold, reporting whether THIS call is the
+    // one that actually performed it -- unlike ReleaseHold, which treats
+    // "already released" as a silent no-op success (right for the
+    // best-effort non-winner release path, wrong here: the caller needs to
+    // know whether to write a ledger row, per the requirement that a ledger
+    // row is created ONLY if the hold actually transitioned). Mirrors the
+    // exact WHERE-status-guard/RETURNING race-guard shape already
+    // established by TrySetWinnerAtomically/TryEndAuctionAtomically
+    // (auction_repo.go).
+    TryReleaseHoldForRefund(ctx context.Context, tx *sqlx.Tx, holdID uuid.UUID) (released bool, amount decimal.Decimal, userID uuid.UUID, err error)
     FreezeForWithdraw(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
     CaptureFrozenForWithdraw(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
     ReleaseFrozenForWithdraw(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
     GetPaymentMethods(ctx context.Context) ([]models.PaymentMethod, error)
+    // CreditBalance (Customer #35): admin-initiated direct balance credit,
+    // outside the deposit/withdraw/hold lifecycle entirely -- unlike those
+    // paths, there is no prior frozen amount to move, so this simply adds to
+    // balance. Callers MUST run this inside the same dbtx as the paired
+    // ledger Transaction row (never write balance without one).
+    CreditBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
+    // DebitBalance (admin wallet controls): admin-initiated direct balance
+    // debit, the mirror of CreditBalance. Same dbtx-pairing requirement.
+    DebitBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error
+    // SetWalletDisabled (admin wallet controls): toggles is_disabled
+    // (migration 000058). No dbtx parameter -- unlike Credit/DebitBalance,
+    // this has no paired ledger Transaction row to keep atomic with (it's a
+    // pure status flag, not a money movement), so it runs as its own
+    // single-statement update.
+    SetWalletDisabled(ctx context.Context, userID uuid.UUID, disabled bool, reason string, adminID uuid.UUID) error
 }
 
 type walletRepo struct{ db *sqlx.DB }
@@ -141,6 +167,34 @@ func (r *walletRepo) ReleaseHold(ctx context.Context, tx *sqlx.Tx, holdID uuid.U
     return err
 }
 
+// TryReleaseHoldForRefund (Customer #31): same atomic active->released
+// transition as ReleaseHold, but reports whether this call actually
+// performed it (released=false, no error, for an already-released/missing
+// hold) instead of silently treating that as success -- the admin
+// manual-refund flow needs this distinction to decide whether to write a
+// ledger row, and to reject a second refund attempt cleanly rather than
+// pretending it succeeded.
+func (r *walletRepo) TryReleaseHoldForRefund(ctx context.Context, tx *sqlx.Tx, holdID uuid.UUID) (bool, decimal.Decimal, uuid.UUID, error) {
+    var amount decimal.Decimal
+    var userID uuid.UUID
+    err := tx.QueryRowContext(ctx,
+        `UPDATE wallet_holds SET status = 'released', released_at = now()
+         WHERE id = $1 AND status = 'active'
+         RETURNING amount, user_id`, holdID).Scan(&amount, &userID)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return false, decimal.Zero, uuid.Nil, nil
+        }
+        return false, decimal.Zero, uuid.Nil, err
+    }
+    if _, err := tx.ExecContext(ctx,
+        `UPDATE wallets SET balance = balance + $1, frozen_amount = frozen_amount - $1
+         WHERE user_id = $2`, amount, userID); err != nil {
+        return false, decimal.Zero, uuid.Nil, err
+    }
+    return true, amount, userID, nil
+}
+
 // ReleaseHoldsForAuction libère tous les wallet_holds actifs d'un auction donné
 // (utilisé lors de l'annulation d'un auction — tous les enchérisseurs récupèrent
 // leur caution).
@@ -255,4 +309,64 @@ func (r *walletRepo) ReleaseFrozenForWithdraw(ctx context.Context, tx *sqlx.Tx, 
         return apperr.ErrInsufficientBalance
     }
     return nil
+}
+
+// CreditBalance (Customer #35): admin-initiated direct wallet credit. No
+// frozen_amount is touched (unlike the withdraw lifecycle) since there is no
+// prior hold/freeze for this path -- just balance += amount.
+func (r *walletRepo) CreditBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error {
+    _, err := tx.ExecContext(ctx,
+        `UPDATE wallets SET balance = balance + $1, version = version + 1
+         WHERE user_id = $2`,
+        amount, userID)
+    return err
+}
+
+// DebitBalance (admin wallet controls): admin-initiated direct wallet debit,
+// the mirror of CreditBalance. The WHERE balance >= $1 guard is the same
+// compare-and-set pattern FreezeForWithdraw/DebitFreezeBalance already use --
+// 0 rows affected means the wallet's CURRENT balance (read inside the same
+// FOR UPDATE-locked dbtx by the caller) was insufficient, mapped to
+// ErrInsufficientBalanceForDebit by the caller. frozen_amount is
+// deliberately untouched: an admin debit only ever reduces spendable
+// balance, never releases or captures a hold that belongs to a specific
+// pending withdrawal/bid.
+func (r *walletRepo) DebitBalance(ctx context.Context, tx *sqlx.Tx, userID uuid.UUID, amount decimal.Decimal) error {
+    result, err := tx.ExecContext(ctx,
+        `UPDATE wallets SET balance = balance - $1, version = version + 1
+         WHERE user_id = $2 AND balance >= $1`,
+        amount, userID)
+    if err != nil {
+        return err
+    }
+    rows, err := result.RowsAffected()
+    if err != nil {
+        return err
+    }
+    if rows == 0 {
+        return apperr.ErrInsufficientBalanceForDebit
+    }
+    return nil
+}
+
+// SetWalletDisabled (admin wallet controls): toggles the wallet-level
+// is_disabled status flag (migration 000058). disabledBy/reason are only
+// meaningful when disabled=true; both are cleared (set to NULL) on
+// re-enable so a stale reason never lingers on a wallet that is currently
+// active again.
+func (r *walletRepo) SetWalletDisabled(ctx context.Context, userID uuid.UUID, disabled bool, reason string, adminID uuid.UUID) error {
+    if disabled {
+        _, err := r.db.ExecContext(ctx,
+            `UPDATE wallets
+             SET is_disabled = true, disabled_reason = NULLIF($1, ''), disabled_by = $2, disabled_at = now()
+             WHERE user_id = $3`,
+            reason, adminID, userID)
+        return err
+    }
+    _, err := r.db.ExecContext(ctx,
+        `UPDATE wallets
+         SET is_disabled = false, disabled_reason = NULL, disabled_by = NULL, disabled_at = NULL
+         WHERE user_id = $1`,
+        userID)
+    return err
 }

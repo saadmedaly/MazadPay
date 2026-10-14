@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auction_api.dart';
+import 'auction_pending_approval_page.dart';
 import '../utils/money_formatter.dart';
 
 class EditAuctionPage extends StatefulWidget {
@@ -53,10 +54,26 @@ class _EditAuctionPageState extends State<EditAuctionPage> {
       );
       if (!mounted) return;
       if (response.success) {
+        // A live auction edited by its seller goes back to admin review.
+        if (response.data?['status'] == 'pending') {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AuctionPendingApprovalPage()),
+            result: true, // signal refresh
+          );
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم حفظ التعديلات بنجاح'), backgroundColor: Color(0xFF00C58D)),
         );
         Navigator.of(context).pop(true); // signal refresh
+      } else if (response.error?.code == 'auction_has_bids') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا يمكن تعديل هذا المزاد لأنه تلقّى مزايدات بالفعل.')),
+        );
+      } else if (response.error?.code == 'auction_not_editable') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا يمكن تعديل هذا المزاد بعد انتهائه أو إلغائه.')),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(response.message ?? 'فشل حفظ التعديلات')),

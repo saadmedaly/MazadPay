@@ -2,6 +2,7 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import '../services/wallet_api.dart';
 import '../utils/money_formatter.dart';
+import 'withdraw_beneficiary_page.dart';
 
 
 class WithdrawPage extends StatefulWidget {
@@ -84,6 +85,24 @@ class _WithdrawPageState extends State<WithdrawPage> {
     if (_selectedGateway == null) {
       messenger.showSnackBar(
         const SnackBar(content: Text('يرجى اختيار طريقة الاستلام')),
+      );
+      return;
+    }
+
+    // Customer #34: the mobile/Bankily receiving method needs a beneficiary
+    // phone/account number, collected on a dedicated "خدمة بنكية" screen
+    // (client reference) before the request is actually submitted. Bank
+    // transfer keeps the original direct-submit behavior (no beneficiary
+    // field required for it).
+    if (_selectedGateway == _gatewayMobileMoney) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WithdrawBeneficiaryPage(
+            amount: amount,
+            gateway: _selectedGateway!,
+            currencyCode: _currencyCode,
+          ),
+        ),
       );
       return;
     }

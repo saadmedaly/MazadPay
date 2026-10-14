@@ -34,6 +34,12 @@ class Auction {
   /// display via MoneyFormatter, which falls back to MRU only when null.
   final String? currencyCode;
   final String? marketCountryIso;
+  /// Bug K fix: server-authoritative auction status ("active", "ended",
+  /// "canceled", "closed", ...). Additive/nullable, same pattern as
+  /// currencyCode above -- an old cached response won't carry it. The bid
+  /// CTA must never rely on the local countdown alone to decide whether
+  /// bidding is still allowed; this is the source of truth for that.
+  final String? status;
 
   Auction({
     required this.id,
@@ -64,6 +70,7 @@ class Auction {
     this.startTime,
     this.currencyCode,
     this.marketCountryIso,
+    this.status,
   });
 
   Auction copyWith({
@@ -95,6 +102,7 @@ class Auction {
     DateTime? startTime,
     String? currencyCode,
     String? marketCountryIso,
+    String? status,
   }) {
     return Auction(
       id: id ?? this.id,
@@ -125,6 +133,7 @@ class Auction {
       startTime: startTime ?? this.startTime,
       currencyCode: currencyCode ?? this.currencyCode,
       marketCountryIso: marketCountryIso ?? this.marketCountryIso,
+      status: status ?? this.status,
     );
   }
 
@@ -147,12 +156,19 @@ class Auction {
       startPrice: double.tryParse(json['starting_price']?.toString() ?? json['start_price']?.toString() ?? '0') ?? 0,
       currentPrice: double.tryParse(json['current_price']?.toString() ?? json['current_bid']?.toString() ?? '0') ?? 0,
       minIncrement: double.tryParse(json['min_increment']?.toString() ?? '500') ?? 500,
-      endTime: () {
-        final raw = json['end_time'] != null ? DateTime.parse(json['end_time']) : DateTime.now();
-        final startRaw = json['start_time'] != null ? DateTime.parse(json['start_time']) : DateTime.now();
-        final maxEnd = startRaw.add(const Duration(hours: 24));
-        return raw.isAfter(maxEnd) ? maxEnd : raw;
-      }(),
+      // Client feedback #15: this used to clamp end_time to start_time + 24h
+      // (commit e984cfd, "cap auction end time to 24h in API and Flutter"),
+      // mirroring a matching backend cap in AuctionHandler.List/GetByID at
+      // the time. That backend cap was later removed entirely ("client
+      // feedback Phase B item 15: the 24h max-duration cap is removed --
+      // multi-day auctions (48h, 72h, several days) must now be allowed",
+      // see auction_handler.go) so the real end_time is now returned
+      // uncapped -- but this mobile-side clamp was never cleaned up,
+      // silently truncating every real multi-day auction back down to 24h
+      // client-side (countdown, active/ended display, everything downstream
+      // of Auction.endTime). Removed; the server's end_time is now trusted
+      // as-is, exactly like start_time already is.
+      endTime: json['end_time'] != null ? DateTime.parse(json['end_time']) : DateTime.now(),
       bidderCount: json['bidder_count'] ?? json['bid_count'] ?? 0,
       views: json['views'] ?? json['view_count'] ?? 0,
       lotNumber: json['lot_number']?.toString() ?? 'N/A',
@@ -178,6 +194,7 @@ class Auction {
       // Additive, null-safe (Phase 2): absent on old cached responses.
       currencyCode: json['currency_code']?.toString(),
       marketCountryIso: json['market_country_iso']?.toString(),
+      status: json['status']?.toString(),
     );
   }
 
@@ -205,6 +222,7 @@ class Auction {
       'model': model,
       'currency_code': currencyCode,
       'market_country_iso': marketCountryIso,
+      'status': status,
     };
   }
 }

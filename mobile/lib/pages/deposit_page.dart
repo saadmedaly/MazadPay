@@ -10,10 +10,28 @@ import 'package:mezadpay/services/payment_methods_service.dart';
 import 'package:mezadpay/models/payment_method.dart';
 
 const String _officialAccountNumber = '36601175';
-const double _depositAmount = 500.0;
+
+// Client feedback (deposit min/max limits): the exact values the client
+// asked to be shown inside the existing "تعليمات الدفع" box, and the same
+// bounds enforced authoritatively server-side (backend/internal/services/
+// wallet_service.go's MinDepositAmountMRU/MaxDepositAmountMRU) for the
+// generic wallet-top-up deposit path. Also used to bound the generic
+// top-up amount field below (client-side UX only -- backend remains
+// authoritative).
+const int _minDepositAmountMRU = 100;
+const int _maxDepositAmountMRU = 100000;
 
 class DepositPage extends StatefulWidget {
-  const DepositPage({super.key});
+  // Customer feedback #4: when set (auction request just submitted for
+  // review), the deposit amount and payment reference are derived from the
+  // request's authoritative subscription_fee -- never user-editable, never
+  // guessed client-side. Both null preserves the page's original generic
+  // wallet-top-up behavior (existing entry points: account page "Deposit
+  // Now", wallet notification taps).
+  final String? auctionRequestId;
+  final double? subscriptionFee;
+
+  const DepositPage({super.key, this.auctionRequestId, this.subscriptionFee});
 
   @override
   State<DepositPage> createState() => _DepositPageState();
@@ -22,11 +40,29 @@ class DepositPage extends StatefulWidget {
 class _DepositPageState extends State<DepositPage> {
   final _phoneController = TextEditingController();
   final _notesController = TextEditingController();
+  final _amountController = TextEditingController();
   String? _selectedMethodCode;
   List<PaymentMethod> _methods = [];
   bool _loadingMethods = true;
   File? _receiptFile;
   bool _submitting = false;
+
+  // MAZADPAY — deposit approval crediting a fixed 500 regardless of what the
+  // user actually transferred: the generic wallet-top-up flow previously had
+  // no amount input at all and always sent the fixed _fallbackDepositAmount
+  // (500), which became transactions.amount and therefore the exact amount
+  // credited on admin approval. For the auction-subscription flow the
+  // server-stamped subscriptionFee remains authoritative and non-editable,
+  // unchanged. For the generic flow, the user now enters the real amount
+  // they transferred.
+  double? get _enteredAmount => double.tryParse(_amountController.text.trim());
+  double get _depositAmount => widget.subscriptionFee ?? _enteredAmount ?? 0;
+  bool get _isAuctionSubscriptionFee => widget.auctionRequestId != null && widget.subscriptionFee != null;
+  bool get _isAmountValid =>
+      _isAuctionSubscriptionFee ||
+      (_enteredAmount != null &&
+          _enteredAmount! >= _minDepositAmountMRU &&
+          _enteredAmount! <= _maxDepositAmountMRU);
 
   @override
   void initState() {
@@ -38,6 +74,7 @@ class _DepositPageState extends State<DepositPage> {
   void dispose() {
     _phoneController.dispose();
     _notesController.dispose();
+    _amountController.dispose();
     super.dispose();
   }
 
@@ -59,6 +96,14 @@ class _DepositPageState extends State<DepositPage> {
   }
 
   Future<void> _submit() async {
+    if (!_isAuctionSubscriptionFee && _enteredAmount == null) {
+      _showSnack('يرجى إدخال المبلغ الذي قمت بتحويله');
+      return;
+    }
+    if (!_isAmountValid) {
+      _showSnack('المبلغ يجب أن يكون بين $_minDepositAmountMRU و $_maxDepositAmountMRU أوقية');
+      return;
+    }
     if (_phoneController.text.trim().isEmpty) {
       _showSnack('يرجى إدخال رقم الهاتف');
       return;
@@ -77,13 +122,24 @@ class _DepositPageState extends State<DepositPage> {
     try {
       final api = ApiService();
 
-      // Step 1: create the deposit transaction
+      // Step 1: create the deposit transaction. Customer feedback #4
+      // financial-integrity round: auction_request_id is sent ONLY for the
+      // auction-subscription flow (widget.auctionRequestId != null) -- the
+      // backend then IGNORES 'amount' below and substitutes that request's
+      // own server-stamped subscription_fee, so _depositAmount here is
+      // display-only, never authoritative, for that case. The generic
+      // wallet-top-up entry points (account page "Deposit Now", wallet
+      // notification taps) never set auctionRequestId, so this field is
+      // omitted for them exactly as before -- their client-supplied amount
+      // stays trusted, unchanged.
       final depositResp = await api.post<Map<String, dynamic>>(
         '/users/wallet/deposit',
         data: {
           'amount': _depositAmount,
           'gateway': _selectedMethodCode,
           'payment_method': _selectedMethodCode,
+          if (widget.auctionRequestId != null)
+            'auction_request_id': widget.auctionRequestId,
         },
       );
 
@@ -100,12 +156,15 @@ class _DepositPageState extends State<DepositPage> {
         return;
       }
 
-      // Step 2: upload the receipt
+      // Step 2: upload the receipt. The auction_request_id link itself is
+      // already stored authoritatively on the transaction's `reference`
+      // field (set server-side in InitiateDeposit) -- only the user's own
+      // free-text note is sent here.
       final fileName = path.basename(_receiptFile!.path);
+      final userNote = _notesController.text.trim();
       final formData = FormData.fromMap({
         'receipt': await MultipartFile.fromFile(_receiptFile!.path, filename: fileName),
-        if (_notesController.text.trim().isNotEmpty)
-          'note': _notesController.text.trim(),
+        if (userNote.isNotEmpty) 'note': userNote,
         if (_phoneController.text.trim().isNotEmpty)
           'phone': _phoneController.text.trim(),
       });
@@ -176,6 +235,73 @@ class _DepositPageState extends State<DepositPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Subscription fee amount (customer feedback #4): shown before
+            // payment-method selection, whenever this page was reached from
+            // submitting an auction request for review. The amount itself
+            // (_depositAmount) is the server-stamped, category-derived
+            // subscription_fee -- never a value the user picks here.
+            if (_isAuctionSubscriptionFee) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F4FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFB3D9FF)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text(
+                      'رسوم النشر المطلوبة',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${_depositAmount.toStringAsFixed(0)} أوقية',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: blue),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ] else ...[
+              // MAZADPAY (admin credit 500 issue): the generic wallet top-up
+              // entry point has no server-stamped amount to fall back on --
+              // the user must explicitly enter the exact amount they
+              // transferred, which becomes transactions.amount and therefore
+              // the exact amount credited on admin approval.
+              const Text('المبلغ الذي قمت بتحويله *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.right,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: 'أدخل المبلغ بالأوقية',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  filled: true,
+                  fillColor: isDark ? const Color(0xFF1D1D1D) : Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: blue),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+
             // Phone number
             const Text('رقم الهاتف *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 8),
@@ -241,6 +367,17 @@ class _DepositPageState extends State<DepositPage> {
                     'يرجى تحويل مبلغ الاشتراك إلى الرقم $_officialAccountNumber عبر تطبيق الدفع الذي اخترته، ثم إرفاق لقطة شاشة من عملية التحويل.',
                     textAlign: TextAlign.right,
                     style: const TextStyle(fontSize: 13, height: 1.5),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'المبلغ الحد الأدنى: MRU $_minDepositAmountMRU',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    'المبلغ الأقصى: MRU $_maxDepositAmountMRU',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -396,6 +533,14 @@ class _DepositPageState extends State<DepositPage> {
               size: 22,
             ),
             const SizedBox(width: 12),
+            // Customer #33: Bankily gets its bundled logo asset next to the
+            // name, matching the client reference screenshot. Other methods
+            // are untouched (server-driven logo_url isn't wired to any
+            // renderer yet -- out of scope for this ticket).
+            if (method.code == 'bankily') ...[
+              Image.asset('assets/logo-bankily.png', width: 28, height: 28, fit: BoxFit.contain),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Text(
                 _methodName(method),

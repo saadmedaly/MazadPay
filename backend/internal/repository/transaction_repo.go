@@ -14,11 +14,34 @@ import (
 type TransactionRepository interface {
 	ListPaginated(ctx context.Context, page, perPage int, status string, userID *uuid.UUID) ([]models.Transaction, int, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error)
+	// ExistsActiveDepositForReference (client feedback #4 financial-integrity
+	// round): reports whether a non-rejected deposit transaction already
+	// references the given string (used with "auction_request_id:<uuid>",
+	// the same value stamped into Transaction.Reference on an
+	// auction-subscription deposit) -- prevents an API retry from creating a
+	// second subscription-fee deposit for the same request.
+	ExistsActiveDepositForReference(ctx context.Context, reference string) (bool, error)
 	FindByID(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*models.Transaction, error)
 	Create(ctx context.Context, tx *models.Transaction) error
 	CreateTx(ctx context.Context, dbtx *sqlx.Tx, tx *models.Transaction) error
 	UpdateReceipt(ctx context.Context, id uuid.UUID, userID uuid.UUID, url string, status string) error
-	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error
+	UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID, attachmentURL string) error
+	// LockAndCloseIfOpenDepositOrWithdraw (Financial Audit fix: admin_credit/
+	// admin_debit double-credit): if the given transaction is a deposit or
+	// withdraw still in a non-terminal status (pending/pending_review), locks
+	// its row (FOR UPDATE, within the caller's own dbtx -- must be called
+	// inside the SAME transaction that performs the admin_credit/admin_debit
+	// wallet mutation) and marks it 'completed', reviewed_by=adminID, so the
+	// normal approval endpoint (UpdateStatus) can never independently credit/
+	// debit the wallet a second time for the same transaction afterward --
+	// UpdateStatus's own tx.Status != "completed" guard then blocks it. If
+	// the transaction is any other type, or already terminal
+	// (completed/rejected), this is a no-op: standalone manual admin_credit/
+	// admin_debit against a non-deposit/non-withdraw anchor (or a deposit/
+	// withdraw the admin is intentionally leaving open, e.g. crediting a
+	// bonus unrelated to any pending request) is left completely untouched,
+	// preserving that as a legitimate independent mechanism.
+	LockAndCloseIfOpenDepositOrWithdraw(ctx context.Context, dbtx *sqlx.Tx, id uuid.UUID, adminID uuid.UUID) error
 	GetStats(ctx context.Context) (float64, float64, error) // Total, Today
 	GetPendingCount(ctx context.Context) (int, error)
 	GetWeeklySum(ctx context.Context) (float64, error)
@@ -87,6 +110,7 @@ const explicitTxJoinQuery = `
 		t.reference, t.receipt_url, t.admin_notes, t.reviewed_by, t.reviewed_at,
 		t.wallet_hold_id, t.receipt_image_temp, t.payment_method, t.fee_amount,
 		t.net_amount, t.description, t.failure_reason, t.created_at, t.currency_code,
+		t.beneficiary_account, t.admin_attachment_url,
 		u.full_name AS user_full_name, u.phone AS user_phone
 	FROM transactions t
 	LEFT JOIN users u ON u.id = t.user_id
@@ -102,6 +126,7 @@ func scanTxJoinRow(row *sqlx.Row) (*models.Transaction, error) {
 		&tx.Reference, &tx.ReceiptURL, &tx.AdminNotes, &tx.ReviewedBy, &tx.ReviewedAt,
 		&tx.WalletHoldID, &tx.ReceiptImageTemp, &tx.PaymentMethod, &tx.FeeAmount,
 		&tx.NetAmount, &tx.Description, &tx.FailureReason, &tx.CreatedAt, &tx.CurrencyCode,
+		&tx.BeneficiaryAccount, &tx.AdminAttachmentURL,
 		&tx.UserFullName, &tx.UserPhone,
 	)
 	return &tx, err
@@ -126,6 +151,21 @@ func (r *transactionRepo) FindByID(ctx context.Context, id uuid.UUID, userID *uu
 	return scanTxJoinRow(row)
 }
 
+// ExistsActiveDepositForReference reports whether any deposit transaction
+// referencing the given string is not rejected (i.e. still pending or
+// already completed) -- "rejected" deposits don't block a resubmission,
+// matching the existing manual-review flow (an admin rejecting a bad receipt
+// must not permanently lock a user out of paying the same subscription fee).
+func (r *transactionRepo) ExistsActiveDepositForReference(ctx context.Context, reference string) (bool, error) {
+	var exists bool
+	err := r.db.GetContext(ctx, &exists, `
+		SELECT EXISTS(
+			SELECT 1 FROM transactions
+			WHERE type = 'deposit' AND reference = $1 AND status != 'rejected'
+		)`, reference)
+	return exists, err
+}
+
 func (r *transactionRepo) Create(ctx context.Context, tx *models.Transaction) error {
 	_, err := r.db.NamedExecContext(ctx, `
 		INSERT INTO transactions
@@ -145,10 +185,12 @@ func (r *transactionRepo) CreateTx(ctx context.Context, dbtx *sqlx.Tx, tx *model
 	_, err := dbtx.NamedExecContext(ctx, `
 		INSERT INTO transactions
 			(id, user_id, auction_id, type, amount, gateway, status, reference,
-			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id, currency_code)
+			 receipt_url, admin_notes, reviewed_by, reviewed_at, wallet_hold_id, currency_code,
+			 beneficiary_account)
 		VALUES
 			(:id, :user_id, :auction_id, :type, :amount, :gateway, :status, :reference,
-			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id, :currency_code)
+			 :receipt_url, :admin_notes, :reviewed_by, :reviewed_at, :wallet_hold_id, :currency_code,
+			 :beneficiary_account)
 	`, tx)
 	return err
 }
@@ -173,7 +215,7 @@ func (r *transactionRepo) UpdateReceipt(ctx context.Context, id uuid.UUID, userI
 	return nil
 }
 
-func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID) error {
+func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status, notes string, adminID uuid.UUID, attachmentURL string) error {
 	dbtx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -192,10 +234,14 @@ func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status
 		return apperr.ErrBadRequest
 	}
 
+	// attachmentURL empty -> NULLIF turns it into NULL rather than storing an
+	// empty string, matching every other optional string column's convention
+	// on this table (Gateway, Reference, BeneficiaryAccount, etc.).
 	if _, err := dbtx.ExecContext(ctx, `
 		UPDATE transactions
-		SET status = $1, admin_notes = $2, reviewed_by = $3, reviewed_at = now()
-		WHERE id = $4`, status, notes, adminID, id); err != nil {
+		SET status = $1, admin_notes = $2, reviewed_by = $3, reviewed_at = now(),
+		    admin_attachment_url = NULLIF($5, '')
+		WHERE id = $4`, status, notes, adminID, id, attachmentURL); err != nil {
 		return err
 	}
 
@@ -242,6 +288,23 @@ func (r *transactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status
 	}
 
 	return dbtx.Commit()
+}
+
+func (r *transactionRepo) LockAndCloseIfOpenDepositOrWithdraw(ctx context.Context, dbtx *sqlx.Tx, id uuid.UUID, adminID uuid.UUID) error {
+	var tx models.Transaction
+	if err := dbtx.GetContext(ctx, &tx, "SELECT * FROM transactions WHERE id = $1 FOR UPDATE", id); err != nil {
+		return err
+	}
+
+	if (tx.Type != "deposit" && tx.Type != "withdraw") || tx.Status == "completed" || tx.Status == "rejected" {
+		return nil
+	}
+
+	_, err := dbtx.ExecContext(ctx, `
+		UPDATE transactions
+		SET status = 'completed', reviewed_by = $1, reviewed_at = now()
+		WHERE id = $2`, adminID, id)
+	return err
 }
 
 func (r *transactionRepo) GetStats(ctx context.Context) (float64, float64, error) {

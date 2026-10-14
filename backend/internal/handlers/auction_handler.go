@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
@@ -64,6 +66,21 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 	if catID := c.QueryInt("category_id", 0); catID > 0 {
 		f.CategoryID = catID
 	}
+	// Note #1 (client feedback): the Active Auctions screen's advanced
+	// filter sheet -- confirmed via source inspection that neither this
+	// handler nor AuctionFilters/FindAll previously read or applied these
+	// at all, so the mobile-side price/sort controls had no effect despite
+	// being fully wired there. c.QueryInt returns 0 on a missing/invalid
+	// value, and 0 is never a meaningful min/max price bound here, so it
+	// safely means "not requested" -- matching every other optional filter
+	// field's convention in this handler.
+	if minPrice := c.QueryInt("min_price", 0); minPrice > 0 {
+		f.MinPrice = &minPrice
+	}
+	if maxPrice := c.QueryInt("max_price", 0); maxPrice > 0 {
+		f.MaxPrice = &maxPrice
+	}
+	f.SortBy = c.Query("sort_by", "")
 	// Country-scoped market (migration 000046, V1): the public listing must never
 	// silently expose auctions from another market. Authenticated caller -> their
 	// own account market; anonymous caller -> DefaultAccountCountryISO ('MR'),
@@ -79,7 +96,7 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 		}
 	}
 
-	auctions, err := h.service.List(c.Context(), f)
+	auctions, total, err := h.service.List(c.Context(), f)
 	if err != nil {
 		return MapError(c, h.logger, err)
 	}
@@ -87,12 +104,8 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 	// Transform auctions to include images array instead of comma-separated string
 	var response []fiber.Map
 	for _, auction := range auctions {
-		// Cap end_time to start_time + 24h for display (does not modify DB)
-		cappedEndTime := auction.EndTime
-		maxAllowedEnd := auction.StartTime.Add(24 * time.Hour)
-		if cappedEndTime.After(maxAllowedEnd) {
-			cappedEndTime = maxAllowedEnd
-		}
+		// Client feedback Phase B item 15: end_time is no longer capped for
+		// display -- auctions can legitimately run longer than 24h now.
 		response = append(response, fiber.Map{
 			"id":               auction.ID,
 			"seller_id":        auction.SellerID,
@@ -111,7 +124,7 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 			"insurance_amount": auction.InsuranceAmount,
 			"reserve_price":    auction.ReservePrice,
 			"start_time":       auction.StartTime,
-			"end_time":         cappedEndTime,
+			"end_time":         auction.EndTime,
 			"status":           auction.Status,
 			"lot_number":       auction.LotNumber,
 			"views":            auction.Views,
@@ -138,7 +151,12 @@ func (h *AuctionHandler) List(c *fiber.Ctx) error {
 		})
 	}
 
-	return OK(c, response)
+	// total (client feedback #12): the real count matching the requested
+	// filters (status/category/search/market), ignoring pagination -- added
+	// alongside "data" as a top-level "total" key so existing callers that
+	// only read response.data (e.g. mobile/lib/services/auction_api.dart)
+	// keep working unchanged; only callers that also read "total" need it.
+	return c.JSON(fiber.Map{"success": true, "data": response, "total": total})
 }
 
 func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
@@ -152,13 +170,34 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 		return NotFound(c, "Auction")
 	}
 
+	// Real-device Staging diagnosis (My Auctions "خطأ في تحميل المزاد"): resolve
+	// the caller once, up front, so both the status check and the market check
+	// below can recognize an owner/admin -- previously this endpoint's caller
+	// lookup only existed inside the market-isolation check further down, so a
+	// seller viewing their OWN pending/draft/rejected auction (e.g. right after
+	// creating it, before admin approval) always 404'd here, even though the
+	// mobile app's AuctionDetailsPage has no other endpoint to call and was
+	// linked to from My Auctions regardless of status. The referenced "dedicated
+	// seller/admin detail endpoint" in the comment this replaces never actually
+	// existed anywhere in routes.go.
+	var callerID uuid.UUID
+	var callerUser *models.User
+	callerMarket := models.DefaultAccountCountryISO
+	if uid, err := middleware.GetUserID(c); err == nil {
+		callerID = uid
+		if user, err := h.userRepo.FindByID(c.Context(), uid); err == nil {
+			callerUser = user
+			callerMarket = user.EffectiveAccountCountryISO()
+		}
+	}
+	isOwner := callerUser != nil && auction.SellerID == callerID
+	isAdmin := callerUser != nil && (callerUser.Role == "admin" || callerUser.IsSuperAdmin)
+
 	// This endpoint has no auth middleware (see routes.go) — an anonymous
 	// caller must never see a pending/rejected/canceled auction by guessing
-	// or reusing its ID (International Auth / Product Review Phase). A
-	// logged-in seller viewing their own non-public auction, or an admin,
-	// should use the dedicated seller/admin detail endpoints instead, which
-	// are not filtered this way.
-	if !services.PubliclyVisibleAuctionStatuses[auction.Status] {
+	// or reusing its ID (International Auth / Product Review Phase). The
+	// owner of the auction, or an admin, may view it regardless of status.
+	if !services.PubliclyVisibleAuctionStatuses[auction.Status] && !isOwner && !isAdmin {
 		return NotFound(c, "Auction")
 	}
 
@@ -168,22 +207,24 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 	// existing convention for any other inaccessible auction (see status check
 	// above). Anonymous caller -> DefaultAccountCountryISO ('MR'), consistent with
 	// List()'s public-listing default.
-	callerMarket := models.DefaultAccountCountryISO
-	if userID, err := middleware.GetUserID(c); err == nil {
-		if user, err := h.userRepo.FindByID(c.Context(), userID); err == nil {
-			callerMarket = user.EffectiveAccountCountryISO()
-		}
-	}
-	if callerMarket != auction.EffectiveMarketCountryISO() {
+	//
+	// Live Staging DB proof (client feedback, round 3): the previous version of
+	// this comment claimed "an owner's own auction is always in their own market
+	// by construction, so this never actually blocks a legitimate owner in
+	// practice" -- that assumption was wrong and was the actual, data-confirmed
+	// cause of the "خطأ في تحميل المزاد" failure. A TN seller's auction that
+	// predates migration 000046 has market_country_iso/currency_code = NULL in
+	// the DB; EffectiveMarketCountryISO() falls back to DefaultAccountCountryISO
+	// ("MR") for such a row, while the TN owner's own callerMarket is "TN" --
+	// "TN" != "MR" tripped this check even though isOwner was already true,
+	// 404-ing the seller out of their own active auction. The owner exemption
+	// must cover market isolation too, not just the status check above.
+	if callerMarket != auction.EffectiveMarketCountryISO() && !isAdmin && !isOwner {
 		return NotFound(c, "Auction")
 	}
 
-	// Cap end_time to start_time + 24h for display (does not modify DB)
-	cappedEnd := auction.EndTime
-	if maxEnd := auction.StartTime.Add(24 * time.Hour); cappedEnd.After(maxEnd) {
-		cappedEnd = maxEnd
-	}
-
+	// Client feedback Phase B item 15: end_time is no longer capped for
+	// display -- auctions can legitimately run longer than 24h now.
 	return OK(c, fiber.Map{
 		"auction": fiber.Map{
 			"id":               auction.ID,
@@ -203,7 +244,7 @@ func (h *AuctionHandler) GetByID(c *fiber.Ctx) error {
 			"insurance_amount": auction.InsuranceAmount,
 			"reserve_price":    auction.ReservePrice,
 			"start_time":       auction.StartTime,
-			"end_time":         cappedEnd,
+			"end_time":         auction.EndTime,
 			"status":           auction.Status,
 			"lot_number":       auction.LotNumber,
 			"views":            auction.Views,
@@ -359,15 +400,18 @@ func (h *AuctionHandler) Create(c *fiber.Ctx) error {
 		startTimePtr = &st
 	}
 
-	// enforce max 24-hour auction duration
+	// Client feedback Phase B item 15: the 24h max-duration cap is removed --
+	// multi-day auctions (48h, 72h, several days) must now be allowed. The
+	// only remaining constraint is end_time > start_time, which the previous
+	// code never actually checked on its own (a bad end_time <= start_time
+	// would have been silently overwritten by the old cap instead of
+	// rejected) -- checked explicitly here now that the cap no longer masks it.
 	effectiveStart := time.Now()
 	if startTimePtr != nil {
 		effectiveStart = *startTimePtr
 	}
-	maxEnd := effectiveStart.Add(24 * time.Hour)
-	if endTime.After(maxEnd) {
-		endTime = maxEnd
-		h.logger.Info("[Create Auction] end_time capped to 24h", zap.Time("capped_end_time", endTime))
+	if !endTime.After(effectiveStart) {
+		return BadRequest(c, "end_time must be after start_time")
 	}
 
 	// auto-compute min_increment if zero
@@ -459,7 +503,36 @@ func (h *AuctionHandler) GetCategories(c *fiber.Ctx) error {
 		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, categories)
+	// Customer #27: public listing excludes hidden (is_active = false)
+	// categories/subcategories -- filtered here, at the public HTTP
+	// boundary, rather than in the underlying GetCategories query itself,
+	// which stays unfiltered because it's also reused internally (see
+	// CreateAuction's category/subcategory name->ID mapping) and by the
+	// Admin panel's own unfiltered AdminListCategories, both of which must
+	// still be able to find/see a hidden category.
+	//
+	// Effective visibility for a subcategory whose PARENT is hidden: the
+	// subcategory's own is_active row is never mass-updated (the client's
+	// own DB state must stay untouched per-row), but it must still not be
+	// reachable through normal public category navigation once its parent
+	// is hidden -- so a subcategory is only included here when both it and
+	// its parent (if any) are individually active.
+	activeByID := make(map[int]bool, len(categories))
+	for _, cat := range categories {
+		activeByID[cat.ID] = cat.IsActive
+	}
+	visible := make([]models.Category, 0, len(categories))
+	for _, cat := range categories {
+		if !cat.IsActive {
+			continue
+		}
+		if cat.ParentID != nil && !activeByID[*cat.ParentID] {
+			continue
+		}
+		visible = append(visible, cat)
+	}
+
+	return OK(c, visible)
 }
 
 func (h *AuctionHandler) GetLocations(c *fiber.Ctx) error {
@@ -653,6 +726,13 @@ func (h *AuctionHandler) handleMultipartImages(c *fiber.Ctx, auctionID, sellerID
 			zap.String("seller_id", sellerID.String()),
 			zap.String("actual_seller", auction.SellerID.String()))
 		return Forbidden(c)
+	}
+	// Fail fast before uploading to R2; AddImages re-checks under the row lock.
+	switch {
+	case auction.Status != "pending" && auction.Status != "active":
+		return MapError(c, h.logger, apperr.ErrAuctionNotEditable)
+	case auction.Status == "active" && (auction.LastBidderID != nil || auction.BidderCount > 0):
+		return MapError(c, h.logger, apperr.ErrAuctionHasBids)
 	}
 
 	h.logger.Info("[handleMultipartImages] Auction ownership validated",
@@ -941,8 +1021,21 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 		return Unauthorized(c)
 	}
 
-	// Parse end_time if provided
-	var endTime *time.Time
+	// Partial update: the mobile edit screen sends only title, description and
+	// start_price. Any field absent from the body keeps its stored value
+	// (previously absent fields were zeroed and a missing end_time panicked).
+	current, _, err := h.service.GetByID(c.Context(), id)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	str := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return *p
+	}
+
+	endTime := current.EndTime
 	if req.EndTime != nil && *req.EndTime != "" {
 		et, err := time.Parse(time.RFC3339, *req.EndTime)
 		if err != nil {
@@ -951,15 +1044,23 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 				return BadRequest(c, "Invalid end_time format")
 			}
 		}
-		endTime = &et
+		endTime = et
 	}
 
-	// Convert optional fields to required CreateAuctionInput format
-	var categoryID int
+	categoryID := current.CategoryID
 	if req.CategoryID != nil {
 		categoryID = *req.CategoryID
 	}
-	var startPrice, minIncrement, insuranceAmount decimal.Decimal
+	subCategoryID := current.SubCategoryID
+	if req.SubCategoryID != nil {
+		subCategoryID = req.SubCategoryID
+	}
+	locationID := current.LocationID
+	if req.LocationID != nil {
+		locationID = req.LocationID
+	}
+
+	startPrice, minIncrement, insuranceAmount := current.StartPrice, current.MinIncrement, current.InsuranceAmount
 	if req.StartPrice != nil {
 		startPrice = decimal.NewFromFloat(*req.StartPrice)
 	}
@@ -969,13 +1070,14 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 	if req.InsuranceAmount != nil {
 		insuranceAmount = decimal.NewFromFloat(*req.InsuranceAmount)
 	}
-	var buyNowPrice *decimal.Decimal
+	buyNowPrice := current.BuyNowPrice
 	if req.BuyNowPrice != nil {
 		b := decimal.NewFromFloat(*req.BuyNowPrice)
 		buyNowPrice = &b
 	}
 
-	var titleAr, titleFr, titleEn, descriptionAr, descriptionFr, descriptionEn string
+	titleAr, titleFr, titleEn := current.TitleAr, str(current.TitleFr), str(current.TitleEn)
+	descriptionAr, descriptionFr, descriptionEn := str(current.DescriptionAr), str(current.DescriptionFr), str(current.DescriptionEn)
 	if req.TitleAr != nil {
 		titleAr = *req.TitleAr
 	}
@@ -995,20 +1097,37 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 		descriptionEn = *req.DescriptionEn
 	}
 
-	var phoneContact string
+	phoneContact := str(current.PhoneContact)
 	if req.PhoneContact != nil {
 		phoneContact = *req.PhoneContact
 	}
+	itemDetails := current.ItemDetails
+	if req.ItemDetails != nil {
+		itemDetails = req.ItemDetails
+	}
+	condition, brand, videoURL := current.Condition, current.Brand, current.VideoURL
+	if req.Condition != nil {
+		condition = req.Condition
+	}
+	if req.Brand != nil {
+		brand = req.Brand
+	}
+	if req.VideoURL != nil {
+		videoURL = req.VideoURL
+	}
 
-	var quantity int = 1 // default
+	quantity := current.Quantity
+	if quantity < 1 {
+		quantity = 1
+	}
 	if req.Quantity != nil {
 		quantity = *req.Quantity
 	}
 
 	if err := h.service.UpdateAuction(c.Context(), id, userID, services.CreateAuctionInput{
 		CategoryID:      categoryID,
-		SubCategoryID:   req.SubCategoryID,
-		LocationID:      req.LocationID,
+		SubCategoryID:   subCategoryID,
+		LocationID:      locationID,
 		TitleAr:         titleAr,
 		TitleFr:         titleFr,
 		TitleEn:         titleEn,
@@ -1018,20 +1137,31 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 		StartPrice:      startPrice,
 		MinIncrement:    minIncrement,
 		InsuranceAmount: insuranceAmount,
-		EndTime:         *endTime,
+		EndTime:         endTime,
 		PhoneContact:    phoneContact,
-		ItemDetails:     req.ItemDetails,
+		ItemDetails:     itemDetails,
 		BuyNowPrice:     buyNowPrice,
 		Images:          []string{},
-		Condition:       req.Condition,
-		Brand:           req.Brand,
-		VideoURL:        req.VideoURL,
+		Condition:       condition,
+		Brand:           brand,
+		VideoURL:        videoURL,
 		Quantity:        quantity,
 	}); err != nil {
+		// Moderation lock (seller edit after bids / on a closed auction) is a
+		// 409, not a validation error.
+		if errors.Is(err, apperr.ErrAuctionHasBids) || errors.Is(err, apperr.ErrAuctionNotEditable) {
+			return MapError(c, h.logger, err)
+		}
 		return BadRequest(c, err.Error())
 	}
 
-	return OK(c, fiber.Map{"message": "Auction updated successfully"})
+	// Report the resulting status so the app can tell the seller when a live
+	// listing went back to admin review ("pending").
+	resp := fiber.Map{"message": "Auction updated successfully"}
+	if updated, _, getErr := h.service.GetByID(c.Context(), id); getErr == nil {
+		resp["status"] = updated.Status
+	}
+	return OK(c, resp)
 }
 
 // Delete - DELETE /api/v1/auctions/:id - Supprimer son enchère
