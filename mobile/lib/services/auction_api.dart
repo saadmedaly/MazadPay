@@ -374,6 +374,9 @@ class AuctionApi {
       );
       
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
+    } on ApiException catch (e) {
+      // Keep the server error code (e.g. auction_has_bids) for the caller.
+      return ApiResponse.error(e.message, code: e.code);
     } catch (e) {
       return ApiResponse.error(e.toString());
     }
