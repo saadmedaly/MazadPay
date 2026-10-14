@@ -96,6 +96,12 @@ type AuctionRepository interface {
 	GetStats(ctx context.Context) (int, int, int, error) // Total, Active, Pending
 	ListByUserBids(ctx context.Context, userID uuid.UUID) ([]models.Auction, error)
 	Update(ctx context.Context, a *models.Auction) error
+	// Seller-edit path (moderation lock): row-locks the auction inside tx and
+	// returns its fresh state plus whether any bid exists, then writes the
+	// edited fields and the resulting status in the same tx.
+	LockForSellerEditTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (*models.Auction, bool, error)
+	UpdateListingTx(ctx context.Context, tx *sqlx.Tx, a *models.Auction) error
+	UpdateStatusTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, status string) error
 	Delete(ctx context.Context, id uuid.UUID) error
 
 	// Images
@@ -944,6 +950,72 @@ func (r *auctionRepo) ListByUserBids(ctx context.Context, userID uuid.UUID) ([]m
         WHERE b.user_id = $1
         ORDER BY a.created_at DESC`, userID)
 	return auctions, err
+}
+
+// LockForSellerEditTx takes the auction row lock (SELECT ... FOR UPDATE) before
+// reading it, so a concurrent bid -- whose TryClaimBidTurn/UpdatePrice also
+// write this row -- is serialized against the edit: either the bid commits
+// first and the edit sees it (hasBids), or the edit commits first and the
+// bid's "WHERE status = 'active'" guard no longer matches.
+func (r *auctionRepo) LockForSellerEditTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (*models.Auction, bool, error) {
+	var lockedID uuid.UUID
+	if err := tx.GetContext(ctx, &lockedID, `SELECT id FROM auctions WHERE id = $1 FOR UPDATE`, id); err != nil {
+		return nil, false, err
+	}
+	a, err := r.findByIDInternal(ctx, tx, id)
+	if err != nil {
+		return nil, false, err
+	}
+	var hasBids bool
+	if err := tx.GetContext(ctx, &hasBids, `
+		SELECT a.last_bidder_id IS NOT NULL
+		    OR a.bidder_count > 0
+		    OR EXISTS (SELECT 1 FROM bids b WHERE b.auction_id = a.id)
+		FROM auctions a WHERE a.id = $1`, id); err != nil {
+		return nil, false, err
+	}
+	return a, hasBids, nil
+}
+
+// UpdateListingTx persists the seller-editable fields and the status decided
+// by the caller (pending re-approval or unchanged) in one statement.
+func (r *auctionRepo) UpdateListingTx(ctx context.Context, tx *sqlx.Tx, a *models.Auction) error {
+	itemDetailsJSON, _ := json.Marshal(a.ItemDetails)
+	_, err := tx.ExecContext(ctx, `
+		UPDATE auctions SET
+			category_id = $1,
+			location_id = $2,
+			title_ar = $3,
+			title_fr = $4,
+			title_en = $5,
+			description_ar = $6,
+			description_fr = $7,
+			description_en = $8,
+			start_price = $9,
+			min_increment = $10,
+			insurance_amount = $11,
+			start_time = $12,
+			end_time = $13,
+			phone_contact = $14,
+			buy_now_price = $15,
+			item_details = $16,
+			status = $17,
+			-- No bid yet: the displayed price follows the edited start price
+			-- (chk_auction_prices requires current_price >= start_price).
+			current_price = CASE WHEN last_bidder_id IS NULL AND bidder_count = 0 THEN $9 ELSE current_price END,
+			version = version + 1
+		WHERE id = $18`,
+		a.CategoryID, a.LocationID, a.TitleAr, a.TitleFr, a.TitleEn,
+		a.DescriptionAr, a.DescriptionFr, a.DescriptionEn,
+		a.StartPrice, a.MinIncrement, a.InsuranceAmount,
+		a.StartTime, a.EndTime, a.PhoneContact, a.BuyNowPrice, itemDetailsJSON,
+		a.Status, a.ID)
+	return err
+}
+
+func (r *auctionRepo) UpdateStatusTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, status string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE auctions SET status = $1, version = version + 1 WHERE id = $2`, status, id)
+	return err
 }
 
 func (r *auctionRepo) Update(ctx context.Context, a *models.Auction) error {

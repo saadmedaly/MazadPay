@@ -36,6 +36,10 @@ var (
 	// Enchères
 	ErrAuctionNotActive       = errors.New("auction_not_active")
 	ErrAuctionEnded           = errors.New("auction_ended")
+	// Seller edit lock: once an auction has a bid its public terms are frozen;
+	// ended/sold/cancelled auctions can never be edited by the seller.
+	ErrAuctionHasBids     = errors.New("auction_has_bids")
+	ErrAuctionNotEditable = errors.New("auction_not_editable")
 	ErrBidTooLow              = errors.New("bid_too_low")
 	ErrBidConflict            = errors.New("bid_conflict") // Optimistic lock → le client retry
 	ErrSelfBid                = errors.New("cannot_bid_own_auction")

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
@@ -725,6 +727,13 @@ func (h *AuctionHandler) handleMultipartImages(c *fiber.Ctx, auctionID, sellerID
 			zap.String("actual_seller", auction.SellerID.String()))
 		return Forbidden(c)
 	}
+	// Fail fast before uploading to R2; AddImages re-checks under the row lock.
+	switch {
+	case auction.Status != "pending" && auction.Status != "active":
+		return MapError(c, h.logger, apperr.ErrAuctionNotEditable)
+	case auction.Status == "active" && (auction.LastBidderID != nil || auction.BidderCount > 0):
+		return MapError(c, h.logger, apperr.ErrAuctionHasBids)
+	}
 
 	h.logger.Info("[handleMultipartImages] Auction ownership validated",
 		zap.String("auction_id", auctionID.String()))
@@ -1012,8 +1021,21 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 		return Unauthorized(c)
 	}
 
-	// Parse end_time if provided
-	var endTime *time.Time
+	// Partial update: the mobile edit screen sends only title, description and
+	// start_price. Any field absent from the body keeps its stored value
+	// (previously absent fields were zeroed and a missing end_time panicked).
+	current, _, err := h.service.GetByID(c.Context(), id)
+	if err != nil {
+		return MapError(c, h.logger, err)
+	}
+	str := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return *p
+	}
+
+	endTime := current.EndTime
 	if req.EndTime != nil && *req.EndTime != "" {
 		et, err := time.Parse(time.RFC3339, *req.EndTime)
 		if err != nil {
@@ -1022,15 +1044,23 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 				return BadRequest(c, "Invalid end_time format")
 			}
 		}
-		endTime = &et
+		endTime = et
 	}
 
-	// Convert optional fields to required CreateAuctionInput format
-	var categoryID int
+	categoryID := current.CategoryID
 	if req.CategoryID != nil {
 		categoryID = *req.CategoryID
 	}
-	var startPrice, minIncrement, insuranceAmount decimal.Decimal
+	subCategoryID := current.SubCategoryID
+	if req.SubCategoryID != nil {
+		subCategoryID = req.SubCategoryID
+	}
+	locationID := current.LocationID
+	if req.LocationID != nil {
+		locationID = req.LocationID
+	}
+
+	startPrice, minIncrement, insuranceAmount := current.StartPrice, current.MinIncrement, current.InsuranceAmount
 	if req.StartPrice != nil {
 		startPrice = decimal.NewFromFloat(*req.StartPrice)
 	}
@@ -1040,13 +1070,14 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 	if req.InsuranceAmount != nil {
 		insuranceAmount = decimal.NewFromFloat(*req.InsuranceAmount)
 	}
-	var buyNowPrice *decimal.Decimal
+	buyNowPrice := current.BuyNowPrice
 	if req.BuyNowPrice != nil {
 		b := decimal.NewFromFloat(*req.BuyNowPrice)
 		buyNowPrice = &b
 	}
 
-	var titleAr, titleFr, titleEn, descriptionAr, descriptionFr, descriptionEn string
+	titleAr, titleFr, titleEn := current.TitleAr, str(current.TitleFr), str(current.TitleEn)
+	descriptionAr, descriptionFr, descriptionEn := str(current.DescriptionAr), str(current.DescriptionFr), str(current.DescriptionEn)
 	if req.TitleAr != nil {
 		titleAr = *req.TitleAr
 	}
@@ -1066,20 +1097,37 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 		descriptionEn = *req.DescriptionEn
 	}
 
-	var phoneContact string
+	phoneContact := str(current.PhoneContact)
 	if req.PhoneContact != nil {
 		phoneContact = *req.PhoneContact
 	}
+	itemDetails := current.ItemDetails
+	if req.ItemDetails != nil {
+		itemDetails = req.ItemDetails
+	}
+	condition, brand, videoURL := current.Condition, current.Brand, current.VideoURL
+	if req.Condition != nil {
+		condition = req.Condition
+	}
+	if req.Brand != nil {
+		brand = req.Brand
+	}
+	if req.VideoURL != nil {
+		videoURL = req.VideoURL
+	}
 
-	var quantity int = 1 // default
+	quantity := current.Quantity
+	if quantity < 1 {
+		quantity = 1
+	}
 	if req.Quantity != nil {
 		quantity = *req.Quantity
 	}
 
 	if err := h.service.UpdateAuction(c.Context(), id, userID, services.CreateAuctionInput{
 		CategoryID:      categoryID,
-		SubCategoryID:   req.SubCategoryID,
-		LocationID:      req.LocationID,
+		SubCategoryID:   subCategoryID,
+		LocationID:      locationID,
 		TitleAr:         titleAr,
 		TitleFr:         titleFr,
 		TitleEn:         titleEn,
@@ -1089,20 +1137,31 @@ func (h *AuctionHandler) Update(c *fiber.Ctx) error {
 		StartPrice:      startPrice,
 		MinIncrement:    minIncrement,
 		InsuranceAmount: insuranceAmount,
-		EndTime:         *endTime,
+		EndTime:         endTime,
 		PhoneContact:    phoneContact,
-		ItemDetails:     req.ItemDetails,
+		ItemDetails:     itemDetails,
 		BuyNowPrice:     buyNowPrice,
 		Images:          []string{},
-		Condition:       req.Condition,
-		Brand:           req.Brand,
-		VideoURL:        req.VideoURL,
+		Condition:       condition,
+		Brand:           brand,
+		VideoURL:        videoURL,
 		Quantity:        quantity,
 	}); err != nil {
+		// Moderation lock (seller edit after bids / on a closed auction) is a
+		// 409, not a validation error.
+		if errors.Is(err, apperr.ErrAuctionHasBids) || errors.Is(err, apperr.ErrAuctionNotEditable) {
+			return MapError(c, h.logger, err)
+		}
 		return BadRequest(c, err.Error())
 	}
 
-	return OK(c, fiber.Map{"message": "Auction updated successfully"})
+	// Report the resulting status so the app can tell the seller when a live
+	// listing went back to admin review ("pending").
+	resp := fiber.Map{"message": "Auction updated successfully"}
+	if updated, _, getErr := h.service.GetByID(c.Context(), id); getErr == nil {
+		resp["status"] = updated.Status
+	}
+	return OK(c, resp)
 }
 
 // Delete - DELETE /api/v1/auctions/:id - Supprimer son enchère

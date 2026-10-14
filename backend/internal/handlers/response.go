@@ -239,6 +239,12 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 		// branch below and be misreported as a 500.
 		logger.Info("Bad request", logFields...)
 		return BadRequest(c, "Invalid request")
+	case "auction_has_bids":
+		logger.Info("Seller edit rejected: auction already has bids", logFields...)
+		return Fail(c, 409, "auction_has_bids", "لا يمكن تعديل مزاد تلقّى مزايدات")
+	case "auction_not_editable":
+		logger.Info("Seller edit rejected: auction no longer editable", logFields...)
+		return Fail(c, 409, "auction_not_editable", "لا يمكن تعديل هذا المزاد")
 	case "bid_conflict":
 		logger.Warn("Bid conflict occurred", logFields...)
 		return Fail(c, 409, "bid_conflict", "Bid conflict, please retry")

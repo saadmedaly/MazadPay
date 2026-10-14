@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -544,21 +545,6 @@ func (s *auctionService) Delete(ctx context.Context, id uuid.UUID) error {
 
 // UpdateAuction - Modifier son enchère avec validation du propriétaire
 func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID uuid.UUID, input CreateAuctionInput) error {
-	auction, err := s.auctionRepo.FindByID(ctx, id)
-	if err != nil {
-		return apperr.ErrNotFound
-	}
-
-	// Vérifier que l'utilisateur est le vendeur
-	if auction.SellerID != userID {
-		return apperr.ErrUnauthorized
-	}
-
-	// Ne permettre la modification que si l'enchère est en statut pending ou active
-	if auction.Status != "pending" && auction.Status != "active" {
-		return fmt.Errorf("can only update pending or active auctions")
-	}
-
 	// Vérifier que la catégorie existe
 	if input.CategoryID > 0 {
 		categories, err := s.auctionRepo.GetCategories(ctx)
@@ -618,6 +604,30 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 		phone = &input.PhoneContact
 	}
 
+	// Moderation lock: the row is locked for the rest of this tx so a bid
+	// cannot slip in between the "has bids?" check and the write.
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	current, hasBids, err := s.auctionRepo.LockForSellerEditTx(ctx, tx, id)
+	if err != nil {
+		return apperr.ErrNotFound
+	}
+
+	// Vérifier que l'utilisateur est le vendeur
+	if current.SellerID != userID {
+		return apperr.ErrUnauthorized
+	}
+
+	// Seuls les statuts pending et active sont modifiables par le vendeur
+	if current.Status != "pending" && current.Status != "active" {
+		return apperr.ErrAuctionNotEditable
+	}
+
+	auction := *current
 	auction.CategoryID = input.CategoryID
 	auction.SubCategoryID = input.SubCategoryID
 	auction.LocationID = input.LocationID
@@ -647,15 +657,33 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 	// all, so `input.Images` was ALWAYS empty on every real call reaching
 	// this function -- yet it used to unconditionally wipe existing
 	// auction_images rows and delete the corresponding R2 objects on every
-	// plain field edit (title, price, description, duration...). This is
-	// the confirmed root cause of an uploaded image being deleted from R2
-	// while its auction_images DB row could independently survive depending
-	// on call ordering relative to the upload. Only touch images at all when
-	// the caller actually supplied at least one non-empty URL -- image
-	// management belongs exclusively to POST /auctions/:id/images (AddImages).
-	// Same principle already used correctly by adminService.UpdateAuction's
-	// hasNewImages guard.
+	// plain field edit (title, price, description, duration...). Only touch
+	// images at all when the caller actually supplied at least one non-empty
+	// URL -- image management belongs exclusively to POST /auctions/:id/images
+	// (AddImages). Same principle already used correctly by
+	// adminService.UpdateAuction's hasNewImages guard.
 	hasNewImages := imagesUpdateIncludesNewURLs(input.Images)
+
+	changed := listingChangedFields(current, &auction)
+	if hasNewImages {
+		changed = append(changed, "images")
+	}
+	if len(changed) == 0 {
+		// Identical save (the app resends every field): nothing to write,
+		// status untouched.
+		return nil
+	}
+
+	resubmitted := false
+	if current.Status == "active" {
+		if hasBids {
+			return apperr.ErrAuctionHasBids
+		}
+		// A live listing whose public content changed goes back to admin
+		// review and leaves the public listings until re-approved.
+		auction.Status = "pending"
+		resubmitted = true
+	}
 
 	var existingImages []models.AuctionImage
 	if hasNewImages {
@@ -667,13 +695,7 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 		}
 	}
 
-	tx, err := s.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	if err := s.auctionRepo.Update(ctx, auction); err != nil {
+	if err := s.auctionRepo.UpdateListingTx(ctx, tx, &auction); err != nil {
 		return err
 	}
 
@@ -713,7 +735,12 @@ func (s *auctionService) UpdateAuction(ctx context.Context, id uuid.UUID, userID
 		}
 	}
 
-	s.emitAuctionEvent(auction, models.EventAuctionUpdated)
+	if resubmitted {
+		s.logResubmission(ctx, &auction, userID, changed)
+		s.emitAuctionEvent(&auction, models.EventAuctionStatusChanged)
+		return nil
+	}
+	s.emitAuctionEvent(&auction, models.EventAuctionUpdated)
 
 	return nil
 }
@@ -820,7 +847,14 @@ func (s *auctionService) IncrementViews(ctx context.Context, id uuid.UUID, userI
 }
 
 func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid.UUID, urls []string) error {
-	auction, err := s.auctionRepo.FindByID(ctx, auctionID)
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Same moderation lock as UpdateAuction: images are public listing content.
+	auction, hasBids, err := s.auctionRepo.LockForSellerEditTx(ctx, tx, auctionID)
 	if err != nil {
 		return apperr.ErrNotFound
 	}
@@ -828,11 +862,17 @@ func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid
 		return apperr.ErrUnauthorized
 	}
 
-	tx, err := s.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to start transaction: %w", err)
+	resubmitted := false
+	switch auction.Status {
+	case "pending":
+	case "active":
+		if hasBids {
+			return apperr.ErrAuctionHasBids
+		}
+		resubmitted = true
+	default:
+		return apperr.ErrAuctionNotEditable
 	}
-	defer tx.Rollback()
 
 	for i, url := range urls {
 		img := &models.AuctionImage{
@@ -845,12 +885,48 @@ func (s *auctionService) AddImages(ctx context.Context, auctionID, sellerID uuid
 			return fmt.Errorf("failed to save uploaded image URL to database: %w", err)
 		}
 	}
+	if resubmitted {
+		if err := s.auctionRepo.UpdateStatusTx(ctx, tx, auctionID, "pending"); err != nil {
+			return err
+		}
+		auction.Status = "pending"
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 
+	if resubmitted {
+		s.logResubmission(ctx, auction, sellerID, []string{"images"})
+		s.emitAuctionEvent(auction, models.EventAuctionStatusChanged)
+		return nil
+	}
 	s.emitAuctionEvent(auction, models.EventAuctionUpdated)
 	return nil
+}
+
+// logResubmission records a live listing sent back to admin review by a
+// seller edit. Only field names are logged, never their values.
+func (s *auctionService) logResubmission(ctx context.Context, auction *models.Auction, sellerID uuid.UUID, changed []string) {
+	if s.auditSvc == nil {
+		return
+	}
+	auctionID := auction.ID
+	details := fmt.Sprintf("old_status=active new_status=pending changed_fields=%s", strings.Join(changed, ","))
+	detailsJSON := models.JSONB{
+		"auction_id":     auctionID.String(),
+		"seller_id":      sellerID.String(),
+		"old_status":     "active",
+		"new_status":     "pending",
+		"changed_fields": changed,
+	}
+	if auditErr := s.auditSvc.Log(ctx, sellerID, "auction_resubmitted", "auction", &auctionID, details,
+		WithActorType("user"),
+		WithDetailsJSON(detailsJSON),
+	); auditErr != nil {
+		if s.logger != nil {
+			s.logger.Error("auction resubmission: failed to write audit log", zap.String("auction_id", auctionID.String()), zap.Error(auditErr))
+		}
+	}
 }
 
 // BuyNow (Bug J) validates preconditions, then performs the winner
