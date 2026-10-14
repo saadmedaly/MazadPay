@@ -9,6 +9,9 @@ class AppLocalizationsFr extends AppLocalizations {
   AppLocalizationsFr([String locale = 'fr']) : super(locale);
 
   @override
+  String get register_submit_button => 'Créer un compte';
+
+  @override
   String get text_1 => 'Accueil';
 
   @override
@@ -1560,4 +1563,72 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get error_too_many_requests =>
       'Trop de tentatives. Veuillez réessayer plus tard.';
+
+  @override
+  String get text_406 => 'Félicitations, vous avez remporté l\'enchère';
+
+  @override
+  String text_407(Object amount, Object title) {
+    return 'J\'ai remporté l\'enchère « $title » sur MazadPay pour $amount.';
+  }
+
+  @override
+  String get text_408 => 'Site web';
+
+  @override
+  String get text_409 => 'Impossible d\'ouvrir le lien';
+
+  @override
+  String get text_410 => 'enchère';
+
+  @override
+  String get text_411 => 'enchères';
+
+  @override
+  String get text_412 => 'Service Bankily';
+
+  @override
+  String get text_413 =>
+      'Entrez le numéro de la personne à qui envoyer le montant via le service Bankily';
+
+  @override
+  String get text_414 => 'Numéro du bénéficiaire';
+
+  @override
+  String get text_415 => 'Entrez le numéro de téléphone ou de compte bancaire';
+
+  @override
+  String get text_416 => 'Informations de retrait';
+
+  @override
+  String get text_417 => 'Montant à retirer';
+
+  @override
+  String get text_418 => 'Frais';
+
+  @override
+  String get text_419 => 'Gratuit';
+
+  @override
+  String get text_420 =>
+      'Le montant sera envoyé directement au numéro du bénéficiaire via le service Bankily.';
+
+  @override
+  String get text_421 => 'Envoyer le montant';
+
+  @override
+  String get text_422 => 'Veuillez entrer le numéro du bénéficiaire';
+
+  @override
+  String get text_423 => 'Solde insuffisant pour enchérir';
+
+  @override
+  String get text_424 =>
+      'Veuillez d\'abord recharger votre solde, puis réessayer.';
+
+  @override
+  String get text_425 => 'Recharger le solde';
+
+  @override
+  String get text_426 => 'Annuler';
 }

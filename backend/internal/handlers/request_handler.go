@@ -73,7 +73,11 @@ func (h *RequestHandler) CreateAuctionRequest(c *fiber.Ctx) error {
 		return MapError(c, h.logger, err)
 	}
 
-	return OK(c, fiber.Map{"message": "Auction request submitted successfully", "id": req.ID})
+	// subscription_fee (client feedback #4): stamped by CreateAuctionRequest
+	// (service) from the request's category before this response is built --
+	// authoritative, never client-supplied. Mobile uses this to display the
+	// correct amount (100/500 MRU) before payment-method selection.
+	return OK(c, fiber.Map{"message": "Auction request submitted successfully", "id": req.ID, "subscription_fee": req.SubscriptionFee})
 }
 
 // Create Banner Request (public endpoint for users)
@@ -87,12 +91,16 @@ func (h *RequestHandler) CreateBannerRequest(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return BadRequest(c, "Invalid request body")
 	}
+
+	// UserID is always the authenticated caller, never client-supplied -- assigned
+	// here, before validation (mirrors CreateAuctionRequest above), so
+	// validate:"required" on UserID sees the real value instead of the zero UUID.
+	req.ID = uuid.New()
+	req.UserID = userID
+
 	if err := h.validate.Struct(req); err != nil {
 		return BadRequest(c, err.Error())
 	}
-
-	req.ID = uuid.New()
-	req.UserID = userID
 
 	if err := h.svc.CreateBannerRequest(c.Context(), &req); err != nil {
 		return MapError(c, h.logger, err)
@@ -319,7 +327,28 @@ func (h *RequestHandler) AdminUpdateAuctionRequest(c *fiber.Ctx) error {
 		return BadRequest(c, err.Error())
 	}
 
-	if err := h.svc.AdminUpdateAuctionRequest(c.Context(), id, &req); err != nil {
+	// Insurance policy (migration 000048): parsed separately, as a pointer,
+	// specifically to distinguish "insurance_policy omitted from the JSON
+	// body" (nil) from "explicitly present" -- a plain string field on
+	// models.AuctionRequest can't express that distinction (BodyParser leaves
+	// a missing string field at its zero value "", indistinguishable from an
+	// explicit empty string). Client feedback requirement: omitting the field
+	// from an update payload must PRESERVE the existing value, never silently
+	// reset a "not_required" request back to "required".
+	var policyBody struct {
+		InsurancePolicy *string `json:"insurance_policy"`
+	}
+	if err := c.BodyParser(&policyBody); err != nil {
+		return BadRequest(c, "Invalid request body")
+	}
+	if policyBody.InsurancePolicy != nil {
+		v := *policyBody.InsurancePolicy
+		if v != models.InsurancePolicyRequired && v != models.InsurancePolicyNotRequired {
+			return BadRequest(c, "insurance_policy must be 'required' or 'not_required'")
+		}
+	}
+
+	if err := h.svc.AdminUpdateAuctionRequest(c.Context(), id, &req, policyBody.InsurancePolicy); err != nil {
 		return MapError(c, h.logger, err)
 	}
 

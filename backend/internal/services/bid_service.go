@@ -74,6 +74,24 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 			return apperr.ErrBidTooLow
 		}
 
+		// 2c. No-consecutive-self-bids (Customer #38, replacing the old
+		// permanent "one bid per user ever" rule from client feedback #19):
+		// a user cannot place two bids in a row -- they may bid again once
+		// someone ELSE has bid in between. TryClaimBidTurn is a single
+		// atomic UPDATE ... WHERE (last_bidder_id IS DISTINCT FROM $userID)
+		// ... RETURNING, so this is race-safe the same way
+		// TrySetWinnerAtomically is: the WHERE clause itself is the
+		// concurrency guard, not a prior SELECT. Placed before the
+		// insurance/wallet work below so a doomed consecutive bid never
+		// needlessly touches the wallet.
+		claimed, err := s.auctionRepo.TryClaimBidTurn(ctx, tx, auctionID, userID)
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return apperr.ErrDuplicateBidder
+		}
+
 		// 2b. Country-scoped market check (migration 000046, V1) — the bidder and
 		// the auction MUST belong to the same market (account_country_iso ==
 		// market_country_iso). Checked by COUNTRY, never by currency alone: two
@@ -91,40 +109,82 @@ func (s *bidService) PlaceBid(ctx context.Context, auctionID, userID uuid.UUID, 
 		// (durci suite à un contournement constaté en production : tous les auctions actifs
 		// avaient insurance_amount = 0, ce qui désactivait complètement la protection).
 		//
-		// Nouvelle règle stricte : aucune mise sans caution définie. Si insurance_amount
-		// <= 0, l'enchère est refusée (l'auction doit être corrigé côté admin/création,
-		// voir CreateAuction/ValidateAuction). Il n'y a plus de "compatibilité silencieuse"
-		// avec les auctions à caution nulle.
-		if !auction.InsuranceAmount.GreaterThan(decimal.Zero) {
-			return apperr.ErrInsuranceNotSet
-		}
+		// Règle stricte inchangée pour toute enchère "required" (politique par défaut,
+		// voir Auction.InsuranceRequired -- défaut à true pour toute valeur vide/legacy) :
+		// aucune mise sans caution définie. Si insurance_amount <= 0, l'enchère est
+		// refusée. Il n'y a toujours aucune "compatibilité silencieuse" avec une caution
+		// nulle par accident ou absence de configuration.
+		//
+		// Insurance policy (migration 000048) : SEULE une politique "not_required"
+		// explicitement choisie par un admin (jamais un défaut, jamais un état
+		// accidentel -- voir AdminUpdateAuctionRequest/ReviewAuctionRequest) permet de
+		// sauter entièrement ce bloc. Dans ce cas, la mise est acceptée sans aucune
+		// caution gelée : la protection financière V03 (avoir "quelque chose à perdre")
+		// est délibérément absente pour cette enchère précise, par décision explicite de
+		// l'admin -- ce n'est PAS le même invariant de sécurité qu'une enchère "required",
+		// et ne doit jamais être présenté comme équivalent.
+		if auction.InsuranceRequired() {
+			if !auction.InsuranceAmount.GreaterThan(decimal.Zero) {
+				return apperr.ErrInsuranceNotSet
+			}
 
-		existingHold, err := s.walletRepo.FindActiveHold(ctx, tx, userID, auctionID)
-		if err != nil && err != sql.ErrNoRows {
-			return err
-		}
-		if existingHold == nil {
-			wallet, err := s.walletRepo.FindForUpdate(ctx, tx, userID)
-			if err != nil {
+			existingHold, err := s.walletRepo.FindActiveHold(ctx, tx, userID, auctionID)
+			if err != nil && err != sql.ErrNoRows {
 				return err
 			}
-			// Defense-in-depth (migration 000046): the wallet's currency must
-			// match the auction's currency before any freeze/comparison. Should
-			// never trigger in practice given the ErrCrossMarketBid check above
-			// (a wallet is always denominated in its owner's account market's
-			// currency), but verified explicitly per financial-safety
-			// requirements rather than assumed.
-			if wallet.EffectiveCurrencyCode() != auction.EffectiveCurrencyCode() {
-				return apperr.ErrWalletCurrencyMismatch
-			}
-			if wallet.Balance.LessThan(auction.InsuranceAmount) {
-				return apperr.ErrInsufficientForInsurance
-			}
-			if err := s.walletRepo.DebitFreezeBalance(ctx, tx, userID, auction.InsuranceAmount, wallet.Version); err != nil {
-				return err
-			}
-			if err := s.walletRepo.CreateHold(ctx, tx, userID, auctionID, auction.InsuranceAmount); err != nil {
-				return err
+			if existingHold == nil {
+				// Security Gate follow-up: a bidder with no wallets row at all
+				// (never funded/deposited) previously fell straight into
+				// FindForUpdate's generic ErrNotFound -- which MapError renders
+				// as a misleading "Resource not found" 404 for what is really
+				// an insufficient-funds case (having zero rows is
+				// indistinguishable, financially, from having a 0 balance).
+				// Live-reproduced on Validation: an eligible, correctly
+				// market-matched, non-owner bidder with no wallet row got 404
+				// on a real active auction they could GET fine, instead of the
+				// same 422 insufficient_for_insurance a funded-but-empty
+				// wallet correctly gets two branches below. Translating
+				// ErrNotFound to ErrInsufficientForInsurance here fixes only
+				// this specific bid-time wallet lookup -- it does not touch
+				// MapError's generic resource_not_found/auction_not_found
+				// mapping (used by many unrelated endpoints), does not alter
+				// any anti-enumeration 404 elsewhere, and does not change
+				// FindForUpdate's contract for any other caller.
+				wallet, err := s.walletRepo.FindForUpdate(ctx, tx, userID)
+				if err != nil {
+					if err == apperr.ErrNotFound {
+						return apperr.ErrInsufficientForInsurance
+					}
+					return err
+				}
+				// Defense-in-depth (migration 000046): the wallet's currency must
+				// match the auction's currency before any freeze/comparison. Should
+				// never trigger in practice given the ErrCrossMarketBid check above
+				// (a wallet is always denominated in its owner's account market's
+				// currency), but verified explicitly per financial-safety
+				// requirements rather than assumed.
+				if wallet.EffectiveCurrencyCode() != auction.EffectiveCurrencyCode() {
+					return apperr.ErrWalletCurrencyMismatch
+				}
+				// MAZADPAY -- admin wallet controls: a wallet an admin has
+				// disabled (migration 000058) must reject a new insurance
+				// freeze/bid attempt regardless of its balance. Checked here
+				// (first real spend gate in the bid path) rather than at
+				// PlaceBid's entry, so a bidder with an existing active hold
+				// on THIS auction (existingHold != nil, no new freeze
+				// needed) is unaffected -- disabling only blocks NEW spend.
+				if wallet.IsDisabled {
+					return apperr.ErrWalletDisabled
+				}
+				if wallet.Balance.LessThan(auction.InsuranceAmount) {
+					return apperr.ErrInsufficientForInsurance
+				}
+				if err := s.walletRepo.DebitFreezeBalance(ctx, tx, userID, auction.InsuranceAmount, wallet.Version); err != nil {
+					return err
+				}
+				if err := s.walletRepo.CreateHold(ctx, tx, userID, auctionID, auction.InsuranceAmount); err != nil {
+					return err
+				}
 			}
 		}
 

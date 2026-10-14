@@ -55,6 +55,14 @@ func (h *WalletHandler) Deposit(c *fiber.Ctx) error {
 		Gateway          string  `json:"gateway" validate:"required"`
 		PaymentMethod    string  `json:"payment_method"` // masrvi, bankily, sedad, click, etc.
 		ReceiptImageTemp string  `json:"receipt_image_temp"` // Image uploadée avant validation
+		// AuctionRequestID (client feedback #4 financial-integrity round):
+		// optional. When present, this deposit pays a specific auction
+		// request's subscription fee -- the service IGNORES Amount above and
+		// substitutes that request's authoritative, server-stamped
+		// subscription_fee, after verifying the caller owns the request.
+		// Omitted/empty preserves the original generic wallet-top-up
+		// behavior exactly (Amount trusted as-is).
+		AuctionRequestID string `json:"auction_request_id"`
 	}
 	var req Request
 	if err := c.BodyParser(&req); err != nil {
@@ -70,14 +78,23 @@ func (h *WalletHandler) Deposit(c *fiber.Ctx) error {
 		return BadRequest(c, "Gateway is required")
 	}
 
+	var auctionRequestID *uuid.UUID
+	if req.AuctionRequestID != "" {
+		id, err := uuid.Parse(req.AuctionRequestID)
+		if err != nil {
+			return BadRequest(c, "Invalid auction_request_id")
+		}
+		auctionRequestID = &id
+	}
+
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return Unauthorized(c)
 	}
 	amount := decimal.NewFromFloat(req.Amount)
-	tx, err := h.svc.InitiateDeposit(c.Context(), userID, amount, req.Gateway, req.PaymentMethod, req.ReceiptImageTemp)
+	tx, err := h.svc.InitiateDeposit(c.Context(), userID, amount, req.Gateway, req.PaymentMethod, req.ReceiptImageTemp, auctionRequestID)
 	if err != nil {
-		return InternalError(c, "Failed to initiate deposit")
+		return MapError(c, h.logger, err)
 	}
 	return OK(c, tx)
 }
@@ -223,8 +240,9 @@ func (h *WalletHandler) GetReceiptURL(c *fiber.Ctx) error {
 
 func (h *WalletHandler) Withdraw(c *fiber.Ctx) error {
 	type Request struct {
-		Amount  float64 `json:"amount"`
-		Gateway string  `json:"gateway"`
+		Amount             float64 `json:"amount"`
+		Gateway            string  `json:"gateway"`
+		BeneficiaryAccount string  `json:"beneficiary_account"`
 	}
 	var req Request
 	if err := c.BodyParser(&req); err != nil {
@@ -242,7 +260,7 @@ func (h *WalletHandler) Withdraw(c *fiber.Ctx) error {
 		return Unauthorized(c)
 	}
 	amount := decimal.NewFromFloat(req.Amount)
-	tx, err := h.svc.RequestWithdraw(c.Context(), userID, amount, req.Gateway)
+	tx, err := h.svc.RequestWithdraw(c.Context(), userID, amount, req.Gateway, req.BeneficiaryAccount)
 	if err != nil {
 		return InternalError(c, err.Error())
 	}

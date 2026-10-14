@@ -20,6 +20,18 @@ type Wallet struct {
 	// wallets in this release). Nullable for wallets created before migration
 	// 000046; EffectiveCurrencyCode below is the fallback-aware accessor.
 	CurrencyCode *string `db:"currency_code" json:"currency_code,omitempty"`
+	// IsDisabled (migration 000058, admin wallet controls): admin-set status
+	// flag, orthogonal to FrozenAmount. FrozenAmount tracks a QUANTITY
+	// temporarily earmarked for one specific pending withdrawal/bid-insurance
+	// hold; IsDisabled means the wallet's entire (unfrozen) Balance must also
+	// reject new spend attempts (bidding, withdrawal requests) regardless of
+	// amount, until an admin re-enables it. Admin credit/debit are
+	// deliberately NOT gated by this flag -- an admin must always be able to
+	// correct a disabled wallet's balance.
+	IsDisabled     bool       `db:"is_disabled"     json:"is_disabled"`
+	DisabledReason *string    `db:"disabled_reason" json:"disabled_reason,omitempty"`
+	DisabledBy     *uuid.UUID `db:"disabled_by"     json:"disabled_by,omitempty"`
+	DisabledAt     *time.Time `db:"disabled_at"     json:"disabled_at,omitempty"`
 }
 
 // EffectiveCurrencyCode falls back to DefaultCurrencyCode for wallets
@@ -76,6 +88,16 @@ type Transaction struct {
 	UserPhone        *string          `db:"user_phone"         json:"user_phone,omitempty"`
 	Description      *string          `db:"description"        json:"description"`
 	FailureReason    *string          `db:"failure_reason"     json:"failure_reason"`
+	// BeneficiaryAccount (Customer #34): the phone/account number a withdrawal
+	// should be sent to (e.g. via Bankily "خدمة بنكية"). Nil for deposits and
+	// for any withdrawal predating migration 000053.
+	BeneficiaryAccount *string `db:"beneficiary_account" json:"beneficiary_account,omitempty"`
+	// AdminAttachmentURL (Customer #36): an optional review-evidence image the
+	// ADMIN attaches while approving/rejecting -- distinct from ReceiptURL
+	// (the USER's own deposit proof). Uploaded via the public admin upload
+	// endpoint (same as banners), so unlike ReceiptURL it's safe to expose
+	// directly in JSON.
+	AdminAttachmentURL *string `db:"admin_attachment_url" json:"admin_attachment_url,omitempty"`
 	CreatedAt        time.Time        `db:"created_at"         json:"created_at"`
 	// CurrencyCode (migration 000046): stamped at transaction-creation time from
 	// the wallet's currency, so this historical record remains correctly

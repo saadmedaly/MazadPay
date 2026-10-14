@@ -18,4 +18,15 @@ type AdminHub interface {
 	BroadcastRequestUpdated(payload models.RequestUpdatedPayload)
 }
 
+// GlobalHub -- Customer Request #20's mobile-wide invalidation channel
+// interface (see internal/websocket/global_hub.go for the concrete
+// implementation). Interfaced the same way as AuctionHub/AdminHub above so
+// adminService/auctionService/contentService stay unit-testable with a
+// no-op double, without needing a real *ws.GlobalHub.
+type GlobalHub interface {
+	Broadcast(event models.GlobalWSEvent)
+	BroadcastAuctionEvent(marketCountryISO string, event models.GlobalWSEvent)
+	BroadcastToUser(userID string, event models.GlobalWSEvent)
+}
+
 

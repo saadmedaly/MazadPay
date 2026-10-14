@@ -9,6 +9,9 @@ class AppLocalizationsAr extends AppLocalizations {
   AppLocalizationsAr([String locale = 'ar']) : super(locale);
 
   @override
+  String get register_submit_button => 'إنشاء الحساب';
+
+  @override
   String get text_1 => 'الرئيسية';
 
   @override
@@ -35,8 +38,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'المزادات الرقمية: مزايدة على السيارات والعقارات والإلكترونيات ومختلف المنتجات بكل موثوقية.';
 
   @override
-  String get text_9 =>
-      'خدمات التوصيل: توصيل الطعام، المياه، خدمات المجاري، نقل الأشخاص، شحن البضائع، الشحن من الخارج إلى موريتانيا، ونقل السيارات والشاحنات.';
+  String get text_9 => '';
 
   @override
   String get text_10 => '';
@@ -1566,4 +1568,71 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get error_too_many_requests =>
       'محاولات كثيرة جدا. يرجى المحاولة مرة أخرى في وقت لاحق.';
+
+  @override
+  String get text_406 => 'مبروك، ربحت المزاد';
+
+  @override
+  String text_407(Object amount, Object title) {
+    return 'لقد فزت بالمزاد «$title» على MazadPay بسعر $amount.';
+  }
+
+  @override
+  String get text_408 => 'الموقع الإلكتروني';
+
+  @override
+  String get text_409 => 'تعذّر فتح الرابط';
+
+  @override
+  String get text_410 => 'مزايدة';
+
+  @override
+  String get text_411 => 'مزايدات';
+
+  @override
+  String get text_412 => 'خدمة بنكية';
+
+  @override
+  String get text_413 =>
+      'أدخل رقم الشخص الذي تريد إرسال مبلغ السحب إليه عبر خدمة بنكية';
+
+  @override
+  String get text_414 => 'رقم المستفيد';
+
+  @override
+  String get text_415 => 'أدخل رقم الهاتف أو الحساب البنكي';
+
+  @override
+  String get text_416 => 'معلومات السحب';
+
+  @override
+  String get text_417 => 'المبلغ المطلوب سحبه';
+
+  @override
+  String get text_418 => 'الرسوم';
+
+  @override
+  String get text_419 => 'مجانية';
+
+  @override
+  String get text_420 =>
+      'سيتم إرسال المبلغ مباشرة إلى رقم المستفيد عبر خدمة بنكية.';
+
+  @override
+  String get text_421 => 'إرسال المبلغ';
+
+  @override
+  String get text_422 => 'يرجى إدخال رقم المستفيد';
+
+  @override
+  String get text_423 => 'رصيدك غير كافٍ للمزايدة';
+
+  @override
+  String get text_424 => 'يرجى شحن رصيدك أولًا ثم إعادة المحاولة.';
+
+  @override
+  String get text_425 => 'شحن الرصيد';
+
+  @override
+  String get text_426 => 'إلغاء';
 }

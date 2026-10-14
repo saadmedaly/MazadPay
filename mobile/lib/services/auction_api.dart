@@ -33,14 +33,57 @@ class AuctionApi {
         '/auctions',
         queryParameters: queryParams,
       );
- 
+
       final List<dynamic> auctionList = response?['data'] ?? [];
       return ApiResponse.success(auctionList);
     } catch (e) {
       return ApiResponse.error(e.toString());
     }
   }
-  
+
+  /// Customer feedback #12 (restore Active/Ended selector): same request as
+  /// getAuctions(), but also surfaces the real "total" GET /auctions now
+  /// returns (backend/internal/handlers/auction_handler.go List) -- needed
+  /// for the Active/Ended tab counts, which must reflect the true total
+  /// matching the filter, not just the current page's length. A separate
+  /// method rather than changing getAuctions()'s return shape, since three
+  /// other pages already call getAuctions() and only expect the plain list.
+  Future<ApiResponse<Map<String, dynamic>>> getAuctionsWithTotal({
+    int page = 1,
+    int limit = 20,
+    String? categoryId,
+    String? locationId,
+    String? status,
+    int? minPrice,
+    int? maxPrice,
+    String? sortBy,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+      };
+
+      if (categoryId != null) queryParams['category_id'] = categoryId;
+      if (locationId != null) queryParams['location_id'] = locationId;
+      if (status != null) queryParams['status'] = status;
+      if (minPrice != null) queryParams['min_price'] = minPrice;
+      if (maxPrice != null) queryParams['max_price'] = maxPrice;
+      if (sortBy != null) queryParams['sort_by'] = sortBy;
+
+      final response = await _apiService.get<Map<String, dynamic>>(
+        '/auctions',
+        queryParameters: queryParams,
+      );
+
+      final List<dynamic> auctionList = response?['data'] ?? [];
+      final int total = (response?['total'] as num?)?.toInt() ?? auctionList.length;
+      return ApiResponse.success({'auctions': auctionList, 'total': total});
+    } catch (e) {
+      return ApiResponse.error(e.toString());
+    }
+  }
+
   /// Récupérer les détails d'une enchère
   Future<ApiResponse<Map<String, dynamic>>> getAuctionById(String id) async {
     try {
@@ -83,13 +126,26 @@ class AuctionApi {
   }
 
   /// Récupérer les enchères gagnées par l'utilisateur
-  Future<ApiResponse<Map<String, dynamic>>> getMyWinnings() async {
+  ///
+  /// Bug L fix: GET /users/me/winnings returns `data` as a raw JSON array
+  /// (backend/internal/handlers/user_handler.go MyWinnings -> OK(c, auctions),
+  /// auctions being a slice of models.Auction), never {"auctions": [...]} or
+  /// {"data": [...]} nested inside another object -- same wire shape as
+  /// getAuctions() below. ApiResponse of Map (String, dynamic) .fromJson used
+  /// to assign that array to a field declared/expected as a Map, which threw
+  /// a runtime type error inside the try block (a List is not a subtype of a
+  /// Map) on every single call, silently caught below and returned as
+  /// ApiResponse.error -- so my_winnings_page.dart's `else` branch (API
+  /// failed, no cache yet) always rendered the "no winnings yet" empty state
+  /// instead of the real data, regardless of whether the backend had
+  /// actually finalized a win.
+  Future<ApiResponse<List<dynamic>>> getMyWinnings() async {
     try {
       final response = await _apiService.get<Map<String, dynamic>>(
         '/users/me/winnings',
       );
-      
-      return ApiResponse<Map<String, dynamic>>.fromJson(response);
+
+      return ApiResponse<List<dynamic>>.fromJson(response);
     } catch (e) {
       return ApiResponse.error(e.toString());
     }
@@ -190,10 +246,18 @@ class AuctionApi {
           'amount': amount,
         },
       );
-      
+
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      // MAZADPAY insufficient-balance bid UX: ApiException.toString() only
+      // returns .message, never .code, so the backend's structured error
+      // code (e.g. "insufficient_for_insurance") was silently discarded
+      // here -- ApiResponse.error() then defaulted code to the generic
+      // 'error' string, leaving bidPlacementErrorMessage() (bid_action_sheet.dart)
+      // nothing to match on but the Arabic message text. Passing the real
+      // code through when available lets that matching happen reliably.
+      final code = e is ApiException ? e.code : null;
+      return ApiResponse.error(e.toString(), code: code);
     }
   }
   
@@ -310,6 +374,9 @@ class AuctionApi {
       );
       
       return ApiResponse<Map<String, dynamic>>.fromJson(response);
+    } on ApiException catch (e) {
+      // Keep the server error code (e.g. auction_has_bids) for the caller.
+      return ApiResponse.error(e.message, code: e.code);
     } catch (e) {
       return ApiResponse.error(e.toString());
     }

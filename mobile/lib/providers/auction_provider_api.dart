@@ -12,9 +12,24 @@ part 'auction_provider_api.g.dart';
 @riverpod
 class AuctionNotifierApi extends _$AuctionNotifierApi {
   final AuctionApi _auctionApi = AuctionApi();
-  
+  // Customer #20 hardening (out-of-order response guard): build() is called
+  // again on every ref.invalidate(auctionNotifierApiProvider(id)) (e.g. the
+  // realtime auction.updated handler in auction_details_page.dart) --
+  // Riverpod tears down and replaces THIS notifier instance when that
+  // happens, but a _refreshInBackground call already in flight from the
+  // PREVIOUS instance is a bare async function with no cancellation of its
+  // own; without this flag its `state = AsyncValue.data(auction)` could
+  // still land after the new instance's own build() already produced fresh
+  // state, silently reverting the UI to older data. Set via ref.onDispose,
+  // which Riverpod calls synchronously when this exact instance is
+  // superseded/disposed -- guarantees the flag is set before any new
+  // instance's own state can be observed as stale by this old one.
+  bool _disposed = false;
+
   @override
   Future<Auction> build(String id) async {
+    ref.onDispose(() => _disposed = true);
+
     // 1. Essayer de charger depuis le cache d'abord (Immédiat)
     final cachedData = await CacheService.instance.getCachedAuctionDetail(id);
     if (cachedData != null) {
@@ -33,6 +48,11 @@ class AuctionNotifierApi extends _$AuctionNotifierApi {
   Future<void> _refreshInBackground(String id) async {
     try {
       final auction = await _fetchFromApi(id);
+      // Out-of-order guard: if this exact notifier instance was already
+      // superseded (e.g. by a realtime-triggered invalidate that started
+      // and finished its OWN fresh fetch while this older background
+      // refresh was still in flight), never let this stale result win.
+      if (_disposed) return;
       state = AsyncValue.data(auction);
     } catch (e) {
       // Silencieux car on a déjà les données du cache
@@ -129,7 +149,19 @@ class AuctionNotifierApi extends _$AuctionNotifierApi {
       if (!response.success) {
         // 3. Revenir en arrière si erreur
         state = previousState;
-        throw Exception(response.message ?? 'Failed to place bid');
+        // MAZADPAY insufficient-balance bid UX: previously threw only
+        // response.message (the human-readable Arabic text), discarding
+        // response.error?.code entirely. bidPlacementErrorMessage
+        // (bid_action_sheet.dart) matches on substrings of the thrown
+        // exception's toString(), so the machine code (e.g.
+        // "insufficient_for_insurance") must be present in that string for
+        // matching to work reliably -- prepending it here (falling back to
+        // the message alone if no code is available) preserves the
+        // existing display text (still included) while making the code
+        // matchable.
+        final code = response.error?.code;
+        final message = response.message ?? 'Failed to place bid';
+        throw Exception(code != null ? '$code: $message' : message);
       }
       
       // 4. Mettre à jour le cache
@@ -152,13 +184,17 @@ class AuctionNotifierApi extends _$AuctionNotifierApi {
     return Auction.fromJson(data);
   }
   
-  /// Enchère par défaut en cas d'erreur
+  /// Enchère par défaut en cas d'erreur. Currently unused (dead code -- no
+  /// call site references it), but fixed regardless per client feedback:
+  /// Bug H, since its name and doc comment mark it explicitly as an
+  /// auction-image fallback: imageUrls must never contain a fake stock
+  /// photo (e.g. assets/corolla.png) standing in for a real auction image.
   Auction _getDefaultAuction(String id) {
     return Auction(
       id: id,
       title: 'Chargement...',
       description: '',
-      imageUrls: ['assets/corolla.png'],
+      imageUrls: const [],
       startPrice: 0,
       currentPrice: 0,
       minIncrement: 500,
@@ -217,8 +253,21 @@ class AuctionHistoryApi extends _$AuctionHistoryApi {
       parsedAmount = amountValue.toDouble();
     }
     
+    // Bug M fix: the backend now sends '' (never SQL NULL, which used to
+    // fail the whole history query's row scan) when neither the bid's own
+    // bidder_name nor the joined user's full_name is set -- treat an empty
+    // string the same as a missing/null field, falling back to the existing
+    // 'Unknown' convention rather than rendering a blank name.
+    final rawBidderName = data['bidder_name'] as String?;
+    final rawUserName = data['user_name'] as String?;
+    final bidderName = (rawBidderName != null && rawBidderName.isNotEmpty)
+        ? rawBidderName
+        : (rawUserName != null && rawUserName.isNotEmpty)
+            ? rawUserName
+            : 'Unknown';
+
     return BidEntry(
-      bidderName: data['bidder_name'] ?? data['user_name'] ?? 'Unknown',
+      bidderName: bidderName,
       phoneNumber: data['bidder_phone'] ?? data['phone'] ?? '',
       amount: parsedAmount,
       timestamp: data['created_at'] != null

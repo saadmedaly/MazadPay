@@ -37,6 +37,10 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	// Hub
 	hub := ws.NewHub(logger)
 	adminHub := ws.NewAdminHub(logger)
+	// Customer Request #20: authenticated mobile-wide channel for
+	// list/content invalidation events (auction.created, faq.updated,
+	// banner.updated, category.updated, ...) -- see internal/websocket/global_hub.go.
+	globalHub := ws.NewGlobalHub(logger)
 
 	// Media service for R2 uploads (must be created before auctionSvc and adminSvc)
 	mediaSvc := services.NewMediaService(cfg, logger)
@@ -46,18 +50,18 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	smsSvc := services.NewSMSService(cfg.Wablas.Token, cfg.Wablas.SecretKey, cfg.Wablas.ServerURL, logger)
 	authSvc := services.NewAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours, cfg.App.Env, cfg.App.DevOTPCode, smsSvc, 4, cfg.Redis.OTPTTLMinutes, rdb, logger)
 	auditSvc := services.NewAuditService(auditRepo)
-	auctionSvc := services.NewAuctionService(db, auctionRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger)
+	auctionSvc := services.NewAuctionService(db, auctionRepo, bidRepo, reportRepo, notifSvc, userRepo, mediaSvc, rdb, walletRepo, auditSvc, logger, globalHub)
 	bidSvc := services.NewBidService(db, auctionRepo, bidRepo, walletRepo, userRepo, notifSvc, hub)
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
-	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
-	walletSvc := services.NewWalletService(db, walletRepo, txRepo, notifSvc, auditSvc, logger)
-	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc)
-	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger)
+	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours, globalHub, walletRepo)
+	walletSvc := services.NewWalletService(db, walletRepo, txRepo, reqRepo, userRepo, notifSvc, auditSvc, logger)
+	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc, globalHub)
+	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger, globalHub)
 	reportSvc := services.NewReportService(txRepo)
 
 
 	// Create and start auction scheduler for notifications
-	auctionScheduler := services.NewAuctionScheduler(auctionRepo, notifSvc, userRepo, rdb, logger)
+	auctionScheduler := services.NewAuctionScheduler(auctionRepo, auctionSvc, logger)
 
 	// New services from migration 000031
 	paymentMethodSvc := services.NewPaymentMethodService(db)
@@ -78,6 +82,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	wsHandler := handlers.NewWSHandler(hub, authSvc, auctionRepo, userRepo, logger)
 
 	adminWSHandler := handlers.NewAdminWSHandler(adminHub, cfg.JWT.Secret, logger)
+	globalWSHandler := handlers.NewGlobalWSHandler(globalHub, authSvc, userRepo, logger)
 	bidHandler := handlers.NewBidHandler(bidSvc, auctionRepo, userRepo, logger)
 	userHandler := handlers.NewUserHandler(userSvc, logger)
 	adminHandler := handlers.NewAdminHandler(adminSvc, reportSvc, logger, rdb)
@@ -109,6 +114,10 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	app.Use("/ws/admin", adminWSHandler.UpgradeMiddleware())
 	app.Get("/ws/admin", websocket.New(adminWSHandler.HandleAdmin))
 
+	// Customer Request #20: authenticated mobile-wide channel
+	app.Use("/ws/global", globalWSHandler.UpgradeMiddleware())
+	app.Get("/ws/global", websocket.New(globalWSHandler.HandleGlobal))
+
 	// Routes registration
 	setupAuthRoutes(api, authSvc, adminHandler, rdb, cfg, logger)
 	setupAuthRoutesV2(apiV2, authSvc, rdb, cfg, logger)
@@ -117,7 +126,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	setupAdminRoutes(api, adminHandler, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupBannerRoutes(api, bannerHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupContentRoutes(api, contentHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
-	setupNotificationRoutes(api, notifHandler, cfg.JWT.Secret, logger, rdb)
+	setupNotificationRoutes(api, notifHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupRequestRoutes(api, reqHandler, cfg.JWT.Secret, logger, auditRepo, rdb, cfg, mediaSvc)
 	// New routes
 	setupPaymentMethodRoutes(api, paymentMethodHandler, cfg.JWT.Secret, logger, rdb)
@@ -172,7 +181,13 @@ func setupAuthRoutes(api fiber.Router, authSvc services.AuthService, adminHandle
 
 	// Protected routes
 	auth.Post("/logout", jwtMiddleware, h.Logout)
-	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
+	// Client feedback Phase B item 6: change-password had no rate limit at all
+	// (contrast with login/register/reset-password above, all rate-limited by
+	// phone+IP) -- a logged-in attacker with a stolen JWT could otherwise brute
+	// force old_pin unthrottled. RateLimitByUser mirrors the pattern already
+	// used for deposit/withdraw/receipt (see setupWalletRoutes).
+	changePasswordRateLimit := middleware.RateLimitByUser(rdb, 3600, 5, logger, true, "")
+	auth.Put("/change-password", jwtMiddleware, changePasswordRateLimit, h.ChangePassword)
 }
 
 // setupAuthRoutesV2 enregistre le contrat d'authentification STRICT (country_iso
@@ -200,7 +215,8 @@ func setupAuthRoutesV2(api fiber.Router, authSvc services.AuthService, rdb *redi
 	auth.Post("/reset-password", rateLimitByIP, rateLimitByPhone, h.ResetPassword)
 
 	auth.Post("/logout", jwtMiddleware, h.Logout)
-	auth.Put("/change-password", jwtMiddleware, h.ChangePassword)
+	changePasswordRateLimit := middleware.RateLimitByUser(rdb, 3600, 5, logger, true, "")
+	auth.Put("/change-password", jwtMiddleware, changePasswordRateLimit, h.ChangePassword)
 }
 
 func setupAuctionRoutes(api fiber.Router, auctionSvc services.AuctionService, bidHandler *handlers.BidHandler, userHandler *handlers.UserHandler, mediaSvc services.MediaService, userRepo repository.UserRepository, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
@@ -340,6 +356,9 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	// User management routes
 	admin.Get("/users", adminHandler.ListUsers)
 	admin.Get("/users/:id", adminHandler.GetUserByID)
+	// MAZADPAY -- admin wallet controls: read-only wallet lookup, shown on
+	// the admin user-detail page before the add/deduct/disable actions.
+	admin.Get("/users/:id/wallet", adminHandler.GetUserWallet)
 	admin.Get("/users/:id/auctions", adminHandler.GetUserAuctions)
 	admin.Get("/users/:id/transactions", adminHandler.GetUserTransactions)
 	// Super Admin only - Créer une invitation admin (Admin Authorization Phase 1B) :
@@ -348,6 +367,10 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	// restreinte au même niveau que DeleteUser ci-dessous.
 	admin.Post("/invitations", middleware.SuperAdminOnly(logger), adminHandler.GenerateInvitation)
 	admin.Put("/users/:id/block", adminHandler.BlockUser)
+	// MAZADPAY -- admin wallet controls: disable/re-enable a user's wallet
+	// (blocks new bidding/withdrawal spend while disabled). Sits next to
+	// /users/:id/block since both are user-anchored admin status toggles.
+	admin.Put("/users/:id/wallet-disabled", adminHandler.AdminSetWalletDisabled)
 
 	// Super Admin only - Delete user
 	admin.Delete("/users/:id", middleware.SuperAdminOnly(logger), adminHandler.DeleteUser)
@@ -361,12 +384,29 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 		c.Locals("mediaService", mediaSvc)
 		return adminHandler.UploadAuctionImages(c)
 	})
+	// Customer #37: admin-only relist of an ended auction (Bug J relist
+	// primitive, reused).
+	admin.Post("/auctions/:id/relist", adminHandler.RelistAuction)
 
 	// Additional management routes
 	admin.Get("/transactions", adminHandler.ListTransactions)
 	admin.Get("/transactions/:id", adminHandler.GetTransaction)
 	admin.Get("/transactions/:id/receipt-url", walletHandler.GetReceiptURL)
 	admin.Put("/transactions/:id/validate", adminHandler.ValidateTransaction)
+	// Customer #31: manual admin release of a WINNER's own insurance hold
+	// (the auto non-winner refund at finalization never covers this).
+	admin.Post("/auctions/:id/refund-winner-insurance", adminHandler.RefundWinnerInsurance)
+	admin.Post("/transactions/:id/add-balance", adminHandler.AdminAddBalance)
+	// MAZADPAY -- admin wallet controls: deduct balance, the mirror of
+	// add-balance immediately above.
+	admin.Post("/transactions/:id/deduct-balance", adminHandler.AdminDeductBalance)
+	// Customer #36: optional admin-side review attachment, unrelated to a
+	// specific transaction ID (returns a URL the client then submits with the
+	// validate call above).
+	admin.Post("/transactions/upload", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return adminHandler.UploadTransactionReviewAttachment(c)
+	})
 	admin.Get("/reports", adminHandler.ListReports)
 	admin.Put("/reports/:id/review", adminHandler.ReviewReport)
 	admin.Delete("/reports/:id", adminHandler.DeleteReport)
@@ -376,8 +416,12 @@ func setupAdminRoutes(api fiber.Router, adminHandler *handlers.AdminHandler, use
 	admin.Get("/reports/revenue/export", adminHandler.ExportRevenueCSV)
 
 	// Category management
+	admin.Get("/categories", adminHandler.AdminListCategories)
 	admin.Post("/categories", adminHandler.CreateCategory)
 	admin.Put("/categories/:id", adminHandler.UpdateCategory)
+	// Customer #27: hide/show, mirroring the existing /admin/banners/:id/toggle
+	// pattern -- minimal targeted status write, not the full-entity Update.
+	admin.Put("/categories/:id/toggle", adminHandler.ToggleCategory)
 	admin.Delete("/categories/:id", adminHandler.DeleteCategory)
 	admin.Post("/categories/upload", func(c *fiber.Ctx) error {
 		c.Locals("mediaService", mediaSvc)
@@ -526,7 +570,7 @@ func setupContentRoutes(api fiber.Router, h *handlers.ContentHandler, mediaSvc s
 	})
 }
 
-func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.NotificationHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.NotificationHandler, mediaSvc services.MediaService, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
 	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
 	adminMiddleware := middleware.AdminOnly(logger)
 
@@ -547,6 +591,12 @@ func setupNotificationRoutes(api fiber.Router, notifHandler *handlers.Notificati
 	admin.Put("/read-all", notifHandler.MarkAllAsRead)
 	admin.Delete("/:id", notifHandler.AdminDelete)
 	admin.Get("/templates", notifHandler.GetTemplates)
+	// Customer #22: one optional notification image, reusing MediaService/R2
+	// exactly like the banner/FAQ/tutorial upload routes above.
+	admin.Post("/upload", func(c *fiber.Ctx) error {
+		c.Locals("mediaService", mediaSvc)
+		return notifHandler.UploadNotificationImage(c)
+	})
 }
 
 func setupRequestRoutes(api fiber.Router, reqHandler *handlers.RequestHandler, jwtSecret string, logger *zap.Logger, auditRepo repository.AuditRepository, rdb *redis.Client, cfg *config.Config, mediaSvc services.MediaService) {

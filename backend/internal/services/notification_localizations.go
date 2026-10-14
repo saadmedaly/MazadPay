@@ -204,6 +204,61 @@ var NotificationLocalizations = map[string]map[string]NotificationLocalization{
 			Body:  "Your deposit of {amount} {currency} was rejected. Reason: {reason}",
 		},
 	},
+	// withdrawal_processed (client feedback #10): mirrors the mobile app's single
+	// existing NotificationType.withdrawalProcessed (fcm_service.dart channel
+	// routing + /wallet tap navigation) -- covers BOTH admin outcomes
+	// (approve/reject) via the {status} param, rather than adding a second
+	// withdrawal_rejected type mobile does not know about (an unrecognized type
+	// falls through to no navigation and the wrong notification channel there).
+	"withdrawal_processed": {
+		"ar": {
+			Title: "💸 تحديث طلب السحب",
+			Body:  "طلب سحب {amount} {currency} {status}{reason}",
+		},
+		"fr": {
+			Title: "💸 Mise à jour de la demande de retrait",
+			Body:  "Votre demande de retrait de {amount} {currency} a été {status}{reason}",
+		},
+		"en": {
+			Title: "💸 Withdrawal request update",
+			Body:  "Your withdrawal of {amount} {currency} was {status}{reason}",
+		},
+	},
+	// deposit_submitted/withdrawal_submitted (Customer #21): dedicated
+	// submission-acknowledgment types, distinct from deposit_confirmed/
+	// deposit_rejected/withdrawal_processed -- those three represent an
+	// actual admin outcome and must never fire for a request that is still
+	// pending review. Wording deliberately says "received"/"submitted", not
+	// "confirmed"/"approved", so a user can never read this as the deposit/
+	// withdrawal having already been finalized.
+	"deposit_submitted": {
+		"ar": {
+			Title: "🕓 تم استلام طلب الإيداع",
+			Body:  "تم استلام طلب إيداع {amount} {currency} وهو قيد المراجعة",
+		},
+		"fr": {
+			Title: "🕓 Demande de dépôt reçue",
+			Body:  "Votre demande de dépôt de {amount} {currency} a été reçue et est en cours d'examen",
+		},
+		"en": {
+			Title: "🕓 Deposit request received",
+			Body:  "Your deposit request of {amount} {currency} has been received and is pending review",
+		},
+	},
+	"withdrawal_submitted": {
+		"ar": {
+			Title: "🕓 تم استلام طلب السحب",
+			Body:  "تم استلام طلب سحب {amount} {currency} وهو قيد المراجعة",
+		},
+		"fr": {
+			Title: "🕓 Demande de retrait reçue",
+			Body:  "Votre demande de retrait de {amount} {currency} a été reçue et est en cours d'examen",
+		},
+		"en": {
+			Title: "🕓 Withdrawal request received",
+			Body:  "Your withdrawal request of {amount} {currency} has been received and is pending review",
+		},
+	},
 }
 
 // GetLocalizedNotification retrieves a localized notification by type and language

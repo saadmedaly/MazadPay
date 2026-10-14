@@ -72,15 +72,15 @@ func (r *requestRepo) CreateAuctionRequest(ctx context.Context, req *models.Auct
 			user_id, category_id, location_id, title_ar, title_fr, title_en,
 			description_ar, description_fr, description_en, start_price, min_increment,
 			insurance_amount, reserve_price, buy_now_price, start_date, end_date,
-			images, status, market_country_iso, currency_code
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+			images, status, market_country_iso, currency_code, subscription_fee
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		RETURNING id, created_at
 	`
 	return r.db.QueryRowContext(ctx, query,
 		req.UserID, req.CategoryID, req.LocationID, req.TitleAr, req.TitleFr, req.TitleEn,
 		req.DescriptionAr, req.DescriptionFr, req.DescriptionEn, req.StartPrice, req.MinIncrement,
 		req.InsuranceAmount, req.ReservePrice, req.BuyNowPrice, req.StartDate, req.EndDate,
-		req.Images, req.Status, req.MarketCountryISO, req.CurrencyCode,
+		req.Images, req.Status, req.MarketCountryISO, req.CurrencyCode, req.SubscriptionFee,
 	).Scan(&req.ID, &req.CreatedAt)
 }
 
@@ -195,8 +195,9 @@ func (r *requestRepo) GetAuctionRequests(ctx context.Context, status string, use
 		var req models.AuctionRequest
 		var user models.User
 		// Voir commentaire équivalent dans GetAuctionRequestByID : 'quantity' (migration
-		// 000033), puis market_country_iso/currency_code (migration 000046) apparaissent
-		// en dernière position dans ar.*, après updated_at.
+		// 000033), market_country_iso/currency_code (migration 000046), puis
+		// insurance_policy (migration 000048) apparaissent en dernière position dans
+		// ar.*, après updated_at, dans l'ordre physique d'ajout des colonnes.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 			&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -205,7 +206,7 @@ func (r *requestRepo) GetAuctionRequests(ctx context.Context, status string, use
 			&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 			&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
-			&req.MarketCountryISO, &req.CurrencyCode,
+			&req.MarketCountryISO, &req.CurrencyCode, &req.InsurancePolicy, &req.SubscriptionFee,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {
@@ -233,8 +234,24 @@ func (r *requestRepo) GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (
 	// among ar.* columns, after updated_at, not in its "logical" position next to the
 	// other fields. Missing this Scan slot here previously caused "sql: expected N
 	// destination arguments in Scan, not N-1" once quantity actually existed in the DB.
-	// Same reasoning applies to market_country_iso/currency_code (migration 000046,
-	// ALTER TABLE ... ADD COLUMN) — appended after quantity, physically last.
+	// Same reasoning applies to market_country_iso/currency_code (migration 000046) and
+	// insurance_policy (migration 000048) — appended after quantity, physically last.
+	//
+	// Insurance policy audit (client feedback, verification round): before this fix,
+	// insurance_policy was MISSING from this Scan call entirely -- Go's database/sql
+	// requires exactly one destination per selected column, but this positional Scan
+	// silently left req.InsurancePolicy at its zero value ("") on every load, REGARDLESS
+	// of what was actually persisted. Since InsuranceRequired() treats "" as required
+	// (safe by design for an unrecognized value), this meant: (a) a persisted
+	// 'not_required' request could never actually be approved (ReviewAuctionRequest
+	// always saw it as required, since it calls this exact method), and (b)
+	// AdminUpdateAuctionRequest's "omit insurance_policy -> preserve existing value"
+	// guarantee was silently broken, since "existing" was never actually loaded with the
+	// real persisted value in the first place. This was a real production-breaking gap
+	// in the feature as first implemented, caught by a dedicated verification pass.
+	// subscription_fee (migration 000049, client feedback #4): appended after
+	// insurance_policy for the same physical-column-order reason documented
+	// above -- it was added by a later ALTER TABLE, so it Scans LAST.
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 		&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -243,7 +260,7 @@ func (r *requestRepo) GetAuctionRequestByID(ctx context.Context, id uuid.UUID) (
 		&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 		&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 		&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
-		&req.MarketCountryISO, &req.CurrencyCode,
+		&req.MarketCountryISO, &req.CurrencyCode, &req.InsurancePolicy, &req.SubscriptionFee,
 		&user.ID, &user.Phone, &user.FullName, &user.Role,
 	)
 	if err != nil {
@@ -283,15 +300,24 @@ func (r *requestRepo) UpdateAuctionRequest(ctx context.Context, req *models.Auct
 			description_ar = $6, description_fr = $7, description_en = $8,
 			start_price = $9, min_increment = $10, insurance_amount = $11,
 			reserve_price = $12, buy_now_price = $13, start_date = $14, end_date = $15,
-			images = $16, status = $17, quantity = $18, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $19
+			images = $16, status = $17, quantity = $18, insurance_policy = $19,
+			subscription_fee = $20,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = $21
 	`
+	// req.InsurancePolicy/req.SubscriptionFee here are whatever the service
+	// layer left on the in-memory struct after applyAuctionRequestUpdates --
+	// which was loaded fresh from this same row before any mutation, so an
+	// update that never touches them naturally preserves the existing DB
+	// value rather than resetting it (client feedback: "omitted must
+	// preserve"; client feedback #4: SubscriptionFee is only re-stamped by
+	// the service when CategoryID actually changed).
 	_, err := r.db.ExecContext(ctx, query,
 		req.CategoryID, req.LocationID, req.TitleAr, req.TitleFr, req.TitleEn,
 		req.DescriptionAr, req.DescriptionFr, req.DescriptionEn,
 		req.StartPrice, req.MinIncrement, req.InsuranceAmount,
 		req.ReservePrice, req.BuyNowPrice, req.StartDate, req.EndDate,
-		req.Images, req.Status, req.Quantity, req.ID,
+		req.Images, req.Status, req.Quantity, req.InsurancePolicy, req.SubscriptionFee, req.ID,
 	)
 	return err
 }
@@ -343,8 +369,9 @@ func (r *requestRepo) GetUserAuctionRequests(ctx context.Context, userID uuid.UU
 		var req models.AuctionRequest
 		var user models.User
 		// Voir commentaire équivalent dans GetAuctionRequestByID : 'quantity' (migration
-		// 000033), puis market_country_iso/currency_code (migration 000046) apparaissent
-		// en dernière position dans ar.*, après updated_at.
+		// 000033), market_country_iso/currency_code (migration 000046), puis
+		// insurance_policy (migration 000048) apparaissent en dernière position dans
+		// ar.*, après updated_at, dans l'ordre physique d'ajout des colonnes.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.CategoryID, &req.LocationID,
 			&req.TitleAr, &req.TitleFr, &req.TitleEn,
@@ -353,7 +380,7 @@ func (r *requestRepo) GetUserAuctionRequests(ctx context.Context, userID uuid.UU
 			&req.ReservePrice, &req.BuyNowPrice, &req.StartDate, &req.EndDate,
 			&req.Images, &req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt, &req.Quantity,
-			&req.MarketCountryISO, &req.CurrencyCode,
+			&req.MarketCountryISO, &req.CurrencyCode, &req.InsurancePolicy, &req.SubscriptionFee,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {
@@ -472,13 +499,17 @@ func (r *requestRepo) GetBannerRequests(ctx context.Context, status string, user
 	for rows.Next() {
 		var req models.BannerRequest
 		var user models.User
+		// See GetBannerRequestByID's comment below: description_ar/fr/en are
+		// physically LAST in br.* (appended by migration 000037 after the
+		// table already existed), not in this "logical" position -- this
+		// caused the same column-shift Scan bug fixed there.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.TitleAr, &req.TitleFr, &req.TitleEn,
 			&req.ImageURL, &req.TargetURL,
-			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 			&req.StartsAt, &req.EndsAt,
 			&req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt,
+			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {
@@ -501,13 +532,27 @@ func (r *requestRepo) GetBannerRequestByID(ctx context.Context, id uuid.UUID) (*
 		LEFT JOIN users u ON br.user_id = u.id
 		WHERE br.id = $1
 	`
+	// br.* column order matches the table's physical column order -- same
+	// reasoning as GetAuctionRequestByID's own comment above: description_ar/
+	// fr/en (migration 000037_add_descriptions_to_banner_requests) were added
+	// via ALTER TABLE ADD COLUMN AFTER the table already existed, so
+	// PostgreSQL appends them physically LAST, after updated_at -- not in
+	// their "logical" position next to title_ar/image_url. This Scan
+	// previously placed them right after ImageURL/TargetURL instead, which
+	// silently shifted every subsequent destination by one column relative to
+	// what the query actually returns once description_ar/fr/en genuinely
+	// exist in the table (e.g. StartsAt receiving admin_notes' value,
+	// ReviewedAt receiving a NULL where a time.Time was expected --
+	// "unsupported Scan ... storing driver.Value type <nil> into type
+	// *time.Time"). Fixed by moving them to the end, matching
+	// GetAuctionRequestByID's already-correct pattern.
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&req.ID, &req.UserID, &req.TitleAr, &req.TitleFr, &req.TitleEn,
 		&req.ImageURL, &req.TargetURL,
-		&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 		&req.StartsAt, &req.EndsAt,
 		&req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 		&req.CreatedAt, &req.UpdatedAt,
+		&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 		&user.ID, &user.Phone, &user.FullName, &user.Role,
 	)
 	if err != nil {
@@ -576,13 +621,15 @@ func (r *requestRepo) GetUserBannerRequests(ctx context.Context, userID uuid.UUI
 	for rows.Next() {
 		var req models.BannerRequest
 		var user models.User
+		// Same column-order fix as GetBannerRequestByID/GetBannerRequests --
+		// description_ar/fr/en are physically last in br.*.
 		err := rows.Scan(
 			&req.ID, &req.UserID, &req.TitleAr, &req.TitleFr, &req.TitleEn,
 			&req.ImageURL, &req.TargetURL,
-			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 			&req.StartsAt, &req.EndsAt,
 			&req.Status, &req.AdminNotes, &req.ReviewedBy, &req.ReviewedAt,
 			&req.CreatedAt, &req.UpdatedAt,
+			&req.DescriptionAr, &req.DescriptionFr, &req.DescriptionEn,
 			&user.ID, &user.Phone, &user.FullName, &user.Role,
 		)
 		if err != nil {

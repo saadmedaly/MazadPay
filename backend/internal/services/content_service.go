@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/repository"
@@ -28,17 +30,36 @@ type ContentService interface {
 }
 
 type contentService struct {
-	repo     repository.ContentRepository
-	notifSvc NotificationService
-	mediaSvc MediaService
+	repo      repository.ContentRepository
+	notifSvc  NotificationService
+	mediaSvc  MediaService
+	globalHub GlobalHub
 }
 
-func NewContentService(repo repository.ContentRepository, notifSvc NotificationService, mediaSvc MediaService) ContentService {
+func NewContentService(repo repository.ContentRepository, notifSvc NotificationService, mediaSvc MediaService, globalHub GlobalHub) ContentService {
 	return &contentService{
-		repo:     repo,
-		notifSvc: notifSvc,
-		mediaSvc: mediaSvc,
+		repo:      repo,
+		notifSvc:  notifSvc,
+		mediaSvc:  mediaSvc,
+		globalHub: globalHub,
 	}
+}
+
+// emitContentEvent broadcasts a Customer #20 global invalidation event for
+// FAQ/tutorial/banner content -- these are global (not market-scoped) so
+// they use globalHub.Broadcast (all connected clients), unlike auction
+// events which are filtered by market (see auctionService.emitAuctionEvent).
+// Called only after the triggering write already succeeded.
+func (s *contentService) emitContentEvent(eventType, entityType string, entityID int) {
+	if s.globalHub == nil {
+		return
+	}
+	s.globalHub.Broadcast(models.GlobalWSEvent{
+		Type:       eventType,
+		EntityType: entityType,
+		EntityID:   strconv.Itoa(entityID),
+		UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 func (s *contentService) GetFAQ(ctx context.Context) ([]models.FAQItem, error) {
@@ -54,15 +75,27 @@ func (s *contentService) GetBanners(ctx context.Context, onlyActive bool) ([]mod
 }
 
 func (s *contentService) CreateFAQ(ctx context.Context, item *models.FAQItem) error {
-	return s.repo.CreateFAQ(ctx, item)
+	if err := s.repo.CreateFAQ(ctx, item); err != nil {
+		return err
+	}
+	s.emitContentEvent(models.EventFAQUpdated, "faq", item.ID)
+	return nil
 }
 
 func (s *contentService) UpdateFAQ(ctx context.Context, item *models.FAQItem) error {
-	return s.repo.UpdateFAQ(ctx, item)
+	if err := s.repo.UpdateFAQ(ctx, item); err != nil {
+		return err
+	}
+	s.emitContentEvent(models.EventFAQUpdated, "faq", item.ID)
+	return nil
 }
 
 func (s *contentService) DeleteFAQ(ctx context.Context, id int) error {
-	return s.repo.DeleteFAQ(ctx, id)
+	if err := s.repo.DeleteFAQ(ctx, id); err != nil {
+		return err
+	}
+	s.emitContentEvent(models.EventFAQUpdated, "faq", id)
+	return nil
 }
 
 func (s *contentService) CreateTutorial(ctx context.Context, tutorial *models.Tutorial) error {
@@ -103,7 +136,11 @@ func (s *contentService) DeleteTutorial(ctx context.Context, id int) error {
 }
 
 func (s *contentService) CreateBanner(ctx context.Context, banner *models.Banner) error {
-	return s.repo.CreateBanner(ctx, banner)
+	if err := s.repo.CreateBanner(ctx, banner); err != nil {
+		return err
+	}
+	s.emitContentEvent(models.EventBannerUpdated, "banner", banner.ID)
+	return nil
 }
 
 func (s *contentService) RequestBanner(ctx context.Context, banner *models.Banner) error {
@@ -124,15 +161,26 @@ func (s *contentService) RequestBanner(ctx context.Context, banner *models.Banne
 		}()
 	}
 
+	// Not broadcast: an inactive/pending banner request isn't visible to
+	// mobile yet -- see UpdateBanner/ToggleBanner, which emit once an admin
+	// actually approves/activates it.
 	return nil
 }
 
 func (s *contentService) ToggleBanner(ctx context.Context, id int, active bool) error {
-	return s.repo.UpdateBannerStatus(ctx, id, active)
+	if err := s.repo.UpdateBannerStatus(ctx, id, active); err != nil {
+		return err
+	}
+	s.emitContentEvent(models.EventBannerUpdated, "banner", id)
+	return nil
 }
 
 func (s *contentService) UpdateBanner(ctx context.Context, banner *models.Banner) error {
-	return s.repo.UpdateBanner(ctx, banner)
+	if err := s.repo.UpdateBanner(ctx, banner); err != nil {
+		return err
+	}
+	s.emitContentEvent(models.EventBannerUpdated, "banner", banner.ID)
+	return nil
 }
 
 func (s *contentService) DeleteBanner(ctx context.Context, id int) error {
@@ -154,5 +202,6 @@ func (s *contentService) DeleteBanner(ctx context.Context, id int) error {
 		}
 	}
 
+	s.emitContentEvent(models.EventBannerUpdated, "banner", id)
 	return nil
 }

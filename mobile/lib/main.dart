@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:firebase_core/firebase_core.dart';
@@ -14,6 +15,7 @@ import 'package:mezadpay/providers/locale_provider.dart';
 import 'package:mezadpay/providers/location_provider.dart';
 import 'package:mezadpay/services/cache_service.dart';
 import 'package:mezadpay/services/fcm_service.dart';
+import 'package:mezadpay/services/realtime_sync_service.dart';
 import 'package:mezadpay/widgets/notification_handler.dart' show NotificationHandler, navigatorKey;
 
 
@@ -56,10 +58,11 @@ class MazadApp extends ConsumerStatefulWidget {
   ConsumerState<MazadApp> createState() => _MazadAppState();
 }
 
-class _MazadAppState extends ConsumerState<MazadApp> {
+class _MazadAppState extends ConsumerState<MazadApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future.microtask(() async {
       try {
         final fcmService = FCMService();
@@ -69,7 +72,33 @@ class _MazadAppState extends ConsumerState<MazadApp> {
         developer.log('⚠️ FCM Service initialization skipped: $e');
       }
       ref.read(locationProvider.notifier).detectLocation();
+      // Customer #20: opens the app-wide global WebSocket (list/content
+      // invalidation events) once at startup. A no-op if the user isn't
+      // logged in yet (GlobalWebsocketService.connect() checks for a token
+      // and simply returns if there is none) -- the login flow doesn't
+      // currently call this again, but didChangeAppLifecycleState's resume
+      // handler below will pick it up the next time the app is foregrounded
+      // after login, and connect() is always safe to call again.
+      unawaited(RealtimeSyncService().start());
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Customer #20, Phase 6: automatic catch-up on resume, no manual
+    // refresh required. RealtimeSyncService.onAppResumed() both fires the
+    // catch-up signal immediately and reconnects the global WS if it had
+    // dropped while backgrounded.
+    if (state == AppLifecycleState.resumed) {
+      unawaited(RealtimeSyncService().onAppResumed());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override

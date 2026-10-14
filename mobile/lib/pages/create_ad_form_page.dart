@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, Uint8List, debugPrint;
 import 'package:image_picker/image_picker.dart';
 
 import 'auction_pending_approval_page.dart';
+import 'deposit_page.dart';
 import '../services/auction_api.dart';
 import '../services/r2_upload_service.dart';
 import '../services/category_api.dart';
@@ -32,7 +33,13 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
   final _descriptionController = TextEditingController();
   final _phoneController = TextEditingController();
   final _priceController = TextEditingController();
-  final _insuranceController = TextEditingController();
+  // Insurance amount is no longer collected from the user at request-creation
+  // time (client feedback A7) -- it is set later by the admin team during
+  // request review (see backend/internal/services/admin_service.go
+  // ValidateAuction / UpdateAuction, which already require InsuranceAmount >
+  // 0 before an auction can go live). The backend already accepts a missing
+  // insurance_amount (models.AuctionRequest validate:"gte=0", RequestApi
+  // defaults to 0/null), so no server change was required.
 
   String? _selectedMainCategory; // display name (nameAr)
   int? _selectedMainCategoryId; // actual ID sent to API
@@ -81,8 +88,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     _descriptionController.text = (req['description_ar'] ?? '').toString();
     final startPrice = req['start_price'];
     if (startPrice != null) _priceController.text = startPrice.toString();
-    final insurance = req['insurance_amount'];
-    if (insurance != null) _insuranceController.text = insurance.toString();
     final catId = req['category_id'];
     if (catId != null) _selectedMainCategoryId = int.tryParse(catId.toString());
     final locId = req['location_id'];
@@ -235,7 +240,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
     final description = _descriptionController.text.trim();
     final phone = _phoneController.text.trim();
     final price = double.tryParse(_priceController.text);
-    final insuranceAmount = double.tryParse(_insuranceController.text);
 
     if (name.isEmpty || description.isEmpty || phone.isEmpty || price == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -250,15 +254,10 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
 
     if (!_validateDescription()) return;
 
-    // Le backend rejette désormais toute mise sur un auction sans caution définie
-    // (insurance_amount <= 0) — voir bid_service.go. On valide donc ici aussi côté
-    // client pour un retour immédiat, mais la vraie protection reste côté serveur.
-    if (insuranceAmount == null || insuranceAmount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يجب إدخال مبلغ تأمين أكبر من صفر')),
-      );
-      return;
-    }
+    // Insurance amount is no longer collected from the user (client feedback
+    // A7) -- it is left unset here and determined later by the admin team
+    // during review (see admin_service.go ValidateAuction, which already
+    // requires InsuranceAmount > 0 before an auction can go live).
 
     if (_selectedImageFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -286,7 +285,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
         brand: _brandController.text.trim().isEmpty
             ? null
             : _brandController.text.trim(),
-        insuranceAmount: insuranceAmount,
         endTime: _endTime,
       );
 
@@ -425,7 +423,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               titleAr: name,
               descriptionAr: description,
               startPrice: price,
-              insuranceAmount: double.tryParse(_insuranceController.text),
               endDate: _endTime,
               status: status,
             )
@@ -435,7 +432,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               titleAr: name,
               descriptionAr: description,
               startPrice: price,
-              insuranceAmount: double.tryParse(_insuranceController.text),
               endDate: _endTime,
               status: status,
             );
@@ -444,17 +440,42 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
       setState(() => _isSavingDraft = false);
 
       if (response.success) {
-        Navigator.of(context).pop(true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              status == 'draft'
-                  ? l10n.label_save_as_draft
-                  : l10n.status_pending,
+        // Customer feedback #4: submitting for review (not just saving a
+        // draft) is the moment the subscription fee applies -- the request
+        // was just stamped server-side with subscription_fee (derived from
+        // its category's fee_tier, never client-chosen). Navigate to the
+        // payment page with that authoritative amount instead of just
+        // popping back; draft saves never trigger payment since the request
+        // isn't under review yet.
+        final requestId = response.data?['id']?.toString() ?? existingId;
+        final rawFee = response.data?['subscription_fee'];
+        final subscriptionFee = rawFee is num
+            ? rawFee.toDouble()
+            : double.tryParse(rawFee?.toString() ?? '');
+
+        if (status == 'pending' && requestId != null && subscriptionFee != null) {
+          Navigator.of(context).pop(true);
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => DepositPage(
+                auctionRequestId: requestId,
+                subscriptionFee: subscriptionFee,
+              ),
             ),
-            backgroundColor: Colors.green,
-          ),
-        );
+          );
+        } else {
+          Navigator.of(context).pop(true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                status == 'draft'
+                    ? l10n.label_save_as_draft
+                    : l10n.status_pending,
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -580,22 +601,6 @@ class _CreateAdFormPageState extends State<CreateAdFormPage> {
               controller: _priceController,
               hint: AppLocalizations.of(context)!.text_97,
               icon: Icons.attach_money_outlined,
-              keyboardType: TextInputType.number,
-              // The market/currency for this auction request is derived
-              // server-side from the user's country (Phase 2, migration
-              // 000046) -- it is not known/selectable client-side before
-              // submission, so this suffix is display-only and uses the
-              // shared fallback code, never a user-editable currency field.
-              suffixText: MoneyFormatter.fallbackCurrencyCode,
-            ),
-
-            const SizedBox(height: 24),
-            _buildLabel(context, 'مبلغ التأمين'),
-            _buildTextField(
-              context,
-              controller: _insuranceController,
-              hint: 'أدخل مبلغ التأمين المطلوب',
-              icon: Icons.shield_outlined,
               keyboardType: TextInputType.number,
               // The market/currency for this auction request is derived
               // server-side from the user's country (Phase 2, migration

@@ -7,6 +7,7 @@ import '../providers/auction_provider_api.dart';
 import '../models/auction.dart';
 import '../services/auction_api.dart';
 import '../utils/money_formatter.dart';
+import '../utils/auction_image.dart';
 
 class AuctionHistoryPage extends ConsumerStatefulWidget {
   final String auctionId;
@@ -436,7 +437,7 @@ class _AuctionHistoryPageState extends ConsumerState<AuctionHistoryPage> {
               const SizedBox(width: 16),
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: _buildAuctionImage(auction.imageUrls.isNotEmpty ? auction.imageUrls[0] : 'assets/corolla.png'),
+                child: _buildAuctionImage(resolveAuctionImageUrl(auction.imageUrls) ?? ''),
               ),
             ],
           ),
@@ -618,7 +619,14 @@ class _AuctionHistoryPageState extends ConsumerState<AuctionHistoryPage> {
     return '${diff.inMinutes}m : ${diff.inSeconds % 60}s';
   }
 
+  // Client feedback: Bug H -- no generic/default product image (e.g. a car
+  // photo) may ever stand in for an auction's real image. An empty
+  // imagePath (no real image) and a failed network/asset load both route
+  // to the same neutral placeholder, never to a fake stock asset.
   Widget _buildAuctionImage(String imagePath) {
+    if (imagePath.isEmpty) {
+      return _buildImagePlaceholder();
+    }
     final isNetworkImage = imagePath.startsWith('http');
     if (isNetworkImage) {
       return Image.network(
@@ -626,12 +634,7 @@ class _AuctionHistoryPageState extends ConsumerState<AuctionHistoryPage> {
         width: 100,
         height: 100,
         fit: BoxFit.cover,
-        errorBuilder: (c, e, s) => Image.asset(
-          'assets/corolla.png',
-          width: 100,
-          height: 100,
-          fit: BoxFit.cover,
-        ),
+        errorBuilder: (c, e, s) => _buildImagePlaceholder(),
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
           return Container(
@@ -648,13 +651,17 @@ class _AuctionHistoryPageState extends ConsumerState<AuctionHistoryPage> {
         width: 100,
         height: 100,
         fit: BoxFit.cover,
-        errorBuilder: (c, e, s) => Container(
-          width: 100,
-          height: 100,
-          color: Colors.grey[300],
-          child: const Icon(Icons.image, color: Colors.grey),
-        ),
+        errorBuilder: (c, e, s) => _buildImagePlaceholder(),
       );
     }
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Container(
+      width: 100,
+      height: 100,
+      color: Colors.grey[300],
+      child: const Icon(Icons.image, color: Colors.grey),
+    );
   }
 }

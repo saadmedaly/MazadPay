@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,7 +9,95 @@ import 'package:mezadpay/widgets/side_menu_drawer.dart';
 import 'package:mezadpay/pages/auction_details_page.dart';
 import '../services/auction_api.dart';
 import '../services/category_api.dart';
+import '../services/realtime_sync_service.dart';
 import '../utils/money_formatter.dart';
+
+/// Client feedback #24 (Active/Ended tabbed auction list only -- see
+/// all_auctions_page.dart's own card builder): active -> green border,
+/// ended -> red border. Any other status (pending/canceled/rejected/
+/// whatever else this screen might ever render) returns null, preserving
+/// the card's prior borderless look rather than guessing a color for a
+/// status this requirement never covered. A pure top-level function so it
+/// can be unit-tested without pumping the widget tree.
+///
+/// Colors reused from the app's existing status-color vocabulary (see
+/// my_auctions_page.dart's _getStatusColor: 0xFF00C58D for active/approved,
+/// 0xFFE31B23 for rejected/cancelled/deleted) -- no new color invented.
+Color? auctionStatusBorderColor(String? status) {
+  switch (status) {
+    case 'active':
+      return const Color(0xFF00C58D);
+    case 'ended':
+    case 'closed':
+      return const Color(0xFFE31B23);
+    default:
+      return null;
+  }
+}
+
+/// Customer #32: Active/Ended status filter tab (chip) fill color when
+/// selected -- 'active' -> green, 'ended' -> red, same 0xFF00C58D/0xFFE31B23
+/// values as auctionStatusBorderColor above (no new color invented). A pure
+/// top-level function so it can be unit-tested without pumping the widget
+/// tree, mirroring auctionStatusBorderColor's own pattern.
+Color statusTabSelectedColor(String value) {
+  return value == 'active' ? const Color(0xFF00C58D) : const Color(0xFFE31B23);
+}
+
+// ── Note #1 (client feedback): Advanced Filter pure logic ──────────────────
+// Extracted so the filter sheet's actual decisions (what query params Apply
+// sends, what Reset restores to, how each sort mode orders a result set,
+// whether a given auction's price is in range) are directly unit-testable
+// without pumping the full AllAuctionsPage widget tree (no DI seam for its
+// live AuctionApi, matching the existing constraint documented on other
+// pages in this app). A pure top-level function set, same pattern as
+// auctionStatusBorderColor/statusTabSelectedColor above.
+
+/// The exact min/max query-param values _loadAuctions sends for a given
+/// committed (post-Apply/Reset) price range -- 0/1000000 (the untouched
+/// default bounds) map to null (no filter), matching AuctionApi.getAuctions'
+/// existing "0 = don't send min_price" / "1000000 = don't send max_price"
+/// convention.
+({int? minPrice, int? maxPrice}) resolveAdvancedFilterPriceParams(RangeValues priceRange) {
+  return (
+    minPrice: priceRange.start > 0 ? priceRange.start.toInt() : null,
+    maxPrice: priceRange.end < 1000000 ? priceRange.end.toInt() : null,
+  );
+}
+
+/// True if an auction's current_price falls within [min, max] (inclusive).
+/// null min/max means "no bound on that side" -- mirrors the backend's own
+/// MinPrice/MaxPrice *int semantics (nil = not requested) added for this
+/// same ticket in auction_repo.go's FindAll.
+bool auctionMatchesPriceRange(num currentPrice, {int? minPrice, int? maxPrice}) {
+  if (minPrice != null && currentPrice < minPrice) return false;
+  if (maxPrice != null && currentPrice > maxPrice) return false;
+  return true;
+}
+
+/// Orders a list of {'id', 'current_price', 'end_time', 'created_at'} maps
+/// the same way the backend's FindAll does for each sort_by value --
+/// mirrored here (not calling the server) so the exact ordering contract
+/// the mobile UI relies on is directly testable. 'newest' (or any
+/// unrecognized value) sorts by created_at descending, matching FindAll's
+/// default/fallback case.
+List<Map<String, dynamic>> sortAuctionsBy(List<Map<String, dynamic>> auctions, String sortBy) {
+  final sorted = List<Map<String, dynamic>>.from(auctions);
+  switch (sortBy) {
+    case 'price_asc':
+      sorted.sort((a, b) => (a['current_price'] as num).compareTo(b['current_price'] as num));
+      break;
+    case 'price_desc':
+      sorted.sort((a, b) => (b['current_price'] as num).compareTo(a['current_price'] as num));
+      break;
+    case 'ending_soon':
+      sorted.sort((a, b) => (a['end_time'] as DateTime).compareTo(b['end_time'] as DateTime));
+      break;
+    default:
+      sorted.sort((a, b) => (b['created_at'] as DateTime).compareTo(a['created_at'] as DateTime));
+  }
+  return sorted;
+}
 
 class AllAuctionsPage extends ConsumerStatefulWidget {
   const AllAuctionsPage({super.key});
@@ -33,6 +123,21 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   bool _isLoading = true;
   String? _selectedCategoryId;
 
+  // Active/Ended status filter tabs (client feedback A12, restored after
+  // they disappeared). The backend's auction list endpoint already supports
+  // a `status` query param (repository.AuctionFilters.Status, used directly
+  // by AuctionRepo.ListPaginated), so this drives a real server-side filter
+  // via _auctionApi.getAuctions(status: ...) rather than a client-only
+  // approximation.
+  String _statusFilter = 'active'; // 'active' | 'ended'
+
+  // Tab counts (client feedback #12): the real total matching each status
+  // (and the current category), from GET /auctions's own "total" field
+  // (backend/internal/handlers/auction_handler.go List) -- never
+  // _allAuctions.length, which would only reflect the current page.
+  int _activeCount = 0;
+  int _endedCount = 0;
+
   // Pagination variables
   int _currentPage = 1;
   bool _hasMoreData = true;
@@ -47,6 +152,18 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
   DateTime? _startDate;
   DateTime? _endDate;
 
+  // Client feedback #24: this screen previously had no realtime
+  // subscription at all -- an auction transitioning active -> ended (or
+  // vice versa) only ever became visible here after a manual
+  // pull-to-refresh/tab switch/page re-entry. Reuses Customer #20's
+  // existing auction.status_changed event exactly as my_winnings_page.dart/
+  // support_page.dart already do (no new realtime architecture): on that
+  // event, refetch so the just-changed auction's card (and its border
+  // color, added this same round) update live, without logout/restart/
+  // manual refresh.
+  StreamSubscription<RealtimeEvent>? _realtimeEventSub;
+  StreamSubscription<void>? _realtimeCatchUpSub;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +171,22 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     _scrollController.addListener(_onScroll);
     _loadCategories();
     _loadAuctions();
+    _loadTabCounts();
+
+    _realtimeEventSub = RealtimeSyncService().events.listen((event) {
+      if (!mounted) return;
+      if (event.type == RealtimeEventType.auctionStatusChanged ||
+          event.type == RealtimeEventType.auctionUpdated ||
+          event.type == RealtimeEventType.auctionDeleted) {
+        _loadAuctions();
+        _loadTabCounts();
+      }
+    });
+    _realtimeCatchUpSub = RealtimeSyncService().catchUpSignal.listen((_) {
+      if (!mounted) return;
+      _loadAuctions();
+      _loadTabCounts();
+    });
   }
 
   void _onScroll() {
@@ -151,6 +284,8 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     _searchController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _realtimeEventSub?.cancel();
+    _realtimeCatchUpSub?.cancel();
     super.dispose();
   }
 
@@ -163,6 +298,34 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     _filterAuctions();
   }
 
+  // Fetches the real Active/Ended totals for the current category (client
+  // feedback #12) -- limit: 1 since only "total" is needed, not the rows
+  // themselves, keeping this a lightweight sibling call to _loadAuctions()
+  // rather than duplicating its full page fetch.
+  Future<void> _loadTabCounts() async {
+    try {
+      final results = await Future.wait([
+        _auctionApi.getAuctionsWithTotal(page: 1, limit: 1, status: 'active', categoryId: _selectedCategoryId),
+        _auctionApi.getAuctionsWithTotal(page: 1, limit: 1, status: 'ended', categoryId: _selectedCategoryId),
+      ]);
+      if (!mounted) return;
+      final activeResponse = results[0];
+      final endedResponse = results[1];
+      setState(() {
+        if (activeResponse.success && activeResponse.data != null) {
+          _activeCount = (activeResponse.data!['total'] as int?) ?? 0;
+        }
+        if (endedResponse.success && endedResponse.data != null) {
+          _endedCount = (endedResponse.data!['total'] as int?) ?? 0;
+        }
+      });
+    } catch (e) {
+      // Silencieux : les compteurs restent à leur dernière valeur connue (ou 0)
+      // plutôt que de bloquer l'affichage de la liste elle-même.
+      debugPrint('Error loading tab counts: $e');
+    }
+  }
+
   Future<void> _loadAuctions({bool reset = true}) async {
     if (reset) {
       setState(() {
@@ -173,13 +336,14 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     }
 
     try {
+      final priceParams = resolveAdvancedFilterPriceParams(_priceRange);
       final response = await _auctionApi.getAuctions(
         page: _currentPage,
         limit: 20,
-        status: 'active',
+        status: _statusFilter,
         categoryId: _selectedCategoryId,
-        minPrice: _minPrice > 0 ? _minPrice.toInt() : null,
-        maxPrice: _maxPrice < 1000000 ? _maxPrice.toInt() : null,
+        minPrice: priceParams.minPrice,
+        maxPrice: priceParams.maxPrice,
         sortBy: _sortBy,
       );
 
@@ -200,9 +364,14 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
             totalCount = responseData['total'] ?? responseData['count'];
           }
 
+          // Extra client-side end_time safety net only applies to the
+          // "active" tab -- for "ended" it would incorrectly filter out
+          // every result, since those auctions' end_time is in the past by
+          // definition.
           final newAuctions = auctionList
               .map((item) => item as Map<String, dynamic>)
               .where((a) {
+                if (_statusFilter != 'active') return true;
                 final endTimeStr = a['end_time']?.toString();
                 if (endTimeStr == null) return true;
                 final endTime = DateTime.tryParse(endTimeStr);
@@ -271,13 +440,19 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
           }
         }
 
-        // Filtre par prix
-        bool matchesPrice = true;
+        // Filtre par prix (belt-and-suspenders client-side re-check -- the
+        // server already applies min_price/max_price, see _loadAuctions;
+        // this only ever narrows the current page further, never widens it,
+        // so it stays correct now that the server-side filter actually
+        // exists).
         final price = (auction['current_price'] ?? auction['current_bid'] ?? auction['price'] ?? 0);
         final priceValue = price is num ? price.toDouble() : double.tryParse(price.toString()) ?? 0;
-        if (priceValue < _minPrice || priceValue > _maxPrice) {
-          matchesPrice = false;
-        }
+        final priceParams = resolveAdvancedFilterPriceParams(_priceRange);
+        final matchesPrice = auctionMatchesPriceRange(
+          priceValue,
+          minPrice: priceParams.minPrice,
+          maxPrice: priceParams.maxPrice,
+        );
 
         // Filtre par date de début/fin
         bool matchesDate = true;
@@ -298,9 +473,26 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     });
   }
 
+  // Note #1 (client feedback): the filter sheet previously mutated the
+  // PARENT State's own _priceRange/_minPrice/_maxPrice/_sortBy fields
+  // directly via the modal's setModalState -- so those fields were already
+  // changed in memory the instant a slider/sort option was touched, even
+  // before Apply was pressed. This meant: (a) closing the sheet with the X
+  // button (not Reset/Apply) after touching a control left stale
+  // half-changed filter values in place for the NEXT time the sheet opened
+  // (the "no stale-filter state after reset/reopen" requirement), and (b)
+  // Reset only reset the sheet's own visual state -- it never closed the
+  // sheet or reloaded the list, so "Reset restores the full/default
+  // active-auctions list" never actually happened. Fixed by having the
+  // sheet operate on its own local draft copies, committing to the real
+  // parent fields (and triggering _loadAuctions) only on Apply or Reset --
+  // never on a bare close/dismiss.
   void _showAdvancedFilterSheet() {
     final locale = Localizations.localeOf(context).languageCode;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    RangeValues draftPriceRange = _priceRange;
+    String draftSortBy = _sortBy;
 
     showModalBottomSheet(
       context: context,
@@ -365,19 +557,17 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           ),
                           const SizedBox(height: 8),
                           RangeSlider(
-                            values: _priceRange,
+                            values: draftPriceRange,
                             min: 0,
                             max: 1000000,
                             divisions: 100,
                             labels: RangeLabels(
-                              MoneyFormatter.formatAmountOnly(_priceRange.start.toInt(), null),
-                              MoneyFormatter.formatAmountOnly(_priceRange.end.toInt(), null),
+                              MoneyFormatter.formatAmountOnly(draftPriceRange.start.toInt(), null),
+                              MoneyFormatter.formatAmountOnly(draftPriceRange.end.toInt(), null),
                             ),
                             onChanged: (values) {
                               setModalState(() {
-                                _priceRange = values;
-                                _minPrice = values.start;
-                                _maxPrice = values.end;
+                                draftPriceRange = values;
                               });
                             },
                           ),
@@ -385,11 +575,11 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                MoneyFormatter.format(_priceRange.start.toInt(), null),
+                                MoneyFormatter.format(draftPriceRange.start.toInt(), null),
                                 style: TextStyle(color: isDarkMode ? Colors.grey.shade400 : Colors.grey),
                               ),
                               Text(
-                                MoneyFormatter.format(_priceRange.end.toInt(), null),
+                                MoneyFormatter.format(draftPriceRange.end.toInt(), null),
                                 style: TextStyle(color: isDarkMode ? Colors.grey.shade400 : Colors.grey),
                               ),
                             ],
@@ -408,24 +598,32 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           const SizedBox(height: 8),
                           _buildSortOption(
                             setModalState,
+                            draftSortBy,
+                            (value) => draftSortBy = value,
                             'newest',
                             locale == 'ar' ? 'الأحدث' : (locale == 'fr' ? 'Plus récent' : 'Newest'),
                             Icons.access_time,
                           ),
                           _buildSortOption(
                             setModalState,
+                            draftSortBy,
+                            (value) => draftSortBy = value,
                             'price_asc',
                             locale == 'ar' ? 'السعر: من الأقل للأعلى' : (locale == 'fr' ? 'Prix: croissant' : 'Price: low to high'),
                             Icons.arrow_upward,
                           ),
                           _buildSortOption(
                             setModalState,
+                            draftSortBy,
+                            (value) => draftSortBy = value,
                             'price_desc',
                             locale == 'ar' ? 'السعر: من الأعلى للأقل' : (locale == 'fr' ? 'Prix: décroissant' : 'Price: high to low'),
                             Icons.arrow_downward,
                           ),
                           _buildSortOption(
                             setModalState,
+                            draftSortBy,
+                            (value) => draftSortBy = value,
                             'ending_soon',
                             locale == 'ar' ? 'تنتهي قريباً' : (locale == 'fr' ? 'Termine bientôt' : 'Ending soon'),
                             Icons.timer,
@@ -449,12 +647,20 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () {
-                              setModalState(() {
+                              // Reset commits the default values to the REAL
+                              // parent state (not just the modal's own
+                              // draft), closes the sheet, and reloads --
+                              // "Reset restores the full/default
+                              // active-auctions list" means the list itself
+                              // must change, not just the sheet's controls.
+                              setState(() {
                                 _priceRange = const RangeValues(0, 1000000);
                                 _minPrice = 0;
                                 _maxPrice = 1000000;
                                 _sortBy = 'newest';
                               });
+                              Navigator.pop(context);
+                              _loadAuctions();
                             },
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -470,6 +676,18 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () {
+                              // Apply commits the sheet's own draft values to
+                              // the real parent state, then reloads -- a
+                              // dismiss without Apply (X button, tap outside,
+                              // back gesture) never reaches this handler, so
+                              // touched-but-uncommitted controls never leak
+                              // into the parent's filter state.
+                              setState(() {
+                                _priceRange = draftPriceRange;
+                                _minPrice = draftPriceRange.start;
+                                _maxPrice = draftPriceRange.end;
+                                _sortBy = draftSortBy;
+                              });
                               Navigator.pop(context);
                               _loadAuctions();
                             },
@@ -495,14 +713,21 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     );
   }
 
-  Widget _buildSortOption(StateSetter setModalState, String value, String label, IconData icon) {
-    final isSelected = _sortBy == value;
+  Widget _buildSortOption(
+    StateSetter setModalState,
+    String currentDraftSortBy,
+    void Function(String) onDraftSortByChanged,
+    String value,
+    String label,
+    IconData icon,
+  ) {
+    final isSelected = currentDraftSortBy == value;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
       onTap: () {
         setModalState(() {
-          _sortBy = value;
+          onDraftSortByChanged(value);
         });
       },
       child: Container(
@@ -543,6 +768,98 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildStatusTab(
+    BuildContext context,
+    bool isDarkMode, {
+    required String value,
+    required String label,
+    required int count,
+  }) {
+    final isSelected = _statusFilter == value;
+    final selectedColor = statusTabSelectedColor(value);
+    return GestureDetector(
+      onTap: () {
+        if (_statusFilter == value) return;
+        setState(() => _statusFilter = value);
+        _loadAuctions();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: isSelected ? selectedColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: isSelected
+                        ? Colors.white
+                        : (isDarkMode ? Colors.white70 : Colors.black87),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Count badge (client feedback #12): real total from
+              // _loadTabCounts()/GET /auctions's "total" field, never a
+              // hardcoded or currentPage.length approximation.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.white.withValues(alpha: 0.25)
+                      : (isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: isSelected
+                        ? Colors.white
+                        : (isDarkMode ? Colors.white70 : Colors.black87),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getStatusTabLabel(BuildContext context, {required bool active}) {
+    final locale = Localizations.localeOf(context).languageCode;
+    if (active) {
+      switch (locale) {
+        case 'fr':
+          return 'Actives';
+        case 'en':
+          return 'Active';
+        default:
+          return 'مزايدات نشطة';
+      }
+    }
+    switch (locale) {
+      case 'fr':
+        return 'Terminées';
+      case 'en':
+        return 'Ended';
+      default:
+        return 'مزايدات منتهية';
+    }
   }
 
   @override
@@ -616,6 +933,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                           }
                           // Recharger les enchères depuis le serveur avec le nouveau filtre
                           _loadAuctions();
+                          _loadTabCounts();
                         },
                         child: Container(
                           width: 100,
@@ -761,6 +1079,41 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                         ),
                       ),
                     ],
+                  ),
+                ),
+
+                // Active / Ended status filter tabs (client feedback A12)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 4.0),
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: primaryBlue.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatusTab(
+                            context,
+                            isDarkMode,
+                            value: 'active',
+                            label: _getStatusTabLabel(context, active: true),
+                            count: _activeCount,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildStatusTab(
+                            context,
+                            isDarkMode,
+                            value: 'ended',
+                            label: _getStatusTabLabel(context, active: false),
+                            count: _endedCount,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -928,7 +1281,15 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
     final favoritesAsync = ref.watch(favoritesProvider);
     final isFavorite = favoritesAsync.value?.contains(id) ?? false;
 
-    final bool isFinished = auction['status'] == 'finished';
+    // Client feedback #24 fix: this previously checked == 'finished', a
+    // status value the backend never actually sends (the real vocabulary is
+    // active/ended/pending/canceled -- see models.AuctionStatus /
+    // AuctionRepository.ListPaginated) -- so this flag was silently always
+    // false. 'closed' is included alongside 'ended' since some call sites
+    // in this codebase (AuctionModel.isEnded) treat them as the same
+    // terminal state.
+    final String? auctionStatus = auction['status']?.toString();
+    final bool isFinished = auctionStatus == 'ended' || auctionStatus == 'closed';
 
     // Récupérer le titre selon la langue actuelle avec fallback intelligent
     final locale = Localizations.localeOf(context).languageCode;
@@ -991,6 +1352,12 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
         decoration: BoxDecoration(
           color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
           borderRadius: BorderRadius.circular(16),
+          // Client correction: the client's original #24 ask ("active ->
+          // green border, ended -> red border" on the CARD itself) was
+          // superseded -- only the Active/Ended status TABS above should be
+          // colored (see statusTabSelectedColor); auction cards must never
+          // have a green/red status border, restored to their normal
+          // neutral/borderless look here.
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.08),
@@ -1055,29 +1422,24 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
                       textAlign: TextAlign.right,
                     ),
                     const SizedBox(height: 6), // Reduced from 10
-                    // Interaction Row: [Timer] [Heart] [Bids+Gavel]
+                    // Interaction Row: [Timer] [Heart] [Bid count]
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Bid count + gavel (leftmost = endmost in RTL code)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              (auction['bidder_count'] ?? auction['bids'] ?? 0).toString(),
-                              style: GoogleFonts.plusJakartaSans(
-                                color: softRed,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                            Icon(
-                              Icons.gavel_rounded,
-                              color: isDarkMode ? Colors.white54 : Colors.black54,
-                              size: 16,
-                            ),
-                          ],
+                        // Client feedback #26: the decorative gavel icon
+                        // beside the bid count is removed per explicit
+                        // client request -- the count itself, its color, and
+                        // its position in this row are otherwise unchanged.
+                        // No replacement icon, no reserved icon width; the
+                        // Row now collapses to just the count (mainAxisSize:
+                        // min keeps it from claiming extra space).
+                        Text(
+                          (auction['bidder_count'] ?? auction['bids'] ?? 0).toString(),
+                          style: GoogleFonts.plusJakartaSans(
+                            color: softRed,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
                         ),
                         // Heart / favorite
                         GestureDetector(

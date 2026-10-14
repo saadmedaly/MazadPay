@@ -46,8 +46,37 @@ type ResponseUser struct {
 	LastLoginAt          *string `json:"last_login_at"`
 }
 
-// MaskUserPhone retourne un User avec le téléphone masqué
+// MaskUserPhone retourne un User avec le téléphone masqué (format ####xxxx,
+// même convention que GetSellerContact dans auction_handler.go) -- pour tout
+// endpoint PUBLIC/CUSTOMER qui expose un profil autre que le sien (ex.
+// UserHandler.Search). Client feedback Phase B item 17: avant ce correctif, le
+// nom de cette fonction était trompeur -- elle copiait user.Phone tel quel
+// (ligne Phone: user.Phone, jamais masqué), donc Search exposait déjà le
+// numéro complet de n'importe quel utilisateur à n'importe quel appelant
+// authentifié malgré le commentaire "Mask phone numbers for privacy" à son
+// site d'appel.
+//
+// NE PAS utiliser cette fonction pour :
+//   - GetMe (l'utilisateur consultant son PROPRE profil -- il doit voir son
+//     numéro complet, voir user_handler.go GetMe qui construit sa propre
+//     réponse sans passer par MaskUserPhone)
+//   - les endpoints Admin (AdminHandler.ListUsers/GetUserByID renvoient déjà
+//     models.User brut, protégés par le middleware AdminOnly -- volontaire,
+//     voir item 17 : Admin doit voir le numéro complet)
 func MaskUserPhone(user *models.User) *ResponseUser {
+	return buildResponseUser(user, true)
+}
+
+// SelfResponseUser returns a ResponseUser with the FULL phone number, for a
+// user viewing their own profile only (UserHandler.GetMe). Client feedback
+// Phase B item 17: separated out from MaskUserPhone so fixing that function
+// to actually mask (see its doc comment) doesn't also mask a user's own
+// number to themselves.
+func SelfResponseUser(user *models.User) *ResponseUser {
+	return buildResponseUser(user, false)
+}
+
+func buildResponseUser(user *models.User, mask bool) *ResponseUser {
 	if user == nil {
 		return nil
 	}
@@ -67,9 +96,24 @@ func MaskUserPhone(user *models.User) *ResponseUser {
 		createdAtStr = &s
 	}
 
+	phone := user.Phone
+	if mask {
+		phone = user.MaskPhone()
+	}
+
+	// createdAtStr is only nil when user.CreatedAt.IsZero() (see above) --
+	// guarded here since it was previously dereferenced unconditionally
+	// (*createdAtStr), a latent nil-pointer panic for any caller with a
+	// zero-value CreatedAt (e.g. a hand-built models.User in a test, or any
+	// future code path that doesn't load it from the DB).
+	createdAt := ""
+	if createdAtStr != nil {
+		createdAt = *createdAtStr
+	}
+
 	return &ResponseUser{
 		ID:                   user.ID.String(),
-		Phone:                user.Phone,
+		Phone:                phone,
 		FullName:             user.FullName,
 		Email:                user.Email,
 		ProfilePicURL:        user.ProfilePicURL,
@@ -85,7 +129,7 @@ func MaskUserPhone(user *models.User) *ResponseUser {
 		Role:                 user.Role,
 		IsVerified:           user.IsVerified,
 		ProfileCompleted:     user.ProfileCompleted,
-		CreatedAt:            *createdAtStr,
+		CreatedAt:            createdAt,
 		LastLoginAt:          lastLoginStr,
 	}
 }
@@ -188,9 +232,34 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "forbidden":
 		logger.Warn("Forbidden access attempt", logFields...)
 		return Forbidden(c)
+	case "bad_request":
+		// Generic apperr.ErrBadRequest -- e.g. category create/update
+		// rejecting an invalid fee_tier value (client feedback #4). Without
+		// this case the error would fall through to the unhandled-error
+		// branch below and be misreported as a 500.
+		logger.Info("Bad request", logFields...)
+		return BadRequest(c, "Invalid request")
+	case "auction_has_bids":
+		logger.Info("Seller edit rejected: auction already has bids", logFields...)
+		return Fail(c, 409, "auction_has_bids", "لا يمكن تعديل مزاد تلقّى مزايدات")
+	case "auction_not_editable":
+		logger.Info("Seller edit rejected: auction no longer editable", logFields...)
+		return Fail(c, 409, "auction_not_editable", "لا يمكن تعديل هذا المزاد")
 	case "bid_conflict":
 		logger.Warn("Bid conflict occurred", logFields...)
 		return Fail(c, 409, "bid_conflict", "Bid conflict, please retry")
+	case "bid_already_placed":
+		// Customer #38 (replacing the old client feedback #19 permanent
+		// rule): a user cannot place two consecutive bids in a row -- they
+		// may bid again once someone else has bid in between.
+		logger.Info("Consecutive self-bid rejected (already the current highest bidder)", logFields...)
+		return Fail(c, 409, "bid_already_placed", "أنت بالفعل صاحب أعلى مزايدة حالياً، يرجى الانتظار حتى يزايد شخص آخر")
+	case "conflict":
+		// Client feedback #4 financial-integrity round: InitiateDeposit
+		// returns this for a duplicate non-rejected subscription deposit on
+		// the same auction_request_id (API-retry protection).
+		logger.Info("Duplicate subscription deposit rejected", logFields...)
+		return Fail(c, 409, "conflict", "A payment for this request is already pending or completed")
 	case "request_already_reviewed":
 		logger.Info("Attempt to re-review an already reviewed request", logFields...)
 		return Fail(c, 409, "request_already_reviewed", "This request has already been reviewed")
@@ -203,9 +272,18 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "bid_too_low":
 		logger.Info("Bid too low", logFields...)
 		return Fail(c, 422, "bid_too_low", "Bid amount is too low")
+	case "deposit_too_low":
+		logger.Info("Deposit amount below the minimum", logFields...)
+		return Fail(c, 422, "deposit_too_low", "الحد الأدنى للإيداع هو 100 أوقية")
+	case "deposit_too_high":
+		logger.Info("Deposit amount above the maximum", logFields...)
+		return Fail(c, 422, "deposit_too_high", "الحد الأقصى للإيداع هو 100,000 أوقية")
 	case "insurance_not_set":
 		logger.Warn("Bid rejected: auction has no insurance_amount set", logFields...)
 		return Fail(c, 422, "insurance_not_set", "لا يمكن المزايدة على هذا المزاد لأن مبلغ التأمين غير محدد")
+	case "request_insurance_not_set":
+		logger.Warn("Request approval rejected: insurance_amount not set by admin", logFields...)
+		return Fail(c, 422, "request_insurance_not_set", "يجب تحديد مبلغ التأمين قبل الموافقة على الطلب")
 	case "insufficient_for_insurance":
 		logger.Info("Bid rejected: balance below insurance_amount", logFields...)
 		return Fail(c, 422, "insufficient_for_insurance", "رصيدك غير كافٍ لتغطية مبلغ التأمين")
@@ -254,6 +332,27 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "wallet_locked":
 		logger.Warn("Wallet locked", logFields...)
 		return Fail(c, 403, "wallet_locked", "Wallet is currently locked")
+	case "auction_not_ended":
+		logger.Info("Winner insurance refund rejected: auction not ended", logFields...)
+		return Fail(c, 422, "auction_not_ended", "لا يمكن إرجاع مبلغ التأمين قبل انتهاء المزاد")
+	case "not_auction_winner":
+		logger.Info("Winner insurance refund rejected: auction has no winner", logFields...)
+		return Fail(c, 422, "not_auction_winner", "هذا المزاد ليس له فائز")
+	case "no_active_hold":
+		logger.Info("Winner insurance refund rejected: no active hold (already refunded or none existed)", logFields...)
+		return Fail(c, 409, "no_active_hold", "تم إرجاع مبلغ التأمين مسبقاً أو لا يوجد مبلغ تأمين محجوز")
+	case "admin_credit_already_applied":
+		logger.Info("Admin add-balance rejected: duplicate request for the same transaction", logFields...)
+		return Fail(c, 409, "admin_credit_already_applied", "تمت إضافة هذا الرصيد مسبقاً لهذه المعاملة")
+	case "admin_debit_already_applied":
+		logger.Info("Admin deduct-balance rejected: duplicate request for the same transaction", logFields...)
+		return Fail(c, 409, "admin_debit_already_applied", "تم خصم هذا الرصيد مسبقاً لهذه المعاملة")
+	case "insufficient_balance_for_debit":
+		logger.Info("Admin deduct-balance rejected: insufficient balance", logFields...)
+		return Fail(c, 422, "insufficient_balance_for_debit", "رصيد المستخدم غير كافٍ لإجراء هذا الخصم")
+	case "wallet_disabled":
+		logger.Info("Action rejected: wallet is disabled", logFields...)
+		return Fail(c, 403, "wallet_disabled", "تم تعطيل هذه المحفظة مؤقتاً من قبل الإدارة")
 	case "receipt_required":
 		logger.Info("Receipt required for transaction", logFields...)
 		return Fail(c, 400, "receipt_required", "Receipt is required for this transaction")

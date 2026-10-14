@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:mezadpay/services/realtime_sync_service.dart';
 
 /// Service de gestion du JWT token
 /// Utilise flutter_secure_storage pour stocker le token de manière sécurisée
@@ -30,8 +32,25 @@ class AuthService {
   }
   
   /// Sauvegarder l'état d'inscription
+  ///
+  /// Bounded with a 5s timeout. `hasRegistered` is a best-effort UX flag
+  /// (skips onboarding on relaunch), not a security- or correctness-critical
+  /// value -- unlike getToken()/getUserId(), which fail closed by returning
+  /// null, a stalled write here should not block navigation after a
+  /// successful registration/login response. On timeout, the write is left
+  /// to complete in the background (fire-and-forget) and this method returns
+  /// normally rather than propagating the timeout as an error -- never
+  /// fabricates a different persisted value, just doesn't wait for
+  /// confirmation past the bound.
   Future<void> saveHasRegistered(bool value) async {
-    await _storage.write(key: _hasRegisteredKey, value: value.toString());
+    final write = _storage.write(key: _hasRegisteredKey, value: value.toString());
+    try {
+      await write.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      // Let it finish in the background; do not block the caller (typically
+      // navigation right after a successful register/login) waiting for a
+      // non-critical flag write.
+    }
   }
   
   /// Récupérer l'état d'inscription (si l'utilisateur s'est déjà inscrit ou connecté auparavant)
@@ -51,18 +70,34 @@ class AuthService {
   }
   
   /// Récupérer le JWT token
+  ///
+  /// Bounded with a 5s timeout, fail-closed -- a stalled secure-storage read
+  /// (used by AuthInterceptor.onRequest on every authenticated request) must
+  /// never hang the request indefinitely. Returns null on timeout, exactly
+  /// like "no token found" -- never fabricates or returns a stale/partial
+  /// value.
   Future<String?> getToken() async {
-    return await _storage.read(key: _tokenKey);
+    try {
+      return await _storage.read(key: _tokenKey).timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      return null;
+    }
   }
-  
+
   /// Récupérer le refresh token
   Future<String?> getRefreshToken() async {
     return await _storage.read(key: _refreshTokenKey);
   }
-  
+
   /// Récupérer l'ID utilisateur
+  ///
+  /// Same bounded, fail-closed behavior as getToken() above.
   Future<String?> getUserId() async {
-    return await _storage.read(key: _userIdKey);
+    try {
+      return await _storage.read(key: _userIdKey).timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      return null;
+    }
   }
   
   /// Vérifier si l'utilisateur est connecté (présence du token uniquement)
@@ -95,14 +130,26 @@ class AuthService {
   }
   
   /// Déconnexion - Supprimer tous les tokens
+  ///
+  /// Customer #20 hardening: stops the global realtime connection HERE,
+  /// the single lowest-level place both call paths that end a session
+  /// (AuthApi.logout()'s finally block, and any direct AuthService().logout()
+  /// call such as settings_page.dart's) funnel through -- so no old user's
+  /// socket/reconnect timer can ever survive past this call, regardless of
+  /// which higher-level logout wrapper triggered it. RealtimeSyncService.stop()
+  /// cancels the pending reconnect timer and closes the physical connection
+  /// (see GlobalWebsocketService.disconnect()'s _explicitlyDisconnected
+  /// flag), so a subsequent login's restart() always starts clean.
   Future<void> logout() async {
+    RealtimeSyncService().stop();
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _userIdKey);
   }
-  
+
   /// Nettoyer toutes les données stockées
   Future<void> clearAll() async {
+    RealtimeSyncService().stop();
     await _storage.deleteAll();
   }
 }
