@@ -2,6 +2,7 @@ import 'package:mezadpay/l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:mezadpay/core/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/auction.dart';
@@ -398,6 +399,7 @@ class _AuctionDetailsPageState extends ConsumerState<AuctionDetailsPage> {
       backgroundColor: isDarkMode
           ? const Color(0xFF1D1D1D)
           : const Color(0xFF0081FF),
+      systemOverlayStyle: AppTheme.lightStatusIcons,
       leadingWidth: 140,
       leading: Padding(
         padding: const EdgeInsetsDirectional.only(end: 16),

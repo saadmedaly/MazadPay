@@ -884,36 +884,39 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_285 => '1. Introduction';
 
   @override
-  String get text_286 => 'Nous nous engageons à protéger votre vie privée...';
+  String get text_286 =>
+      'MazadPay s\'engage à protéger votre vie privée. Cette page explique quelles données l\'application utilise, comment nous les utilisons et comment nous les protégeons. La version complète est disponible sur : mazadpay.com/privacy';
 
   @override
-  String get text_287 => '2. Informations collectées';
+  String get text_287 => '2. Données collectées';
 
   @override
   String get text_288 =>
-      'Nous collectons des informations lors de la création du compte...';
+      '• Compte : nom, numéro de téléphone et adresse e-mail si vous l\'ajoutez.\n• Localisation : avec votre accord, l\'application utilise la position de l\'appareil uniquement pour déterminer votre ville ; seul le nom de la ville est enregistré dans votre compte, vos coordonnées ne sont pas envoyées à nos serveurs.\n• Photos : les images que vous choisissez d\'envoyer, par exemple les photos d\'annonces et les reçus de paiement.\n• Portefeuille et transactions : dépôts, retraits, cautions, enchères et lots remportés.\n• Notifications : le jeton Firebase de l\'appareil, pour vous envoyer des notifications.';
 
   @override
   String get text_289 => '3. Utilisation des données';
 
   @override
   String get text_290 =>
-      'Nous les utilisons pour le traitement des enchères...';
+      'Nous utilisons vos données pour gérer votre compte, faire fonctionner les enchères, vérifier les opérations du portefeuille, afficher les enchères proches de vous et vous envoyer les notifications d\'enchères et de transactions. Nous n\'utilisons aucun outil de suivi ni d\'analyse publicitaire et nous ne vendons pas vos données.';
 
   @override
-  String get text_291 => '4. Protection des informations';
+  String get text_291 => '4. Protection et partage';
 
   @override
-  String get text_292 => 'Techniques de cryptage avancées...';
+  String get text_292 =>
+      'Vos données sont transmises via une connexion chiffrée et seul le personnel autorisé y a accès. Nous ne partageons que ce qui est nécessaire au service, par exemple l\'envoi des notifications via Firebase, ou lorsque la loi l\'exige.';
 
   @override
-  String get text_293 => '5. Modifications';
+  String get text_293 => '5. Suppression du compte et modifications';
 
   @override
-  String get text_294 => 'Nous nous réservons le droit de mise à jour.';
+  String get text_294 =>
+      'Vous pouvez supprimer votre compte dans l\'application : Menu → Paramètres → « حذف الحساب » (Supprimer le compte). Vos données personnelles (nom, téléphone, e-mail) sont alors supprimées et le compte est désactivé ; les enregistrements de transactions et d\'enchères nécessaires aux obligations légales et financières sont conservés. Nous pouvons mettre à jour cette politique et publierons tout changement ici et sur notre site.';
 
   @override
-  String get text_295 => 'Dernière mise à jour : Avril 2026';
+  String get text_295 => 'Dernière mise à jour : octobre 2026';
 
   @override
   String get text_296 => 'Gagnez du temps';

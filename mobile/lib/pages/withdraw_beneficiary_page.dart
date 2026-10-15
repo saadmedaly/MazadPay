@@ -1,5 +1,6 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:mezadpay/core/theme.dart';
 import '../services/wallet_api.dart';
 import '../utils/money_formatter.dart';
 
@@ -128,6 +129,7 @@ class _WithdrawBeneficiaryPageState extends State<WithdrawBeneficiaryPage> {
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: blue,
+        systemOverlayStyle: AppTheme.lightStatusIcons,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
