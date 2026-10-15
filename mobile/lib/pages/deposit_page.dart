@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:mezadpay/core/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
@@ -219,6 +220,7 @@ class _DepositPageState extends State<DepositPage> {
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: blue,
+        systemOverlayStyle: AppTheme.lightStatusIcons,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
