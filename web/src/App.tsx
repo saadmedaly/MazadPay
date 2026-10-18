@@ -5,6 +5,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { AuctionsPage } from './pages/AuctionsPage'
 import { AuctionDetailPage } from './pages/AuctionDetailPage'
 import { TransactionsPage } from './pages/TransactionsPage'
+import { BankilyPaymentsPage } from './pages/BankilyPaymentsPage'
 import { TransactionDetailPage } from './pages/TransactionDetailPage'
 import { UsersPage } from './pages/UsersPage'
 import { UserDetailPage } from './pages/UserDetailPage'
@@ -72,6 +73,7 @@ export default function App() {
         
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="transactions/:id" element={<TransactionDetailPage />} />
+        <Route path="bankily-payments" element={<BankilyPaymentsPage />} />
         
         <Route path="users" element={<UsersPage />} />
         <Route path="users/:id" element={<UserDetailPage />} />

@@ -12,8 +12,6 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 <string>Autoriser l'accès aux photos pour uploader des images</string>
-<key>NSCameraUsageDescription</key>
-<string>Autoriser l'accès à la caméra pour prendre des photos</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -28,6 +26,27 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>FlutterSceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -52,15 +71,22 @@
 	<!-- Location permissions -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Cette application a besoin d'accéder à votre position pour détecter votre ville et afficher les enchères proches de vous.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Cette application a besoin d'accéder à votre position pour détecter votre ville et afficher les enchères proches de vous.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Cette application a besoin d'accéder à votre position pour détecter votre ville et afficher les enchères proches de vous.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Required for canLaunchUrl(Uri.parse('whatsapp://...')) to correctly
+	     report WhatsApp's availability on iOS 9+ (query-scheme allowlist).
+	     Support/auction-details/winnings pages use the native whatsapp://send
+	     deep link as a fallback alongside the https://wa.me/... link (see
+	     lib/utils/whatsapp_launcher.dart); https/tel/mailto schemes used
+	     elsewhere in the app need no entry here, only non-Apple custom
+	     schemes require this declaration. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+	</array>
 </dict>
 </plist>

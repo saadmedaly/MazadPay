@@ -884,36 +884,39 @@ class AppLocalizationsFr extends AppLocalizations {
   String get text_285 => '1. Introduction';
 
   @override
-  String get text_286 => 'Nous nous engageons à protéger votre vie privée...';
+  String get text_286 =>
+      'MazadPay s\'engage à protéger votre vie privée. Cette page explique quelles données l\'application utilise, comment nous les utilisons et comment nous les protégeons. La version complète est disponible sur : mazadpay.com/privacy';
 
   @override
-  String get text_287 => '2. Informations collectées';
+  String get text_287 => '2. Données collectées';
 
   @override
   String get text_288 =>
-      'Nous collectons des informations lors de la création du compte...';
+      '• Compte : nom, numéro de téléphone et adresse e-mail si vous l\'ajoutez.\n• Localisation : avec votre accord, l\'application utilise la position de l\'appareil uniquement pour déterminer votre ville ; seul le nom de la ville est enregistré dans votre compte, vos coordonnées ne sont pas envoyées à nos serveurs.\n• Photos : les images que vous choisissez d\'envoyer, par exemple les photos d\'annonces et les reçus de paiement.\n• Portefeuille et transactions : dépôts, retraits, cautions, enchères et lots remportés.\n• Notifications : le jeton Firebase de l\'appareil, pour vous envoyer des notifications.';
 
   @override
   String get text_289 => '3. Utilisation des données';
 
   @override
   String get text_290 =>
-      'Nous les utilisons pour le traitement des enchères...';
+      'Nous utilisons vos données pour gérer votre compte, faire fonctionner les enchères, vérifier les opérations du portefeuille, afficher les enchères proches de vous et vous envoyer les notifications d\'enchères et de transactions. Nous n\'utilisons aucun outil de suivi ni d\'analyse publicitaire et nous ne vendons pas vos données.';
 
   @override
-  String get text_291 => '4. Protection des informations';
+  String get text_291 => '4. Protection et partage';
 
   @override
-  String get text_292 => 'Techniques de cryptage avancées...';
+  String get text_292 =>
+      'Vos données sont transmises via une connexion chiffrée et seul le personnel autorisé y a accès. Nous ne partageons que ce qui est nécessaire au service, par exemple l\'envoi des notifications via Firebase, ou lorsque la loi l\'exige.';
 
   @override
-  String get text_293 => '5. Modifications';
+  String get text_293 => '5. Suppression du compte et modifications';
 
   @override
-  String get text_294 => 'Nous nous réservons le droit de mise à jour.';
+  String get text_294 =>
+      'Vous pouvez supprimer votre compte dans l\'application : Menu → Paramètres → « حذف الحساب » (Supprimer le compte). Vos données personnelles (nom, téléphone, e-mail) sont alors supprimées et le compte est désactivé ; les enregistrements de transactions et d\'enchères nécessaires aux obligations légales et financières sont conservés. Nous pouvons mettre à jour cette politique et publierons tout changement ici et sur notre site.';
 
   @override
-  String get text_295 => 'Dernière mise à jour : Avril 2026';
+  String get text_295 => 'Dernière mise à jour : octobre 2026';
 
   @override
   String get text_296 => 'Gagnez du temps';
@@ -1631,4 +1634,144 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get text_426 => 'Annuler';
+
+  @override
+  String get bpay_title => 'Paiement Bankily B-PAY';
+
+  @override
+  String get bpay_entry_title => 'Bankily B-PAY (automatique)';
+
+  @override
+  String get bpay_entry_subtitle => 'Recharge instantanée, sans reçu à joindre';
+
+  @override
+  String get bpay_manual_section => 'Ou virement manuel avec reçu';
+
+  @override
+  String get bpay_instructions_title => 'Comment obtenir le code de paiement';
+
+  @override
+  String get bpay_step1 => 'Ouvrez l\'application Bankily et choisissez B-PAY';
+
+  @override
+  String get bpay_step2 => 'Saisissez le code commerçant et le montant';
+
+  @override
+  String get bpay_step3 =>
+      'Confirmez avec votre code PIN : le code de paiement s\'affiche';
+
+  @override
+  String get bpay_step4 =>
+      'Saisissez ici votre numéro Bankily et le code de paiement';
+
+  @override
+  String get bpay_merchant_code => 'Code commerçant';
+
+  @override
+  String get bpay_copied => 'Copié';
+
+  @override
+  String get bpay_amount_label => 'Montant (MRU)';
+
+  @override
+  String get bpay_amount_hint => 'Le même montant que dans Bankily';
+
+  @override
+  String bpay_amount_range(String min, String max) {
+    return 'Entre $min et $max MRU';
+  }
+
+  @override
+  String get bpay_phone_label => 'Numéro de téléphone Bankily';
+
+  @override
+  String get bpay_phone_hint => '8 chiffres';
+
+  @override
+  String get bpay_passcode_label => 'Code de paiement B-PAY';
+
+  @override
+  String get bpay_passcode_hint =>
+      'Le code affiché dans l\'application Bankily';
+
+  @override
+  String get bpay_passcode_note =>
+      'Ne communiquez jamais votre code PIN. Seul le code de paiement est demandé.';
+
+  @override
+  String get bpay_pay_button => 'Payer maintenant';
+
+  @override
+  String get bpay_err_amount => 'Montant invalide';
+
+  @override
+  String get bpay_err_phone => 'Numéro Bankily invalide';
+
+  @override
+  String get bpay_err_passcode => 'Veuillez saisir le code de paiement';
+
+  @override
+  String get bpay_err_generic => 'Opération impossible. Veuillez réessayer';
+
+  @override
+  String get bpay_err_unavailable =>
+      'Le paiement Bankily est momentanément indisponible';
+
+  @override
+  String get bpay_processing_title => 'Paiement en cours';
+
+  @override
+  String get bpay_processing_body => 'Veuillez ne pas fermer l\'application';
+
+  @override
+  String get bpay_success_title => 'Portefeuille rechargé';
+
+  @override
+  String bpay_success_body(String amount) {
+    return '$amount MRU ont été ajoutés à votre solde';
+  }
+
+  @override
+  String get bpay_failed_title => 'Le paiement a échoué';
+
+  @override
+  String get bpay_failed_body =>
+      'Votre portefeuille MazadPay n\'a pas été modifié. Vous pouvez réessayer ou utiliser le virement manuel.';
+
+  @override
+  String get bpay_pending_title => 'Vérification du paiement';
+
+  @override
+  String get bpay_pending_body =>
+      'Nous attendons la confirmation de Bankily. Le montant sera crédité automatiquement dès confirmation, une seule fois.';
+
+  @override
+  String get bpay_check_again => 'Vérifier à nouveau';
+
+  @override
+  String get bpay_try_again => 'Réessayer';
+
+  @override
+  String get bpay_use_manual => 'Utiliser le virement manuel';
+
+  @override
+  String get bpay_done => 'Terminé';
+
+  @override
+  String get bpay_operation_id => 'N° d\'opération';
+
+  @override
+  String get bpay_transaction_id => 'N° de transaction Bankily';
+
+  @override
+  String get bpay_recent_title => 'Paiements B-PAY récents';
+
+  @override
+  String get bpay_status_pending => 'En vérification';
+
+  @override
+  String get bpay_status_success => 'Réussi';
+
+  @override
+  String get bpay_status_failed => 'Échoué';
 }

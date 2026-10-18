@@ -886,38 +886,38 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_286 =>
-      'نحن في مزاد باي (MazadPay) نلتزم بحماية خصوصيتك ومعلوماتك الشخصية. توضح هذه السياسة كيفية جمع واستخدام وحماية بياناتك عند استخدام تطبيقنا خدماتنا.';
+      'نحن في مزاد باي (MazadPay) نلتزم بحماية خصوصيتك. توضّح هذه الصفحة البيانات التي يستخدمها التطبيق وكيف نستخدمها ونحميها. النسخة الكاملة متاحة أيضاً على: mazadpay.com/privacy';
 
   @override
-  String get text_287 => '2. المعلومات التي نجمعها';
+  String get text_287 => '2. البيانات التي نجمعها';
 
   @override
   String get text_288 =>
-      'نقوم بجمع المعلومات التي تقدمها لنا مباشرة عند إنشاء حساب، مثل الاسم، رقم الهاتف، والبريد الإلكتروني. كما نسجل بيانات المعاملات المالية والمزايدات التي تشارك بها.';
+      '• بيانات الحساب: الاسم، رقم الهاتف، والبريد الإلكتروني إن أضفته.\n• الموقع: عند موافقتك، يستخدم التطبيق موقع جهازك لتحديد مدينتك فقط؛ نحفظ اسم المدينة في حسابك ولا نرسل إحداثيات موقعك إلى خوادمنا.\n• الصور: الصور التي تختارها وترفعها بنفسك، مثل صور الإعلانات وإيصالات الدفع.\n• المحفظة والمعاملات: الإيداعات والسحوبات، مبالغ التأمين، المزايدات والمزادات التي فزت بها.\n• الإشعارات: رمز الجهاز الخاص بخدمة Firebase لإرسال الإشعارات إليك.';
 
   @override
   String get text_289 => '3. كيفية استخدام البيانات';
 
   @override
   String get text_290 =>
-      'نستخدم معلوماتك لمعالجة المزايدات، إدارة حسابك، إرسال تنبيهات السعر، وضمان أمان المعاملات المالية داخل التطبيق.';
+      'نستخدم بياناتك لإدارة حسابك، تشغيل المزادات والمزايدات، مراجعة عمليات المحفظة، عرض المزادات القريبة منك، وإرسال إشعارات المزايدة والمعاملات. لا نستخدم أدوات تتبّع أو تحليلات إعلانية، ولا نبيع بياناتك.';
 
   @override
-  String get text_291 => '4. حماية المعلومات';
+  String get text_291 => '4. حماية البيانات ومشاركتها';
 
   @override
   String get text_292 =>
-      'نحن نستخدم تقنيات تشفير متطورة لحماية بياناتك من الوصول غير المصرح به. معلوماتك المالية يتم معالجتها من خلال بوابات دفع آمنة ومعتمدة.';
+      'تُنقل بياناتك عبر اتصال مشفّر، ويقتصر الوصول إليها على الفريق المخوّل. نشارك فقط ما يلزم لتشغيل الخدمة، مثل إرسال الإشعارات عبر Firebase، أو عندما يفرض القانون ذلك.';
 
   @override
-  String get text_293 => '5. التغييرات على هذه السياسة';
+  String get text_293 => '5. حذف الحساب والتغييرات';
 
   @override
   String get text_294 =>
-      'نحتفظ بالحق في تحديث سياسة الخصوصية هذه من وقت لآخر. سيتم إخطارك بأي تغييرات جوهرية عبر البريد الإلكتروني أو تنبيه داخل التطبيق.';
+      'يمكنك حذف حسابك من داخل التطبيق: القائمة ← الإعدادات ← حذف الحساب. عند الحذف تُزال بياناتك الشخصية (الاسم، رقم الهاتف، البريد الإلكتروني) ويتم تعطيل الحساب، مع الاحتفاظ بسجلات المعاملات والمزايدات اللازمة للالتزامات القانونية والمالية. قد نحدّث هذه السياسة، وسننشر أي تغيير هنا وعلى موقعنا.';
 
   @override
-  String get text_295 => 'آخر تحديث: أبريل 2026';
+  String get text_295 => 'آخر تحديث: أكتوبر 2026';
 
   @override
   String get text_296 => 'اربح وقتك';
@@ -1635,4 +1635,140 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_426 => 'إلغاء';
+
+  @override
+  String get bpay_title => 'الدفع عبر بنكيلي B-PAY';
+
+  @override
+  String get bpay_entry_title => 'بنكيلي B-PAY (تلقائي)';
+
+  @override
+  String get bpay_entry_subtitle => 'شحن فوري للمحفظة بدون إرفاق إيصال';
+
+  @override
+  String get bpay_manual_section => 'أو التحويل اليدوي مع إرفاق الإيصال';
+
+  @override
+  String get bpay_instructions_title => 'كيف تحصل على رمز الدفع';
+
+  @override
+  String get bpay_step1 => 'افتح تطبيق بنكيلي واختر B-PAY';
+
+  @override
+  String get bpay_step2 => 'أدخل رمز التاجر والمبلغ';
+
+  @override
+  String get bpay_step3 => 'أكّد العملية برمزك السري، سيظهر لك رمز الدفع';
+
+  @override
+  String get bpay_step4 => 'أدخل رقم هاتف بنكيلي ورمز الدفع هنا';
+
+  @override
+  String get bpay_merchant_code => 'رمز التاجر';
+
+  @override
+  String get bpay_copied => 'تم النسخ';
+
+  @override
+  String get bpay_amount_label => 'المبلغ (أوقية)';
+
+  @override
+  String get bpay_amount_hint => 'نفس المبلغ المُدخل في بنكيلي';
+
+  @override
+  String bpay_amount_range(String min, String max) {
+    return 'بين $min و $max أوقية';
+  }
+
+  @override
+  String get bpay_phone_label => 'رقم هاتف بنكيلي';
+
+  @override
+  String get bpay_phone_hint => '8 أرقام';
+
+  @override
+  String get bpay_passcode_label => 'رمز الدفع B-PAY';
+
+  @override
+  String get bpay_passcode_hint => 'الرمز الظاهر في تطبيق بنكيلي';
+
+  @override
+  String get bpay_passcode_note =>
+      'لا تشارك رمزك السري (PIN) أبداً. نطلب فقط رمز الدفع.';
+
+  @override
+  String get bpay_pay_button => 'ادفع الآن';
+
+  @override
+  String get bpay_err_amount => 'المبلغ غير صالح';
+
+  @override
+  String get bpay_err_phone => 'رقم هاتف بنكيلي غير صالح';
+
+  @override
+  String get bpay_err_passcode => 'يرجى إدخال رمز الدفع';
+
+  @override
+  String get bpay_err_generic => 'تعذر إتمام العملية. يرجى المحاولة مجدداً';
+
+  @override
+  String get bpay_err_unavailable => 'الدفع عبر بنكيلي غير متاح حالياً';
+
+  @override
+  String get bpay_processing_title => 'جارٍ معالجة الدفع';
+
+  @override
+  String get bpay_processing_body => 'يرجى عدم إغلاق التطبيق';
+
+  @override
+  String get bpay_success_title => 'تم شحن المحفظة';
+
+  @override
+  String bpay_success_body(String amount) {
+    return 'تمت إضافة $amount أوقية إلى رصيدك';
+  }
+
+  @override
+  String get bpay_failed_title => 'لم تتم عملية الدفع';
+
+  @override
+  String get bpay_failed_body =>
+      'لم يتم خصم أي مبلغ من محفظتك على MazadPay. يمكنك المحاولة مجدداً أو استخدام التحويل اليدوي.';
+
+  @override
+  String get bpay_pending_title => 'جارٍ التحقق من الدفع';
+
+  @override
+  String get bpay_pending_body =>
+      'ننتظر تأكيد بنكيلي. سيُضاف المبلغ تلقائياً فور التأكيد، ولن يُحتسب مرتين.';
+
+  @override
+  String get bpay_check_again => 'تحقق مرة أخرى';
+
+  @override
+  String get bpay_try_again => 'حاول مجدداً';
+
+  @override
+  String get bpay_use_manual => 'استخدام التحويل اليدوي';
+
+  @override
+  String get bpay_done => 'تم';
+
+  @override
+  String get bpay_operation_id => 'رقم العملية';
+
+  @override
+  String get bpay_transaction_id => 'رقم معاملة بنكيلي';
+
+  @override
+  String get bpay_recent_title => 'مدفوعات B-PAY الأخيرة';
+
+  @override
+  String get bpay_status_pending => 'قيد التحقق';
+
+  @override
+  String get bpay_status_success => 'ناجحة';
+
+  @override
+  String get bpay_status_failed => 'فاشلة';
 }

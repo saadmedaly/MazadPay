@@ -1,11 +1,14 @@
 package routes
 
 import (
+	"context"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 	"github.com/jmoiron/sqlx"
 	"github.com/mazadpay/backend/internal/config"
 	"github.com/mazadpay/backend/internal/handlers"
+	"github.com/mazadpay/backend/internal/payments/bankily"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/repository"
 	"github.com/mazadpay/backend/internal/services"
@@ -55,6 +58,23 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	userSvc := services.NewUserService(userRepo, favoriteRepo, auctionRepo, kycRepo, auditSvc, rdb, logger, cfg.JWT.ExpiryHours)
 	adminSvc := services.NewAdminService(db, userRepo, auctionRepo, bidRepo, txRepo, reportRepo, kycRepo, contentRepo, invRepo, reqRepo, settingsRepo, mediaSvc, notifSvc, auditSvc, rdb, logger, cfg.JWT.ExpiryHours, globalHub, walletRepo)
 	walletSvc := services.NewWalletService(db, walletRepo, txRepo, reqRepo, userRepo, notifSvc, auditSvc, logger)
+	// Bankily B-PAY automatic top-up. The client (and its credentials) only
+	// exists when fully configured; otherwise the endpoints report disabled
+	// and the manual deposit flow is the only path, exactly as before.
+	var bankilyAPI services.BankilyAPI
+	if cfg.Bankily.Ready() {
+		bankilyAPI = bankily.NewClient(bankily.Config{
+			BaseURL:  cfg.Bankily.BaseURL,
+			Username: cfg.Bankily.Username,
+			Password: cfg.Bankily.Password,
+			ClientID: cfg.Bankily.ClientID,
+			Timeout:  cfg.Bankily.HTTPTimeout,
+		}, nil)
+	}
+	bankilySvc := services.NewBankilyPaymentService(db, cfg.Bankily, bankilyAPI, repository.NewBankilyPaymentRepository(db), walletRepo, userRepo, notifSvc, auditSvc, logger)
+	if bankilySvc.Enabled() {
+		go bankilySvc.RunReconciler(context.Background())
+	}
 	contentSvc := services.NewContentService(contentRepo, notifSvc, mediaSvc, globalHub)
 	reqSvc := services.NewRequestService(reqRepo, auctionRepo, contentRepo, userRepo, auditSvc, notifSvc, logger, globalHub)
 	reportSvc := services.NewReportService(txRepo)
@@ -90,6 +110,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	bannerHandler.SetAuditService(auditSvc)
 	walletHandler := handlers.NewWalletHandler(walletSvc, logger, mediaSvc)
 	walletHandler.SetAuditService(auditSvc)
+	bankilyHandler := handlers.NewBankilyHandler(bankilySvc, userRepo, logger)
 	reqHandler := handlers.NewRequestHandler(reqSvc, logger)
 	contentHandler := handlers.NewContentHandler(contentSvc, logger)
 	contentHandler.SetAuditService(auditSvc)
@@ -124,6 +145,7 @@ func Setup(app *fiber.App, db *sqlx.DB, rdb *redis.Client, cfg *config.Config, l
 	setupAuctionRoutes(api, auctionSvc, bidHandler, userHandler, mediaSvc, userRepo, cfg.JWT.Secret, logger, rdb)
 	setupUserRoutes(api, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupAdminRoutes(api, adminHandler, userHandler, walletHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
+	setupBankilyRoutes(api, bankilyHandler, cfg.JWT.Secret, logger, rdb)
 	setupBannerRoutes(api, bannerHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupContentRoutes(api, contentHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
 	setupNotificationRoutes(api, notifHandler, mediaSvc, cfg.JWT.Secret, logger, rdb)
@@ -754,4 +776,25 @@ func setupRatingRoutes(api fiber.Router, h *handlers.RatingHandler, jwtSecret st
 	admin.Get("/ratings/stats", h.GetAppStats)
 	admin.Get("/ratings", h.ListAppRatings)
 	admin.Delete("/ratings/:id", h.DeleteAppRating)
+}
+
+// setupBankilyRoutes registers the Bankily B-PAY automatic top-up endpoints.
+// Rate limits are per user and fail-closed: /pay moves real money and
+// /check calls Bankily.
+func setupBankilyRoutes(api fiber.Router, h *handlers.BankilyHandler, jwtSecret string, logger *zap.Logger, rdb *redis.Client) {
+	jwtMiddleware := middleware.JWT(jwtSecret, logger, rdb)
+
+	payRateLimit := middleware.RateLimitByUser(rdb, 3600, 10, logger, true, "")
+	checkRateLimit := middleware.RateLimitByUser(rdb, 3600, 60, logger, true, "id")
+
+	user := api.Group("/users/wallet/bankily", jwtMiddleware)
+	user.Get("/config", h.Config)
+	user.Post("/pay", payRateLimit, h.Pay)
+	user.Get("/payments", h.List)
+	user.Get("/payments/:id", h.Get)
+	user.Post("/payments/:id/check", checkRateLimit, h.Check)
+
+	admin := api.Group("/admin/bankily", jwtMiddleware, middleware.AdminOnly(logger))
+	admin.Get("/payments", h.AdminList)
+	admin.Post("/payments/:id/recheck", h.AdminRecheck)
 }

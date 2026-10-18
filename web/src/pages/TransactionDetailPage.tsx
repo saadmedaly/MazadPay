@@ -103,7 +103,11 @@ export function TransactionDetailPage() {
     </div>
   )
 
-  const isPendingReview = txn.status === 'pending_review'
+  // Bankily B-PAY automatic rows are settled by the provider (written already
+  // completed after a Bankily-confirmed TS). The backend refuses manual
+  // approve/reject/add-balance on them; the UI does not offer them either.
+  const isBankilyAuto = txn.gateway === 'bankily_bpay'
+  const isPendingReview = txn.status === 'pending_review' && !isBankilyAuto
 
   return (
     <div className="animate-fade-in max-w-5xl" dir="rtl">
@@ -276,9 +280,23 @@ export function TransactionDetailPage() {
         </div>
       )}
 
+      {isBankilyAuto && (
+        <div className="admin-card p-6 mt-6 border-emerald-500/30">
+          <h2 className="font-display font-bold text-emerald-400 text-base mb-2 flex items-center gap-2">
+            <Check className="w-4 h-4" />
+            معاملة تلقائية عبر بنكيلي B-PAY
+          </h2>
+          <p className="text-xs text-surface-muted font-medium">
+            تم تأكيد هذا الدفع من بنكيلي (TS) وإضافته إلى المحفظة تلقائياً مرة واحدة. لا يتطلب أي موافقة يدوية.
+            <button onClick={() => navigate('/bankily-payments')} className="text-mazad-primary font-bold mr-2">عرض مدفوعات بنكيلي</button>
+          </p>
+        </div>
+      )}
+
       {/* Add Balance (Customer #35): admin-only direct credit to this
           transaction's own user, reusing the wallet/ledger architecture --
           never a client-side transfer, amount is re-validated server-side. */}
+      {!isBankilyAuto && (
       <div className="admin-card p-6 mt-6">
         <h2 className="font-display font-bold text-white text-base mb-6 pb-4 border-b border-surface-border flex items-center gap-2">
           <Wallet className="w-4 h-4 text-mazad-primary" />
@@ -307,6 +325,7 @@ export function TransactionDetailPage() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Deduct Balance (admin wallet controls): the mirror of Add Balance
           above -- same anchor-transaction-derives-target-user architecture,

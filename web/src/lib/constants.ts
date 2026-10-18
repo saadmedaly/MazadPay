@@ -43,4 +43,5 @@ export const GATEWAY_LABELS: Record<string, string> = {
   Sedad:    'سداد',
   Click:    'كليك',
   Bank:     'تحويل بنكي',
+  bankily_bpay: 'بنكيلي B-PAY (تلقائي)',
 }

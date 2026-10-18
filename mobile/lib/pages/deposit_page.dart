@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:mezadpay/core/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
@@ -8,6 +9,10 @@ import 'package:mezadpay/pages/payment_success_page.dart';
 import 'package:mezadpay/services/api_service.dart';
 import 'package:mezadpay/services/payment_methods_service.dart';
 import 'package:mezadpay/models/payment_method.dart';
+import 'package:mezadpay/models/bankily_payment.dart';
+import 'package:mezadpay/services/bankily_api.dart';
+import 'package:mezadpay/pages/bankily_bpay_page.dart';
+import 'package:mezadpay/l10n/app_localizations.dart';
 
 const String _officialAccountNumber = '36601175';
 
@@ -46,6 +51,10 @@ class _DepositPageState extends State<DepositPage> {
   bool _loadingMethods = true;
   File? _receiptFile;
   bool _submitting = false;
+  // Bankily B-PAY automatic top-up: offered only once the backend reports it
+  // enabled, and only for the generic wallet top-up (an auction-subscription
+  // payment keeps the manual, reference-linked flow below).
+  BankilyConfig _bankilyConfig = BankilyConfig.disabled;
 
   // MAZADPAY — deposit approval crediting a fixed 500 regardless of what the
   // user actually transferred: the generic wallet-top-up flow previously had
@@ -68,6 +77,69 @@ class _DepositPageState extends State<DepositPage> {
   void initState() {
     super.initState();
     _loadMethods();
+    _loadBankilyConfig();
+  }
+
+  Future<void> _loadBankilyConfig() async {
+    try {
+      final cfg = await BankilyApi().getConfig();
+      if (mounted) setState(() => _bankilyConfig = cfg);
+    } catch (_) {
+      // B-PAY simply stays hidden; the manual flow is always available.
+    }
+  }
+
+  void _openBankilyBpay() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => BankilyBpayPage(config: _bankilyConfig)),
+    );
+  }
+
+  Widget _buildBankilyEntry(bool isDark, Color blue) {
+    final l10n = AppLocalizations.of(context);
+    if (l10n == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: isDark ? const Color(0xFF1D1D1D) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            key: const Key('bpay-entry'),
+            borderRadius: BorderRadius.circular(12),
+            onTap: _openBankilyBpay,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: blue, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Image.asset('assets/logo-bankily.png', width: 36, height: 36, errorBuilder: (_, _, _) => const SizedBox.shrink()),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(l10n.bpay_entry_title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        const SizedBox(height: 4),
+                        Text(l10n.bpay_entry_subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: blue),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(l10n.bpay_manual_section, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+        const SizedBox(height: 16),
+      ],
+    );
   }
 
   @override
@@ -219,6 +291,7 @@ class _DepositPageState extends State<DepositPage> {
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: blue,
+        systemOverlayStyle: AppTheme.lightStatusIcons,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
@@ -235,6 +308,7 @@ class _DepositPageState extends State<DepositPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_bankilyConfig.enabled && !_isAuctionSubscriptionFee) _buildBankilyEntry(isDark, blue),
             // Subscription fee amount (customer feedback #4): shown before
             // payment-method selection, whenever this page was reached from
             // submitting an auction request for review. The amount itself

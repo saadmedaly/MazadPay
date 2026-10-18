@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import {
+import { Zap,
   LayoutDashboard, Gavel, CreditCard, Users,
   Flag, Image, LogOut, Hammer, ShieldCheck, HelpCircle, Video, Bell, User, Settings, PhoneOff,
   Wallet, Handshake, Star, LifeBuoy, Grid2x2, MapPin, X
@@ -39,6 +39,7 @@ const NAV_SECTIONS = [
     items: [
       { label: 'المزادات',        icon: Gavel,       to: '/auctions',        badgeKey: 'pendingAuctions' },
       { label: 'المعاملات',       icon: CreditCard,  to: '/transactions',    badgeKey: 'pendingTxns' },
+      { label: 'بنكيلي B-PAY',    icon: Zap,         to: '/bankily-payments', badgeKey: null },
       { label: 'المستخدمين',      icon: Users,       to: '/users',           badgeKey: null },
       { label: 'طرق الدفع',      icon: Wallet,      to: '/payment-methods', badgeKey: null },
       { label: 'البلاغات',        icon: Flag,        to: '/reports',         badgeKey: 'pendingReports' },

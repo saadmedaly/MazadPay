@@ -1,6 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:mezadpay/pages/home_page.dart';
@@ -60,6 +61,7 @@ class SideMenuDrawer extends StatefulWidget {
 }
 
 class _SideMenuDrawerState extends State<SideMenuDrawer> {
+  static final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
   final UserApi _userApi = UserApi();
   Map<String, dynamic>? _userData;
   bool _isLoading = true;
@@ -461,9 +463,17 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
                 ],
               ),
             ),
-            const Text(
-              'Version 1.0.0',
-              style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
+            // Read from the build metadata (pubspec version) so it never goes
+            // stale; renders an empty line while loading or if unavailable.
+            FutureBuilder<PackageInfo>(
+              future: _packageInfo,
+              builder: (context, snapshot) {
+                final info = snapshot.data;
+                return Text(
+                  info == null ? '' : 'Version ${info.version} (${info.buildNumber})',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
+                );
+              },
             ),
             const SizedBox(height: 20),
           ],

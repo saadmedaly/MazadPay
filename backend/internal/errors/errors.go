@@ -123,6 +123,20 @@ var (
 	// comment).
 	ErrWalletDisabled = errors.New("wallet_disabled")
 
+	// Bankily B-PAY automatic top-up.
+	ErrBankilyDisabled          = errors.New("bankily_disabled")
+	ErrBankilyInvalidPhone      = errors.New("bankily_invalid_phone")
+	ErrBankilyInvalidPasscode   = errors.New("bankily_invalid_passcode")
+	ErrBankilyInvalidAmount     = errors.New("bankily_invalid_amount")
+	ErrBankilyCurrency          = errors.New("bankily_currency_unsupported")
+	ErrBankilyIdempotencyReused = errors.New("bankily_idempotency_key_reused")
+	// ErrBankilyIdempotencyRequired: every /pay submission must carry a key so
+	// a retry can never start a second payment.
+	ErrBankilyIdempotencyRequired = errors.New("bankily_idempotency_key_required")
+	// ErrAutomaticTransaction: a confirmed Bankily B-PAY ledger row is
+	// settled by the provider, never by manual admin approval/credit.
+	ErrAutomaticTransaction = errors.New("automatic_transaction")
+
 	// Chat / Messagerie
 	ErrConversationNotFound     = errors.New("conversation_not_found")
 	ErrNotConversationMember    = errors.New("not_conversation_member")

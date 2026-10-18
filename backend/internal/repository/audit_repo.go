@@ -29,13 +29,16 @@ func (r *auditRepo) Create(ctx context.Context, log *models.AuditLog) error {
 	if log.ActorType == "" {
 		log.ActorType = "unknown"
 	}
+	// System-initiated entries (scheduler, Bankily reconciler) pass uuid.Nil:
+	// store NULL, since admin_id references users(id) and the nil UUID would
+	// violate that foreign key and silently drop the audit entry.
 	_, err := r.db.NamedExecContext(ctx, `
 		INSERT INTO audit_logs (
 			id, admin_id, action, entity_type, entity_id, details,
 			actor_id, actor_type, ip_address, user_agent, details_json, entity_key
 		)
 		VALUES (
-			:id, :admin_id, :action, :entity_type, :entity_id, :details,
+			:id, NULLIF(:admin_id, CAST('00000000-0000-0000-0000-000000000000' AS uuid)), :action, :entity_type, :entity_id, :details,
 			:actor_id, :actor_type, :ip_address, :user_agent, :details_json, :entity_key
 		)
 	`, log)
