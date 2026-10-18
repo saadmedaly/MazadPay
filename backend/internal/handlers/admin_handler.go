@@ -626,6 +626,11 @@ func (h *AdminHandler) ValidateTransaction(c *fiber.Ctx) error {
 		return Unauthorized(c)
 	}
 	if err := h.svc.ValidateTransaction(c.Context(), id, req.Approve, req.Notes, adminID, req.AttachmentURL); err != nil {
+		// Bankily B-PAY automatic rows: surface the typed 409 through the
+		// shared mapping. Every other error keeps its existing response.
+		if errors.Is(err, apperr.ErrAutomaticTransaction) {
+			return MapError(c, h.logger, err)
+		}
 		return InternalError(c, "Failed to validate transaction")
 	}
 
