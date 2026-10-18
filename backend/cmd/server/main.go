@@ -51,7 +51,7 @@ func main() {
 	}
 	defer db.Close()
 
-	logger.Info("Connecting to Redis...", zap.String("url", cfg.Redis.URL))
+	logger.Info("Connecting to Redis...", zap.String("addr", database.RedactRedisURL(cfg.Redis.URL)))
 	rdb, err := database.NewRedis(cfg, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to Redis", zap.Error(err))

@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/mazadpay/backend/internal/config"
@@ -13,7 +14,9 @@ import (
 func NewRedis(cfg *config.Config, logger *zap.Logger) (*redis.Client, error) {
 	opts, err := redis.ParseURL(cfg.Redis.URL)
 	if err != nil {
-		return nil, fmt.Errorf("redis parse URL: %w", err)
+		// Never wrap the parse error: url.Parse errors embed the raw URL,
+		// password included.
+		return nil, fmt.Errorf("redis parse URL (%s): invalid REDIS_URL", RedactRedisURL(cfg.Redis.URL))
 	}
 
 	client := redis.NewClient(opts)
@@ -25,6 +28,17 @@ func NewRedis(cfg *config.Config, logger *zap.Logger) (*redis.Client, error) {
 		return nil, fmt.Errorf("redis ping: %w", err)
 	}
 
-	logger.Info("Redis connected", zap.String("url", cfg.Redis.URL))
+	logger.Info("Redis connected", zap.String("addr", RedactRedisURL(cfg.Redis.URL)))
 	return client, nil
+}
+
+// RedactRedisURL returns scheme://host:port/db for logging -- never the
+// username, password or query string. Unparseable input yields a fixed
+// placeholder rather than any part of the raw value.
+func RedactRedisURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "<unparseable REDIS_URL>"
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
 }
