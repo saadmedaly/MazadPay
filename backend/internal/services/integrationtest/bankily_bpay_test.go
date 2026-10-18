@@ -720,3 +720,55 @@ func TestBankily_IdempotencyKeyRequired(t *testing.T) {
 		t.Fatalf("expected 1 attempt / 1 Bankily call, got %d / %d", n, b.fake.PaymentCalls.Load())
 	}
 }
+
+// HTTP: admin approve/reject/add-balance on a Bankily ledger row return the
+// typed 409 automatic_transaction, and change neither the row nor the wallet.
+func TestBankily_AdminHTTP_ManualActions409(t *testing.T) {
+	b := newBpayEnv(t, 5*time.Second)
+	p, err := b.pay(t, 100, uniqKey())
+	if err != nil || p.WalletTransactionID == nil {
+		t.Fatalf("setup payment: %v", err)
+	}
+	admin := createTestAdmin(t, b.env, "TEST BPAY HTTP ADMIN")
+	h := handlers.NewAdminHandler(newTestAdminService(t, b.env), nil, b.env.logger)
+	app := fiber.New()
+	aid := admin.ID
+	app.Put("/admin/transactions/:id/validate", fakeAuth(&aid), h.ValidateTransaction)
+	app.Post("/admin/transactions/:id/add-balance", fakeAuth(&aid), h.AdminAddBalance)
+
+	type rowState struct {
+		Status     string     `db:"status"`
+		ReviewedBy *uuid.UUID `db:"reviewed_by"`
+		AdminNotes *string    `db:"admin_notes"`
+	}
+	var before rowState
+	b.env.db.Get(&before, `SELECT status, reviewed_by, admin_notes FROM transactions WHERE id = $1`, *p.WalletTransactionID)
+	balBefore := b.balance(t)
+
+	cases := []struct{ name, method, path, body string }{
+		{"approve", "PUT", "/validate", `{"approve":true,"notes":""}`},
+		{"reject", "PUT", "/validate", `{"approve":false,"notes":"stale reject"}`},
+		{"add-balance", "POST", "/add-balance", `{"amount":50,"notes":"x"}`},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest(c.method, "/admin/transactions/"+p.WalletTransactionID.String()+c.path, strings.NewReader(c.body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := app.Test(req, 10000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != 409 || !strings.Contains(string(raw), `"automatic_transaction"`) {
+			t.Fatalf("%s: expected 409 automatic_transaction, got %d %s", c.name, resp.StatusCode, raw)
+		}
+	}
+
+	var after rowState
+	b.env.db.Get(&after, `SELECT status, reviewed_by, admin_notes FROM transactions WHERE id = $1`, *p.WalletTransactionID)
+	if after.Status != "completed" || after.Status != before.Status || after.ReviewedBy != nil || after.AdminNotes != nil {
+		t.Fatalf("Bankily ledger row changed: before=%+v after=%+v", before, after)
+	}
+	if !b.balance(t).Equal(balBefore) || b.ledgerRows(t, p.OperationID) != 1 {
+		t.Fatal("wallet or ledger changed by refused admin actions")
+	}
+}
