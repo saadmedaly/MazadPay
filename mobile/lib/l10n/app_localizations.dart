@@ -3261,6 +3261,264 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'إلغاء'**
   String get text_426;
+
+  /// No description provided for @bpay_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'الدفع عبر بنكيلي B-PAY'**
+  String get bpay_title;
+
+  /// No description provided for @bpay_entry_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'بنكيلي B-PAY (تلقائي)'**
+  String get bpay_entry_title;
+
+  /// No description provided for @bpay_entry_subtitle.
+  ///
+  /// In ar, this message translates to:
+  /// **'شحن فوري للمحفظة بدون إرفاق إيصال'**
+  String get bpay_entry_subtitle;
+
+  /// No description provided for @bpay_manual_section.
+  ///
+  /// In ar, this message translates to:
+  /// **'أو التحويل اليدوي مع إرفاق الإيصال'**
+  String get bpay_manual_section;
+
+  /// No description provided for @bpay_instructions_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'كيف تحصل على رمز الدفع'**
+  String get bpay_instructions_title;
+
+  /// No description provided for @bpay_step1.
+  ///
+  /// In ar, this message translates to:
+  /// **'افتح تطبيق بنكيلي واختر B-PAY'**
+  String get bpay_step1;
+
+  /// No description provided for @bpay_step2.
+  ///
+  /// In ar, this message translates to:
+  /// **'أدخل رمز التاجر والمبلغ'**
+  String get bpay_step2;
+
+  /// No description provided for @bpay_step3.
+  ///
+  /// In ar, this message translates to:
+  /// **'أكّد العملية برمزك السري، سيظهر لك رمز الدفع'**
+  String get bpay_step3;
+
+  /// No description provided for @bpay_step4.
+  ///
+  /// In ar, this message translates to:
+  /// **'أدخل رقم هاتف بنكيلي ورمز الدفع هنا'**
+  String get bpay_step4;
+
+  /// No description provided for @bpay_merchant_code.
+  ///
+  /// In ar, this message translates to:
+  /// **'رمز التاجر'**
+  String get bpay_merchant_code;
+
+  /// No description provided for @bpay_copied.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم النسخ'**
+  String get bpay_copied;
+
+  /// No description provided for @bpay_amount_label.
+  ///
+  /// In ar, this message translates to:
+  /// **'المبلغ (أوقية)'**
+  String get bpay_amount_label;
+
+  /// No description provided for @bpay_amount_hint.
+  ///
+  /// In ar, this message translates to:
+  /// **'نفس المبلغ المُدخل في بنكيلي'**
+  String get bpay_amount_hint;
+
+  /// No description provided for @bpay_amount_range.
+  ///
+  /// In ar, this message translates to:
+  /// **'بين {min} و {max} أوقية'**
+  String bpay_amount_range(String min, String max);
+
+  /// No description provided for @bpay_phone_label.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم هاتف بنكيلي'**
+  String get bpay_phone_label;
+
+  /// No description provided for @bpay_phone_hint.
+  ///
+  /// In ar, this message translates to:
+  /// **'8 أرقام'**
+  String get bpay_phone_hint;
+
+  /// No description provided for @bpay_passcode_label.
+  ///
+  /// In ar, this message translates to:
+  /// **'رمز الدفع B-PAY'**
+  String get bpay_passcode_label;
+
+  /// No description provided for @bpay_passcode_hint.
+  ///
+  /// In ar, this message translates to:
+  /// **'الرمز الظاهر في تطبيق بنكيلي'**
+  String get bpay_passcode_hint;
+
+  /// No description provided for @bpay_passcode_note.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا تشارك رمزك السري (PIN) أبداً. نطلب فقط رمز الدفع.'**
+  String get bpay_passcode_note;
+
+  /// No description provided for @bpay_pay_button.
+  ///
+  /// In ar, this message translates to:
+  /// **'ادفع الآن'**
+  String get bpay_pay_button;
+
+  /// No description provided for @bpay_err_amount.
+  ///
+  /// In ar, this message translates to:
+  /// **'المبلغ غير صالح'**
+  String get bpay_err_amount;
+
+  /// No description provided for @bpay_err_phone.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم هاتف بنكيلي غير صالح'**
+  String get bpay_err_phone;
+
+  /// No description provided for @bpay_err_passcode.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى إدخال رمز الدفع'**
+  String get bpay_err_passcode;
+
+  /// No description provided for @bpay_err_generic.
+  ///
+  /// In ar, this message translates to:
+  /// **'تعذر إتمام العملية. يرجى المحاولة مجدداً'**
+  String get bpay_err_generic;
+
+  /// No description provided for @bpay_err_unavailable.
+  ///
+  /// In ar, this message translates to:
+  /// **'الدفع عبر بنكيلي غير متاح حالياً'**
+  String get bpay_err_unavailable;
+
+  /// No description provided for @bpay_processing_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'جارٍ معالجة الدفع'**
+  String get bpay_processing_title;
+
+  /// No description provided for @bpay_processing_body.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى عدم إغلاق التطبيق'**
+  String get bpay_processing_body;
+
+  /// No description provided for @bpay_success_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم شحن المحفظة'**
+  String get bpay_success_title;
+
+  /// No description provided for @bpay_success_body.
+  ///
+  /// In ar, this message translates to:
+  /// **'تمت إضافة {amount} أوقية إلى رصيدك'**
+  String bpay_success_body(String amount);
+
+  /// No description provided for @bpay_failed_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'لم تتم عملية الدفع'**
+  String get bpay_failed_title;
+
+  /// No description provided for @bpay_failed_body.
+  ///
+  /// In ar, this message translates to:
+  /// **'لم يتم خصم أي مبلغ من محفظتك على MazadPay. يمكنك المحاولة مجدداً أو استخدام التحويل اليدوي.'**
+  String get bpay_failed_body;
+
+  /// No description provided for @bpay_pending_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'جارٍ التحقق من الدفع'**
+  String get bpay_pending_title;
+
+  /// No description provided for @bpay_pending_body.
+  ///
+  /// In ar, this message translates to:
+  /// **'ننتظر تأكيد بنكيلي. سيُضاف المبلغ تلقائياً فور التأكيد، ولن يُحتسب مرتين.'**
+  String get bpay_pending_body;
+
+  /// No description provided for @bpay_check_again.
+  ///
+  /// In ar, this message translates to:
+  /// **'تحقق مرة أخرى'**
+  String get bpay_check_again;
+
+  /// No description provided for @bpay_try_again.
+  ///
+  /// In ar, this message translates to:
+  /// **'حاول مجدداً'**
+  String get bpay_try_again;
+
+  /// No description provided for @bpay_use_manual.
+  ///
+  /// In ar, this message translates to:
+  /// **'استخدام التحويل اليدوي'**
+  String get bpay_use_manual;
+
+  /// No description provided for @bpay_done.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم'**
+  String get bpay_done;
+
+  /// No description provided for @bpay_operation_id.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم العملية'**
+  String get bpay_operation_id;
+
+  /// No description provided for @bpay_transaction_id.
+  ///
+  /// In ar, this message translates to:
+  /// **'رقم معاملة بنكيلي'**
+  String get bpay_transaction_id;
+
+  /// No description provided for @bpay_recent_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'مدفوعات B-PAY الأخيرة'**
+  String get bpay_recent_title;
+
+  /// No description provided for @bpay_status_pending.
+  ///
+  /// In ar, this message translates to:
+  /// **'قيد التحقق'**
+  String get bpay_status_pending;
+
+  /// No description provided for @bpay_status_success.
+  ///
+  /// In ar, this message translates to:
+  /// **'ناجحة'**
+  String get bpay_status_success;
+
+  /// No description provided for @bpay_status_failed.
+  ///
+  /// In ar, this message translates to:
+  /// **'فاشلة'**
+  String get bpay_status_failed;
 }
 
 class _AppLocalizationsDelegate

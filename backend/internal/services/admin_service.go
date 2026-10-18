@@ -827,6 +827,14 @@ func (s *adminService) ValidateTransaction(ctx context.Context, id uuid.UUID, ap
 	// financier — Financial audit logs, ne bloque jamais l'opération si l'audit échoue).
 	txBefore, findErr := s.txRepo.FindByID(ctx, id, nil)
 
+	// Bankily B-PAY: automatic ledger rows are settled by the provider
+	// (written already 'completed' after a Bankily-confirmed TS) and must
+	// never be approved/rejected manually. The gateway is immutable, so
+	// this pre-lock read is sufficient.
+	if findErr == nil && isBankilyAutomatic(txBefore) {
+		return apperr.ErrAutomaticTransaction
+	}
+
 	if err := s.txRepo.UpdateStatus(ctx, id, status, notes, adminID, attachmentURL); err != nil {
 		return err
 	}
@@ -1131,6 +1139,11 @@ func (s *adminService) AdminAddBalance(ctx context.Context, transactionID uuid.U
 	anchor, err := s.txRepo.GetByID(ctx, transactionID)
 	if err != nil {
 		return nil, err
+	}
+	// Bankily B-PAY: a confirmed automatic payment is already credited --
+	// "add balance" against it would be a second credit for the same money.
+	if isBankilyAutomatic(anchor) {
+		return nil, apperr.ErrAutomaticTransaction
 	}
 	userID := anchor.UserID
 
@@ -2573,4 +2586,10 @@ func (s *adminService) AdminAddAuctionImages(ctx context.Context, auctionID uuid
 		s.emitAuctionEvent(auction, models.EventAuctionUpdated)
 	}
 	return nil
+}
+
+// isBankilyAutomatic reports whether a ledger row was written by the
+// automatic Bankily B-PAY path.
+func isBankilyAutomatic(tx *models.Transaction) bool {
+	return tx != nil && tx.Gateway != nil && *tx.Gateway == models.BankilyGateway
 }

@@ -350,6 +350,21 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 	case "insufficient_balance_for_debit":
 		logger.Info("Admin deduct-balance rejected: insufficient balance", logFields...)
 		return Fail(c, 422, "insufficient_balance_for_debit", "رصيد المستخدم غير كافٍ لإجراء هذا الخصم")
+	case "bankily_disabled":
+		return Fail(c, 503, "bankily_disabled", "خدمة الدفع عبر بنكيلي غير متاحة حالياً")
+	case "bankily_invalid_phone":
+		return Fail(c, 422, "bankily_invalid_phone", "رقم هاتف بنكيلي غير صالح")
+	case "bankily_invalid_passcode":
+		return Fail(c, 422, "bankily_invalid_passcode", "رمز الدفع B-PAY غير صالح")
+	case "bankily_invalid_amount":
+		return Fail(c, 422, "bankily_invalid_amount", "المبلغ غير صالح")
+	case "bankily_currency_unsupported":
+		return Fail(c, 422, "bankily_currency_unsupported", "بنكيلي متاح فقط للمحافظ بالأوقية")
+	case "bankily_idempotency_key_reused":
+		return Fail(c, 409, "bankily_idempotency_key_reused", "Idempotency key already used for a different payment")
+	case "automatic_transaction":
+		logger.Warn("Manual action refused on an automatic Bankily transaction", logFields...)
+		return Fail(c, 409, "automatic_transaction", "هذه معاملة تلقائية عبر بنكيلي ولا تحتاج إلى موافقة يدوية")
 	case "wallet_disabled":
 		logger.Info("Action rejected: wallet is disabled", logFields...)
 		return Fail(c, 403, "wallet_disabled", "تم تعطيل هذه المحفظة مؤقتاً من قبل الإدارة")

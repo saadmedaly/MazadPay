@@ -1634,4 +1634,144 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get text_426 => 'Annuler';
+
+  @override
+  String get bpay_title => 'Paiement Bankily B-PAY';
+
+  @override
+  String get bpay_entry_title => 'Bankily B-PAY (automatique)';
+
+  @override
+  String get bpay_entry_subtitle => 'Recharge instantanée, sans reçu à joindre';
+
+  @override
+  String get bpay_manual_section => 'Ou virement manuel avec reçu';
+
+  @override
+  String get bpay_instructions_title => 'Comment obtenir le code de paiement';
+
+  @override
+  String get bpay_step1 => 'Ouvrez l\'application Bankily et choisissez B-PAY';
+
+  @override
+  String get bpay_step2 => 'Saisissez le code commerçant et le montant';
+
+  @override
+  String get bpay_step3 =>
+      'Confirmez avec votre code PIN : le code de paiement s\'affiche';
+
+  @override
+  String get bpay_step4 =>
+      'Saisissez ici votre numéro Bankily et le code de paiement';
+
+  @override
+  String get bpay_merchant_code => 'Code commerçant';
+
+  @override
+  String get bpay_copied => 'Copié';
+
+  @override
+  String get bpay_amount_label => 'Montant (MRU)';
+
+  @override
+  String get bpay_amount_hint => 'Le même montant que dans Bankily';
+
+  @override
+  String bpay_amount_range(String min, String max) {
+    return 'Entre $min et $max MRU';
+  }
+
+  @override
+  String get bpay_phone_label => 'Numéro de téléphone Bankily';
+
+  @override
+  String get bpay_phone_hint => '8 chiffres';
+
+  @override
+  String get bpay_passcode_label => 'Code de paiement B-PAY';
+
+  @override
+  String get bpay_passcode_hint =>
+      'Le code affiché dans l\'application Bankily';
+
+  @override
+  String get bpay_passcode_note =>
+      'Ne communiquez jamais votre code PIN. Seul le code de paiement est demandé.';
+
+  @override
+  String get bpay_pay_button => 'Payer maintenant';
+
+  @override
+  String get bpay_err_amount => 'Montant invalide';
+
+  @override
+  String get bpay_err_phone => 'Numéro Bankily invalide';
+
+  @override
+  String get bpay_err_passcode => 'Veuillez saisir le code de paiement';
+
+  @override
+  String get bpay_err_generic => 'Opération impossible. Veuillez réessayer';
+
+  @override
+  String get bpay_err_unavailable =>
+      'Le paiement Bankily est momentanément indisponible';
+
+  @override
+  String get bpay_processing_title => 'Paiement en cours';
+
+  @override
+  String get bpay_processing_body => 'Veuillez ne pas fermer l\'application';
+
+  @override
+  String get bpay_success_title => 'Portefeuille rechargé';
+
+  @override
+  String bpay_success_body(String amount) {
+    return '$amount MRU ont été ajoutés à votre solde';
+  }
+
+  @override
+  String get bpay_failed_title => 'Le paiement a échoué';
+
+  @override
+  String get bpay_failed_body =>
+      'Votre portefeuille MazadPay n\'a pas été modifié. Vous pouvez réessayer ou utiliser le virement manuel.';
+
+  @override
+  String get bpay_pending_title => 'Vérification du paiement';
+
+  @override
+  String get bpay_pending_body =>
+      'Nous attendons la confirmation de Bankily. Le montant sera crédité automatiquement dès confirmation, une seule fois.';
+
+  @override
+  String get bpay_check_again => 'Vérifier à nouveau';
+
+  @override
+  String get bpay_try_again => 'Réessayer';
+
+  @override
+  String get bpay_use_manual => 'Utiliser le virement manuel';
+
+  @override
+  String get bpay_done => 'Terminé';
+
+  @override
+  String get bpay_operation_id => 'N° d\'opération';
+
+  @override
+  String get bpay_transaction_id => 'N° de transaction Bankily';
+
+  @override
+  String get bpay_recent_title => 'Paiements B-PAY récents';
+
+  @override
+  String get bpay_status_pending => 'En vérification';
+
+  @override
+  String get bpay_status_success => 'Réussi';
+
+  @override
+  String get bpay_status_failed => 'Échoué';
 }

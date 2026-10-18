@@ -1635,4 +1635,140 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_426 => 'إلغاء';
+
+  @override
+  String get bpay_title => 'الدفع عبر بنكيلي B-PAY';
+
+  @override
+  String get bpay_entry_title => 'بنكيلي B-PAY (تلقائي)';
+
+  @override
+  String get bpay_entry_subtitle => 'شحن فوري للمحفظة بدون إرفاق إيصال';
+
+  @override
+  String get bpay_manual_section => 'أو التحويل اليدوي مع إرفاق الإيصال';
+
+  @override
+  String get bpay_instructions_title => 'كيف تحصل على رمز الدفع';
+
+  @override
+  String get bpay_step1 => 'افتح تطبيق بنكيلي واختر B-PAY';
+
+  @override
+  String get bpay_step2 => 'أدخل رمز التاجر والمبلغ';
+
+  @override
+  String get bpay_step3 => 'أكّد العملية برمزك السري، سيظهر لك رمز الدفع';
+
+  @override
+  String get bpay_step4 => 'أدخل رقم هاتف بنكيلي ورمز الدفع هنا';
+
+  @override
+  String get bpay_merchant_code => 'رمز التاجر';
+
+  @override
+  String get bpay_copied => 'تم النسخ';
+
+  @override
+  String get bpay_amount_label => 'المبلغ (أوقية)';
+
+  @override
+  String get bpay_amount_hint => 'نفس المبلغ المُدخل في بنكيلي';
+
+  @override
+  String bpay_amount_range(String min, String max) {
+    return 'بين $min و $max أوقية';
+  }
+
+  @override
+  String get bpay_phone_label => 'رقم هاتف بنكيلي';
+
+  @override
+  String get bpay_phone_hint => '8 أرقام';
+
+  @override
+  String get bpay_passcode_label => 'رمز الدفع B-PAY';
+
+  @override
+  String get bpay_passcode_hint => 'الرمز الظاهر في تطبيق بنكيلي';
+
+  @override
+  String get bpay_passcode_note =>
+      'لا تشارك رمزك السري (PIN) أبداً. نطلب فقط رمز الدفع.';
+
+  @override
+  String get bpay_pay_button => 'ادفع الآن';
+
+  @override
+  String get bpay_err_amount => 'المبلغ غير صالح';
+
+  @override
+  String get bpay_err_phone => 'رقم هاتف بنكيلي غير صالح';
+
+  @override
+  String get bpay_err_passcode => 'يرجى إدخال رمز الدفع';
+
+  @override
+  String get bpay_err_generic => 'تعذر إتمام العملية. يرجى المحاولة مجدداً';
+
+  @override
+  String get bpay_err_unavailable => 'الدفع عبر بنكيلي غير متاح حالياً';
+
+  @override
+  String get bpay_processing_title => 'جارٍ معالجة الدفع';
+
+  @override
+  String get bpay_processing_body => 'يرجى عدم إغلاق التطبيق';
+
+  @override
+  String get bpay_success_title => 'تم شحن المحفظة';
+
+  @override
+  String bpay_success_body(String amount) {
+    return 'تمت إضافة $amount أوقية إلى رصيدك';
+  }
+
+  @override
+  String get bpay_failed_title => 'لم تتم عملية الدفع';
+
+  @override
+  String get bpay_failed_body =>
+      'لم يتم خصم أي مبلغ من محفظتك على MazadPay. يمكنك المحاولة مجدداً أو استخدام التحويل اليدوي.';
+
+  @override
+  String get bpay_pending_title => 'جارٍ التحقق من الدفع';
+
+  @override
+  String get bpay_pending_body =>
+      'ننتظر تأكيد بنكيلي. سيُضاف المبلغ تلقائياً فور التأكيد، ولن يُحتسب مرتين.';
+
+  @override
+  String get bpay_check_again => 'تحقق مرة أخرى';
+
+  @override
+  String get bpay_try_again => 'حاول مجدداً';
+
+  @override
+  String get bpay_use_manual => 'استخدام التحويل اليدوي';
+
+  @override
+  String get bpay_done => 'تم';
+
+  @override
+  String get bpay_operation_id => 'رقم العملية';
+
+  @override
+  String get bpay_transaction_id => 'رقم معاملة بنكيلي';
+
+  @override
+  String get bpay_recent_title => 'مدفوعات B-PAY الأخيرة';
+
+  @override
+  String get bpay_status_pending => 'قيد التحقق';
+
+  @override
+  String get bpay_status_success => 'ناجحة';
+
+  @override
+  String get bpay_status_failed => 'فاشلة';
 }

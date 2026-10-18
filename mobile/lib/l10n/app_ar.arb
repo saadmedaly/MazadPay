@@ -526,5 +526,65 @@
   "text_423": "رصيدك غير كافٍ للمزايدة",
   "text_424": "يرجى شحن رصيدك أولًا ثم إعادة المحاولة.",
   "text_425": "شحن الرصيد",
-  "text_426": "إلغاء"
+  "text_426": "إلغاء",
+  "bpay_title": "الدفع عبر بنكيلي B-PAY",
+  "bpay_entry_title": "بنكيلي B-PAY (تلقائي)",
+  "bpay_entry_subtitle": "شحن فوري للمحفظة بدون إرفاق إيصال",
+  "bpay_manual_section": "أو التحويل اليدوي مع إرفاق الإيصال",
+  "bpay_instructions_title": "كيف تحصل على رمز الدفع",
+  "bpay_step1": "افتح تطبيق بنكيلي واختر B-PAY",
+  "bpay_step2": "أدخل رمز التاجر والمبلغ",
+  "bpay_step3": "أكّد العملية برمزك السري، سيظهر لك رمز الدفع",
+  "bpay_step4": "أدخل رقم هاتف بنكيلي ورمز الدفع هنا",
+  "bpay_merchant_code": "رمز التاجر",
+  "bpay_copied": "تم النسخ",
+  "bpay_amount_label": "المبلغ (أوقية)",
+  "bpay_amount_hint": "نفس المبلغ المُدخل في بنكيلي",
+  "bpay_amount_range": "بين {min} و {max} أوقية",
+  "@bpay_amount_range": {
+    "placeholders": {
+      "min": {
+        "type": "String"
+      },
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "bpay_phone_label": "رقم هاتف بنكيلي",
+  "bpay_phone_hint": "8 أرقام",
+  "bpay_passcode_label": "رمز الدفع B-PAY",
+  "bpay_passcode_hint": "الرمز الظاهر في تطبيق بنكيلي",
+  "bpay_passcode_note": "لا تشارك رمزك السري (PIN) أبداً. نطلب فقط رمز الدفع.",
+  "bpay_pay_button": "ادفع الآن",
+  "bpay_err_amount": "المبلغ غير صالح",
+  "bpay_err_phone": "رقم هاتف بنكيلي غير صالح",
+  "bpay_err_passcode": "يرجى إدخال رمز الدفع",
+  "bpay_err_generic": "تعذر إتمام العملية. يرجى المحاولة مجدداً",
+  "bpay_err_unavailable": "الدفع عبر بنكيلي غير متاح حالياً",
+  "bpay_processing_title": "جارٍ معالجة الدفع",
+  "bpay_processing_body": "يرجى عدم إغلاق التطبيق",
+  "bpay_success_title": "تم شحن المحفظة",
+  "bpay_success_body": "تمت إضافة {amount} أوقية إلى رصيدك",
+  "@bpay_success_body": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "bpay_failed_title": "لم تتم عملية الدفع",
+  "bpay_failed_body": "لم يتم خصم أي مبلغ من محفظتك على MazadPay. يمكنك المحاولة مجدداً أو استخدام التحويل اليدوي.",
+  "bpay_pending_title": "جارٍ التحقق من الدفع",
+  "bpay_pending_body": "ننتظر تأكيد بنكيلي. سيُضاف المبلغ تلقائياً فور التأكيد، ولن يُحتسب مرتين.",
+  "bpay_check_again": "تحقق مرة أخرى",
+  "bpay_try_again": "حاول مجدداً",
+  "bpay_use_manual": "استخدام التحويل اليدوي",
+  "bpay_done": "تم",
+  "bpay_operation_id": "رقم العملية",
+  "bpay_transaction_id": "رقم معاملة بنكيلي",
+  "bpay_recent_title": "مدفوعات B-PAY الأخيرة",
+  "bpay_status_pending": "قيد التحقق",
+  "bpay_status_success": "ناجحة",
+  "bpay_status_failed": "فاشلة"
 }

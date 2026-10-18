@@ -19,6 +19,7 @@ type Config struct {
 	Wablas   WablasConfig
 	Business BusinessConfig
 	Firebase FirebaseConfig
+	Bankily  BankilyConfig
 }
 
 type AppConfig struct {
@@ -84,6 +85,39 @@ type BusinessConfig struct {
 	BidMinIncrement      float64
 	InsuranceDefault     float64
 	PaymentDeadlineHours int
+}
+
+// BankilyConfig (Bankily B-PAY automatic wallet top-up). Credentials are
+// server-side only and come exclusively from the environment -- never from
+// code, never sent to the mobile/admin clients. Every value Bankily has not
+// yet confirmed (operationId format, decimal amounts, timeouts, maximum
+// pending window) is configuration rather than a hard-coded guess.
+type BankilyConfig struct {
+	Enabled      bool
+	BaseURL      string
+	Username     string
+	Password     string
+	ClientID     string
+	MerchantCode string // public merchant code shown to customers in the B-PAY instructions
+	// HTTPTimeout bounds a single Bankily HTTP call. A timeout on /payment is
+	// never treated as a failure -- the attempt moves to PENDING_VERIFICATION
+	// and is resolved through /checkTransaction.
+	HTTPTimeout         time.Duration
+	OperationIDPrefix   string
+	OperationIDDigits   int
+	AllowDecimalAmounts bool
+	MinAmount           float64
+	MaxAmount           float64
+	// ReconcileInterval: how often the worker scans unresolved attempts.
+	ReconcileInterval time.Duration
+	// MaxPendingAge: after this, an unresolved attempt is flagged needs_review
+	// for an operator. It is never auto-failed -- money may have moved.
+	MaxPendingAge time.Duration
+}
+
+// Ready reports whether the integration is switched on and fully configured.
+func (b BankilyConfig) Ready() bool {
+	return b.Enabled && b.BaseURL != "" && b.Username != "" && b.Password != "" && b.ClientID != ""
 }
 
 type FirebaseConfig struct {
@@ -152,6 +186,22 @@ func Load() *Config {
 		Firebase: FirebaseConfig{
 			ServiceAccountPath: getEnv("FIREBASE_SERVICE_ACCOUNT_PATH", ""),
 			ServiceAccountJSON: getEnv("FIREBASE_SERVICE_ACCOUNT_JSON", ""),
+		},
+		Bankily: BankilyConfig{
+			Enabled:             getEnvBool("BANKILY_ENABLED", false),
+			BaseURL:             getEnv("BANKILY_BASE_URL", ""),
+			Username:            getEnv("BANKILY_USERNAME", ""),
+			Password:            getEnv("BANKILY_PASSWORD", ""),
+			ClientID:            getEnv("BANKILY_CLIENT_ID", ""),
+			MerchantCode:        getEnv("BANKILY_MERCHANT_CODE", ""),
+			HTTPTimeout:         time.Duration(getEnvInt("BANKILY_HTTP_TIMEOUT_SECONDS", 30)) * time.Second,
+			OperationIDPrefix:   getEnv("BANKILY_OPERATION_ID_PREFIX", "MZP"),
+			OperationIDDigits:   getEnvInt("BANKILY_OPERATION_ID_DIGITS", 13),
+			AllowDecimalAmounts: getEnvBool("BANKILY_ALLOW_DECIMAL_AMOUNTS", false),
+			MinAmount:           getEnvFloat("BANKILY_MIN_AMOUNT", 100),
+			MaxAmount:           getEnvFloat("BANKILY_MAX_AMOUNT", 100000),
+			ReconcileInterval:   time.Duration(getEnvInt("BANKILY_RECONCILE_INTERVAL_SECONDS", 30)) * time.Second,
+			MaxPendingAge:       time.Duration(getEnvInt("BANKILY_MAX_PENDING_HOURS", 72)) * time.Hour,
 		},
 	}
 }
