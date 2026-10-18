@@ -36,6 +36,10 @@ const (
 	PaymentCodeOtherError          = "1"
 	PaymentCodeInvalidToken        = "2"
 	PaymentCodeOperationIDRequired = "4"
+	// PaymentCodeOperationIDExists is NOT in the v1.0 specification; Bankily
+	// TEST returned it ("Operation ID already existe") for a reused
+	// operationId. A later TS for that operationId may not be ours.
+	PaymentCodeOperationIDExists = "5"
 )
 
 // checkTransaction errorCode values and transaction statuses (specification,

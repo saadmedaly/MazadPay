@@ -13,6 +13,7 @@ const STATUS_LABELS: Record<BankilyPaymentStatus, { label: string; cls: string }
   PENDING_VERIFICATION: { label: 'قيد التحقق',   cls: 'bg-amber-500/15 text-amber-300' },
   SUCCESS:              { label: 'ناجحة',        cls: 'bg-emerald-500/15 text-emerald-300' },
   FAILED:               { label: 'فاشلة',        cls: 'bg-red-500/15 text-red-300' },
+  NEEDS_REVIEW:         { label: 'مراجعة يدوية', cls: 'bg-orange-500/15 text-orange-300' },
 }
 
 const TABS = [
@@ -20,6 +21,7 @@ const TABS = [
   { label: 'قيد التحقق', value: 'PENDING_VERIFICATION' },
   { label: 'ناجحة',      value: 'SUCCESS' },
   { label: 'فاشلة',      value: 'FAILED' },
+  { label: 'مراجعة يدوية', value: 'NEEDS_REVIEW' },
 ]
 
 // Bankily B-PAY automatic top-ups. Confirmed payments are credited by the
@@ -125,6 +127,24 @@ export function BankilyPaymentsPage() {
               <RefreshCw className={`w-3.5 h-3.5 ${recheck.isPending && recheck.variables === p.id ? 'animate-spin' : ''}`} />
               إعادة التحقق الآن
             </button>
+          )
+        }
+        if (p.status === 'NEEDS_REVIEW') {
+          // Never a credit action: the re-check only records what Bankily
+          // reports; the backend cannot credit from this state.
+          return (
+            <div className="flex flex-col gap-1">
+              <button
+                disabled={recheck.isPending}
+                onClick={() => recheck.mutate(p.id)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold bg-orange-500/15 text-orange-300
+                           hover:bg-orange-500/25 transition-all disabled:opacity-40"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${recheck.isPending && recheck.variables === p.id ? 'animate-spin' : ''}`} />
+                استعلام بنكيلي (للمعلومات فقط)
+              </button>
+              <span className="text-[10px] text-orange-300/80">لا إضافة تلقائية للرصيد — يتطلب تحقيقاً مع بنكيلي</span>
+            </div>
           )
         }
         return <span className="text-xs text-surface-muted">—</span>

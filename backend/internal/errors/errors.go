@@ -130,6 +130,9 @@ var (
 	ErrBankilyInvalidAmount     = errors.New("bankily_invalid_amount")
 	ErrBankilyCurrency          = errors.New("bankily_currency_unsupported")
 	ErrBankilyIdempotencyReused = errors.New("bankily_idempotency_key_reused")
+	// ErrBankilyIdempotencyRequired: every /pay submission must carry a key so
+	// a retry can never start a second payment.
+	ErrBankilyIdempotencyRequired = errors.New("bankily_idempotency_key_required")
 	// ErrAutomaticTransaction: a confirmed Bankily B-PAY ledger row is
 	// settled by the provider, never by manual admin approval/credit.
 	ErrAutomaticTransaction = errors.New("automatic_transaction")

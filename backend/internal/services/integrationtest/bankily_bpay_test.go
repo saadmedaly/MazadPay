@@ -507,7 +507,8 @@ func TestBankily_ValidationAndNoPasscodeStored(t *testing.T) {
 		{Amount: decimal.NewFromInt(200000), ClientPhone: "48110011", Passcode: "1234"},
 	}
 	for i, in := range bad {
-		if _, err := b.svc.Pay(ctx, b.user.ID, in); err == nil {
+		in.IdempotencyKey = uniqKey() // so each case exercises its own validation
+		if _, err := b.svc.Pay(ctx, b.user.ID, in); err == nil || errors.Is(err, apperr.ErrBankilyIdempotencyRequired) {
 			t.Fatalf("case %d must be rejected", i)
 		}
 	}
@@ -576,5 +577,146 @@ func TestBankily_HTTPContract(t *testing.T) {
 	}
 	if r, _ := app.Test(httptest.NewRequest("GET", "/admin/payments?status=BOGUS", nil)); r.StatusCode != 400 {
 		t.Fatalf("invalid status filter must be 400, got %d", r.StatusCode)
+	}
+}
+
+// errorCode 5 ("Operation ID already existe", undocumented): the attempt goes
+// to NEEDS_REVIEW and no automatic path ever credits it -- even when Bankily
+// later reports TS for that operationId (it may be someone else's payment).
+func TestBankily_ErrorCode5_NeedsReview_NeverAutoCredits(t *testing.T) {
+	b := newBpayEnv(t, 5*time.Second)
+	b.fake.SetPaymentHook(func(w http.ResponseWriter, body map[string]string) bool {
+		b.fake.SetOp(body["operationId"], "TS") // an existing, successful operation
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"errorCode":"5","errorMessage":"Operation ID already existe"}`))
+		return true
+	})
+	before := b.balance(t)
+	p, err := b.pay(t, 700, uniqKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Status != models.BankilyStatusNeedsReview || !p.NeedsReview {
+		t.Fatalf("errorCode 5 must go to NEEDS_REVIEW, got %s needs_review=%v", p.Status, p.NeedsReview)
+	}
+	if p.BankilyErrorCode == nil || *p.BankilyErrorCode != "5" || p.FailureReason == nil || *p.FailureReason != "operation_id_already_exists" ||
+		p.BankilyErrorMessage == nil || *p.BankilyErrorMessage != "Operation ID already existe" {
+		t.Fatalf("Bankily metadata not preserved: %+v", p)
+	}
+	if b.fake.CheckCalls.Load() != 0 {
+		t.Fatal("errorCode 5 must not continue into automatic checkTransaction resolution")
+	}
+
+	// Repeated user/admin re-checks, the reconciler, and concurrent mixes:
+	// Bankily keeps answering TS, yet nothing credits.
+	for i := 0; i < 3; i++ {
+		if _, err := b.svc.Recheck(context.Background(), p.ID, "user", b.user.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.svc.Recheck(context.Background(), p.ID, "admin", b.user.ID); err != nil {
+			t.Fatal(err)
+		}
+		b.reconcileOnlyMine(t)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); b.svc.Recheck(context.Background(), p.ID, "admin", b.user.ID) }()
+	}
+	wg.Wait()
+
+	q := b.reload(t, p.ID)
+	if q.Status != models.BankilyStatusNeedsReview || q.WalletTransactionID != nil {
+		t.Fatalf("review attempt changed: status=%s", q.Status)
+	}
+	if q.BankilyStatus == nil || *q.BankilyStatus != "TS" || q.CheckAttempts != 14 {
+		t.Fatalf("informational checks not recorded: bankily_status=%v attempts=%d", q.BankilyStatus, q.CheckAttempts)
+	}
+	if q.BankilyErrorCode == nil || *q.BankilyErrorCode != "5" {
+		t.Fatal("re-checks must not overwrite the original errorCode 5")
+	}
+	if !b.balance(t).Equal(before) || b.ledgerRows(t, p.OperationID) != 0 {
+		t.Fatal("errorCode 5 attempt credited the wallet")
+	}
+	if b.fake.PaymentCalls.Load() != 1 {
+		t.Fatalf("payment must not be resent, calls=%d", b.fake.PaymentCalls.Load())
+	}
+
+	// Exactly one audit entry records the move to manual review.
+	var reviewAudits int
+	b.env.db.Get(&reviewAudits, `SELECT COUNT(*) FROM audit_logs WHERE entity_id=$1 AND action='bankily_payment_needs_review'`, p.ID)
+	if reviewAudits != 1 {
+		t.Fatalf("expected one needs_review audit entry, got %d", reviewAudits)
+	}
+
+	// Admin sees it under the review filter; no ledger row exists to approve.
+	h := handlers.NewBankilyHandler(b.svc, b.env.userRepo, b.env.logger)
+	app := fiber.New()
+	app.Get("/admin/payments", h.AdminList)
+	r, _ := app.Test(httptest.NewRequest("GET", "/admin/payments?status=NEEDS_REVIEW&per_page=100", nil))
+	raw, _ := io.ReadAll(r.Body)
+	if r.StatusCode != 200 || !strings.Contains(string(raw), p.ID.String()) || !strings.Contains(string(raw), `"needs_review":true`) {
+		t.Fatalf("admin review list: %d %s", r.StatusCode, raw)
+	}
+}
+
+// The idempotency key is mandatory: no key -> typed 400, no Bankily call,
+// no attempt row.
+func TestBankily_IdempotencyKeyRequired(t *testing.T) {
+	b := newBpayEnv(t, 5*time.Second)
+	count := func() int {
+		var n int
+		b.env.db.Get(&n, `SELECT COUNT(*) FROM bankily_payments WHERE user_id = $1`, b.user.ID)
+		return n
+	}
+	if _, err := b.pay(t, 100, ""); !errors.Is(err, apperr.ErrBankilyIdempotencyRequired) {
+		t.Fatalf("service: expected ErrBankilyIdempotencyRequired, got %v", err)
+	}
+
+	h := handlers.NewBankilyHandler(b.svc, b.env.userRepo, b.env.logger)
+	app := fiber.New()
+	uid := b.user.ID
+	app.Post("/pay", fakeAuth(&uid), h.Pay)
+	req := httptest.NewRequest("POST", "/pay", strings.NewReader(`{"amount":"100","client_phone":"48110011","passcode":"`+bpayPasscode+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 400 || !strings.Contains(string(raw), `"bankily_idempotency_key_required"`) {
+		t.Fatalf("HTTP: expected 400 bankily_idempotency_key_required, got %d %s", resp.StatusCode, raw)
+	}
+	if b.fake.PaymentCalls.Load() != 0 || b.fake.PasswordGrants.Load() != 0 {
+		t.Fatalf("missing key reached Bankily: payments=%d logins=%d", b.fake.PaymentCalls.Load(), b.fake.PasswordGrants.Load())
+	}
+	if n := count(); n != 0 {
+		t.Fatalf("missing key created %d attempt rows", n)
+	}
+
+	// The header form is accepted and duplicate-key behaviour is unchanged.
+	key := uniqKey()
+	send := func(amount string) (int, string) {
+		req := httptest.NewRequest("POST", "/pay", strings.NewReader(`{"amount":"`+amount+`","client_phone":"48110011","passcode":"`+bpayPasscode+`"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", key)
+		resp, err := app.Test(req, 10000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(raw)
+	}
+	if code, body := send("100"); code != 200 {
+		t.Fatalf("first submit: %d %s", code, body)
+	}
+	if code, body := send("100"); code != 200 {
+		t.Fatalf("same key + same payload: %d %s", code, body)
+	}
+	if code, body := send("900"); code != 409 || !strings.Contains(body, "bankily_idempotency_key_reused") {
+		t.Fatalf("same key + different amount must be 409, got %d %s", code, body)
+	}
+	if n := count(); n != 1 || b.fake.PaymentCalls.Load() != 1 {
+		t.Fatalf("expected 1 attempt / 1 Bankily call, got %d / %d", n, b.fake.PaymentCalls.Load())
 	}
 }

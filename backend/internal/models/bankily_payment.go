@@ -14,6 +14,9 @@ const (
 	BankilyStatusPendingVerification = "PENDING_VERIFICATION"
 	BankilyStatusSuccess             = "SUCCESS"
 	BankilyStatusFailed              = "FAILED"
+	// BankilyStatusNeedsReview: Bankily's answer cannot be safely attributed
+	// to this attempt. No automatic path ever credits from it.
+	BankilyStatusNeedsReview = "NEEDS_REVIEW"
 
 	// BankilyGateway marks the transactions ledger rows written by the
 	// automatic B-PAY path. Those rows are created already 'completed' and are
@@ -50,9 +53,9 @@ type BankilyPayment struct {
 	UpdatedAt            time.Time       `db:"updated_at"             json:"updated_at"`
 }
 
-// IsTerminal reports whether the attempt can no longer change.
+// IsTerminal reports whether automation can no longer change the attempt.
 func (p *BankilyPayment) IsTerminal() bool {
-	return p.Status == BankilyStatusSuccess || p.Status == BankilyStatusFailed
+	return p.Status == BankilyStatusSuccess || p.Status == BankilyStatusFailed || p.Status == BankilyStatusNeedsReview
 }
 
 // BankilyPaymentAdminRow adds the owner's identity for the admin list.

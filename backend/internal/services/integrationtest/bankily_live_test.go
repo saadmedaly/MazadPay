@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/mazadpay/backend/internal/config"
 	"github.com/mazadpay/backend/internal/models"
@@ -100,6 +101,7 @@ func TestBankilyLive(t *testing.T) {
 		before, _ := walletBalanceAndFrozen(t, env, user.ID)
 		p, err := svc.Pay(ctx, user.ID, services.BankilyPayInput{
 			Amount: decimal.RequireFromString(r.Amount), ClientPhone: r.Phone, Passcode: r.Passcode, Language: "fr",
+			IdempotencyKey: "live-" + uuid.NewString(),
 		})
 		res := liveResult{Row: r.Row, Phone: models.MaskPhone(r.Phone), Amount: r.Amount, SheetOperationID: r.SheetOperationID}
 		if err != nil {

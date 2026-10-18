@@ -14,7 +14,7 @@ import (
 
 // BankilyOutcome is a non-success state change for an unresolved attempt.
 type BankilyOutcome struct {
-	Status              string // PENDING_VERIFICATION | FAILED
+	Status              string // PENDING_VERIFICATION | FAILED | NEEDS_REVIEW
 	BankilyErrorCode    *string
 	BankilyErrorMessage *string
 	BankilyStatus       *string
@@ -43,6 +43,10 @@ type BankilyPaymentRepository interface {
 	LockForUpdate(ctx context.Context, dbtx *sqlx.Tx, id uuid.UUID) (*models.BankilyPayment, error)
 	MarkSuccessTx(ctx context.Context, dbtx *sqlx.Tx, id uuid.UUID, walletTxID uuid.UUID, bankilyTxID, bankilyStatus *string) error
 	FlagStale(ctx context.Context, olderThan time.Time) (int64, error)
+	// RecordReviewCheck stores an informational checkTransaction answer on a
+	// NEEDS_REVIEW row without changing its status or the original Bankily
+	// payment metadata (error code/message) kept for investigation.
+	RecordReviewCheck(ctx context.Context, id uuid.UUID, bankilyStatus *string) error
 	// FailOrphanInitiated fails INITIATED rows older than the cutoff. INITIATED
 	// is only ever set before MarkSubmitted, which runs before the /payment
 	// call -- so such a row was provably never sent to Bankily.
@@ -139,7 +143,7 @@ func (r *bankilyPaymentRepo) ApplyOutcome(ctx context.Context, id uuid.UUID, o B
 			bankily_status         = COALESCE($5, bankily_status),
 			bankily_transaction_id = COALESCE(bankily_transaction_id, $6),
 			failure_reason         = COALESCE($7, failure_reason),
-			next_check_at          = CASE WHEN $2::varchar = 'FAILED' THEN NULL ELSE $8::timestamptz END,
+			next_check_at          = CASE WHEN $2::varchar IN ('FAILED','NEEDS_REVIEW') THEN NULL ELSE $8::timestamptz END,
 			needs_review           = needs_review OR $9::boolean,
 			check_attempts         = check_attempts + CASE WHEN $10::boolean THEN 1 ELSE 0 END,
 			last_checked_at        = CASE WHEN $10::boolean THEN NOW() ELSE last_checked_at END,
@@ -223,4 +227,15 @@ func (r *bankilyPaymentRepo) FailOrphanInitiated(ctx context.Context, olderThan 
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+func (r *bankilyPaymentRepo) RecordReviewCheck(ctx context.Context, id uuid.UUID, bankilyStatus *string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE bankily_payments SET
+			bankily_status        = COALESCE($2, bankily_status),
+			check_attempts        = check_attempts + 1,
+			last_checked_at       = NOW(),
+			updated_at            = NOW()
+		WHERE id = $1 AND status = 'NEEDS_REVIEW'`, id, bankilyStatus)
+	return err
 }

@@ -178,7 +178,7 @@ func (h *BankilyHandler) Check(c *fiber.Ctx) error {
 func (h *BankilyHandler) AdminList(c *fiber.Ctx) error {
 	status := strings.ToUpper(c.Query("status"))
 	switch status {
-	case "", models.BankilyStatusInitiated, models.BankilyStatusSubmitted, models.BankilyStatusPendingVerification, models.BankilyStatusSuccess, models.BankilyStatusFailed:
+	case "", models.BankilyStatusInitiated, models.BankilyStatusSubmitted, models.BankilyStatusPendingVerification, models.BankilyStatusSuccess, models.BankilyStatusFailed, models.BankilyStatusNeedsReview:
 	default:
 		return BadRequest(c, "Invalid status")
 	}

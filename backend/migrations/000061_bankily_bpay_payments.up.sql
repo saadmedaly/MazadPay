@@ -14,6 +14,10 @@
 --   * transactions.reference unique for gateway = 'bankily_bpay'
 --     ('bankily:<operation_id>')        -> one operation credits the wallet at most once
 -- The B-PAY passcode is never stored: there is deliberately no column for it.
+--
+-- NEEDS_REVIEW: Bankily answered in a way we cannot safely attribute to this
+-- attempt (e.g. undocumented errorCode 5 "Operation ID already existe").
+-- Automation never credits from it; an operator investigates.
 
 CREATE TABLE IF NOT EXISTS bankily_payments (
     id                      UUID PRIMARY KEY,
@@ -41,7 +45,7 @@ CREATE TABLE IF NOT EXISTS bankily_payments (
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT chk_bankily_payments_status CHECK (
-        status IN ('INITIATED', 'SUBMITTED', 'PENDING_VERIFICATION', 'SUCCESS', 'FAILED')
+        status IN ('INITIATED', 'SUBMITTED', 'PENDING_VERIFICATION', 'SUCCESS', 'FAILED', 'NEEDS_REVIEW')
     ),
     CONSTRAINT chk_bankily_payments_amount_positive CHECK (amount > 0),
     CONSTRAINT chk_bankily_payments_success_has_credit CHECK (

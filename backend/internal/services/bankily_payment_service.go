@@ -168,6 +168,9 @@ func (s *bankilyPaymentService) Pay(ctx context.Context, userID uuid.UUID, in Ba
 	// mobile client disconnects mid-request; the HTTP client timeout still
 	// bounds every Bankily call.
 	ctx = context.WithoutCancel(ctx)
+	if in.IdempotencyKey == "" {
+		return nil, apperr.ErrBankilyIdempotencyRequired
+	}
 	phone := NormalizeBankilyPhone(in.ClientPhone)
 	if !bankilyPhoneRe.MatchString(phone) {
 		return nil, apperr.ErrBankilyInvalidPhone
@@ -183,22 +186,19 @@ func (s *bankilyPaymentService) Pay(ctx context.Context, userID uuid.UUID, in Ba
 		amount.GreaterThan(decimal.NewFromFloat(s.cfg.MaxAmount)) {
 		return nil, apperr.ErrBankilyInvalidAmount
 	}
-	var idemKey *string
-	if in.IdempotencyKey != "" {
-		if !bankilyIdemKeyRe.MatchString(in.IdempotencyKey) {
-			return nil, apperr.ErrBadRequest
+	if !bankilyIdemKeyRe.MatchString(in.IdempotencyKey) {
+		return nil, apperr.ErrBadRequest
+	}
+	idemKey := &in.IdempotencyKey
+	// Duplicate submission (double-tap, network retry): return the original
+	// attempt, never start a second payment.
+	if existing, err := s.repo.GetByIdempotencyKey(ctx, userID, in.IdempotencyKey); err == nil {
+		if !existing.Amount.Equal(amount) || existing.ClientPhone != phone {
+			return nil, apperr.ErrBankilyIdempotencyReused
 		}
-		idemKey = &in.IdempotencyKey
-		// Duplicate submission (double-tap, network retry): return the
-		// original attempt, never start a second payment.
-		if existing, err := s.repo.GetByIdempotencyKey(ctx, userID, in.IdempotencyKey); err == nil {
-			if !existing.Amount.Equal(amount) || existing.ClientPhone != phone {
-				return nil, apperr.ErrBankilyIdempotencyReused
-			}
-			return existing, nil
-		} else if !errors.Is(err, apperr.ErrNotFound) {
-			return nil, err
-		}
+		return existing, nil
+	} else if !errors.Is(err, apperr.ErrNotFound) {
+		return nil, err
 	}
 
 	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
@@ -236,13 +236,11 @@ func (s *bankilyPaymentService) Pay(ctx context.Context, userID uuid.UUID, in Ba
 		}
 		// Concurrent duplicate submission with the same key: hand back the
 		// winner's attempt rather than starting another payment.
-		if idemKey != nil {
-			if existing, gerr := s.repo.GetByIdempotencyKey(ctx, userID, *idemKey); gerr == nil {
-				if !existing.Amount.Equal(amount) || existing.ClientPhone != phone {
-					return nil, apperr.ErrBankilyIdempotencyReused
-				}
-				return existing, nil
+		if existing, gerr := s.repo.GetByIdempotencyKey(ctx, userID, *idemKey); gerr == nil {
+			if !existing.Amount.Equal(amount) || existing.ClientPhone != phone {
+				return nil, apperr.ErrBankilyIdempotencyReused
 			}
+			return existing, nil
 		}
 		// Otherwise an operation_id collision: draw a new one.
 	}
@@ -312,6 +310,13 @@ func (s *bankilyPaymentService) handlePaymentResult(ctx context.Context, p *mode
 		o.FailureReason = strPtr("operation_id_required")
 		o.NeedsReview = true
 		s.fail(ctx, p, o, "system")
+	case bankily.PaymentCodeOperationIDExists:
+		// Undocumented by the v1.0 spec. Bankily already holds an operation
+		// with this ID, so a later TS for it may not be this customer's
+		// payment: never resolve it automatically.
+		s.logger.Error("bankily payment: operationId already exists; attempt sent to manual review", fields...)
+		o.FailureReason = strPtr("operation_id_already_exists")
+		s.review(ctx, p, o)
 	case bankily.PaymentCodeSuccess, bankily.PaymentCodeOtherError:
 		s.logger.Info("bankily payment answered; confirming via checkTransaction", fields...)
 		s.pending(ctx, p, o, 0)
@@ -409,6 +414,25 @@ func (s *bankilyPaymentService) countCheck(ctx context.Context, p *models.Bankil
 	s.pending(ctx, p, o, p.CheckAttempts+1)
 }
 
+// review moves an unresolved attempt to NEEDS_REVIEW: no automatic path
+// (inline, reconciler, user or admin re-check) ever credits from that state.
+func (s *bankilyPaymentService) review(ctx context.Context, p *models.BankilyPayment, o repository.BankilyOutcome) {
+	o.Status = models.BankilyStatusNeedsReview
+	o.NeedsReview = true
+	changed, err := s.repo.ApplyOutcome(ctx, p.ID, o)
+	if err != nil {
+		s.logger.Error("bankily: failed to persist NEEDS_REVIEW state", append(s.log(p), zap.Error(err))...)
+		return
+	}
+	if changed {
+		reason := ""
+		if o.FailureReason != nil {
+			reason = *o.FailureReason
+		}
+		s.audit(ctx, p, "bankily_payment_needs_review", "system", uuid.Nil, models.JSONB{"failure_reason": reason})
+	}
+}
+
 func (s *bankilyPaymentService) fail(ctx context.Context, p *models.BankilyPayment, o repository.BankilyOutcome, actor string) {
 	o.Status = models.BankilyStatusFailed
 	changed, err := s.repo.ApplyOutcome(ctx, p.ID, o)
@@ -446,15 +470,15 @@ func (s *bankilyPaymentService) credit(ctx context.Context, id uuid.UUID, bankil
 	if p.Status == models.BankilyStatusSuccess {
 		return nil // already credited by another path
 	}
-	if p.Status == models.BankilyStatusFailed {
-		// Bankily now says TS for an attempt we closed as failed. Never
-		// auto-credit a closed attempt: flag it for an operator.
-		s.logger.Error("bankily TS received for an attempt already FAILED; flagged for review", s.log(p)...)
+	if p.Status == models.BankilyStatusFailed || p.Status == models.BankilyStatusNeedsReview {
+		// Bankily says TS for an attempt that is closed or under manual
+		// review. Never auto-credit it: flag it for an operator.
+		s.logger.Error("bankily TS received for an attempt not eligible for automatic credit; flagged for review", append(s.log(p), zap.String("local_status", p.Status))...)
 		_, _ = dbtx.ExecContext(ctx, `UPDATE bankily_payments SET needs_review = TRUE, bankily_status = $2, updated_at = NOW() WHERE id = $1`, id, bankilyStatus)
 		if err := dbtx.Commit(); err != nil {
 			return err
 		}
-		s.audit(ctx, p, "bankily_payment_status_conflict", actor, actorID, models.JSONB{"bankily_status": "TS", "local_status": "FAILED"})
+		s.audit(ctx, p, "bankily_payment_status_conflict", actor, actorID, models.JSONB{"bankily_status": "TS", "local_status": p.Status})
 		return nil
 	}
 
@@ -540,7 +564,18 @@ func (s *bankilyPaymentService) Recheck(ctx context.Context, paymentID uuid.UUID
 	if err != nil {
 		return nil, err
 	}
-	if !p.IsTerminal() && p.Status != models.BankilyStatusInitiated {
+	if p.Status == models.BankilyStatusNeedsReview {
+		// Informational only: record what Bankily reports for the operator.
+		// Nothing here can change the status or credit the wallet.
+		s.audit(ctx, p, "bankily_payment_review_check", actor, actorID, nil)
+		if check, err := s.api.CheckTransaction(ctx, p.OperationID); err == nil {
+			if err := s.repo.RecordReviewCheck(ctx, p.ID, strPtr(check.Status)); err != nil {
+				s.logger.Error("bankily: failed to record review check", append(s.log(p), zap.Error(err))...)
+			}
+		} else {
+			s.logger.Warn("bankily review check uncertain", append(s.log(p), zap.Error(err))...)
+		}
+	} else if !p.IsTerminal() && p.Status != models.BankilyStatusInitiated {
 		s.audit(ctx, p, "bankily_payment_recheck", actor, actorID, nil)
 		s.verify(ctx, p.ID, actor, actorID)
 	}

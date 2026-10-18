@@ -360,6 +360,8 @@ func MapError(c *fiber.Ctx, logger *zap.Logger, err error) error {
 		return Fail(c, 422, "bankily_invalid_amount", "المبلغ غير صالح")
 	case "bankily_currency_unsupported":
 		return Fail(c, 422, "bankily_currency_unsupported", "بنكيلي متاح فقط للمحافظ بالأوقية")
+	case "bankily_idempotency_key_required":
+		return Fail(c, 400, "bankily_idempotency_key_required", "Idempotency-Key is required")
 	case "bankily_idempotency_key_reused":
 		return Fail(c, 409, "bankily_idempotency_key_reused", "Idempotency key already used for a different payment")
 	case "automatic_transaction":

@@ -1,7 +1,7 @@
 import client from './client'
 import type { APIResponse, PaginatedResponse } from '@/types/api'
 
-export type BankilyPaymentStatus = 'INITIATED' | 'SUBMITTED' | 'PENDING_VERIFICATION' | 'SUCCESS' | 'FAILED'
+export type BankilyPaymentStatus = 'INITIATED' | 'SUBMITTED' | 'PENDING_VERIFICATION' | 'SUCCESS' | 'FAILED' | 'NEEDS_REVIEW'
 
 // Bankily B-PAY automatic top-up attempt (admin view). Never contains the
 // customer's B-PAY passcode -- the backend does not store it.
