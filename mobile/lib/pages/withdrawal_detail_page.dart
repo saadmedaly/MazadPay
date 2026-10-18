@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mezadpay/core/theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:mezadpay/models/wallet.dart';
@@ -79,6 +80,7 @@ class _WithdrawalDetailPageState extends State<WithdrawalDetailPage> {
           backgroundColor: Colors.black,
           appBar: AppBar(
             backgroundColor: Colors.black,
+            systemOverlayStyle: AppTheme.lightStatusIcons,
             iconTheme: const IconThemeData(color: Colors.white),
           ),
           body: Center(

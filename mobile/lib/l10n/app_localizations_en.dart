@@ -870,34 +870,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get text_285 => '1. Introduction';
 
   @override
-  String get text_286 => 'We are committed to protecting your privacy...';
+  String get text_286 =>
+      'MazadPay is committed to protecting your privacy. This page explains what data the app uses, how we use it and how we protect it. The full version is also available at: mazadpay.com/privacy';
 
   @override
-  String get text_287 => '2. Data Collected';
+  String get text_287 => '2. Data We Collect';
 
   @override
-  String get text_288 => 'We collect info upon account creation...';
+  String get text_288 =>
+      '• Account: name, phone number, and email address if you add one.\n• Location: with your permission, the app uses your device location only to determine your city; only the city name is saved to your account and your coordinates are not sent to our servers.\n• Photos: images you choose to upload, such as listing photos and payment receipts.\n• Wallet and transactions: deposits, withdrawals, auction deposits, bids and auctions you win.\n• Notifications: your device\'s Firebase token, used to send you notifications.';
 
   @override
-  String get text_289 => '3. Data Usage';
+  String get text_289 => '3. How We Use Data';
 
   @override
-  String get text_290 => 'We use it for auction processing...';
+  String get text_290 =>
+      'We use your data to run your account and the auctions, review wallet operations, show auctions near you, and send bidding and transaction notifications. We do not use tracking or advertising analytics, and we do not sell your data.';
 
   @override
-  String get text_291 => '4. Security';
+  String get text_291 => '4. Protection and Sharing';
 
   @override
-  String get text_292 => 'Advanced encryption techniques...';
+  String get text_292 =>
+      'Your data is sent over an encrypted connection and only authorized staff can access it. We share only what the service needs, such as delivering notifications through Firebase, or when the law requires it.';
 
   @override
-  String get text_293 => '5. Changes';
+  String get text_293 => '5. Account Deletion and Changes';
 
   @override
-  String get text_294 => 'We reserve the right to update this.';
+  String get text_294 =>
+      'You can delete your account in the app: Menu → Settings → « حذف الحساب » (Delete account). Your personal data (name, phone, email) is then removed and the account is deactivated; transaction and bid records required for legal and financial obligations are kept. We may update this policy and will publish any change here and on our website.';
 
   @override
-  String get text_295 => 'Last updated: March 2026';
+  String get text_295 => 'Last updated: October 2026';
 
   @override
   String get text_296 => 'Save Time';

@@ -1,7 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 
 class AppTheme {
+  // Status-bar styles touching only the status-bar fields (unlike
+  // SystemUiOverlayStyle.dark/.light, which also recolor Android's
+  // navigation bar). App bars default to Colors.transparent, which Flutter
+  // reads as black and answers with white icons -- invisible on our light
+  // screens -- so the themes set the style explicitly.
+  static const SystemUiOverlayStyle darkStatusIcons = SystemUiOverlayStyle(
+    statusBarBrightness: Brightness.light,
+    statusBarIconBrightness: Brightness.dark,
+  );
+  static const SystemUiOverlayStyle lightStatusIcons = SystemUiOverlayStyle(
+    statusBarBrightness: Brightness.dark,
+    statusBarIconBrightness: Brightness.light,
+  );
+
   static const Color primaryColor = Color(0xFF0081FF);
   static const Color accentColor = Color(0xFF0081FF);
   static const Color backgroundColor = Color(0xFFFBFBFB);
@@ -23,6 +38,7 @@ class AppTheme {
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
+      systemOverlayStyle: darkStatusIcons,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
@@ -53,6 +69,7 @@ class AppTheme {
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
+      systemOverlayStyle: lightStatusIcons,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(

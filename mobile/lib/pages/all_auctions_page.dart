@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:mezadpay/core/theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mezadpay/providers/favorites_provider.dart';
@@ -872,6 +873,7 @@ class _AllAuctionsPageState extends ConsumerState<AllAuctionsPage> {
       endDrawer: const SideMenuDrawer(),
       appBar: AppBar(
         backgroundColor: primaryBlue,
+        systemOverlayStyle: AppTheme.lightStatusIcons,
         elevation: 0,
         toolbarHeight: 60,
         centerTitle: true,

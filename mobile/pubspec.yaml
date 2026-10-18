@@ -86,6 +86,7 @@ dependencies:
   path: ^1.9.1
   cached_network_image: ^3.4.1
   shimmer: ^3.0.0
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:
@@ -109,6 +110,11 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   generate: true
+
+  # Keep all iOS plugins on CocoaPods: file_picker via SwiftPM pulls in its own
+  # SDWebImage, duplicating the one flutter_image_compress_common gets from Pods.
+  config:
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
