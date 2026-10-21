@@ -265,12 +265,15 @@ class _BankilyBpayPageState extends State<BankilyBpayPage> {
   }
 
   Widget _pendingBanner(List<BankilyPayment> pending, AppLocalizations l10n) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF7E6),
+    // Material (not a decorated Container) so each ListTile has a Material
+    // ancestor to paint its background and ink ripple on.
+    return Material(
+      color: const Color(0xFFFFF7E6),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFF59E0B)),
+        side: const BorderSide(color: Color(0xFFF59E0B)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: pending
             .map((p) => ListTile(
