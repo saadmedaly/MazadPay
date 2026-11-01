@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:mezadpay/core/feature_flags.dart';
 import 'package:mezadpay/core/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -35,8 +36,11 @@ class DepositPage extends StatefulWidget {
   // Now", wallet notification taps).
   final String? auctionRequestId;
   final double? subscriptionFee;
+  // Test-only override of the build-time B-PAY switch (kBpayEnabled).
+  @visibleForTesting
+  final bool? bpayFeatureEnabled;
 
-  const DepositPage({super.key, this.auctionRequestId, this.subscriptionFee});
+  const DepositPage({super.key, this.auctionRequestId, this.subscriptionFee, this.bpayFeatureEnabled});
 
   @override
   State<DepositPage> createState() => _DepositPageState();
@@ -77,7 +81,9 @@ class _DepositPageState extends State<DepositPage> {
   void initState() {
     super.initState();
     _loadMethods();
-    _loadBankilyConfig();
+    // B-PAY is compiled out of builds without BPAY_ENABLED: no config call,
+    // no card, whatever the backend reports.
+    if (widget.bpayFeatureEnabled ?? kBpayEnabled) _loadBankilyConfig();
   }
 
   Future<void> _loadBankilyConfig() async {
@@ -308,7 +314,8 @@ class _DepositPageState extends State<DepositPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_bankilyConfig.enabled && !_isAuctionSubscriptionFee) _buildBankilyEntry(isDark, blue),
+            if ((widget.bpayFeatureEnabled ?? kBpayEnabled) && _bankilyConfig.enabled && !_isAuctionSubscriptionFee)
+              _buildBankilyEntry(isDark, blue),
             // Subscription fee amount (customer feedback #4): shown before
             // payment-method selection, whenever this page was reached from
             // submitting an auction request for review. The amount itself
