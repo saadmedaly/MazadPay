@@ -79,6 +79,18 @@ var (
 	// need a new error code to recognize this case, only updated messaging.
 	ErrDuplicateBidder = errors.New("bid_already_placed")
 
+	// Account deletion (App Store guideline 5.1.1(v)) : DELETE /users/me est
+	// refusé tant qu'une obligation financière ou d'enchère reste ouverte —
+	// l'argent et l'historique d'enchères ne sont jamais modifiés silencieusement.
+	// Un code distinct par cause pour que l'app affiche un message précis.
+	ErrDeletionPositiveBalance   = errors.New("account_deletion_blocked_balance")
+	ErrDeletionActiveHold        = errors.New("account_deletion_blocked_hold")
+	ErrDeletionPendingDeposit    = errors.New("account_deletion_blocked_pending_deposit")
+	ErrDeletionPendingWithdrawal = errors.New("account_deletion_blocked_pending_withdrawal")
+	ErrDeletionLeadingBid        = errors.New("account_deletion_blocked_leading_bid")
+	ErrDeletionUnpaidWin         = errors.New("account_deletion_blocked_unpaid_win")
+	ErrDeletionActiveListing     = errors.New("account_deletion_blocked_active_listing")
+
 	// Finance
 	ErrInsufficientBalance = errors.New("insufficient_balance")
 	ErrWalletLocked        = errors.New("wallet_locked")

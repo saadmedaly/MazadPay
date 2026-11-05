@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apperr "github.com/mazadpay/backend/internal/errors"
 	"github.com/mazadpay/backend/internal/middleware"
 	"github.com/mazadpay/backend/internal/models"
 	"github.com/mazadpay/backend/internal/services"
@@ -414,11 +416,34 @@ func (h *UserHandler) DeleteMe(c *fiber.Ctx) error {
 	}
 
 	if err := h.service.DeactivateOwnAccount(c.Context(), userID); err != nil {
+		for _, blocker := range accountDeletionBlockers {
+			if errors.Is(err, blocker.err) {
+				return Fail(c, 409, blocker.err.Error(), blocker.message)
+			}
+		}
+		if errors.Is(err, apperr.ErrUserNotFound) {
+			return NotFound(c, "User")
+		}
 		h.logger.Error("Failed to delete own account", zap.Error(err), zap.String("user_id", userID.String()))
 		return InternalError(c, "Failed to delete account")
 	}
 
 	return OK(c, fiber.Map{"message": "Account deletion completed"})
+}
+
+// accountDeletionBlockers : obligations ouvertes qui bloquent DELETE /users/me
+// (409 + code typé ; l'app affiche le message localisé correspondant au code).
+var accountDeletionBlockers = []struct {
+	err     error
+	message string
+}{
+	{apperr.ErrDeletionPositiveBalance, "Withdraw your remaining wallet balance before deleting your account"},
+	{apperr.ErrDeletionActiveHold, "You have an active insurance hold on an auction"},
+	{apperr.ErrDeletionPendingDeposit, "You have a deposit awaiting review"},
+	{apperr.ErrDeletionPendingWithdrawal, "You have a withdrawal awaiting processing"},
+	{apperr.ErrDeletionLeadingBid, "You are currently the highest bidder on a live auction"},
+	{apperr.ErrDeletionUnpaidWin, "You have a won auction awaiting payment"},
+	{apperr.ErrDeletionActiveListing, "You have an auction that is live or awaiting approval"},
 }
 
 // New endpoints for extended user functionality

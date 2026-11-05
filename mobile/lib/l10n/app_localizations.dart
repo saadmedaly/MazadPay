@@ -1867,7 +1867,7 @@ abstract class AppLocalizations {
   /// No description provided for @text_294.
   ///
   /// In ar, this message translates to:
-  /// **'يمكنك حذف حسابك من داخل التطبيق: القائمة ← الإعدادات ← حذف الحساب. عند الحذف تُزال بياناتك الشخصية (الاسم، رقم الهاتف، البريد الإلكتروني) ويتم تعطيل الحساب، مع الاحتفاظ بسجلات المعاملات والمزايدات اللازمة للالتزامات القانونية والمالية. قد نحدّث هذه السياسة، وسننشر أي تغيير هنا وعلى موقعنا.'**
+  /// **'يمكنك حذف حسابك من داخل التطبيق: حسابي ← معلومات الحساب ← حذف الحساب (أو القائمة ← الإعدادات ← حذف الحساب). عند الحذف تُزال بياناتك الشخصية (الاسم، رقم الهاتف، البريد الإلكتروني، الصورة، المدينة) ويُغلق الحساب نهائياً، مع الاحتفاظ بسجلات المعاملات والمزايدات اللازمة للالتزامات القانونية والمالية دون ربطها ببياناتك الشخصية. لا يمكن حذف الحساب أثناء وجود رصيد أو تأمين محجوز أو إيداع أو سحب قيد المعالجة أو مزاد جارٍ أو غير مدفوع. قد نحدّث هذه السياسة، وسننشر أي تغيير هنا وعلى موقعنا.'**
   String get text_294;
 
   /// No description provided for @text_295.
@@ -3519,6 +3519,102 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'فاشلة'**
   String get bpay_status_failed;
+
+  /// No description provided for @delete_account.
+  ///
+  /// In ar, this message translates to:
+  /// **'حذف الحساب'**
+  String get delete_account;
+
+  /// No description provided for @delete_account_confirm_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'حذف الحساب نهائياً؟'**
+  String get delete_account_confirm_title;
+
+  /// No description provided for @delete_account_confirm_body.
+  ///
+  /// In ar, this message translates to:
+  /// **'سيتم حذف حسابك نهائياً وإزالة بياناتك الشخصية (الاسم، رقم الهاتف، البريد الإلكتروني، الصورة، المدينة) وتسجيل خروجك من جميع الأجهزة. نحتفظ فقط بسجلات المعاملات والمزايدات اللازمة للالتزامات القانونية والمالية، دون ربطها ببياناتك الشخصية.\n\nلا يمكن التراجع عن هذا الإجراء.'**
+  String get delete_account_confirm_body;
+
+  /// No description provided for @delete_account_confirm_button.
+  ///
+  /// In ar, this message translates to:
+  /// **'حذف حسابي نهائياً'**
+  String get delete_account_confirm_button;
+
+  /// No description provided for @delete_account_cancel.
+  ///
+  /// In ar, this message translates to:
+  /// **'إلغاء'**
+  String get delete_account_cancel;
+
+  /// No description provided for @delete_account_success.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم حذف حسابك بنجاح'**
+  String get delete_account_success;
+
+  /// No description provided for @delete_account_failed.
+  ///
+  /// In ar, this message translates to:
+  /// **'تعذر حذف الحساب، يرجى المحاولة لاحقاً'**
+  String get delete_account_failed;
+
+  /// No description provided for @delete_account_blocked_title.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا يمكن حذف الحساب الآن'**
+  String get delete_account_blocked_title;
+
+  /// No description provided for @delete_account_blocked_ok.
+  ///
+  /// In ar, this message translates to:
+  /// **'حسناً'**
+  String get delete_account_blocked_ok;
+
+  /// No description provided for @delete_account_blocked_balance.
+  ///
+  /// In ar, this message translates to:
+  /// **'لديك رصيد في المحفظة. يرجى سحب رصيدك أولاً ثم حذف الحساب.'**
+  String get delete_account_blocked_balance;
+
+  /// No description provided for @delete_account_blocked_hold.
+  ///
+  /// In ar, this message translates to:
+  /// **'لديك مبلغ تأمين محجوز على مزاد. يمكنك حذف الحساب بعد تحرير التأمين.'**
+  String get delete_account_blocked_hold;
+
+  /// No description provided for @delete_account_blocked_pending_deposit.
+  ///
+  /// In ar, this message translates to:
+  /// **'لديك عملية إيداع قيد المراجعة. يمكنك حذف الحساب بعد معالجتها.'**
+  String get delete_account_blocked_pending_deposit;
+
+  /// No description provided for @delete_account_blocked_pending_withdrawal.
+  ///
+  /// In ar, this message translates to:
+  /// **'لديك طلب سحب قيد المعالجة. يمكنك حذف الحساب بعد اكتماله.'**
+  String get delete_account_blocked_pending_withdrawal;
+
+  /// No description provided for @delete_account_blocked_leading_bid.
+  ///
+  /// In ar, this message translates to:
+  /// **'أنت صاحب أعلى مزايدة في مزاد جارٍ. يمكنك حذف الحساب بعد انتهاء المزاد.'**
+  String get delete_account_blocked_leading_bid;
+
+  /// No description provided for @delete_account_blocked_unpaid_win.
+  ///
+  /// In ar, this message translates to:
+  /// **'لديك مزاد فزت به ولم يتم دفعه بعد. يرجى إتمام الدفع أولاً.'**
+  String get delete_account_blocked_unpaid_win;
+
+  /// No description provided for @delete_account_blocked_active_listing.
+  ///
+  /// In ar, this message translates to:
+  /// **'لديك مزاد معروض أو قيد المراجعة. يمكنك حذف الحساب بعد انتهائه أو إلغائه.'**
+  String get delete_account_blocked_active_listing;
 }
 
 class _AppLocalizationsDelegate

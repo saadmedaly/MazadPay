@@ -297,6 +297,14 @@ class _SideMenuDrawerState extends State<SideMenuDrawer> {
                     title: AppLocalizations.of(context)!.text_284,
                     icon: Icons.privacy_tip_outlined,
                   ),
+                  // Settings (text_44) had an onTap branch but no menu item, so
+                  // SettingsPage -- and its account deletion entry -- was
+                  // unreachable (App Store 5.1.1(v) rejection).
+                  _buildMenuItem(
+                    context,
+                    title: AppLocalizations.of(context)!.text_44,
+                    icon: Icons.settings_outlined,
+                  ),
                   const Divider(height: 32, thickness: 1, indent: 20, endIndent: 20),
                   _buildMenuItem(
                     context,

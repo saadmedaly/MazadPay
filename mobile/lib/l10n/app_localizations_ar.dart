@@ -914,7 +914,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get text_294 =>
-      'يمكنك حذف حسابك من داخل التطبيق: القائمة ← الإعدادات ← حذف الحساب. عند الحذف تُزال بياناتك الشخصية (الاسم، رقم الهاتف، البريد الإلكتروني) ويتم تعطيل الحساب، مع الاحتفاظ بسجلات المعاملات والمزايدات اللازمة للالتزامات القانونية والمالية. قد نحدّث هذه السياسة، وسننشر أي تغيير هنا وعلى موقعنا.';
+      'يمكنك حذف حسابك من داخل التطبيق: حسابي ← معلومات الحساب ← حذف الحساب (أو القائمة ← الإعدادات ← حذف الحساب). عند الحذف تُزال بياناتك الشخصية (الاسم، رقم الهاتف، البريد الإلكتروني، الصورة، المدينة) ويُغلق الحساب نهائياً، مع الاحتفاظ بسجلات المعاملات والمزايدات اللازمة للالتزامات القانونية والمالية دون ربطها ببياناتك الشخصية. لا يمكن حذف الحساب أثناء وجود رصيد أو تأمين محجوز أو إيداع أو سحب قيد المعالجة أو مزاد جارٍ أو غير مدفوع. قد نحدّث هذه السياسة، وسننشر أي تغيير هنا وعلى موقعنا.';
 
   @override
   String get text_295 => 'آخر تحديث: أكتوبر 2026';
@@ -1771,4 +1771,60 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get bpay_status_failed => 'فاشلة';
+
+  @override
+  String get delete_account => 'حذف الحساب';
+
+  @override
+  String get delete_account_confirm_title => 'حذف الحساب نهائياً؟';
+
+  @override
+  String get delete_account_confirm_body =>
+      'سيتم حذف حسابك نهائياً وإزالة بياناتك الشخصية (الاسم، رقم الهاتف، البريد الإلكتروني، الصورة، المدينة) وتسجيل خروجك من جميع الأجهزة. نحتفظ فقط بسجلات المعاملات والمزايدات اللازمة للالتزامات القانونية والمالية، دون ربطها ببياناتك الشخصية.\n\nلا يمكن التراجع عن هذا الإجراء.';
+
+  @override
+  String get delete_account_confirm_button => 'حذف حسابي نهائياً';
+
+  @override
+  String get delete_account_cancel => 'إلغاء';
+
+  @override
+  String get delete_account_success => 'تم حذف حسابك بنجاح';
+
+  @override
+  String get delete_account_failed => 'تعذر حذف الحساب، يرجى المحاولة لاحقاً';
+
+  @override
+  String get delete_account_blocked_title => 'لا يمكن حذف الحساب الآن';
+
+  @override
+  String get delete_account_blocked_ok => 'حسناً';
+
+  @override
+  String get delete_account_blocked_balance =>
+      'لديك رصيد في المحفظة. يرجى سحب رصيدك أولاً ثم حذف الحساب.';
+
+  @override
+  String get delete_account_blocked_hold =>
+      'لديك مبلغ تأمين محجوز على مزاد. يمكنك حذف الحساب بعد تحرير التأمين.';
+
+  @override
+  String get delete_account_blocked_pending_deposit =>
+      'لديك عملية إيداع قيد المراجعة. يمكنك حذف الحساب بعد معالجتها.';
+
+  @override
+  String get delete_account_blocked_pending_withdrawal =>
+      'لديك طلب سحب قيد المعالجة. يمكنك حذف الحساب بعد اكتماله.';
+
+  @override
+  String get delete_account_blocked_leading_bid =>
+      'أنت صاحب أعلى مزايدة في مزاد جارٍ. يمكنك حذف الحساب بعد انتهاء المزاد.';
+
+  @override
+  String get delete_account_blocked_unpaid_win =>
+      'لديك مزاد فزت به ولم يتم دفعه بعد. يرجى إتمام الدفع أولاً.';
+
+  @override
+  String get delete_account_blocked_active_listing =>
+      'لديك مزاد معروض أو قيد المراجعة. يمكنك حذف الحساب بعد انتهائه أو إلغائه.';
 }
