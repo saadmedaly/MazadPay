@@ -140,6 +140,10 @@ func TestAccountDeletion_ClearsPersonalDataAndPreservesHistory(t *testing.T) {
 	if _, err := env.db.Exec(`INSERT INTO notifications (user_id, type, title) VALUES ($1, 'general', 'hello')`, u.ID); err != nil {
 		t.Fatal(err)
 	}
+	live := createTestAuction(t, env, seller.ID, "MR", "MRU")
+	if _, err := env.db.Exec(`INSERT INTO bid_auto_bids (user_id, auction_id, max_amount, current_bid_amount, is_active) VALUES ($1, $2, 900, 0, true)`, u.ID, live.ID); err != nil {
+		t.Fatal(err)
+	}
 	pendingReq := newAuctionRequest(u.ID, "deletion")
 	if err := env.reqRepo.CreateAuctionRequest(ctx, pendingReq); err != nil {
 		t.Fatalf("pending auction request: %v", err)
@@ -194,6 +198,12 @@ func TestAccountDeletion_ClearsPersonalDataAndPreservesHistory(t *testing.T) {
 		if got := countRows(t, env, `SELECT count(*) FROM `+table+` WHERE user_id = $1`, u.ID); got != want {
 			t.Errorf("%s rows = %d, want %d", table, got, want)
 		}
+	}
+	if got := countRows(t, env, `SELECT count(*) FROM bid_auto_bids WHERE user_id = $1 AND is_active = true`, u.ID); got != 0 {
+		t.Errorf("active auto-bids = %d, want 0", got)
+	}
+	if got := countRows(t, env, `SELECT count(*) FROM bid_auto_bids WHERE user_id = $1`, u.ID); got != 1 {
+		t.Errorf("auto-bid history rows = %d, want 1 (kept, deactivated)", got)
 	}
 	var reqStatus string
 	if err := env.db.Get(&reqStatus, `SELECT status FROM auction_requests WHERE id = $1`, pendingReq.ID); err != nil || reqStatus != "rejected" {

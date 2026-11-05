@@ -385,6 +385,12 @@ func (r *userRepo) AnonymizeAndDeactivate(ctx context.Context, id uuid.UUID) err
 		}
 	}
 
+	// Enchères automatiques : désactivées (gardées pour l'historique) pour
+	// qu'aucune enchère ne soit plus jamais placée au nom du compte supprimé.
+	if _, err := tx.ExecContext(ctx, `UPDATE bid_auto_bids SET is_active = false WHERE user_id = $1 AND is_active = true`, id); err != nil {
+		return err
+	}
+
 	// Demandes non financières encore en attente : clôturées (pas supprimées)
 	// pour garder la trace de revue côté admin.
 	if _, err := tx.ExecContext(ctx, `
