@@ -659,6 +659,19 @@ class FCMService {
     },
   };
 
+  /// Après suppression du compte : invalide le token FCM de cet appareil
+  /// (Firebase en émettra un nouveau au prochain compte connecté) et
+  /// l'oublie localement. Best effort : un échec Firebase ne bloque pas
+  /// la déconnexion.
+  Future<void> clearLocalToken() async {
+    _fcmToken = null;
+    try {
+      await _messagingInstance.deleteToken();
+    } catch (e) {
+      debugPrint('FCM deleteToken failed: $e');
+    }
+  }
+
   /// Dispose
   void dispose() {
     _notificationController.close();

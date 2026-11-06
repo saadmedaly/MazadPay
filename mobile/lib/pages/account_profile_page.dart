@@ -1,6 +1,7 @@
 import 'package:mezadpay/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:mezadpay/widgets/side_menu_drawer.dart';
+import 'package:mezadpay/widgets/account_deletion_flow.dart';
 import 'package:mezadpay/widgets/app_modals.dart';
 import '../services/user_api.dart';
 import '../models/api_response.dart';
@@ -10,7 +11,11 @@ import 'account_page.dart';
 import 'notifications_page.dart';
 
 class AccountProfilePage extends ConsumerStatefulWidget {
-  const AccountProfilePage({super.key});
+  const AccountProfilePage({super.key, this.deletionFlow});
+
+  /// Injected only by widget tests; the app uses the default flow.
+  @visibleForTesting
+  final AccountDeletionFlow? deletionFlow;
 
   @override
   ConsumerState<AccountProfilePage> createState() => _AccountProfilePageState();
@@ -30,6 +35,7 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
   // onChanged:(_){}). No new preference system needed here.
   bool _notificationsEnabled = true;
   bool _isTogglingNotifications = false;
+  bool _isDeletingAccount = false;
   
   // Controllers pour les champs éditables
   final _fullNameController = TextEditingController();
@@ -360,6 +366,17 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
                       ),
                     ),
                     _buildSettingTile(context, AppLocalizations.of(context)!.text_48, Icons.notifications_outlined, isDarkMode, hasSwitch: true, switchValue: _notificationsEnabled, onSwitchChanged: _toggleNotifications),
+                    // App Store 5.1.1(v) : suppression du compte accessible
+                    // depuis le parcours normal Compte → Informations du compte.
+                    _buildSettingTile(
+                      context,
+                      AppLocalizations.of(context)!.delete_account,
+                      Icons.delete_outline,
+                      isDarkMode,
+                      danger: true,
+                      tileKey: const Key('delete-account-tile'),
+                      onTap: _isDeletingAccount ? null : _deleteAccount,
+                    ),
 
                     const SizedBox(height: 32),
 
@@ -486,25 +503,40 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
     );
   }
 
-  Widget _buildSettingTile(BuildContext context, String title, IconData icon, bool isDarkMode, {String? trailing, bool hasSwitch = false, VoidCallback? onTap, bool switchValue = true, ValueChanged<bool>? onSwitchChanged}) {
+  Future<void> _deleteAccount() async {
+    setState(() => _isDeletingAccount = true);
+    try {
+      await (widget.deletionFlow ?? AccountDeletionFlow()).start(context);
+    } finally {
+      if (mounted) setState(() => _isDeletingAccount = false);
+    }
+  }
+
+  Widget _buildSettingTile(BuildContext context, String title, IconData icon, bool isDarkMode, {String? trailing, bool hasSwitch = false, VoidCallback? onTap, bool switchValue = true, ValueChanged<bool>? onSwitchChanged, bool danger = false, Key? tileKey}) {
+    final accent = danger ? Colors.red : const Color(0xFF0084FF);
     return Container(
+      key: tileKey,
       margin: const EdgeInsetsDirectional.only(bottom: 10),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1D1D1D) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
       ),
-      child: ListTile(
+      // Transparent Material so the ListTile's ink paints inside the
+      // decorated container (debug assertion otherwise).
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
         leading: Container(
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: const Color(0xFF0084FF).withValues(alpha: 0.1),
+            color: accent.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: const Color(0xFF0084FF), size: 18),
+          child: Icon(icon, color: accent, size: 18),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: danger ? Colors.red : null)),
         trailing: hasSwitch
             ? Switch(
                 value: switchValue,
@@ -522,6 +554,7 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
                   )
                 : Icon(Icons.arrow_back_ios, size: 14, color: Colors.grey[400]),
         onTap: onTap,
+        ),
       ),
     );
   }

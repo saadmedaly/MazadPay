@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -317,10 +319,47 @@ func (r *userRepo) AnonymizeAndDeactivate(ctx context.Context, id uuid.UUID) err
 	// réel de cette table).
 	compactID := strings.ReplaceAll(id.String(), "-", "")
 	anonymizedPhone := "del_" + compactID[:16]
-	_, err := r.db.ExecContext(ctx, `
+
+	// Mot de passe remplacé par une valeur aléatoire qui n'est pas un hash
+	// bcrypt valide : aucune saisie ne peut jamais la satisfaire.
+	random := make([]byte, 24)
+	if _, err := rand.Read(random); err != nil {
+		return err
+	}
+	unusableHash := "deleted:" + hex.EncodeToString(random)
+
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Verrous : la ligne users puis le wallet. Un dépôt, une enchère avec
+	// caution ou un retrait concurrent verrouille le même wallet, donc les
+	// vérifications ci-dessous voient un état figé jusqu'au commit.
+	var lockedID uuid.UUID
+	if err := tx.GetContext(ctx, &lockedID, `SELECT id FROM users WHERE id = $1 AND is_active = true FOR UPDATE`, id); err != nil {
+		if err == sql.ErrNoRows {
+			return apperr.ErrUserNotFound
+		}
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT 1 FROM wallets WHERE user_id = $1 FOR UPDATE`, id); err != nil {
+		return err
+	}
+
+	if err := checkAccountDeletionBlockers(ctx, tx, id); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `
 		UPDATE users SET
 			is_active = false,
 			phone = $1,
+			phone_e164 = NULL,
+			phone_country_iso = NULL,
+			account_country_iso = NULL,
+			password_hash = $2,
 			full_name = 'Deleted User',
 			email = NULL,
 			profile_pic_url = NULL,
@@ -329,9 +368,77 @@ func (r *userRepo) AnonymizeAndDeactivate(ctx context.Context, id uuid.UUID) err
 			postal_code = NULL,
 			date_of_birth = NULL,
 			gender = NULL
-		WHERE id = $2
-	`, anonymizedPhone, id)
-	return err
+		WHERE id = $3
+	`, anonymizedPhone, unusableHash, id); err != nil {
+		return err
+	}
+
+	// Données personnelles non financières : supprimées.
+	for _, q := range []string{
+		`DELETE FROM push_tokens WHERE user_id = $1`,
+		`DELETE FROM user_settings WHERE user_id = $1`,
+		`DELETE FROM user_favorites WHERE user_id = $1`,
+		`DELETE FROM notifications WHERE user_id = $1`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return err
+		}
+	}
+
+	// Enchères automatiques : désactivées (gardées pour l'historique) pour
+	// qu'aucune enchère ne soit plus jamais placée au nom du compte supprimé.
+	if _, err := tx.ExecContext(ctx, `UPDATE bid_auto_bids SET is_active = false WHERE user_id = $1 AND is_active = true`, id); err != nil {
+		return err
+	}
+
+	// Demandes non financières encore en attente : clôturées (pas supprimées)
+	// pour garder la trace de revue côté admin.
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE auction_requests SET status = 'rejected', admin_notes = 'Account deleted by owner', reviewed_at = now()
+		WHERE user_id = $1 AND status IN ('draft', 'pending')`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE banner_requests SET status = 'rejected', admin_notes = 'Account deleted by owner', reviewed_at = now()
+		WHERE user_id = $1 AND status = 'pending'`, id); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// checkAccountDeletionBlockers refuse la suppression tant qu'une obligation
+// financière ou d'enchère est ouverte. Rien n'est modifié ici : lecture seule,
+// dans la transaction verrouillée d'AnonymizeAndDeactivate.
+func checkAccountDeletionBlockers(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
+	checks := []struct {
+		err   error
+		query string
+	}{
+		{apperr.ErrDeletionPositiveBalance, `SELECT EXISTS (SELECT 1 FROM wallets WHERE user_id = $1 AND balance > 0)`},
+		{apperr.ErrDeletionActiveHold, `SELECT EXISTS (SELECT 1 FROM wallets WHERE user_id = $1 AND frozen_amount > 0)
+			OR EXISTS (SELECT 1 FROM wallet_holds WHERE user_id = $1 AND status = 'active')`},
+		{apperr.ErrDeletionPendingDeposit, `SELECT EXISTS (SELECT 1 FROM transactions WHERE user_id = $1 AND type = 'deposit' AND status IN ('pending', 'pending_review'))
+			OR EXISTS (SELECT 1 FROM bankily_payments WHERE user_id = $1 AND status IN ('INITIATED', 'SUBMITTED', 'PENDING_VERIFICATION', 'NEEDS_REVIEW'))`},
+		{apperr.ErrDeletionPendingWithdrawal, `SELECT EXISTS (SELECT 1 FROM transactions WHERE user_id = $1 AND type = 'withdraw' AND status IN ('pending', 'pending_review'))`},
+		{apperr.ErrDeletionLeadingBid, `SELECT EXISTS (
+			SELECT 1 FROM auctions a WHERE a.status = 'active' AND (
+				a.last_bidder_id = $1
+				OR (SELECT b.user_id FROM bids b WHERE b.auction_id = a.id ORDER BY b.amount DESC, b.created_at ASC LIMIT 1) = $1))`},
+		{apperr.ErrDeletionUnpaidWin, `SELECT EXISTS (SELECT 1 FROM auctions WHERE winner_id = $1 AND status = 'ended' AND payment_deadline > now())
+			OR EXISTS (SELECT 1 FROM auction_payments WHERE winner_id = $1 AND status IN ('pending', 'overdue'))`},
+		{apperr.ErrDeletionActiveListing, `SELECT EXISTS (SELECT 1 FROM auctions WHERE seller_id = $1 AND status IN ('pending', 'active'))`},
+	}
+	for _, c := range checks {
+		var blocked bool
+		if err := tx.GetContext(ctx, &blocked, c.query, id); err != nil {
+			return err
+		}
+		if blocked {
+			return c.err
+		}
+	}
+	return nil
 }
 
 func (r *userRepo) Delete(ctx context.Context, id uuid.UUID) error {

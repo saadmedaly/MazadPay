@@ -899,7 +899,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get text_294 =>
-      'You can delete your account in the app: Menu → Settings → « حذف الحساب » (Delete account). Your personal data (name, phone, email) is then removed and the account is deactivated; transaction and bid records required for legal and financial obligations are kept. We may update this policy and will publish any change here and on our website.';
+      'You can delete your account in the app: My Account → Account Information → Delete account (or Menu → Settings → Delete account). Your personal data (name, phone, email, photo, city) is then removed and the account is permanently closed; transaction and bid records required for legal and financial obligations are kept, no longer linked to your personal data. Deletion isn\'t possible while a balance, held insurance, a pending deposit or withdrawal, or a live or unpaid auction remains. We may update this policy and will publish any change here and on our website.';
 
   @override
   String get text_295 => 'Last updated: October 2026';
@@ -1748,4 +1748,61 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bpay_status_failed => 'Failed';
+
+  @override
+  String get delete_account => 'Delete account';
+
+  @override
+  String get delete_account_confirm_title => 'Permanently delete your account?';
+
+  @override
+  String get delete_account_confirm_body =>
+      'Your account will be permanently deleted: your personal data (name, phone, email, photo, city) is removed and you are signed out on every device. Only transaction and bid records required for legal and financial obligations are kept, no longer linked to your personal data.\n\nThis cannot be undone.';
+
+  @override
+  String get delete_account_confirm_button => 'Delete permanently';
+
+  @override
+  String get delete_account_cancel => 'Cancel';
+
+  @override
+  String get delete_account_success => 'Your account has been deleted';
+
+  @override
+  String get delete_account_failed =>
+      'Couldn\'t delete the account, please try again later';
+
+  @override
+  String get delete_account_blocked_title => 'Account can\'t be deleted yet';
+
+  @override
+  String get delete_account_blocked_ok => 'OK';
+
+  @override
+  String get delete_account_blocked_balance =>
+      'Your wallet still has a balance. Withdraw it first, then delete your account.';
+
+  @override
+  String get delete_account_blocked_hold =>
+      'An insurance deposit is held on an auction. You can delete your account once it is released.';
+
+  @override
+  String get delete_account_blocked_pending_deposit =>
+      'A deposit is awaiting review. You can delete your account once it is processed.';
+
+  @override
+  String get delete_account_blocked_pending_withdrawal =>
+      'A withdrawal is being processed. You can delete your account once it completes.';
+
+  @override
+  String get delete_account_blocked_leading_bid =>
+      'You are the highest bidder on a live auction. You can delete your account after it ends.';
+
+  @override
+  String get delete_account_blocked_unpaid_win =>
+      'You won an auction that isn\'t paid yet. Please complete the payment first.';
+
+  @override
+  String get delete_account_blocked_active_listing =>
+      'You have an auction that is live or awaiting approval. You can delete your account after it ends or is cancelled.';
 }

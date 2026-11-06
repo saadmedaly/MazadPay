@@ -913,7 +913,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get text_294 =>
-      'Vous pouvez supprimer votre compte dans l\'application : Menu → Paramètres → « حذف الحساب » (Supprimer le compte). Vos données personnelles (nom, téléphone, e-mail) sont alors supprimées et le compte est désactivé ; les enregistrements de transactions et d\'enchères nécessaires aux obligations légales et financières sont conservés. Nous pouvons mettre à jour cette politique et publierons tout changement ici et sur notre site.';
+      'Vous pouvez supprimer votre compte dans l\'application : Mon Compte → Informations du compte → Supprimer le compte (ou Menu → Paramètres → Supprimer le compte). Vos données personnelles (nom, téléphone, e-mail, photo, ville) sont alors effacées et le compte est définitivement fermé ; les enregistrements de transactions et d\'enchères nécessaires aux obligations légales et financières sont conservés, sans lien avec vos données personnelles. La suppression n\'est pas possible tant qu\'un solde, une caution, un dépôt ou un retrait en cours, ou une enchère en cours ou impayée subsiste. Nous pouvons mettre à jour cette politique et publierons tout changement ici et sur notre site.';
 
   @override
   String get text_295 => 'Dernière mise à jour : octobre 2026';
@@ -1774,4 +1774,63 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get bpay_status_failed => 'Échoué';
+
+  @override
+  String get delete_account => 'Supprimer le compte';
+
+  @override
+  String get delete_account_confirm_title =>
+      'Supprimer définitivement le compte ?';
+
+  @override
+  String get delete_account_confirm_body =>
+      'Votre compte sera définitivement supprimé : vos données personnelles (nom, téléphone, e-mail, photo, ville) seront effacées et vous serez déconnecté de tous les appareils. Seuls les enregistrements de transactions et d\'enchères requis par nos obligations légales et financières sont conservés, sans lien avec vos données personnelles.\n\nCette action est irréversible.';
+
+  @override
+  String get delete_account_confirm_button => 'Supprimer définitivement';
+
+  @override
+  String get delete_account_cancel => 'Annuler';
+
+  @override
+  String get delete_account_success => 'Votre compte a été supprimé';
+
+  @override
+  String get delete_account_failed =>
+      'Impossible de supprimer le compte, veuillez réessayer plus tard';
+
+  @override
+  String get delete_account_blocked_title =>
+      'Suppression impossible pour le moment';
+
+  @override
+  String get delete_account_blocked_ok => 'OK';
+
+  @override
+  String get delete_account_blocked_balance =>
+      'Votre portefeuille contient un solde. Retirez-le d\'abord, puis supprimez le compte.';
+
+  @override
+  String get delete_account_blocked_hold =>
+      'Une caution est bloquée sur une enchère. Vous pourrez supprimer le compte une fois la caution libérée.';
+
+  @override
+  String get delete_account_blocked_pending_deposit =>
+      'Un dépôt est en cours de vérification. Vous pourrez supprimer le compte une fois qu\'il sera traité.';
+
+  @override
+  String get delete_account_blocked_pending_withdrawal =>
+      'Un retrait est en cours de traitement. Vous pourrez supprimer le compte une fois qu\'il sera terminé.';
+
+  @override
+  String get delete_account_blocked_leading_bid =>
+      'Vous êtes le meilleur enchérisseur d\'une enchère en cours. Vous pourrez supprimer le compte à la fin de l\'enchère.';
+
+  @override
+  String get delete_account_blocked_unpaid_win =>
+      'Vous avez remporté une enchère qui n\'est pas encore payée. Finalisez d\'abord le paiement.';
+
+  @override
+  String get delete_account_blocked_active_listing =>
+      'Vous avez une enchère en ligne ou en attente de validation. Vous pourrez supprimer le compte après sa fin ou son annulation.';
 }
